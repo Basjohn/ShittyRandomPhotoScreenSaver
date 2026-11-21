@@ -140,6 +140,13 @@ class FrameTraceEvent(IntEnum):
     # The PERF HUD's once-a-second text update (``scene_controller``, GUI thread, a queued frameSwapped; ``--frame-trace``
     # with PERF only): the scene's update request it makes, at the moment it makes it.
     GUI_PERF_HUD_UPDATE = 80
+    # A transition run on the native background layer (``rendering/quick/render/native_background.py``, GUI thread;
+    # ``--frame-trace`` only, nothing recorded without a sink): one TICK when the run starts and one per frame the run's
+    # clock gives a progress, one END when the run ends; auxiliary = the run's id. The core draws the run, so the Python
+    # background node's BACKGROUND_RENDER records never carry it; these bound its window instead
+    # (``tools/live_check_transition_session.py``).
+    NATIVE_TRANSITION_TICK = 81
+    NATIVE_TRANSITION_END = 82
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

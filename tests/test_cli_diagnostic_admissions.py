@@ -62,6 +62,17 @@ def test_parse_screensaver_args_ignores_new_admissions(monkeypatch):
     assert preview_hwnd is None
 
 
+def test_a_bare_vulkan_launch_runs_the_saver_and_godzip_foundry_offers_it(monkeypatch):
+    # The operator launches ``main.py --vulkan`` alone (no /s), from the shell or GODZIP Foundry's flag list.
+    import tools.godzip_foundry_core as foundry
+
+    monkeypatch.setattr(main, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(main.sys, "argv", ["main.py", ef.VULKAN_FLAG])
+    mode, _preview = main.parse_screensaver_args()
+    assert mode is main.ScreensaverMode.RUN
+    assert ef.VULKAN_FLAG in foundry.discover_run_flags(main.Path(main.__file__).parent)
+
+
 def test_inactive_admissions_read_disabled_until_startup_activates_them():
     assert ef.profile_cpu_admitted() is False
     assert ef.mc_window_splash_admitted() is False

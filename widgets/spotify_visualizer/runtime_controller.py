@@ -12,6 +12,7 @@ retired compositor/presenter code.
 from __future__ import annotations
 
 import copy
+import math
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -138,6 +139,10 @@ class VisualizerRuntimeController:
         # The drawn card's framed view (``core.framed_view``, N0.4): the exact camera inputs the scene publishes at
         # its geometry edges (``set_framed_view``); None until a card is drawn.
         self._framed_view: FramedView | None = None
+        # The display-wide card's physical world extent while the scene draws it (``set_drawn_world_extent``), else
+        # None. The committed metrics above stay the ordinary card's; a mode whose simulation world is the drawn
+        # card's world (Bubble) reads ``logical_world_extent``.
+        self._drawn_world_extent: tuple[float, float] | None = None
         self._render_bridge = VisualizerSnapshotBridge()
         # The presentation-neutral destination owner for this generation's
         # authored per-tick logical state. The authored logical step advances
@@ -454,8 +459,9 @@ class VisualizerRuntimeController:
     @property
     def layout_metrics_snapshot(self) -> tuple:
         """(committed extent, committed rotations, override extent or None, override rotations or None, framed view or
-        None): the raw layout metrics, mode-independent (each controller resolves them for its own mode), and the drawn
-        card's framed view (``set_framed_view``)."""
+        None, drawn world extent or None): the raw layout metrics, mode-independent (each controller resolves them for
+        its own mode), the drawn card's framed view (``set_framed_view``) and the display-wide card's world while it is
+        drawn (``set_drawn_world_extent``)."""
         with self._lock:
             return (
                 tuple(self._committed_viewport_extent),
@@ -464,7 +470,41 @@ class VisualizerRuntimeController:
                 None if self._custom_content_rotation_override is None
                 else dict(self._custom_content_rotation_override),
                 self._framed_view,
+                self._drawn_world_extent,
             )
+
+    def set_drawn_world_extent(self, extent: Any) -> None:
+        """The display-wide card's physical world extent while the scene draws it, or None while the ordinary card is
+        drawn (the owner's two commit routes, at their edges only), or the engine worker's copy (``VIS_SET_VIEW``).
+
+        The display-wide card grows the card's world on the display's long axis and the renderer lays a frame out on
+        that world, so a simulation whose world is the extent itself must live in it (Bubble: operator, 21 Nov, its
+        bubbles ran several times faster display-wide). The committed metrics stay the ordinary card's. A changed
+        value is a layout-metrics write; an equal one does nothing."""
+        if extent is None:
+            resolved = None
+        else:
+            width, height = float(extent[0]), float(extent[1])
+            if not (math.isfinite(width) and math.isfinite(height) and width > 0.0 and height > 0.0):
+                raise ValueError("drawn world extent must be finite and positive")
+            resolved = (width, height)
+        with self._lock:
+            if resolved == self._drawn_world_extent:
+                return
+            self._drawn_world_extent = resolved
+        self._layout_metrics_written()
+
+    @property
+    def logical_world_extent(self) -> tuple[float, float]:
+        """The world of the card the scene draws, oriented for the current mode: the display-wide card's while it is
+        drawn, otherwise ``presentation_viewport_extent`` (the CUSTOM override or the committed extent)."""
+        with self._lock:
+            drawn = self._drawn_world_extent
+        if drawn is None:
+            return self.presentation_viewport_extent
+        if self.presentation_content_rotation_quarters & 1:
+            return (drawn[1], drawn[0])
+        return drawn
 
     @property
     def framed_view(self) -> FramedView | None:

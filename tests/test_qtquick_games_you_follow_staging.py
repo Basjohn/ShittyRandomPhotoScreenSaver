@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickItem
 
 from core.steam.games_followed_source import FollowedNewsSnapshot, FollowedNewsStory
@@ -103,13 +103,13 @@ def test_followed_stable_grouped_children_reflow_and_restore_without_delegate_ch
         # shadow remains a sibling. Tiny CUSTOM geometry must never let text or
         # inline art paint outside its story tile.
         frame0 = _find_visual(item, "followedStoryFrame0")
-        shadow0 = _find_visual(item, "followedStoryShadow0")
         headline0 = _find_visual(item, "followedStoryHeadline0")
         source0 = _find_visual(item, "followedStorySource0")
-        assert frame0 is not None and shadow0 is not None and headline0 is not None and source0 is not None
+        assert frame0 is not None and headline0 is not None and source0 is not None
         assert bool(frame0.property("clip"))
         assert headline0.parentItem() is frame0 and source0.parentItem() is frame0
-        assert shadow0.parentItem() is tiles[0]
+        # The tile has no shadow slab behind its translucent fill (the Feed tile's treatment).
+        assert _find_visual(item, "followedStoryShadow0") is None
         initial_header_x = header.x()
         initial_group = (group.x(), group.y(), group.width(), group.height())
         roles = item.property("customEditableChildRoles")
@@ -492,9 +492,8 @@ def test_followed_inline_article_thumbnails_keep_local_sources_and_retained_slot
         assert tile is not None and first is not None and second is not None and third is not None
         assert first_frame is not None and third_frame is not None and outline is not None
         contact = _find_visual(root, "followedStoryArtworkContactShadow0")
-        tile_shadow = _find_visual(root, "followedStoryShadow0")
         inline_contact = _find_visual(root, "followedStoryInlineContactShadow10")
-        assert all(obj is not None for obj in (contact, tile_shadow, inline_contact))
+        assert all(obj is not None for obj in (contact, inline_contact))
         assert bool(tile.property("canActivate"))  # Hover and tap cannot be inert on a live story.
         # A 730 x 440 grid may yield a narrow two-image tile. The third
         # retained role exists, but its QML Image must *not* acquire its local
@@ -555,3 +554,33 @@ def test_followed_inline_article_thumbnails_keep_local_sources_and_retained_slot
     finally:
         root.deleteLater()
         engine.deleteLater()
+
+
+def test_followed_story_tile_is_the_feed_story_tile_not_a_tinted_slab(qt_app) -> None:
+    """The stories sit on the card's own surface under a faint wash of the body ink and the
+    header's hairline (the News/Feed tile treatment), never on the palette's opaque info slab."""
+    model = GamesYouFollowPresentationModel()
+    assert model.accept_snapshot(_snapshot())
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "GamesYouFollowPresentation.qml")),
+    )
+    item = component.createWithInitialProperties({"followedModel": model})
+    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    try:
+        frame = _find_visual(item, "followedStoryFrame0")
+        assert frame is not None
+        fill = frame.property("color")
+        ink = model.primaryColor
+        assert (fill.red(), fill.green(), fill.blue()) == (ink.red(), ink.green(), ink.blue())
+        assert fill.alphaF() < 0.15  # a wash: the surface behind the card reads through
+        assert QQmlProperty(frame, "border.color").read() == model.headerBorderColor
+    finally:
+        model.retire()
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()

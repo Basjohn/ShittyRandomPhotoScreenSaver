@@ -154,6 +154,17 @@ def test_graphics_backend_is_requested_only_by_its_own_token_and_named_backends(
         assert ef.experiment_flag_tokens(["main.py", token, "/s"]) == (token,)
 
 
+def test_vulkan_flag_is_short_for_graphics_backend_vulkan_and_an_explicit_backend_wins():
+    flags = ef.parse_experiment_flags(["main.py", "/s", ef.VULKAN_FLAG])
+    assert flags.graphics_backend == "vulkan"
+    assert flags.lifecycle_telemetry_admitted is False and flags.gpu_pass_timing is False   # it admits nothing else
+    assert ef.experiment_flag_tokens(["main.py", ef.VULKAN_FLAG, "/s"]) == (ef.VULKAN_FLAG,)
+    for argv in (["main.py", ef.VULKAN_FLAG, f"{ef.GRAPHICS_BACKEND_FLAG}=opengl"],
+                 ["main.py", f"{ef.GRAPHICS_BACKEND_FLAG}=opengl", ef.VULKAN_FLAG]):
+        assert ef.parse_experiment_flags(argv).graphics_backend == "opengl", argv
+    assert ef.parse_experiment_flags(["main.py", "--vulkan=1"]).graphics_backend is None   # only the bare token
+
+
 def test_graphics_backend_request_is_read_after_deliberate_activation_only():
     assert ef.graphics_backend_request() is None
     ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", f"{ef.GRAPHICS_BACKEND_FLAG}=vulkan"]))

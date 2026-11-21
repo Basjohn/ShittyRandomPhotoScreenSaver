@@ -66,7 +66,7 @@ POSIX (source-level only there); no control message registers a descriptor with 
 Contract: `Docs/Contracts.md` "Process path".
 
 The dependency floor is PySide6/Qt 6.12.0 (pinned in `requirements.txt`; bumped from 6.11.2 on 12 Nov 2026, commit 655b04bf). Production requests OpenGL 4.6 Core and uses GLSL 460 core;
-OpenGL is the sole production graphics API (the `--graphics-backend=vulkan` switch is the lead's diagnostic rehearsal
+OpenGL is the sole production graphics API (the `--graphics-backend=vulkan` switch, or `--vulkan` for short, is the diagnostic rehearsal
 path until the flip: `Docs/Future_Work/Native_Core_P3_Decisions.md` D10). The existing render-context initialization boundary records actual
 GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to
 context lifetime, with no steady-frame driver queries. The accepted swap interval remains zero.

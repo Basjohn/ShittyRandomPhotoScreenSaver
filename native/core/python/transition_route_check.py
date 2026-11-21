@@ -2,7 +2,10 @@
 ``rendering/quick/render/native_background.py``), in hidden hosts only (never a window on a screen), widened by N5.2b to
 the five item-quad programs that are one fragment between two pictures (``N52B_VARIANTS``: Chromatic Shear, Liquid
 Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``) and to Beam, whose sparks follow its fragment as instanced
-quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover). The Python reference is the product's frame at the run's dpr
+quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover), and by N5.2c to the 3D transitions drawn as
+scenes (``N52C_VARIANTS``: Blinds in both styles, Cube Turn, Depth Card Cascade, Jigsaw; N4.j's photo environment, the
+scene target and the opaque composite; ``--topic n5_2c``), whose photo environment must be drawn exactly once a run
+(``environment_once_per_photo``). The Python reference is the product's frame at the run's dpr
 (``product_capture``: the item's logical size over the display's device pixels, as the runtime gives it).
 
 A photo change runs the configured transition natively over N5.7a's background layer: the transition's own product
@@ -92,7 +95,7 @@ BEAM_RULE_B = pt.Tolerance("Beam (fragment and sparks), Vulkan against OpenGL (r
 REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
-ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks")
+ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -122,12 +125,91 @@ BEAM_VARIANTS = {
                     "scorch": 0.0, "cure": 0.0},
     "beam_plain": {"request_direction": "up", "sparks": False, "glow": 0.0, "scorch": 1.0, "cure": 1.0},
 }
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",)
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS}
+#: N5.2c: the 3D transitions drawn as scenes (``NativeScenePasses``: a scene target, its passes and meshes, N4.j's photo
+#: environment, the opaque composite). Each at its production defaults (the tier's 4 samples), and with options at the
+#: other extremes, single-sampled (``samples`` 0: Python draws straight into Quick's framebuffer), the path rule (a)
+#: proves exact; Blinds in both styles.
+N52C_TRANSITIONS = ("blinds", "cube_turn", "depth_cascade", "jigsaw")
+N52C_VARIANTS = {
+    "cube_turn": {},
+    "cube_turn_options": {"request_direction": "up", "gloss": 1.0, "samples": 0},
+    # Blinds' production default is the flat style, whose request carries no slat values: 3D Slats as High draws them.
+    "blinds": {"style": "slats", "slats": 16, "gloss": 0.5, "samples": 4, "request_direction": "horizontal"},
+    "blinds_slats": {"style": "slats", "slats": 48, "gloss": 1.0, "request_direction": "vertical", "samples": 0},
+    "blinds_slats_few": {"style": "slats", "slats": 6, "gloss": 0.0, "request_direction": "horizontal", "samples": 0},
+    "blinds_flat": {"style": "flat", "feather": 0.5, "request_direction": "diagonal"},
+    "depth_cascade": {},
+    "depth_cascade_options": {"request_direction": "up", "cards": 14, "gloss": 1.0, "shadows": False, "seed": 7,
+                              "samples": 0},
+    "jigsaw": {},
+    "jigsaw_options": {"pieces": 150, "order": "unordered", "seed": 9, "detail": "Performance", "samples": 0},
+}
+#: N5.2c's rule (a), the lead's decision (21 Nov) on r3's measurement (the ABI 36 build, 068be1f26):
+#: - Single-sampled scenes (``samples`` 0): at most N52C_SCATTER_PIXELS isolated pixels a frame one level off, nothing
+#:   past one level. Measured worst 1,152 a frame (Cube Turn with options), scattered over the textured faces and none in
+#:   the environment's backdrop: the translated packs and Python's compiler round the faces' UVs and lighting within
+#:   float error of a half level differently (N5.2b's fragment-pass scatter, on more pixels because a face fills much of
+#:   the frame); the bound is the worst times 1.5. Not every one is alone (the agent's "isolated" was loose): over r3's
+#:   single-sampled frames the largest group of touching one-level pixels is 19 (Cube Turn with options at 0.80, dpr
+#:   1.5), so a group may hold N52C_SCATTER_GROUP (19 times 1.5) and a compact one-level patch still fails.
+#: - Multisampled scenes (the tier's 4 samples) are not judged against Python (D8 point 1): the core draws its targets top
+#:   row first and Python bottom row first (F1), so the driver's standard 4x pattern, (0.375, 0.125), (0.875, 0.375),
+#:   (0.125, 0.625), (0.625, 0.875) and not symmetric under a vertical flip, lands mirrored on the picture: a slanted
+#:   edge's pixel covers a different one of four samples (a quarter of the edge's contrast, measured up to about 2,260
+#:   pixels a frame along slanted silhouettes; horizontal edges and single-sampled frames agree). The core's row order
+#:   is not changed for it. Their rule (a) is their single-sampled forms' (the same geometry: ``*_options`` and
+#:   ``blinds_slats*`` at ``samples`` 0); the 4x frames are judged by rule (b), Vulkan against OpenGL, both native.
+N52C_SCATTER_PIXELS = 1750
+N52C_SCATTER_GROUP = 28
+N52C_RULE_A = pt.Tolerance("3D transition scene, single-sampled, against its Python renderer (rule a)",
+                           scatter_pixels=N52C_SCATTER_PIXELS, scatter_cluster_pixels=N52C_SCATTER_GROUP)
+#: Jigsaw's single-sampled scenes also admit one flip a frame on an edge (the lead, 21 Nov, as Surface Tension's): a
+#: pixel of a piece's outline where the two compilers put the outline's edge either side of the pixel centre (r4:
+#: Jigsaw with options at 0.05, one pixel 12 levels off, isolated on the outline, both dprs).
+JIGSAW_RULE_A = pt.Tolerance("Jigsaw scene, single-sampled, against its Python renderer (rule a; a piece outline's flip)",
+                             scatter_pixels=N52C_SCATTER_PIXELS, scatter_cluster_pixels=N52C_SCATTER_GROUP,
+                             flip_pixels=1)
+#: Blinds' flat style (one fragment between the pictures, judged as a fragment pass): its own scatter bound (the lead, 21
+#: Nov): measured 128 pixels a frame one level off (progress 0 to 0.35, both dprs; the two compilers' rounding of its
+#: feathered edges), times 1.5.
+BLINDS_FLAT_RULE_A = pt.Tolerance("Blinds flat, a fragment pass, against its Python renderer (rule a)", scatter_pixels=192)
+MULTISAMPLED_RULE_A = ("a multisampled scene: rule (b) only (D8 point 1: the sample pattern lands mirrored on Python's "
+                       "bottom-first rows); rule (a) is its single-sampled form's")
+#: Blinds' slats are edge-on at exactly half the run: a slat's side then covers a row only by float error, and Python
+#: itself draws that row differently a hair either side (measured: row 267 grey at 0.49999, 0.5 and 0.50001, the picture
+#: at 0.4999, another colour at 0.5001). A hair either side is still too near: at 0.4999 and 0.5001 the faces are so
+#: near edge-on that six slats at dpr 1.5 put 3,036 pixels one level off (r4), past N52C_RULE_A, where every other pose
+#: is within it. So the check takes 0.49 and 0.51 in place of 0.5 (the lead, 21 Nov), never a pose exception or a wider
+#: bound for near edge-on faces.
+SLAT_PROGRESS = (0.49, 0.51)
+SLAT_VARIANTS = ("blinds", "blinds_slats", "blinds_slats_few")
+#: Rule (b)'s flips (lead's instruction 21 Nov, as BEAM_RULE_B): measured on the ABI 36 build (068be1f26, r3) at most 3
+#: pixels a frame past 2 levels, each isolated on a geometry edge, where the two APIs' rasterisers decide a pixel centre
+#: within float error of the edge differently (Vulkan's clip space is OpenGL's with z halved and y flipped, so the edge
+#: equations differ in their last bits): Cube Turn's slanted silhouette (up to 233 levels: the box against the
+#: backdrop), a Jigsaw piece's outline, and Depth Card Cascade's card edges (options: 3 a frame at x 249-253, one card's
+#: left edge, its fwidth ramp).
+N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
+                           tie_pixels=TIE_PIXELS, flip_pixels=3)
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + N52C_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **N52C_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS)
+
+
+def variant_progress(variant: str) -> tuple[float, ...]:
+    """The progress values ``variant`` is drawn at: PROGRESS, Blinds' slats with 0.5 replaced by SLAT_PROGRESS."""
+    if variant.split("@", 1)[0] not in SLAT_VARIANTS:
+        return tuple(PROGRESS)
+    half = PROGRESS.index(0.5)
+    return tuple(PROGRESS[:half]) + SLAT_PROGRESS + tuple(PROGRESS[half + 1:])
+
+
+def progress_key(progress: float) -> str:
+    """A frame's progress in its key: two places (the stored keys), four where two would merge two values."""
+    return f"{progress:.2f}" if round(progress, 2) == progress else f"{progress:.4f}"
 
 
 def variant_transition(variant: str) -> str:
@@ -178,7 +260,7 @@ def production_run(variant: str, images, run_id: int):
     from tools.transition_contact_sheet import production_transition_spec
 
     transition_id = variant_transition(variant)
-    spec = production_transition_spec(fsc.renderer_class(transition_id).transition_id, DURATION_MS)
+    spec = production_transition_spec(transition_id, DURATION_MS)
     request = spec.build_request(runtime_generation=0, source_image=images[0], destination_image=images[1])
     overrides = VARIANTS[variant]
     if overrides:
@@ -199,7 +281,7 @@ def references(variants, photos, dpr: float) -> dict:
     try:
         for index, variant in enumerate(variants):
             run = production_run(variant, [image for image, _rows in photos], index + 1)
-            for progress in PROGRESS:
+            for progress in variant_progress(variant):
                 image, _ms = capture.render(run, progress)
                 out[(variant, progress)] = np.asarray(image, dtype=np.uint8).copy()
     finally:
@@ -235,6 +317,10 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 scene.present(photos[0][0])
                 scene.settle()
                 entry: dict = {}
+                # N5.2c: a scene's samples (rule a's form) and its photo environment's copies over the run.
+                entry["scene"] = variant_transition(variant) in N52C_TRANSITIONS
+                entry["samples"] = int(run.request.parameter_dict().get("samples", 0) or 0)
+                copies_before = _environment_copies(core)
                 clock.at(run, PROGRESS[0])
                 started = time.perf_counter()
                 scene.layer.transition(run)
@@ -243,22 +329,31 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 ticks_before = scene.layer.ticks
                 scene.frames(2)
                 entry["clock_edge_ticks_over_2_frames"] = scene.layer.ticks - ticks_before
-                for progress in PROGRESS:
+                progresses = variant_progress(variant)
+                entry["progress"] = list(progresses)
+                for progress in progresses:
                     clock.at(run, progress)
                     scene.layer.tick()
                     scene.frames(1)
                     rows = scene.display_rows(scene.read())
-                    frames[f"dpr{dpr}_{variant}_{progress:.2f}"] = rows
+                    frames[f"dpr{dpr}_{variant}_{progress_key(progress)}"] = rows
                     if not vulkan:
                         reference = expected[(variant, progress)]
-                        entry[f"{progress:.2f}"] = blc.compare(rows, reference)
-                        entry[f"{progress:.2f}"]["over_tolerance"] = _over(rows, reference, VULKAN_TOLERANCE)
-                        entry[f"{progress:.2f}"]["tolerance"] = pt.judge(
-                            rows[..., :3], reference[..., :3],
-                            FRAGMENT_PASS_RULE_A if _is_fragment_pass(variant) else pt.EXACT)
+                        rule = _rule_a(variant, entry)
+                        judged = entry[progress_key(progress)] = blc.compare(rows, reference)
+                        judged["over_tolerance"] = _over(rows, reference, VULKAN_TOLERANCE)
+                        # N5.2c: a multisampled scene is judged by rule (b) only (rule a: its single-sampled form).
+                        judged["tolerance"] = (pt.judge(rows[..., :3], reference[..., :3], rule) if rule is not None
+                                               else {"pass": True, "judged": False, "reason": MULTISAMPLED_RULE_A})
                 if not vulkan:
+                    # Another progress's reference differs (the pair two thirds into the run's values).
+                    here, there = progresses[-5], progresses[-4]
                     entry["control_next_progress_differs"] = not blc.compare(
-                        frames[f"dpr{dpr}_{variant}_{PROGRESS[4]:.2f}"], expected[(variant, PROGRESS[5])])["equal"]
+                        frames[f"dpr{dpr}_{variant}_{progress_key(here)}"], expected[(variant, there)])["equal"]
+                # N5.2c: N4.j's copy drawn once over the run (a scene reading it), never for any other run.
+                reads = entry["scene"] and _reads_environment(run)
+                entry["environment_copies"] = _environment_copies(core) - copies_before
+                entry["environment_once_per_photo"] = entry["environment_copies"] == (1 if reads else 0)
                 # The run's end: the item ends the run, then hands over the destination (the runtime's order).
                 uploads = _mode_counts(scene)["uploads"]
                 scene.layer.transition(None)
@@ -275,7 +370,8 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 entry["rest"] = [before, after]
                 facts["variants"][f"{variant}@{dpr}"] = entry
                 if dpr == 1.0 and variant in SHEET_VARIANTS:
-                    tiles.append([blc._tile(frames[f"dpr{dpr}_{variant}_{p:.2f}"]) for p in (0.2, 0.5, 0.8)])
+                    tiles.append([blc._tile(frames[f"dpr{dpr}_{variant}_{progress_key(p)}"])
+                                  for p in variant_progress(variant)[2:-2:2]][:3])
             facts[f"layer_dpr_{dpr}"] = scene.layer.state()
         finally:
             scene.close(app)
@@ -283,23 +379,98 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     keys = list(facts["variants"])
     if not vulkan:
         # Exact for the seven; the shared tolerance for a NativeFragmentPass (FRAGMENT_PASS_RULE_A).
+        judged = [(k, p, facts["variants"][k][progress_key(p)]) for k in keys
+                  for p in facts["variants"][k]["progress"]]
         checks["rule_a_equal_to_the_python_renderer"] = all(
-            facts["variants"][k][f"{p:.2f}"]["tolerance"]["pass"]
-            and (_is_fragment_pass(k) or facts["variants"][k][f"{p:.2f}"]["equal"]) for k in keys for p in PROGRESS)
+            e["tolerance"]["pass"] and (_rule_a(k, facts["variants"][k]) is not pt.EXACT or e["equal"])
+            for k, _p, e in judged)
         facts["rule_a_tolerance"] = {
-            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound()],
-            **pt.summarise(facts["variants"][k][f"{p:.2f}"]["tolerance"] for k in keys for p in PROGRESS)}
+            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A.bound(), JIGSAW_RULE_A.bound(),
+                       BLINDS_FLAT_RULE_A.bound()],
+            "not_judged": sorted({k for k, _p, e in judged if e["tolerance"].get("judged") is False}),
+            **pt.summarise(e["tolerance"] for _k, _p, e in judged if e["tolerance"].get("judged") is not False)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
                                                          for k in keys)
-        worst = max(((k, p, facts["variants"][k][f"{p:.2f}"]) for k in keys for p in PROGRESS),
-                    key=lambda e: e[2].get("max_level", 0))
+        worst = max(((k, p, e) for k, p, e in judged if e["tolerance"].get("judged") is not False),
+                    key=lambda e: e[2].get("max_level", 0), default=("", 0.0, {}))
         facts["rule_a_worst"] = {"variant": worst[0], "progress": worst[1], **worst[2]}
-    for name in ("end_is_the_destination", "end_uploads_nothing", "clock_disconnected", "nothing_at_rest"):
+    for name in ("end_is_the_destination", "end_uploads_nothing", "clock_disconnected", "nothing_at_rest",
+                 "environment_once_per_photo"):
         checks[name] = all(facts["variants"][k][name] for k in keys)
     if vulkan:
         checks.update(_route_on_vulkan(core, engine, app, frames, facts))
     np.savez_compressed(work / f"route_{api}.npz", **frames)
-    blc._sheet(out / f"transition_route_{api}.png", tiles)
+    if tiles:                                            # a selection without a sheet variant draws no sheet
+        blc._sheet(out / f"transition_route_{api}.png", tiles)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+#: The performance step's cost (``--cost``; Native_Parity_And_Timing_Proof.md section 3, "A transition port": C per pass
+#: at 2560 x 1440 and 4K on both backends): the layer's record of the run (the environment's copy and chain once, the
+#: scene's passes, the composite) timed by the core's GPU timer over COST_FRAMES frames of the effect, median and p90;
+#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context. Frames run back to
+#: back (no readback between them, which let the GPU idle and downclock: the first run's 4K figures were below its
+#: 1440p ones); Crossfade, timed in the same run, is the control the others are read against.
+COST_SIZES = ((2560, 1440), (3840, 2160))
+COST_FRAMES = 240
+
+
+def round_cost(core, engine, app, api: str, variants) -> dict:
+    from PIL import Image
+
+    facts: dict = {}
+    checks: dict = {}
+    for size in COST_SIZES:
+        label = f"{size[0]}x{size[1]}"
+        photos = [blc.processed(path, "fill", size) for path in PHOTOS]
+        host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
+        scene = blc.Scene(core, engine, host, 1.0, size, kind="layer")
+        clock = Clock()
+        scene.layer._clock_ns = clock
+        try:
+            for index, variant in enumerate(variants):
+                run = production_run(variant, [image for image, _rows in photos], index + 1)
+                scene.present(photos[0][0])
+                scene.settle()
+                clock.at(run, 0.1)
+                scene.layer.transition(run)
+                scene.settle()
+                scene.frames(4)
+                host.set_gpu_timer(True)
+                host.gpu_samples()
+                walls = []
+                for frame in range(COST_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
+                    started = time.perf_counter()
+                    scene.layer.tick()
+                    scene.frames(1)
+                    walls.append((time.perf_counter() - started) * 1000.0)
+                scene.frames(4)
+                samples = host.gpu_samples()
+                host.set_gpu_timer(False)
+                surface = [s.nanoseconds / 1e6 for s in samples if s.kind == 2]
+                frame_gpu = [s.nanoseconds / 1e6 for s in samples if s.kind == 0]
+                facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
+                                               "qrhi_frame_gpu": blc._ms_stats(frame_gpu),
+                                               "gui_tick_and_frame_wall": blc._ms_stats(walls),
+                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0)}
+                checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
+                scene.layer.transition(None)
+                scene.present(photos[1][0])
+                scene.settle()
+        finally:
+            scene.close(app)
+            facts.setdefault("host_close", []).append(blc._close_host(app, host))
+        if api == "opengl":
+            pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
+            capture = product_capture(size[0], size[1], *pictures, 1.0)
+            try:
+                for index, variant in enumerate(variants):
+                    run = production_run(variant, [image for image, _rows in photos], index + 1)
+                    capture.render(run, 0.5)                     # its per-run resources made before the timing
+                    facts[f"{label}_{variant}"]["python_opengl"] = capture.benchmark(run)
+            finally:
+                capture.close()
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -308,7 +479,7 @@ def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
     layer, the same pixels as the layer driven directly; the run's end draws the destination. Each ``ROUTE_VARIANTS``
     entry the run drew, in its own host."""
     dpr = 1.5
-    drawn = [v for v in ROUTE_VARIANTS if f"dpr{dpr}_{v}_{PROGRESS[0]:.2f}" in frames]
+    drawn = [v for v in ROUTE_VARIANTS if f"dpr{dpr}_{v}_{progress_key(PROGRESS[0])}" in frames]
     if not drawn:
         return {"route_variant_drawn": False}
     facts["route_variants"] = drawn
@@ -323,14 +494,16 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
     from rendering.quick import bootstrap
 
     owner = bootstrap._owner
+    # The run is resolved before the backend is the native one: N5.2c's scenes are drawn natively before Vulkan offers
+    # them (registration comes last, playbook checklist 18), so the resolver would refuse them on Vulkan.
+    photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
+    run = production_run(route_variant, [image for image, _rows in photos], 1)
     saved = (owner.core, owner.backend)
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     host = blc._host(core, blc.WINDOW, dpr)
     scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
     try:
-        photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
-        run = production_run(route_variant, [image for image, _rows in photos], 1)
         scene.present(photos[0][0])
         scene.settle()
         layer = scene.item.native_layer
@@ -340,12 +513,13 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
         scene.item.set_transition_run(run)
         scene.settle()
         same = {}
-        for progress in PROGRESS:
+        for progress in variant_progress(route_variant):
             clock.at(run, progress)
             layer.tick()
             scene.frames(1)
             rows = scene.display_rows(scene.read())
-            same[f"{progress:.2f}"] = blc.compare(rows, frames[f"dpr{dpr}_{route_variant}_{progress:.2f}"])
+            same[progress_key(progress)] = blc.compare(rows,
+                                                       frames[f"dpr{dpr}_{route_variant}_{progress_key(progress)}"])
         scene.item.set_transition_run(None)
         scene.item.set_presentation_image(photos[1][0])
         scene.settle()
@@ -371,8 +545,52 @@ def _over(a, b, level: int) -> int:
     return int(np.count_nonzero(difference > level))
 
 
+#: N5.2c variants that are one authored fragment between the two pictures (Blinds' flat style: no scene, no target),
+#: judged as N5.2b's fragment passes are (the lead, 21 Nov), with its own scatter bound: BLINDS_FLAT_RULE_A.
+N52C_FRAGMENT_VARIANTS = ("blinds_flat",)
+
+
 def _is_fragment_pass(variant: str) -> bool:
-    return variant.split("@", 1)[0] in N52B_VARIANTS or variant.split("@", 1)[0] in BEAM_VARIANTS
+    drawn = variant.split("@", 1)[0]
+    return drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
+
+
+def _multisampled_scene(entry: dict) -> bool:
+    """N5.2c: a scene drawn with more than one sample (rule b only: MULTISAMPLED_RULE_A)."""
+    return bool(entry.get("scene")) and int(entry.get("samples", 0)) > 1
+
+
+def _rule_a(variant: str, entry: dict):
+    """Rule (a)'s tolerance for ``variant`` (None: not judged by rule a, a multisampled scene)."""
+    if _multisampled_scene(entry):
+        return None
+    drawn = variant.split("@", 1)[0]
+    if drawn in N52C_FRAGMENT_VARIANTS:
+        return BLINDS_FLAT_RULE_A
+    if _is_fragment_pass(variant):
+        return FRAGMENT_PASS_RULE_A
+    if not entry.get("scene"):
+        return pt.EXACT
+    return JIGSAW_RULE_A if variant_transition(drawn) == "jigsaw" else N52C_RULE_A
+
+
+def _environment_copies(core) -> int:
+    """N5.2c: the photo environments' copies drawn in the process so far (``composite_live``). A module that does not
+    count them is refused (a missing count must never read as "no copy", which would pass the copy check)."""
+    live = core.composite_live()
+    copies = live.get("stage_environment_copies") if isinstance(live, dict) else None
+    if isinstance(copies, bool) or not isinstance(copies, int) or copies < 0:
+        raise RuntimeError(f"composite_live() has no environment copy count (stage_environment_copies={copies!r}): "
+                           "the module predates N5.2c or its accounting is broken")
+    return copies
+
+
+def _reads_environment(run) -> bool:
+    from rendering.quick.render.native_background import native_transition_renderer
+
+    renderer = native_transition_renderer(run.request.transition_id)
+    return bool(renderer is not None and getattr(renderer, "native_scene", None)
+                and renderer.native_scene(run, blc.DISPLAY).environment)
 
 
 def vulkan_against_opengl(work: Path) -> dict:
@@ -396,13 +614,14 @@ def vulkan_against_opengl(work: Path) -> dict:
         worst = max(worst, result.get("max_level", 255))
         drawn = variant.split("_", 1)[1]
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
+                     N52C_RULE_B if drawn in N52C_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound()]}
 
 
 # --------------------------------------------------------------------------------------------------- the child
@@ -453,7 +672,10 @@ def child(args) -> dict:
     engine = QQmlEngine()
     try:
         try:
-            record["draw"] = round_draw(core, engine, app, args.api, args.variants, work, out)
+            if args.cost:
+                record["draw"] = round_cost(core, engine, app, args.api, args.variants)
+            else:
+                record["draw"] = round_draw(core, engine, app, args.api, args.variants, work, out)
         except Exception:
             record["draw"] = {"pass": False, "error": traceback.format_exc()}
     finally:
@@ -489,6 +711,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    parser.add_argument("--cost", action="store_true",
+                        help="the performance step instead of the draw: GPU time per run at COST_SIZES (round_cost)")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -521,7 +745,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--variants", *args.variants]
+                   "--variants", *args.variants, *(["--cost"] if args.cost else [])]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
@@ -545,7 +769,7 @@ def main(argv: list[str] | None = None) -> int:
             bad = [k for k, v in (entry.get("checks") or {}).items() if not v]
             failed.append(f"{api} draw: {bad or entry.get('error', 'failed')}"[:1500])
     comparison = None
-    if set(APIS) <= set(args.apis):
+    if set(APIS) <= set(args.apis) and not args.cost:
         comparison = vulkan_against_opengl(out / "work")
         if not comparison.get("pass"):
             failed.append(f"rule (b): Vulkan against OpenGL native, worst {comparison.get('worst_level')} levels")

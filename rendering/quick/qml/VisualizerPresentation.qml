@@ -1189,9 +1189,11 @@ Item {
         // Place the visualizer counter BELOW its original 6px top inset.
         // Its independent 12px inset is not inherited from the screen HUD.
         // Retain the added 1px of internal vertical padding per side.
+        // Expanded (the card fills the display): drop below the screen HUD (DisplayScene perfHud, 8px inset, one
+        // 11px line plus 8px padding) so the two never overlap (operator, 21 Nov).
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 12
+        anchors.topMargin: visualizerPresentationRoot.expandedDisplay ? 40 : 12
         width: visualizerPerfHudLabel.implicitWidth + 10
         height: visualizerPerfHudLabel.implicitHeight + 8
         radius: 3

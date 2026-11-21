@@ -49,6 +49,8 @@ Admissions:
   device (D6). Run by the lead only, bounded, on Display 1 (``tools/d1_run.py --app-arg=--graphics-backend=vulkan``).
   ``--graphics-backend=opengl`` names the default. Absent or any other value: OpenGL, the product path, unchanged
   (:func:`graphics_backend_request`). Only the ``=`` form is one token.
+* ``--vulkan`` — the same as ``--graphics-backend=vulkan``, short for the operator's own runs of what has landed on
+  Vulkan (operator, 21 Nov 2026). An explicit ``--graphics-backend=`` token wins over it.
 
 All are ordinary argv tokens in the ``=`` form, so a harness that launches a
 child passes them as arguments; nothing is read from the environment.
@@ -108,6 +110,8 @@ class ExperimentFlags:
 ONLY_DISPLAY_FLAG = "--only-display"
 GPU_PASS_TIMING_FLAG = "--gpu-pass-timing"
 GRAPHICS_BACKEND_FLAG = "--graphics-backend"
+#: Short for ``--graphics-backend=vulkan``.
+VULKAN_FLAG = "--vulkan"
 #: The backends ``--graphics-backend`` may name (``rendering.quick.bootstrap.QUICK_BACKENDS`` is the same pair).
 GRAPHICS_BACKENDS = ("opengl", "vulkan")
 
@@ -162,6 +166,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     in_process_chosen = False
     gpu_pass_timing = False
     graphics_backend: str | None = None
+    explicit_backend = False
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
@@ -169,6 +174,11 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         if arg.startswith(GRAPHICS_BACKEND_FLAG + "="):
             requested = arg.split("=", 1)[1].strip().lower()
             graphics_backend = requested if requested in GRAPHICS_BACKENDS else None
+            explicit_backend = True
+            continue
+        if arg == VULKAN_FLAG:
+            if not explicit_backend:
+                graphics_backend = "vulkan"
             continue
         if arg == GPU_PASS_TIMING_FLAG:
             gpu_pass_timing = True
@@ -253,6 +263,7 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
         if (
             arg == "--viz-switch-telemetry"
             or arg == GPU_PASS_TIMING_FLAG
+            or arg == VULKAN_FLAG
             or arg == "--viz-engine-worker"
             or arg == "--viz-in-process"
             or arg == "--profile-cpu"
@@ -386,6 +397,7 @@ __all__ = [
     "GPU_PASS_TIMING_FLAG",
     "gpu_pass_timing_admitted",
     "GRAPHICS_BACKEND_FLAG",
+    "VULKAN_FLAG",
     "GRAPHICS_BACKENDS",
     "graphics_backend_request",
     "override_active_flags_for_testing",

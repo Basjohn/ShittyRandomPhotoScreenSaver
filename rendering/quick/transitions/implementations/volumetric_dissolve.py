@@ -23,7 +23,8 @@ from rendering.gl_programs.volumetric_dissolve_program import (
     volumetric_grid,
 )
 from rendering.quick import gl_query
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.population import CompactedPopulation, population_programs
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -116,7 +117,7 @@ class QuickVolumetricDissolveRenderer:
         _seed, particle_size, _mist, _depth = volumetric_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "backdrop", VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
                    (r, "particles", VOLUMETRIC_PARTICLE_VERTEX_SOURCE, VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE)]
         entries += [(r, *program) for program in population_programs("particles", VOLUMETRIC_HOOKS)]

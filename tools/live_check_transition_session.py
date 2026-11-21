@@ -18,6 +18,12 @@ one process.
   (``BACKGROUND_RENDER_BEGIN`` 19 and ``BACKGROUND_RENDER_READY`` 23; 0 = no run). A run's window is from the first begin
   record carrying its id to the last ready record carrying it. A run with no begin record, or whose last begin has no
   ready record after it (the trace or the process ended inside it), is **failed**, never measured on a partial window.
+  A run the native core draws (Vulkan's background layer) has no background-node records; the layer writes
+  ``NATIVE_TRANSITION_TICK`` 81 (at the run's start and each frame's progress) and ``NATIVE_TRANSITION_END`` 82, which
+  bound its window the same way.
+* **Hitch verdict** (``run_gaps``): the render thread's frame gaps inside the window (the startup reveal and the
+  destination's handover are outside it), median, p90, max and the count over ``GAP_LIMIT_MS``; the run's first frame is
+  measured from the window's opening, so a first-run compile stall counts. The verdict is no gap over the limit.
 * **Attribution:** the planned names are matched to the post-startup runs by what the run resolved to, each name's first
   run; the run ids of the planned order must increase, or the later row fails (an out-of-order session is not trusted).
 
@@ -33,7 +39,12 @@ from pathlib import Path
 BACKGROUND_RENDER_BEGIN, BACKGROUND_RENDER_READY = 19, 23
 QUICK_BEFORE_RENDERING, QUICK_AFTER_RENDERING = 51, 54
 LIFECYCLE_BEGIN, LIFECYCLE_END = 62, 63
+NATIVE_TRANSITION_TICK, NATIVE_TRANSITION_END = 81, 82
 LATE_MS, HITCH_MS = 25.0, 50.0
+#: A transition run's hitch verdict (the lead, 21 Nov; Native_Parity_And_Timing_Proof.md "A transition port"): no gap
+#: between the render thread's frames inside the run longer than this, the run's first frame included (a first-run
+#: compile stall shows there: the window opens before the run's first frame).
+GAP_LIMIT_MS = 33.0
 SETTLE_S = 4.0                 # after the longest transition completes, before the next image change
 STARTUP_LEAD_S = 25.0          # process start to the first image change's transition (a tolerance, not a measurement)
 
@@ -157,21 +168,43 @@ def startup_end_ns(events) -> int | None:
 def cut_windows(events) -> dict[int, dict]:
     """``{run_id: {"begin_ns", "end_ns", "complete", "reason"}}`` from the background node's per-frame records.
 
-    ``complete`` is False (with a ``reason``) when no ready record follows the run's last begin record."""
+    ``complete`` is False (with a ``reason``) when no ready record follows the run's last begin record. A run the native
+    core drew (the native background layer, Vulkan) has no background-node records: its window is from its first
+    ``NATIVE_TRANSITION_TICK`` (written when the run starts, before its first frame) to its ``NATIVE_TRANSITION_END``
+    (the run's end, before the destination's handover), and it is incomplete without the end record."""
     first_begin, last_begin, last_ready = {}, {}, {}
-    for ts, event, _screen, _revision, aux in events:
+    native_first, native_last, native_end = {}, {}, {}
+    screens = {}
+    for ts, event, screen, _revision, aux in events:
         if aux <= 0:
             continue
         if event == BACKGROUND_RENDER_BEGIN:
             first_begin.setdefault(aux, ts)
             last_begin[aux] = ts
+            screens.setdefault(aux, screen)
         elif event == BACKGROUND_RENDER_READY:
             last_ready[aux] = ts
+        elif event == NATIVE_TRANSITION_TICK:
+            native_first.setdefault(aux, ts)
+            native_last[aux] = ts
+            screens.setdefault(aux, screen)
+        elif event == NATIVE_TRANSITION_END:
+            native_end[aux] = ts
     windows = {}
+    for run_id, begin in native_first.items():
+        end = native_end.get(run_id)
+        complete = end is not None and end >= native_last[run_id]
+        windows[run_id] = {"begin_ns": begin, "end_ns": end if complete else None, "complete": complete, "native": True,
+                           "screen": screens[run_id],
+                           "reason": None if complete else ("no end record (NATIVE_TRANSITION_END) after the run's last "
+                                                            "tick: the trace or the process ended inside the run")}
     for run_id, begin in first_begin.items():
+        if run_id in windows:
+            continue                                     # a native run (both kinds never carry one id)
         end = last_ready.get(run_id)
         complete = end is not None and end >= last_begin[run_id]
         windows[run_id] = {"begin_ns": begin, "end_ns": end if complete else None, "complete": complete,
+                           "screen": screens[run_id],
                            "reason": None if complete else ("no end record (BACKGROUND_RENDER_READY) after the last "
                                                             "begin record: the trace or the process ended inside the run")}
     return windows
@@ -185,15 +218,40 @@ def _stats(values):
             "p90": round(ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))], 2)}
 
 
-def window_figures(events, begin_ns: int, end_ns: int, *, samples=None, process_summary=None) -> dict:
-    """The window's figures, named as ``tools/preflip_pack.extract_figures`` stores them: fps, render time (Quick's
-    render phase), frame time (the gap between rendered frames, stored as the swap gap) median and p90, late frames, hitches and the saver's CPU in the window."""
-    swaps = [ts for ts, event, *_ in events if event == QUICK_AFTER_RENDERING and begin_ns <= ts <= end_ns]
+def _screen_frames(events, event_id: int, begin_ns: int, end_ns: int, screen: int) -> list[int]:
+    """The timestamps of ``event_id`` records of ``screen``'s window inside ``[begin_ns, end_ns]`` (each display's window
+    renders on its own thread, so another screen's frames say nothing of this run's)."""
+    return [ts for ts, event, s, *_ in events if event == event_id and s == screen and begin_ns <= ts <= end_ns]
+
+
+def run_gaps(events, begin_ns: int, end_ns: int, *, screen: int, limit_ms: float = GAP_LIMIT_MS) -> dict:
+    """The run's hitch figures: ``screen``'s render-thread frame gaps inside ``[begin_ns, end_ns]``
+    (``QUICK_AFTER_RENDERING`` spacing), the first measured from the window's opening (``first_frame_ms``), with their
+    median, p90, max, the count over ``limit_ms`` and the verdict (``pass``: none over it; a run with no frame fails)."""
+    frames = _screen_frames(events, QUICK_AFTER_RENDERING, begin_ns, end_ns, screen)
+    if not frames:
+        return {"gap_ms": None, "first_frame_ms": None, "gaps_over_limit": None, "gap_limit_ms": limit_ms,
+                "hitch_verdict": "fail: no frame was rendered inside the run"}
+    gaps = [(frames[0] - begin_ns) / 1e6] + [(b - a) / 1e6 for a, b in zip(frames, frames[1:])]
+    ordered = sorted(gaps)
+    over = [round(g, 2) for g in gaps if g > limit_ms]
+    return {"gap_ms": {"median": round(statistics.median(gaps), 2),
+                       "p90": round(ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))], 2),
+                       "max": round(ordered[-1], 2), "count": len(gaps)},
+            "first_frame_ms": round(gaps[0], 2), "gaps_over_limit": len(over), "gap_limit_ms": limit_ms,
+            "hitch_verdict": "pass" if not over else f"fail: {len(over)} gap(s) over {limit_ms:g} ms ({over[:5]})"}
+
+
+def window_figures(events, begin_ns: int, end_ns: int, *, screen: int, samples=None, process_summary=None) -> dict:
+    """The window's figures on ``screen`` (the run's display), named as ``tools/preflip_pack.extract_figures`` stores
+    them: fps, render time (Quick's render phase), frame time (the gap between rendered frames, stored as the swap gap)
+    median and p90, late frames, hitches and the saver's CPU in the window."""
+    swaps = _screen_frames(events, QUICK_AFTER_RENDERING, begin_ns, end_ns, screen)
     gaps = [(b - a) / 1e6 for a, b in zip(swaps, swaps[1:])]
     span = (swaps[-1] - swaps[0]) / 1e9 if len(swaps) > 1 else 0.0
     render, opened = [], None
-    for ts, event, *_ in events:
-        if not begin_ns <= ts <= end_ns:
+    for ts, event, event_screen, *_ in events:
+        if event_screen != screen or not begin_ns <= ts <= end_ns:
             continue
         if event == QUICK_BEFORE_RENDERING:
             opened = ts
@@ -209,6 +267,7 @@ def window_figures(events, begin_ns: int, end_ns: int, *, samples=None, process_
         "steady_late_pct": round(100.0 * late / len(gaps), 1) if gaps else None,
         "hitches_per_min": round(60.0 * hitches / span, 2) if span > 0 else None,
         "process": None,
+        **run_gaps(events, begin_ns, end_ns, screen=screen),
     }
     if samples and process_summary is not None:
         figures["process"] = process_summary(samples, (begin_ns, end_ns), fps)
@@ -252,9 +311,9 @@ def analyse_session(events, state: dict | None, planned: list[str], *, samples=N
                 row.update(status="failed", reason=f"run {run['run_id']} came before the previous planned transition's "
                                                    f"run {last_run_id}: the session ran out of order")
             else:
-                row.update(window_figures(events, window["begin_ns"], window["end_ns"], samples=samples,
-                                          process_summary=process_summary))
-                row["begin_ns"], row["end_ns"] = window["begin_ns"], window["end_ns"]
+                row.update(window_figures(events, window["begin_ns"], window["end_ns"], screen=window["screen"],
+                                          samples=samples, process_summary=process_summary))
+                row["begin_ns"], row["end_ns"], row["screen"] = window["begin_ns"], window["end_ns"], window["screen"]
             last_run_id = max(last_run_id, run["run_id"])
         if row["status"] != "ok":
             failures.append(f"{name}: {row['reason']}")

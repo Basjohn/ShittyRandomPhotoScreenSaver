@@ -821,6 +821,8 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("stage_defocus_records"), double(sc.defocusRecords));
     o.insert(QStringLiteral("stage_transparency_resolves"), double(sc.transparencyResolves));
     o.insert(QStringLiteral("stage_generated_mips"), double(sc.generatedMips));
+    o.insert(QStringLiteral("stage_environments"), sc.environments);                   // N5.2c
+    o.insert(QStringLiteral("stage_environment_copies"), double(sc.environmentCopies));
     o.insert(QStringLiteral("stage_fallbacks"), double(sc.fallbacks));
     o.insert(QStringLiteral("stage_left_behind"), sc.leftBehind);
     o.insert(QStringLiteral("stage_records_timed"), double(sc.recordsTimed));

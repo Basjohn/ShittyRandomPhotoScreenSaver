@@ -125,7 +125,12 @@ not a different renderer.
 - **The world is contained, never cropped or stretched (M2):** the ordinary viewport extent grows on the inset card's
   long axis only (a wider card keeps the height and widens; a portrait one keeps the width and grows taller), and one
   uniform scale maps it onto the card. The logical runtime keeps the ordinary extent (the controller is never handed
-  the display-wide record), so every mode's frames are those of its card.
+  the display-wide record), so every mode's frames are those of its card, with two inputs from the drawn card: its
+  framed view (N0.4) and, while it is drawn, the display-wide card's world extent
+  (`VisualizerRuntimeController.set_drawn_world_extent`, read through `logical_world_extent`). A mode whose
+  simulation world is the extent itself lives in the world the renderer lays its frame onto: Bubble kept the ordinary
+  world on a grown card and every position and wake was stretched along the grown axis (operator, 21 Nov: about 4.8x
+  faster on a thin card; `tests/test_bubble_expanded_world.py`).
 - **Cycling while expanded (operator, 7 Nov):** a double-click to the next mode skips enabled modes that are not
   capable and goes to the next enabled capable mode, staying expanded; with no other enabled capable mode it stays
   on the current mode, still expanded. An explicit selection of an incapable mode (Settings, the context menu) still
@@ -558,8 +563,9 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 - *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete)`
   swaps the publication sync's resolve/commit pair (`QuickVisualizerPresentationSync.set_presentation_route`) at the
   event edge, so the steady path carries no per-frame branch and a collapse restores the ordinary methods
-  themselves. The display-wide commit hands the controller the ordinary record's metrics, never its own, so the
-  logical world, CUSTOM, presets and Settings never see the display rect. `resolved_outer_size` (layout planning)
+  themselves. The display-wide commit hands the controller the ordinary record's metrics, never its own, so CUSTOM,
+  presets and Settings never see the display rect (the drawn world extent is the one display-wide value the logical
+  side reads, §0.6, amended 21 Nov). `resolved_outer_size` (layout planning)
   stays ordinary. Animated changes fade the whole presentation out where it is, swap the viewport at the midpoint
   and fade in at the target (two smoothstep halves of the mode transition's 0.25 s), sampled on the existing
   publication edge on the owner's transition clock: one GL target reallocation at the swap, no geometry tween, no

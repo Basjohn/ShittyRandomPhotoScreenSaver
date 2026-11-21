@@ -135,6 +135,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
     "--fresh": "Clear current logs before starting",
     "--devsteam": "Show the unfinished Steam Journey scaffold",
+    "--vulkan": "Run on Vulkan (what has landed natively; unported modes are not offered)",
 }
 
 

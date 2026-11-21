@@ -67,17 +67,33 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
-  its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
-- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
-  environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
-  merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
-- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends. Its Vulkan hitch run passed 21 Nov (0 % late,
-  render 0.43/0.61 ms against Python OpenGL 1.03/1.5).
-- [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
-  Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
-  Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a. Its branch holds 17a4bb9e0 (placement, bucket
+  discard, row order; Python stills unchanged) and e3a84a443 (core C++, not compiled: record f64/u32 into vector and
+  matrix members, the conventions `w` flag, the sampler W-wrap fix). Next: lead reserves ABI 38 (37 is N5.2d's), the
+  agent renumbers, lead builds; rule (a) needs a measured Waveform bound (bloom rounding 13-29k px at 2-3 levels,
+  edges 400-1,200 past 3) decided on the rerun after the W-wrap fix; then L, P, rule (b), C, T.
+- [ ] Background track: N5.2d with N4.i (motion blur and trails), agent a52b367bbd9c11f5c (Opus Medium), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
+- [ ] Black flicker at a transition's start on Vulkan (`--vulkan`, operator, 21 Nov): a visible black frame when a
+  wallpaper transition begins. A serious class (fade, never vanish). Background track, the N5.2d agent's next box
+  after its merge (it holds the background layer's run path), before any further transition batch. Reproduce on a
+  live Vulkan run with `--frame-trace` (which transitions; first frame of the run: the destination upload, the slot
+  swap, the photo environment's first copy, a target made at run start, a cleared frame presented before the first
+  record); compare OpenGL native and Python. Fix at the owner so the first frame of every run shows the source or the
+  run's own first frame, never black; a test whose control is the old path, and a trace-checked run on Display 1.
+- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
+  crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
+  "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
+  over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
+- [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
+  performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
+  28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
+  Python OpenGL. The earlier whole-row figures (Beam 16.5 % against 9.9, Crossfade 19.9 %) included idle time between
+  runs; the first step is the same inside-run figure for Python OpenGL, so the ratio is like for like.
+  Not one transition's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
   that path) before NF; evidence `tools/baselines/preflip/beam_*` and `crossfade_native_vulkan*`.
+- [ ] `--perf` overlay on Vulkan (operator, 21 Nov): the Visualizer's overlay shows no fps, rev or age when the saver
+  runs on Vulkan (`--vulkan`). Root-cause where the native path stops feeding the overlay's figures; fix at the owner
+  so both backends feed it the same way, with a test. Before NF.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
@@ -98,6 +114,28 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
+- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (agent ad98162c77b175a12, Opus Medium; operator, 21 Nov, after R-248 fixed the
+  speed): R-248's check matched breathing as displayed/nominal radius in logical frames, yet on screen fullscreen
+  breathes and reacts visibly less. Log: `logs/worker_visualizer.log` 21 Nov 20:19:17-20:21:24 fullscreen (world
+  1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
+  (the capacity zoom, a pixel or world-unit cap or floor on pulse/breath amplitude, size-class thresholds that move
+  with the zoom, the renderer's mapping), measured on drawn output not only logical ratios; fix at the owner so the
+  visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
+  never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
+  take at card and fullscreen size with the take's envelope above.
+- [ ] Widget consistency with the Feed/Games You Follow tile treatment (agent a46843a7773612d34, Sonnet Medium; operator, 21 Nov; pattern: 8b5bf3454, Games You
+  Follow's tile = Feed's ink wash + header hairline, no opaque slab, no tile shadow):
+  - [ ] System Stats: its four stat tiles (CPU, Memory, Uptime, Network) draw the extra opaque slab, and keep a
+    (pink, accent) border even with Borderless on.
+  - [ ] Friend Pulse: its friend tiles draw the extra opaque slab.
+  - [ ] Abandonment Issues: the "BACKLOG n/m" badge has a semantically poor fill (pink-red), a border, and off-centre
+    text; give it a proper semantic role colour like the other header badges, no border, text centred.
+  - [ ] Abandonment Issues: the "LAST VISIT" box draws the extra slab; its artwork under Borderless shows stray lines
+    around it; artwork behaves exactly like Achievement Pulse's and Games You Follow's.
+  - [ ] Renders before/after on a real wallpaper, dark and light theme, Borderless off and on, each beside Feed; tests
+    with controls.
+- [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
+  the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
 - [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
@@ -595,8 +633,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): the velocity is the formats-service decision above (two R16F); the
   tile-max runs as compute over a storage image (D16) in a format the research lists as load-store on both
   backends.
-- [ ] N4.j Photo and backdrop environments (`PhotoEnvironment`: ten transitions; `BackdropEnvironment`: Extruded
-  Spectrum and Sphere's wallpaper reflection).
+- [ ] N4.j Backdrop environment (`BackdropEnvironment`: Extruded Spectrum and Sphere's wallpaper reflection), with N5.3;
+  the photo half landed with N5.2c (ABI 36).
 - [ ] N4.k Light shafts: the shared owner (Neon Lake today) and Extruded Bubble's own second implementation
   merged onto it, one owner (high potential); ported with Extruded Bubble, then used by Neon Lake.
   Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 17): volumes are written by compute (one pass, D16), never by per-slice
@@ -864,8 +902,19 @@ the feature (D3D11 is not stated).
     - [ ] Before the first Waveform consumer draws: the N3.2 box "Awaiting Validation before a Waveform consumer":
       `python native/core/python/mesh_buffer_check.py --module-dir release/native_module --rounds stream_ring` with the
       GPU state recorded before and after, its median margins against 0.05 ms and the D5.3 tail watch reviewed.
+- [ ] Waveform travel-speed reactivity (operator; after N5.4's acceptance, additive to its native record): the mesh's
+  travel has no reactivity control for its speed. Add ONE range slider (two handles): its low end is the minimum
+  speed at the least energy, its high end the maximum speed at the highest energy, and the speed between follows
+  the overall music energy (wired to real energy, calibrated on recorded music, never pinned at either end). Attack
+  is faster than decay and the decay is gentle (both exposed as options with those defaults). Check for a missing
+  base speed and idle speed; audit these controls so they complement rather than conflict. Every preset's default stays exactly what it is now (Settings spec system,
+  `core/settings/visualizer_mode_settings.py`); reaction check with `waveform_music_response.py`.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
+  - [ ] First, before any port reference is recorded (operator, 21 Nov): root-cause and fix on the Python side the three
+    Extruded Bubble defects in section 1B (the wake-teleport box, Preset 9's flickering star of bubble lines, living
+    bubbles not accelerated by music), so the port copies the fixed behaviour and its references are right the first
+    time. Each fix gets its own tests and evidence as its box says; then the port's references are taken.
   - Reading (reference; Sonnet agent a531eca73061cfa21, 21 Nov, merged), as Waveform's reading above: the record per frame and
     per Settings or card change, each stream's size rule, every pass with its targets, formats and attachments (the
     drift compute, transparency/OIT, HDR, the depth texture and background capture, the probe, defocus, impostors and
@@ -1045,6 +1094,13 @@ the feature (D3D11 is not stated).
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
+  - [ ] First, before any port reference is recorded (operator, 21 Nov): the terrain's sharp, block-like judder. On
+    Preset 1, terrain near the camera jumps up or down suddenly instead of moving smoothly. Likely visual, not design.
+    Root-cause on the Python side (where the height steps: the published field, its interpolation between frames, the
+    grid sampling), then smooth the motion there without smoothing the audio or deadening reactivity: the same peaks
+    and troughs, reached less sharply. Prove it with `neon_lake_music_response.py` before and after on a recorded take
+    (peak and trough heights kept, frame-to-frame height steps reduced) and a focused test with a control on the old
+    code; then the port's references are taken.
   - Reading (reference; Sonnet agent ac4e1a1c9d1ad93c4, 21 Nov, merged), as Waveform's and Extruded Bubble's readings: the
     record per frame and per Settings or card change, stream size rules, every pass with its targets and formats, how
     it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
@@ -1445,8 +1501,6 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw. Dispatched 21 Nov with N4.j
-  (agent a77d7d16afb481093, Opus High), ABI 34 reserved.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
@@ -1542,7 +1596,7 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
   **SMP visual/library foundations (operator, 16 Nov):** M0/M1 must define/consume versioned semantic shape,
   surface, type and motion tokens before building the panes, including full sharp-to-pill radii, inner junctions,
-  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The full visual Theme & Skin Studio comes after the first usable SMP release at M10. Design and boundaries: plan 02 §8.2B and document 05.
+  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The Theme Studio (visual authoring of the unified theme) is pre-SMP, after the native core, the flip and M4 (operator, 21 Nov; the 1B.8 box below); SMP M10 only extends that same Studio with skin authoring. Design and boundaries: plan 02 §8.2B and document 05.
   M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
   concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
   **Pre-SMP admission (operator, 16 Nov):** NF (the native flip) is necessary but not sufficient: finish the
@@ -1670,6 +1724,15 @@ follow-ups with their evidence folders).
   - [ ] **Theme-authored legibility guard per eligible surface:** evaluate a typed semantic on/off (and inheritance precedence) for the guard/legibility panel, resolving theme default -> user Style Override if that component exposes one -> material child, with no duplicate shader or capture. Defaults mirror **current effective per-component states**: the ordinary Media card keeps its guard; the volume child and Media Control Bar do not have theirs restored by accident. Do not apply a global switch that disables guards on unrelated cards or sacrifices necessary contrast; prove light/dark/bright-scene ink accessibility and independently configurable card/child guards.
   - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
   - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
+- [ ] **Theme Studio (operator, 21 Nov; supersedes "Studio only at SMP M10"):** after the native core work, the flip
+  (NF) and its follow-ups, and M4, and **before SMP M0**; not worth building before then. One visual editor for the
+  unified Appearance Theme at the quality of the Visualizer Studios: live rendered previews of real Settings, ordinary
+  widgets, Media, the Context Menu and fullscreen overlays on light and dark backdrops at real DPR; edits of every
+  semantic role and sub-semantic (colours, materials, face and border transparency bias, border thickness, curvature,
+  typography, legibility guard) with an inheritance inspector, one-click revert, undo and redo, Save and Cancel, and
+  export and import through the production theme loader. It renders through the production theme renderer (no second
+  renderer, no per-frame theme parsing) and edits appearance only. SMP M10 later adds skin authoring and the SMP
+  Full/Compact previews to this same Studio. Design: `Docs/Future_Work/ShittyMusicPlayer/05_Theme_Skin_Studio.md` §5.
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
@@ -1713,9 +1776,9 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
-- [ ] **Idle parent bubbles occasionally teleport their wake bubbles (operator, 19 Nov):** this persists in Extruded Bubble with wakes enabled, less noticeably for small parent bubbles and more noticeably for larger parents. Reproduce on steady idle motion at contrasting parent radii with stable bubble/wake identity traces, world-space positions and successive frames; determine whether the cause is wrapping, spawn/expiry, parent-relative transform, interpolation or a GPU/CPU lifetime mismatch. Correct the owner, not by fading out the symptom; preserve authored wake motion and the already-required stable-world/camera contracts in `Docs/Reference/Extruded_Bubble/Target.md`. Cover Normal/paused/idle audio, large/small bubbles and camera motion with focused tests and real visual evidence. **Schedule after the relevant native Extruded Bubble port/validation, before SMP M0; do not detour N5.6 or ongoing native work.**
-- [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera (post-port):** at the authored default view, which is otherwise good at fullscreen 4K, a very fast flickering circular/star-like arrangement of bubble lines is briefly visible and difficult to capture in screenshots. Investigate whether an emission source or spawn geometry is leaking into view; gather high-frame-rate footage or captured successive frames, verify emitter culling and view transforms, and hide the source without hiding the legitimate emitted bubbles. Treat this as a shared Extruded Bubble system issue unless evidence isolates a preset defect.
-- [ ] **Existing regular bubbles not consistently accelerated by music (post-port):** confirm that all eligible *already-living parent bubbles*, not only newly emitted bubbles, respond to music-driven acceleration. Exclude microbubbles and particles. Compare old/new bubble identity and velocity under the same audio, checking pinning, age-dependent logic, lifetime state, spawn-time-only parameter propagation and native buffer updates. Preserve intentional pinned motion if explicitly authored, but correct accidental non-reactivity at its owner. Reproduce on Preset 9 and another preset, with paired real-audio and idle tests. **Both Preset 9 issues are after N5.6 and its validation, before SMP M0.**
+- [ ] **Idle parent bubbles occasionally teleport their wake bubbles (operator, 19 Nov):** this persists in Extruded Bubble with wakes enabled, less noticeably for small parent bubbles and more noticeably for larger parents. Reproduce on steady idle motion at contrasting parent radii with stable bubble/wake identity traces, world-space positions and successive frames; determine whether the cause is wrapping, spawn/expiry, parent-relative transform, interpolation or a GPU/CPU lifetime mismatch. Correct the owner, not by fading out the symptom; preserve authored wake motion and the already-required stable-world/camera contracts in `Docs/Reference/Extruded_Bubble/Target.md`. Cover Normal/paused/idle audio, large/small bubbles and camera motion with focused tests and real visual evidence. **Scheduled as N5.6's first step, before the port records its references (operator, 21 Nov).**
+- [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera (N5.6's first step):** at the authored default view, which is otherwise good at fullscreen 4K, a very fast flickering circular/star-like arrangement of bubble lines is briefly visible and difficult to capture in screenshots. Investigate whether an emission source or spawn geometry is leaking into view; gather high-frame-rate footage or captured successive frames, verify emitter culling and view transforms, and hide the source without hiding the legitimate emitted bubbles. Treat this as a shared Extruded Bubble system issue unless evidence isolates a preset defect.
+- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step):** confirm that all eligible *already-living parent bubbles*, not only newly emitted bubbles, respond to music-driven acceleration. Exclude microbubbles and particles. Compare old/new bubble identity and velocity under the same audio, checking pinning, age-dependent logic, lifetime state, spawn-time-only parameter propagation and native buffer updates. Preserve intentional pinned motion if explicitly authored, but correct accidental non-reactivity at its owner. Reproduce on Preset 9 and another preset, with paired real-audio and idle tests. **Both Preset 9 issues are N5.6's first step, fixed on the Python side before the port's references (operator, 21 Nov).**
 
 ### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
 
@@ -3450,8 +3513,5 @@ ADDITION & SIDE QUEST BOX
 Never Remove This Box. Restore It If Removed. Only Remove Contents As you place them in the active plan as real live checklist targets.
 ####################
 Reactivity Issues:
-1. WaveForm - Travel Direction for the overall mesh has no reactivity option to control its speed. It should have a range slider controlling speed from min-max depending on overall instensity. Quick Attack, Slow Decay but adding these as options is best. There also might be missing a overall base speed and idle speed of the mesh setting. Check, add what's missing and audit these controls so they don't conflict but complement each other. Default setting in all presets will be what it currently is as is our usual methodology.
-2. Neon Lake. Generally very much improved and still has work in plan but there is a lot of sharp movement on terrain currently. Sudden massive judder up or down that feels sharp blocklike instead of smooth. This is likely a visual issue not a design one. Preset 1 shows this easily, especially on terrain closer to the camera. Needs to be smoothed without smoothing the audio or deadening reactivity. Same peaks and bottoms but we get there less sharply.
 General Issues:
-Clicking a link in MC profiles/mode completely kills the cursor halo now.
 ###################

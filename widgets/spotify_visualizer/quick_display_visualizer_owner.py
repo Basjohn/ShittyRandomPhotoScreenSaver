@@ -340,6 +340,9 @@ class QuickDisplayVisualizerOwner:
         # (no more feeding while it is current; a mode change while the arrow is held prepares the new one).
         self._neighbour_prewarm: tuple[Any, Any, Any] | None = None
         self._expanded_source: Any = None
+        # The drawn world extent last handed to the controller (``set_drawn_world_extent``): the display-wide card's
+        # while it is drawn, None while the ordinary card is, so each route writes it at its edges only.
+        self._drawn_world_published: tuple[float, float] | None = None
         # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
         # are on; the last value projected to the scene, so it is written at its edges only.
         self._expanded_overlays_drawn = False
@@ -1217,7 +1220,9 @@ class QuickDisplayVisualizerOwner:
             ordinary, display_size=_expanded_display_size(self._presentation_runtime, style), display_style=style)
 
     def _apply_expanded_presentation(self, presentation: Any) -> None:
-        """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics."""
+        """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics, and learns the
+        drawn card's world (``set_drawn_world_extent``: the world grows on the display's long axis, and a simulation
+        whose world is the extent must live in the world the renderer lays its frame onto)."""
 
         self._presentation_runtime.scene_controller.apply_visualizer_presentation(
             presentation,
@@ -1226,6 +1231,11 @@ class QuickDisplayVisualizerOwner:
         ordinary = self._expanded_source
         if ordinary is not None and not self._controller.has_custom_viewport_override:
             self._controller.commit_presentation_metrics(ordinary)
+        extent = tuple(presentation.viewport_extent)
+        if extent != self._drawn_world_published:
+            # An edge (entering, a display or style change), not every frame.
+            self._drawn_world_published = extent
+            self._controller.set_drawn_world_extent(extent)
         self._committed_layout_extent = None
 
     def _takeover_fade(self, takeover: _TakeoverFade) -> float:
@@ -1607,6 +1617,10 @@ class QuickDisplayVisualizerOwner:
         # explicitly through commit_live_custom_layout instead.
         if not self._controller.has_custom_viewport_override:
             self._controller.commit_presentation_metrics(presentation)
+        if self._drawn_world_published is not None:
+            # The ordinary card is drawn again: its world is the controller's own metrics (an edge, not per frame).
+            self._drawn_world_published = None
+            self._controller.set_drawn_world_extent(None)
         # The retained scene has now consumed one coherent presentation.  Drop
         # the one-shot persisted-layout hydration fence so later live CUSTOM
         # edits / transfers continue to follow the controller normally.
@@ -3046,6 +3060,7 @@ class QuickDisplayVisualizerOwner:
         self._takeover = None
         self._expanded_display = False
         self._expanded_source = None
+        self._drawn_world_published = None
         self._transition_request_serial += 1  # disarm any queued one-shot
         self._transition_failure_callback = None
         self._presentation_resolver = None

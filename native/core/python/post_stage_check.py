@@ -935,7 +935,7 @@ def round_retire(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-ACCOUNTING_KEYS = STAGE_KEYS + ("stage_left_behind",)
+ACCOUNTING_KEYS = STAGE_KEYS + ("stage_left_behind", "stage_environments")
 
 
 def stage_accounting_verdict(actual: dict, baseline: dict, expected: dict) -> dict:
@@ -1069,6 +1069,89 @@ def _allocation_fault_case(core, engine, app, host, packs: dict, stage: str, con
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+#: N5.2c audit: an environment step's fail_allocation ordinals (no bloom or defocus step before it in a Cube Turn
+#: run): its texture, its chain's bindings, its render target.
+ENVIRONMENT_ATTEMPTS = (1, 2, 3)
+#: An environment's build objects (stage_pipelines): its sampler, block, bindings and pipeline.
+ENVIRONMENT_PIPELINES = 4
+
+
+def _environment_expected(size) -> dict:
+    """One environment held: its mipped RGBA8 texture (every level) and its four build objects."""
+    expected = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    width, height, total = int(size[0]), int(size[1]), 0
+    while True:
+        total += width * height * 4
+        if width == 1 and height == 1:
+            break
+        width, height = max(1, width // 2), max(1, height // 2)
+    expected.update(stage_environments=1, stage_textures=1, stage_bytes=total, stage_pipelines=ENVIRONMENT_PIPELINES)
+    return expected
+
+
+def _environment_fault_case(core, engine, app, attempt: int) -> dict:
+    """N5.2c audit: an environment step's create or bind failing in a real Cube Turn run on the background layer (the
+    same fault count as the sync's), loudly, released to the baseline at the close; then the same run allocating every
+    owned object and releasing them exactly."""
+    import background_layer_check as blc
+    import transition_route_check as trc
+    from rendering.quick.scene3d.environment import environment_size
+
+    zero = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    baseline = _live(core)
+    checks = {"baseline_clear": stage_accounting_verdict(baseline, zero, zero)["pass"]}
+    facts: dict = {}
+    photos = [blc.processed(path, "fill", blc.DISPLAY) for path in trc.PHOTOS]
+    run = trc.production_run("cube_turn_options", [image for image, _rows in photos], 1)
+
+    def drawn(fail: int):
+        if not core.module.stage_control("fail_allocation", fail):
+            raise RuntimeError("unknown stage fault control 'fail_allocation'")
+        host = blc._host(core, blc.WINDOW, 1.0)
+        scene = blc.Scene(core, engine, host, 1.0, blc.DISPLAY, kind="layer")
+        clock = trc.Clock()
+        scene.layer._clock_ns = clock
+        scene.present(photos[0][0])
+        scene.settle()
+        clock.at(run, 0.5)
+        scene.layer.transition(run)
+        scene.frames(3)
+        return host, scene
+
+    def closed(host, scene):
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+        blc._close_host(app, host)
+
+    host = scene = None
+    try:
+        host, scene = drawn(attempt)
+        state = scene.mode_state()
+        facts["failure"] = {**_state_facts(state), "live": {key: _live(core).get(key) for key in ACCOUNTING_KEYS}}
+        checks["intended_create_failed_loudly"] = f"[harness fail_allocation={attempt}]" in facts["failure"]["error"]
+        checks["environment_named"] = "environment step" in facts["failure"]["error"]
+        closed(host, scene)
+        host = scene = None
+        core.module.stage_control("fail_allocation", 0)
+        facts["released_after_failure"] = stage_accounting_verdict(_live(core), baseline, zero)
+        checks["failure_releases_exactly_to_baseline"] = facts["released_after_failure"]["pass"]
+        host, scene = drawn(0)
+        scene.settle()
+        expected = _environment_expected(environment_size(blc.DISPLAY))
+        facts["successful_allocation"] = stage_accounting_verdict(_live(core), baseline, expected)
+        checks["successful_allocation_accounts_all_owned_objects"] = facts["successful_allocation"]["pass"]
+        closed(host, scene)
+        host = scene = None
+        facts["released_after_success"] = stage_accounting_verdict(_live(core), baseline, zero)
+        checks["success_releases_exactly_to_baseline"] = facts["released_after_success"]["pass"]
+    finally:
+        core.module.stage_control("fail_allocation", 0)
+        if scene is not None:
+            closed(host, scene)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 def round_accounting(core, engine, app, api: str, packs: dict) -> dict:
     """Allocation/binding faults use real owner paths; no synthetic counter mutation or pixel verdict."""
     cases = []
@@ -1093,6 +1176,14 @@ def round_accounting(core, engine, app, api: str, packs: dict) -> dict:
     finally:
         host.close()
         host_check._flush_deletes(app)
+    for attempt in ENVIRONMENT_ATTEMPTS:          # N5.2c audit: the environment step's creates and bind
+        label = f"environment_fail_allocation_{attempt}_cold"
+        if api == "vulkan":
+            core.set_vulkan_phase(f"n34 accounting {label}")
+        try:
+            results[label] = _environment_fault_case(core, engine, app, attempt)
+        except Exception:
+            results[label] = {"pass": False, "checks": {"ran": False}, "error": traceback.format_exc()}
     checks = {name: result["pass"] for name, result in results.items()}
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "cases": results}
 

@@ -16,8 +16,9 @@ import math
 from typing import Any, NamedTuple
 
 #: ``VIS_SET_VIEW``'s message version: 2 since the view carries the framed view (an internal message, never
-#: persisted: no bridge, N0.4 lead decision 2). The worker refuses any other version.
-VIEW_MESSAGE_VERSION = 2
+#: persisted: no bridge, N0.4 lead decision 2); 3 since it also carries the display-wide card's drawn world extent
+#: (``drawn_world_extent``, 21 Nov). The worker refuses any other version.
+VIEW_MESSAGE_VERSION = 3
 
 
 class FramedView(NamedTuple):

@@ -404,7 +404,10 @@ class GamesYouFollowPresentationModel(QObject):
 
     @Property(QColor, constant=True)
     def tileColor(self) -> QColor:
-        return QColor(*self._palette.info_surface)
+        # The News/Feed story tile's treatment: a faint wash of the body ink, no tinted
+        # semantic slab behind the stories (the card's own surface shows through).
+        r, g, b, _a = self._body_text
+        return QColor(r, g, b, round(255 * 0.055))
 
     @Property(QColor, constant=True)
     def headerFillColor(self) -> QColor:

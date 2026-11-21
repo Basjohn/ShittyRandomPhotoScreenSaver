@@ -334,9 +334,14 @@ def test_the_face_declares_the_oriented_frame_and_carries_the_cards_keys():
     assert "extra.update(oriented_scene_card(" in spectrum and "        if quarters:\n" in spectrum
 
 
-def test_the_abi_is_35_with_34_reserved():
+def test_the_abi_is_35_or_later_with_34_retired():
+    import re
+
     from rendering.native import loader
 
     abi = _source("abi.h")
-    assert "#define SRPSS_NATIVE_CORE_ABI 35" in abi and loader.EXPECTED_ABI == 35
-    assert "// 34: reserved for another branch" in abi
+    # 35 brought these gaps; a later ABI (36: N5.2c) keeps them. The module and its importer agree.
+    defined = int(re.search(r"#define SRPSS_NATIVE_CORE_ABI (\d+)", abi).group(1))
+    assert defined >= 35 and loader.EXPECTED_ABI == defined
+    assert "// 35 (N5.4, the Waveform port's two core gaps)" in abi
+    assert "// 34: retired unused" in abi

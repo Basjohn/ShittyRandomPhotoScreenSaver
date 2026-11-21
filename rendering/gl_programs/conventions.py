@@ -92,7 +92,7 @@ SRPSS_CONVENTIONS_FRAGMENT_GLSL = "\n#define SRPSS_CONVENTIONS_FRAGMENT" + SRPSS
 # A scene drawn from its own camera (D5.5: OpenGL form, its rows bottom-up and its clip depth -1 to 1; Waveform's) into
 # a target of the drawing renderer's (N5.4). It follows the conventions include and reads the block's z (1 where the
 # drawn target's top row lies at clip NDC -Y: the native core's OpenGL and Vulkan targets) and w (1 where the target's
-# clip depth runs 0 to 1: the native core's Vulkan targets, ABI 36); this OpenGL renderer writes 0 to both, so each is
+# clip depth runs 0 to 1: the native core's Vulkan targets, ABI 38); this OpenGL renderer writes 0 to both, so each is
 # its argument, bit for bit. Under the native core a surface-sized scene target is its 64-pixel bucket with the scene
 # at its bottom left (``mode_content.cpp`` sceneAnchor, Python's SceneTarget): ``viewport`` is the scene's pixels and
 # ``targetPx`` the target's (the core's ``u_target_px``), equal for an explicit-size target. The vertex stage places

@@ -1038,7 +1038,9 @@ are specified above.
        orbit and drag, the camera keys, Home and a preset's activation), the 3D Detail tier, and the reflected wallpaper.
        Waveform Ribbon's camera, `zoom_hold` and `view_span` derive from those (its camera keys are presentation-only
        controls, and the view span from the forwarded layout metrics). Expanded Visualizer: nothing; the display-wide
-       route is presentation only and the controller keeps the ordinary metrics the tick reads (already forwarded).
+       route is presentation only and the controller keeps the ordinary metrics the tick reads (already forwarded);
+       since 21 Nov the layout metrics also carry the display-wide card's drawn world extent while it is drawn
+       (`VIS_SET_VIEW` version 3), which Bubble's world reads.
      - *One forwarding path for the view inputs (A7-M2):* `VIS_SET_VIEW` carries, with the layout metrics, the
        presentation inputs that changed since the last send (`logical_edges.presentation_inputs_snapshot`: the records
        and the mode's presentation-only controls, plain data only; `apply_presentation_inputs` on the worker refuses any

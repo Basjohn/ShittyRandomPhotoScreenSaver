@@ -14,9 +14,10 @@ stored and on every backend.
 ``native/core/shaders/mip_box_rgba8.comp`` (RGBA8; a test holds each equal to its file): one dispatch a level, level
 L - 1 bound as ``u_source`` (read) and level L as ``u_dest`` (write), 8 x 8 invocations a group. The core runs them
 for a self-mipped scene target's attachments a sampler reads with mips (``native/core/src/scene_targets.cpp``
-``generateSelfMips``) and for an item texture uploaded with mips (``mode_content.cpp``, ABI 35), through
-``native/core/src/mip_chain.h``; the Python renderer runs the same texts with ``glBindImageTexture`` per level
-(``dispatch_mip_chain``).
+``generateSelfMips``), for an item texture uploaded with mips (``mode_content.cpp``, ABI 35) and for the photo
+environment's copy (``post_stages.cpp``, ABI 36, N5.2c), through ``native/core/src/mip_chain.h``; the Python renderer
+runs the same texts with ``glBindImageTexture`` per level (``dispatch_mip_chain``; the photo environment's in
+``rendering/quick/scene3d/environment.py``).
 """
 from __future__ import annotations
 
