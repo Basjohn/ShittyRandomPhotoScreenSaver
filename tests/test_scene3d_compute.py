@@ -189,14 +189,32 @@ _CASES = (("exploding_tiles", None), ("glass_shatter", "left"), ("crumble", None
 
 @pytest.mark.parametrize("effect,direction", _CASES)
 def test_without_motion_blur_nothing_compiles_or_dispatches_compute(qt_app, monkeypatch, effect, direction):
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError("dormant compute touched GL")
-
-    monkeypatch.setattr(gl, "glDispatchCompute", forbidden)
-    monkeypatch.setattr(gl, "glBindImageTexture", forbidden)
-    monkeypatch.setattr(gl_resources, "compile_compute_program", forbidden)
+    """Motion blur's compute stays dormant without it. N4.j's photo environment is compute of its own (the shared mip
+    kernel, once a photograph, for the scenes that reflect it: Exploding Tiles, Glass Shatter); it is allowed, and only
+    while its own kernel is the program in use (stale before 21 Nov: the test forbade every compute)."""
+    from rendering.gl_programs.mip_chain import MIP_BOX_RGBA8_COMP
     import rendering.quick.scene3d.resources as scene_resources
-    monkeypatch.setattr(scene_resources, "compile_compute_program", forbidden)
+
+    allowed: set[int] = set()
+    real_compile, real_dispatch = scene_resources.compile_compute_program, gl.glDispatchCompute
+
+    def compile_environment_only(source, *, label):
+        if source != MIP_BOX_RGBA8_COMP:
+            raise AssertionError(f"dormant compute compiled: {label}")
+        program = real_compile(source, label=label)
+        allowed.add(int(program))
+        return program
+
+    def environment_only(real):
+        def call(*args, **kwargs):
+            if gl_query.get_int(gl.GL_CURRENT_PROGRAM) not in allowed:
+                raise AssertionError("dormant compute touched GL")
+            return real(*args, **kwargs)
+        return call
+
+    monkeypatch.setattr(gl, "glDispatchCompute", environment_only(real_dispatch))
+    monkeypatch.setattr(gl_resources, "compile_compute_program", compile_environment_only)
+    monkeypatch.setattr(scene_resources, "compile_compute_program", compile_environment_only)
     capture = TransitionCapture(256, 144)
     try:
         run = capture.run(effect, direction=direction, parameters={"motion_trails": True}, duration_ms=3000)

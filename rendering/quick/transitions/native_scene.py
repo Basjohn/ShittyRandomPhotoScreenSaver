@@ -25,10 +25,14 @@ from typing import Mapping
 
 from .fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD
 
-#: What a sampler of a scene pass reads: the run's old picture, its new one, or the photo environment's mipped copy.
-SCENE_TEXTURES = ("old", "new", "environment")
+#: What a sampler of a scene pass reads: the run's old picture, its new one, the photo environment's mipped copy, (N5.2d)
+#: a run texture the scene sends (``NativeSceneTexture``: Crumble's motion table, sampled nearest) or the trails'
+#: ghost buffer (``ghosts``).
+SCENE_TEXTURES = ("old", "new", "environment", "motion", "ghosts")
 #: The built-in mesh: the item quad's four corners (``aPosition``, 0..1), drawn as a strip.
 QUAD_MESH = "quad"
+#: N5.2d (N4.i): the targets a scene pass draws into: the scene, or the trails' ghost buffer (R8, MAX).
+SCENE_TARGETS = ("scene", "ghosts")
 
 
 @dataclass(frozen=True)
@@ -61,17 +65,42 @@ class NativeScenePass:
     samplers: tuple[tuple[str, str], ...] = ()
     depth: bool = False
     blend: str | tuple = "replace"
+    #: N5.2d (N4.i): where it draws (``SCENE_TARGETS``), whether it writes the screen motion (a motion variant: every
+    #: velocity attachment written; any other pass on a scene with motion blur masks them, as Python's
+    #: ``velocity_writes``), and its viewport (``"allocation"``: the trails' edges, over the target's whole allocation).
+    target: str = "scene"
+    moves: bool = False
+    viewport: str = "content"
+    #: N5.2d: a pass with no vertex stage of its own (``vertex_source`` None) draws the core's triangle.
+    core_triangle: bool = False
+
+
+@dataclass(frozen=True)
+class NativeSceneTexture:
+    """N5.2d: a texture a run sends with its meshes (Crumble's motion table): its kind (``SCENE_TEXTURES``), floats of
+    ``size`` (``format`` ``"rgba32f"``, rows top first, as Python's ``glTexImage2D`` rows bottom first: one row a chunk,
+    read by texelFetch, never filtered)."""
+
+    kind: str
+    pixels: bytes
+    size: tuple[int, int]
+    format: str = "rgba32f"
 
 
 @dataclass(frozen=True)
 class NativeScene:
     """A run's scene: its passes in order, its meshes, its requested samples (0: drawn single-sampled) and whether a
-    pass reads the photo environment (N4.j: the destination's mipped copy, ``environment_size``)."""
+    pass reads the photo environment (N4.j: the destination's mipped copy, ``environment_size``). N5.2d (N4.i): whether
+    the run blurs its motion (``motion``: the velocity attachments, the tile max, the gather) and draws trails
+    (``trails``: the ghost buffer; the edges are one of its passes), and the textures it sends."""
 
     passes: tuple[NativeScenePass, ...]
     meshes: tuple[NativeSceneMesh, ...] = field(default=())
     samples: int = 0
     environment: bool = False
+    motion: bool = False
+    trails: bool = False
+    textures: tuple[NativeSceneTexture, ...] = ()
 
 
 def item_quad_pass(name: str, vertex_source: str, fragment_source: str, samplers: tuple[tuple[str, str], ...] = (),
@@ -109,6 +138,126 @@ class NativeScenePasses:
         raise KeyError(f"{cls.transition_id} has no scene pass {name!r}")
 
 
+# ------------------------------------------------------------------------------- N5.2d (N4.i): motion blur and trails
+
+#: The shared post passes' packs (one each, beside the transitions' packs): Python's own texts (``motion.py``,
+#: ``trails.py``) baked with the native frame's define (``motion.NATIVE_FRAME_GLSL``).
+MOTION_TILE_MAX = "scene3d_motion_tile_max"
+MOTION_GATHER = "scene3d_motion_gather"
+TRAIL_EDGES = "scene3d_trail_edges"
+
+
+def native_frame_text(text: str) -> str:
+    """``text`` with the native frame's define after its ``#version`` line (the native core's pack of the same text)."""
+    from rendering.quick.scene3d.motion import NATIVE_FRAME_DEFINE
+
+    head, newline, rest = text.partition("\n")
+    if not head.startswith("#version") or not newline:
+        raise ValueError("a post pass's text starts with its #version line")
+    return f"{head}\n#define {NATIVE_FRAME_DEFINE}\n{rest}"
+
+
+def motion_post_sources() -> dict[str, str]:
+    """The shared post passes' sources by file name (``tools/regen_qrc.py`` bakes ``<name>.qsb`` from each)."""
+    from rendering.quick.scene3d.motion import MOTION_BLUR_PROGRAMS
+    from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM
+
+    (_tile_key, tile), (_gather_key, _vertex, gather) = MOTION_BLUR_PROGRAMS
+    return {f"{MOTION_TILE_MAX}.comp": native_frame_text(tile), f"{MOTION_GATHER}.frag": native_frame_text(gather),
+            f"{TRAIL_EDGES}.frag": native_frame_text(TRAIL_EDGES_PROGRAM[2])}
+
+
+#: The trails' edge pass in a scene's pass list (after the underlay and the ghosts, before the pieces): the core's
+#: triangle over the scene's whole allocation, blended as Python's (SRC_ALPHA, ONE_MINUS_SRC_ALPHA on both).
+TRAIL_EDGES_PASS = NativeScenePass(TRAIL_EDGES, None, "", samplers=(("uGhosts", "ghosts"),), core_triangle=True,
+                                   viewport="allocation",
+                                   blend=(("add", "src_alpha", "one_minus_src_alpha"),
+                                          ("add", "src_alpha", "one_minus_src_alpha")))
+
+
+@dataclass(frozen=True)
+class MotionGeometry:
+    """Python's motion blur geometry for a scene of ``pixels`` (the item's pixel size): its SceneTarget allocation
+    (64-pixel buckets), the tile edge (``motion_blur_tile`` of the allocation's height) and the tile counts."""
+
+    allocation: tuple[int, int]
+    tile: int
+    tiles: tuple[int, int]
+
+
+def motion_geometry(pixels: tuple[int, int]) -> MotionGeometry:
+    from rendering.quick.scene3d.motion import motion_blur_tile
+    from rendering.quick.scene3d.target import _bucket
+
+    width, height = _bucket(int(pixels[0])), _bucket(int(pixels[1]))
+    tile = motion_blur_tile(height)
+    return MotionGeometry((width, height), tile, (-(-width // tile), -(-height // tile)))
+
+
+def motion_post_values(scene: NativeScene, pixels: tuple[int, int]) -> dict[str, object]:
+    """The post passes' values (Python's own: ``MotionBlur.apply``'s and ``MotionTrails.draw``'s blocks)."""
+    from rendering.quick.scene3d.trails import TRAIL_STRENGTH, trail_line
+
+    geometry = motion_geometry(pixels)
+    values: dict[str, object] = {}
+    if scene.motion or scene.trails:
+        values["uSize"] = geometry.allocation
+    if scene.motion:
+        values.update({"uTile": geometry.tile, "uLongest": 2.0 * geometry.tile})
+    if scene.trails:
+        values.update({"uRadius": trail_line(geometry.allocation[1]), "uStrength": TRAIL_STRENGTH})
+    return values
+
+
+def ghost_pass_name(name: str, age: int) -> str:
+    """A ghost pass's name in the program: one pass a ghost (``<pass>_<age>``), drawn from the same packs."""
+    return f"{name}_{age}"
+
+
+def ghost_values(name: str, ghosts, time_uniform: str, at, now: float) -> dict[str, object]:
+    """Each ghost pass's own values (``<member>@<pass>``, ABI 37): its moment (``at(time)``: the members that place the
+    piece then), the piece now (``<time_uniform>Before``: ``scene3d_ghost_fragment``'s distance test) and its fade
+    (``draw_ghosts``'s, oldest first)."""
+    values: dict[str, object] = {}
+    for age, (time, fade) in enumerate(ghosts):
+        scope = ghost_pass_name(name, age)
+        for member, value in at(time).items():
+            values[f"{member}@{scope}"] = value
+        for member, value in at(now).items():
+            values[f"{member}Before@{scope}"] = value
+        values[f"uGhostFade@{scope}"] = float(fade)
+    return values
+
+
+#: The line ``native_clip_depth`` ends a vertex stage's main with.
+NATIVE_CLIP_DEPTH_LINE = ("    gl_Position.z = uMatrix[2][2] * gl_Position.z + uMatrix[3][2] * gl_Position.w;"
+                          "  // native: the backend's clip depth (uMatrix's z row)\n")
+
+
+def native_clip_depth(vertex_source: str) -> str:
+    """N5.2d: a vertex stage that writes its own clip depth after ``uMatrix`` (Block Spins: ``projected.z = ...``,
+    OpenGL's -w..w) as the native core draws it on every backend: the core's ``uMatrix`` carries QRhi's clip-space
+    correction (Vulkan's depth is 0..w: z row (0, 0, 0.5, 0.5)), which the stage's own depth bypasses, so the depth is
+    put through the matrix's z row last. On OpenGL that row is (0, 0, 1, 0), the stage's depth exactly (rule a); without
+    it Vulkan clips every fragment in front of the slab's middle (found 21 Nov on the ABI 37 build: half of each face
+    gone). The Python renderer compiles its own text; this text is the native pack's."""
+    body_end = vertex_source.rstrip().rfind("}")
+    main = vertex_source.rfind("void main(")
+    if body_end < 0 or main < 0 or vertex_source.find("{", main) < 0 or "uMatrix" not in vertex_source:
+        raise ValueError("a vertex stage whose main is its last function and that reads uMatrix")
+    if vertex_source.count("void main(") != 1 or NATIVE_CLIP_DEPTH_LINE in vertex_source:
+        raise ValueError("one main, not yet given its native clip depth")
+    depth, close = 0, -1
+    for index in range(vertex_source.find("{", main), len(vertex_source)):
+        depth += {"{": 1, "}": -1}.get(vertex_source[index], 0)
+        if depth == 0:
+            close = index
+            break
+    if close != body_end:
+        raise ValueError("main is not the stage's last function")
+    return vertex_source[:body_end] + NATIVE_CLIP_DEPTH_LINE + vertex_source[body_end:]
+
+
 def eased_show(progress: float, end: float = 1.0) -> int:
     """The show of a run whose Python renderer draws the old picture at progress 0 and the new one from ``end``."""
     if progress <= 0.0:
@@ -131,5 +280,8 @@ def flat_values(values: Mapping[str, object]) -> dict[str, object]:
     return out
 
 
-__all__ = ["NativeScene", "NativeSceneMesh", "NativeScenePass", "NativeScenePasses", "QUAD_MESH", "SCENE_TEXTURES",
-           "SHOW_EFFECT", "SHOW_NEW", "SHOW_OLD", "eased_show", "flat_values", "item_quad_pass"]
+__all__ = ["MOTION_GATHER", "MOTION_TILE_MAX", "MotionGeometry", "NativeScene", "NativeSceneMesh", "NativeScenePass",
+           "NativeScenePasses", "NativeSceneTexture", "QUAD_MESH", "SCENE_TARGETS", "SCENE_TEXTURES", "SHOW_EFFECT",
+           "SHOW_NEW", "SHOW_OLD", "TRAIL_EDGES", "TRAIL_EDGES_PASS", "eased_show", "flat_values", "ghost_pass_name",
+           "ghost_values", "item_quad_pass", "motion_geometry", "motion_post_sources", "motion_post_values",
+           "NATIVE_CLIP_DEPTH_LINE", "native_clip_depth", "native_frame_text"]

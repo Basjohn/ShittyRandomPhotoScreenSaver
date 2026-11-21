@@ -68,6 +68,9 @@ BASELINES = ROOT / "tools" / "baselines" / "preflip"
 #: Tokens for the live check's ``--app-arg`` (``--app-arg`` here; set once by ``main``): a native Vulkan row passes
 #: ``--graphics-backend=vulkan``. Empty for the product's default OpenGL path.
 APP_ARGS: list[str] = []
+#: Persisted settings every row and session also writes, after its own (``--setting KEY=JSON``; set once by ``main``):
+#: a port's run with a look its defaults leave off (N5.2d: motion blur and trails, ``transitions.<section>.motion_blur``).
+EXTRA_SETTINGS: list[tuple[str, object]] = []
 WALLPAPER = Path("D:/Temp/Scratch/SRPSS/wallpaper_usu")
 CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"
 APPLICATION = "Screensaver_MC"
@@ -289,7 +292,7 @@ def row_settings(row: Row) -> list[tuple[str, object]]:
         settings += [("widgets.spotify_visualizer.enabled", False), ("timing.interval", session_interval([row.label])),
                      ("transitions.random_always", False), ("transitions.type", row.label),
                      (f"transitions.activation.{row.label}", True), *pinned_durations([row.label])]
-    return settings
+    return settings + EXTRA_SETTINGS
 
 
 def session_settings(rows: list[Row], interval_s: int) -> list[tuple[str, object]]:
@@ -300,7 +303,7 @@ def session_settings(rows: list[Row], interval_s: int) -> list[tuple[str, object
         ("widgets.spotify_visualizer.enabled", False), ("timing.interval", int(interval_s)),
         ("transitions.random_always", False), ("transitions.type", rows[0].label)]
     settings += [(f"transitions.activation.{row.label}", True) for row in rows]
-    return settings + pinned_durations([row.label for row in rows])
+    return settings + pinned_durations([row.label for row in rows]) + EXTRA_SETTINGS
 
 
 def session_command(rows: list[Row], out: Path, *, interval_s: int, clip: Path = CLIP,
@@ -852,6 +855,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", help="a label stored with the baseline (e.g. python-vulkan, native-opengl)")
     parser.add_argument("--app-arg", action="append", default=[], metavar="=TOKEN",
                         help="passed to the live check's --app-arg (an experiment_flags token, e.g. --app-arg=--graphics-backend=vulkan for a native Vulkan row); repeatable")
+    parser.add_argument("--setting", action="append", default=[], metavar="KEY=JSON",
+                        help="a persisted setting every row and session also writes after its own (e.g. "
+                             "transitions.crumble.motion_blur=\"On\"); repeatable")
     parser.add_argument("--per-row", action="store_true",
                         help="one saver process per transition row instead of one session per size and state "
                              "(single-row reruns; a lone pending transition row is always per-row)")
@@ -930,9 +936,18 @@ def print_plan(rows: list[Row], *, loaded: bool, per_row: bool = False, log=prin
     log(f"total about {(estimate_seconds(rows, loaded=loaded, per_row=per_row) + CONTROL_SECONDS * len(by_size)) / 60:.0f} min")
 
 
+def parse_setting(token: str) -> tuple[str, object]:
+    """``KEY=JSON`` as (key, value); refused (ValueError) without a key or with a value that is not JSON."""
+    key, separator, value = str(token).partition("=")
+    if not key.strip() or not separator:
+        raise ValueError(f"--setting takes KEY=JSON, not {token!r}")
+    return key.strip(), json.loads(value)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     APP_ARGS[:] = [str(token).lstrip("=") for token in args.app_arg]
+    EXTRA_SETTINGS[:] = [parse_setting(token) for token in args.setting]
     if args.compare_only:
         old, new = (load_baseline(p) for p in args.compare_only)
         report = compare_baselines(old, new)

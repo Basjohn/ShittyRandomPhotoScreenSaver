@@ -63,7 +63,13 @@
 // setting that names a record field, is refused (one owner per member); a member none of the three fills is refused
 // (unfilled). The checks run when the program, the schema and the settings meet (at bind, program and settings), so a
 // mode whose data does not match its shaders never draws zeros. A program whose members the core and the record fill
-// alone draws with no settings at all (audit L5).
+// alone draws with no settings at all (audit L5). ABI 37 (N4.i): a setting named "<member>@<pass>" fills that member of
+// that one pass over the unscoped setting of the member (the motion trails' ghosts: one pass a ghost, one pack, each at
+// its own moment); its pass must declare the member, and the member's owner rules are the unscoped name's.
+// ABI 37 (N4.i): a pass on the core's triangle into a scene target may declare "viewport": "allocation" (drawn over the
+// target's whole allocation, as Python draws its post passes; default "content"); an attachment a pass masks
+// ("write": false) may be left unwritten by its shader; a compute entry may be triggered by "draw" (every record that
+// draws the passes), the one compute a still admits.
 //
 // The passes (ModeContent): the surface's target is cleared by a draw (targets.h rule B), then every pass draws one
 // triangle over the whole target, in order, blended as it says (PassBlend): replace, alpha (straight alpha over:
@@ -421,6 +427,9 @@ struct ModePass
     // waits for it as for any texture it samples).
     QByteArray environmentSource;
     QSize environmentSize;
+    // ABI 37 (N4.i): "viewport": "allocation", a pass on the core's triangle drawn over its scene target's whole
+    // allocation (Python's post passes over the SceneTarget's allocation: the trails' edges).
+    bool allocationViewport = false;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
@@ -462,6 +471,8 @@ struct ModeProgram
     const StorageBufferDeclaration *storageBuffer(const QByteArray &name) const;
     const StorageImageDeclaration *storageImage(const QByteArray &name) const;
     bool hasCompute() const;
+    // ABI 37 (N4.i): every compute entry (if any) is triggered by "draw" (the one trigger a still admits).
+    bool computeOnDrawOnly() const;
     // N3.2: the settings' numbers the draws name, from `settings`.
     QHash<QByteArray, double> drawSettingNumbers(const QJsonObject &settings) const;
     bool needsCard() const;
@@ -522,7 +533,9 @@ int modeContentObjects();
 // runs the same text, rendering/gl_programs/mip_chain.py) in the record that commits it, before any pass samples it,
 // on either route (in the frame, or after a job's output is imported); never QRhi's generateMips, whose odd levels are
 // the driver's. A device without compute refuses such a texture with its reason (a failure, the owner told).
-enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1 };
+// ABI 37 (N5.2d): RGBA32F (16 bytes a texel, floats in the platform's byte order: Crumble's motion table, Python's
+// GL_RGBA32F keyframes read with texelFetch, never filtered), never with mips (the box kernel is RGBA8 and RGBA16F).
+enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1, RGBA32F = 2 };
 bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out);
 QString modeTextureFormatName(ModeTextureFormat format);
 QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format);

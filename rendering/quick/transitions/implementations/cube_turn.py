@@ -24,7 +24,7 @@ from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM,
 from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
                                                warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+from ..native_scene import (native_clip_depth, NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
                             item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -33,7 +33,7 @@ _BOX_INPUTS = (("aPosition", 3), ("aNormal", 3))
 _SCENE_PASSES = (
     item_quad_pass("backdrop", CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE,
                    (("uEnvironment", "environment"),)),
-    NativeScenePass("box", CUBE_TURN_VERTEX_SOURCE, CUBE_TURN_FRAGMENT_SOURCE, mesh="box",
+    NativeScenePass("box", native_clip_depth(CUBE_TURN_VERTEX_SOURCE), CUBE_TURN_FRAGMENT_SOURCE, mesh="box",
                     samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
 )
 

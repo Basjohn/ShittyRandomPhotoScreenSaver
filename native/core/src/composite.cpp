@@ -676,13 +676,19 @@ bool CompositeItem::stillMode(bool still, QString *error)
 }
 
 bool CompositeItem::textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
-                                QString *error, bool inFrame, bool halfFloat)
+                                QString *error, bool inFrame, bool halfFloat, bool fullFloat)
 {
     if (modeRefused(error))
         return false;
+    if (halfFloat && fullFloat) {
+        *error = QStringLiteral("texture '%1': half floats or full floats, not both").arg(QString::fromLatin1(name));
+        return false;
+    }
     std::shared_ptr<ModeSource> source = currentOrNewMode();
-    if (!source->setTexture(name, pixels, size, mips, error, inFrame,
-                            halfFloat ? ModeTextureFormat::RGBA16F : ModeTextureFormat::RGBA8))
+    const ModeTextureFormat format = fullFloat ? ModeTextureFormat::RGBA32F // ABI 37
+        : halfFloat                            ? ModeTextureFormat::RGBA16F
+                                               : ModeTextureFormat::RGBA8;
+    if (!source->setTexture(name, pixels, size, mips, error, inFrame, format))
         return false;
     m_mode = source;
     update();

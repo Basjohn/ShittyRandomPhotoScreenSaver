@@ -18,7 +18,7 @@ from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, 
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import PassBlocks
 from ..fullscreen_pass import SHOW_EFFECT, fullscreen_pass_parts
-from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+from ..native_scene import (native_clip_depth, NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
                             item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -120,7 +120,7 @@ def _slat_passes() -> tuple[NativeScenePass, ...]:
     return (
         item_quad_pass("backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE,
                        (("uNewTex", "new"),)),
-        NativeScenePass("slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE, mesh="slat",
+        NativeScenePass("slats", native_clip_depth(shaders.BLINDS_SLATS_VERTEX_SOURCE), shaders.BLINDS_SLATS_FRAGMENT_SOURCE, mesh="slat",
                         samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
     )
 

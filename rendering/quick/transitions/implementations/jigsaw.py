@@ -29,7 +29,7 @@ from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM,
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from ..native_scene import NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show
+from ..native_scene import native_clip_depth, NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show
 from ..piece_layout import PIECE_VERTEX_ATTRIBUTES
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import PREPARED_GEOMETRY, build_jigsaw_geometry, jigsaw_geometry_key
@@ -42,11 +42,11 @@ _PIECE_INPUTS = tuple(zip(("aUv", "aSide", "aNormal", "aBevel", "aPiece"), PIECE
 #: The shadow's multiply (``blend_scope(GL_FUNC_ADD, GL_DST_COLOR, GL_ZERO)``: alpha ZERO, ONE).
 _SHADOW_BLEND = (("add", "dst_color", "zero"), ("add", "zero", "one"))
 _SCENE_PASSES = (
-    NativeScenePass("flat", JIGSAW_FLAT_VERTEX_SOURCE, JIGSAW_FLAT_FRAGMENT_SOURCE, mesh="pieces",
+    NativeScenePass("flat", native_clip_depth(JIGSAW_FLAT_VERTEX_SOURCE), JIGSAW_FLAT_FRAGMENT_SOURCE, mesh="pieces",
                     samplers=(("uOldTex", "old"), ("uNewTex", "new"))),
     NativeScenePass("shadow", JIGSAW_SHADOW_VERTEX_SOURCE, JIGSAW_SHADOW_FRAGMENT_SOURCE, topology="triangle_strip",
                     vertices=4, blend=_SHADOW_BLEND),
-    NativeScenePass("flight", JIGSAW_FLIGHT_VERTEX_SOURCE, JIGSAW_FLIGHT_FRAGMENT_SOURCE, mesh="pieces",
+    NativeScenePass("flight", native_clip_depth(JIGSAW_FLIGHT_VERTEX_SOURCE), JIGSAW_FLIGHT_FRAGMENT_SOURCE, mesh="pieces",
                     samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
 )
 

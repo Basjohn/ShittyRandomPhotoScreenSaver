@@ -203,4 +203,11 @@
 // stage_environment_copies, and the lost edge's "mesh:<name>" (a mesh a content made again has nothing to upload from:
 // the owner sends it again). Backward compatible for every earlier program (no program declares either; an owner without
 // a mesh listener ignores the name).
-#define SRPSS_NATIVE_CORE_ABI 36
+// 37 (N4.i motion blur and trails, with N5.2d): a compute entry's "trigger": "draw" (dispatched at every record that
+// draws the program's passes: a still's only compute trigger, the motion blur's tile max over this record's velocity);
+// the target format "r8" (the trails' ghost buffer); an attachment a pass masks ("write": false) may be left unwritten
+// by its shader; a setting scoped to one pass ("<member>@<pass>": the trails' ghosts, one pass a ghost from one pack);
+// a pass's "viewport": "allocation" (the core's triangle over a scene target's whole allocation: the trails' edges);
+// the item texture format rgba32f (composite_mode_texture's eighth argument full_float, no mips: Crumble's motion
+// table). Backward compatible for every earlier program and caller (none declares any of them).
+#define SRPSS_NATIVE_CORE_ABI 37

@@ -78,7 +78,8 @@ constexpr int kMaxTargetColour = 4;
 constexpr int kSceneBucket = 64;
 constexpr int kMaxSceneSamples = 8;
 
-enum class TargetFormat { RGBA8 = 0, RGBA16F = 1, R16F = 2, R32F = 3 };
+// ABI 37 (N4.i): R8, the motion trails' ghost buffer (one unorm channel, MAX-blended: Python's GL_R8).
+enum class TargetFormat { RGBA8 = 0, RGBA16F = 1, R16F = 2, R32F = 3, R8 = 4 };
 bool parseTargetFormat(const QString &text, TargetFormat *out);
 QString targetFormatName(TargetFormat format);
 QRhiTexture::Format targetRhiFormat(TargetFormat format);
