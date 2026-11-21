@@ -1725,7 +1725,7 @@ by risk; none takes a slot native work can use.
   composed Mica pixels land below it. Fix in the shared solver or Mica's light recipe, never a Gmail exception.
   Media still supplies its own playback-state ink (`MediaPresentation.qml:7`) and so still differs from Feeds and
   Reddit (glass 0.80 against 0.88 on Default Dark): decide whether Media's too goes to the shared path.
-- [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). The operator checked that every theme
+- [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). (Sonnet agent a2cf4bc7f83cfea91, 21 Nov.) The operator checked that every theme
   stays legible at -0.35.
   - [ ] Root cause first: where the baseline is defined (the canonical default and the Style Override offset), and
     what the legibility guard does at that value. The guard must not raise opacity back: tell it the new base is
