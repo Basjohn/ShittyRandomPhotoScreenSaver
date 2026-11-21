@@ -907,7 +907,7 @@ the feature (D3D11 is not stated).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
-  - [ ] Source reading first (Sonnet, research only, no code), as the Oscilloscope's: the record each frame carries
+  - [ ] Source reading first (Sonnet agent af6ce7875bfd45d8f, 21 Nov; research only, no code), as the Oscilloscope's: the record each frame carries
     (what is per frame from the logical frame, what is per Settings or card change), each stream's size rule, every
     pass with its targets and attachments (the five compute passes, the three rings, the planar reflection, the fog
     volume, the floor and pulse-rim textures, bloom if any), how it turns (Waveform is a turned scene consumer: the
