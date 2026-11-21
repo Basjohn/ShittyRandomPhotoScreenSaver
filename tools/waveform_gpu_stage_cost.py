@@ -116,7 +116,7 @@ def _variants(extra: int):
     def target_only(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
         recipe = self.recipe
         with self.scene.scope(card, 4, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
-                              oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
+                              oit=True, hdr=None if flat else recipe.exposure, bloom_stage=not flat):
             gl.glViewport(0, 0, *self.size)
             gl.glClearBufferfv(gl.GL_COLOR, 0, (0., 0., 0., 1.))
             with self.scene.transparent_writes(card, self.resources):

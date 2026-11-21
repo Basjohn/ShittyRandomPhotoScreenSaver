@@ -542,7 +542,8 @@ class SceneTarget:
     def scope(self, frame: SceneFrame, samples: int, resources,
               rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
               motion_blur: bool = False, overlay: float | None = None, shafts: bool = False,
-              depth_texture: bool = False, oit: bool = False, hdr: float | None = None) -> Iterator[None]:
+              depth_texture: bool = False, oit: bool = False, hdr: float | None = None,
+              bloom_stage: bool = False) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
 
         With ``hdr`` (an exposure, overlay with bloom only) the scene's colour, background capture and resolve are
@@ -550,7 +551,9 @@ class SceneTarget:
         bloom), and the composite tone maps it (ACES fit) once at that exposure.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
-        (see ``post.BloomChain``); the passes must then write alpha deliberately.
+        (see ``post.BloomChain``); the passes must then write alpha deliberately. ``bloom_stage`` keeps that stage
+        (emission, chain, and the HDR tone map) in place at strength 0, where it adds nothing: a strength that
+        crosses 0 then fades to nothing instead of switching the composite path (fade, never vanish).
         With ``motion_blur`` the passes that move write their screen motion inside
         ``velocity_writes()`` (see ``motion.MotionBlur``). With ``overlay`` (an opacity)
         the scene is laid over what is already drawn (see the module notes). With ``shafts`` (an
@@ -561,11 +564,12 @@ class SceneTarget:
             raise ValueError(f"{self.label}: an overlay scene target has no motion blur")
         if shafts and overlay is None:
             raise ValueError(f"{self.label}: light shafts need an overlay scene target")
-        if hdr is not None and (overlay is None or bloom <= 0.0):
+        staged = bloom > 0.0 or bloom_stage
+        if hdr is not None and (overlay is None or not staged):
             raise ValueError(f"{self.label}: an HDR scene target tone maps in its overlay bloom composite")
         self.begin(frame, samples, rect, motion_blur, overlay=overlay,
-                   emission=overlay is not None and bloom > 0.0, shafts=shafts, depth_texture=depth_texture,
-                   oit=oit, hdr=hdr is not None, bloom=bloom > 0.0)
+                   emission=overlay is not None and staged, shafts=shafts, depth_texture=depth_texture,
+                   oit=oit, hdr=hdr is not None, bloom=staged)
         self._exposure = 0.0 if hdr is None else max(float(hdr), 1e-3)
         try:
             yield
@@ -573,7 +577,7 @@ class SceneTarget:
             self._restore_inherited(frame)
             self._restore_inherited_blend()
             raise
-        self.end(frame, resources, bloom)
+        self.end(frame, resources, bloom, staged)
 
     @contextmanager
     def emission_writes(self) -> Iterator[None]:
@@ -934,7 +938,8 @@ class SceneTarget:
         vx, vy, vw, vh = frame.viewport
         gl.glViewport(vx - x, vy - y, vw, vh)
 
-    def end(self, frame: SceneFrame, resources, bloom: float = 0.0) -> None:
+    def end(self, frame: SceneFrame, resources, bloom: float = 0.0, staged: bool | None = None) -> None:
+        staged = bloom > 0.0 if staged is None else staged
         # Only a turned Visualizer scene pays for its output frame; transitions and unturned scenes read one attribute.
         rotation = getattr(frame, "scene_output_rotation", 0)
         # The scene (and so the shaft source) was drawn in the oriented frame; the light's item point is in that
@@ -951,17 +956,17 @@ class SceneTarget:
         if motion:
             gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         scene, glow = self._names["colour"], 0
-        if (bloom > 0.0 and not self._names["emission"]) or motion:
+        if (staged and not self._names["emission"]) or motion:
             velocity = self._names["velocity"]
             if multisampled:
                 scene, velocity = self._resolve(frame, resources)
             if motion:
                 scene = self._motion.apply(scene, velocity, (allocated_width, allocated_height), resources,
                                            frame.quad_vao)
-            if bloom > 0.0:
+            if staged:
                 glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
         light, self._shaft_light = self._shaft_light, None
-        emitting = self._overlay is not None and bool(self._names["emission"]) and bloom > 0.0
+        emitting = self._overlay is not None and bool(self._names["emission"]) and staged
         if emitting or (self._overlay is not None and light is not None):
             try:
                 # The post passes overwrite their targets: no caller blending (handed back below).
