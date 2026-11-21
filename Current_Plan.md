@@ -1235,18 +1235,6 @@ the feature (D3D11 is not stated).
     Next: compare the uniforms and the per-fragment colour of one A and one B frame Python against native; fix at
     the owner; if either proves a D12 class, the bound is a lead decision with the measured worst stated (A: 12
     ties; B: a touching pair at range 10).
-  - [ ] Spectrum: steady passes on all four takes, both variants, both halves (max level 1, scatter 0, worst ties 2
-    then 1). Variant b passes all four. Variant a fails only in the fade after the replay's mode switch:
-    human_heavy1 5311 (3 ties), anything_mixed2 5311 (25) and 5312 (105), nightsolong 5310 (6), 5311 (7) and 5312
-    (69); ragdoll none. Every failing pixel is one level off, off the mask, in a horizontal row: fading bar content
-    a few levels over the card's dark fill (Python 13-22 against 12). Classified as the judge, not the port (the
-    probe kept the reference's second-background draw for human_heavy1 and anything_mixed2): all 133 such pixels
-    draw as exactly the magenta second background, `(255, 0, 255)`, so `pixel_tolerance.translucent_by_backgrounds`
-    drops them as bare and they lose the masked one-level class (nightsolong read its reference from the cache: the
-    same rows, its second draw not kept). Lead decision (21 Nov): a pixel is bare only if it equals its own background
-    in every draw (these read 13-22 over the card fill against its 12, so they are content); no third background and no
-    bound change. Then rejudge these frames from the cached references, with a test whose control is a fully bare pixel
-    and a faded content pixel that matches only the second background.
   - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
     (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
     Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
