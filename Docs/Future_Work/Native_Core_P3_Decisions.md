@@ -1130,7 +1130,10 @@ each harness states its bounds beside their measured reasons:
 1. *Exact everywhere*, opaque content and background included, except:
 2. *The explained one-level class, only through a mask derived from the reference*: the pixels the reference draws
    translucent, found by drawing it over two backgrounds (the owner-level rule (a): `owner_render_parity.py
-   content_backdrop` clears the Python render host's viewport to magenta in a second Python run) or read from its own
+   content_backdrop` clears the Python render host's viewport to magenta in a second Python run; a pixel is bare, out
+   of the mask, only where it equals its own background in both draws, the first draw's read before the clear: the
+   lead's decision, 21 Nov, for Spectrum's switch fade, whose faded bar pixels round to exactly magenta over the second
+   background while they read a few levels over the card's fill in the first) or read from its own
    alpha in a target cleared to zero (`devcurve_check.py`, the scene targets' RGBA8 textures), and the pixels a blended
    layer sums into (`mesh_buffer_check.py`: alpha strictly between 0 and 255, or above 0 in an additive scene). A float
    texture's unit is its own rounding (one float16 ulp, or the depth bound), which every texel may reach.
