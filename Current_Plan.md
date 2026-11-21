@@ -69,11 +69,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
 - [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
   its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
-- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
-  environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
-  merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
-- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends. Its Vulkan hitch run passed 21 Nov (0 % late,
-  render 0.43/0.61 ms against Python OpenGL 1.03/1.5).
+- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): proved and registered on its branch,
+  waiting for the lead's merge (the N5.2c box).
+- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
+  crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
+  "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
+  over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
 - [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
   Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
   Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
@@ -1410,6 +1411,12 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw. Dispatched 21 Nov with N4.j
   (agent a77d7d16afb481093, Opus High), ABI 36 (34 retired unused).
+  - [ ] Merge the branch (the ABI 36 module built from 068be1f26; nothing in the core changed after it). Every other
+    box of the port is met: rules (a) and (b) pass (route check r5, the lead's rules in `transition_route_check.py`),
+    cost per pass at 1440p and 4K on both backends, the Vulkan hitch session passes, and the four are registered.
+  - [ ] Watch after the merge: the CPU inside a run on native Vulkan is 28-36 % of a core for these four and Beam (the
+    "Performance, before the flip" box above owns the cause); Jigsaw's GUI tick is about 1.25 ms against 0.5 for the
+    others (its piece table packed every frame).
   - Reading (Opus High agent, worktree agent-a77d7d16afb481093, 21 Nov; no Python pixel touched). Files under
     `rendering/quick/transitions/implementations/`: `ct.py` cube_turn, `bl.py` blinds, `dc.py` depth_cascade, `jg.py`
     jigsaw; under `rendering/gl_programs/`: `ctp.py` cube_turn_program, `bsp.py` blinds_slats_program, `dcp.py`
