@@ -113,6 +113,14 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
+- [ ] Guided Setup: Borderless offered on the Interaction page (operator, 21 Nov: Borderless looks very good; give it
+  visibility). The page becomes Interaction + Borderless: the Interaction Mode choice stays (its wording, MC rule and
+  draft-only save unchanged) but its practice-story preview card goes; below it a Borderless choice (off / on) with two
+  real rendered stills of the Media card without and with Borderless, side by side, the selected one highlighted.
+  The choice writes the same setting Style Overrides' Borderless writes (one owner, the wizard's draft, saved only on
+  Finish). Stills come from the onboarding preview foundry (real widget pixels, offscreen), stored with the other
+  onboarding assets and in the manifest. Title Case, one-sentence intros, tooltips for the rest. Tests on the real
+  wizard (choice writes the draft, Finish saves, Cancel does not; no pinned wording or values).
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
