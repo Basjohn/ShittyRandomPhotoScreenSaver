@@ -260,13 +260,12 @@ OverlayWidget {
         width: statsRoot.metricPanelWidth
         height: statsRoot.metricPanelHeight
         radius: 10.0
-        color: statsRoot.systemStatsModel.metricSurfaceColor
+        color: statsRoot.systemStatsModel.tileColor
         // The runs below sit on this fill: their ink is judged on it with its row (ShadowedText).
         readonly property Item textLegibilityRow: panelLegibilityRow
-        border.color: Qt.rgba(
-            accentColor.r, accentColor.g, accentColor.b, 0.55
-        )
-        border.width: statsRoot.scaleAwareStrokeWidth(1.25)
+        // The Feed tile's hairline (invisible under Borderless), not an accent-tinted stroke.
+        border.color: statsRoot.systemStatsModel.headerBorderColor
+        border.width: statsRoot.scaleAwareStrokeWidth(1.0)
 
         Rectangle {
             objectName: panel.objectPrefix + "Accent"

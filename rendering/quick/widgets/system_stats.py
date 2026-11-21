@@ -41,6 +41,7 @@ from .host import (
 from .steam_common import as_bool, bounded_float, bounded_int, rgba, with_alpha
 from .theme_projection import (
     resolve_soft_text_shadow,
+    tile_wash,
     resolve_card_surface_colors,
     resolve_header_colors,
     resolve_primary_text_color,
@@ -635,8 +636,9 @@ class SystemStatsPresentationModel(QObject):
         return QColor(*self.config.cpu_accent_color)
 
     @Property(QColor, notify=stateChanged)
-    def metricSurfaceColor(self) -> QColor:
-        return QColor(*self.config.metric_surface_color)
+    def tileColor(self) -> QColor:
+        # The Feed tile's fill: a faint wash of the body ink, not an opaque slab.
+        return QColor(*tile_wash(self.config.text_color))
 
     @Property(QColor, notify=stateChanged)
     def metricBorderColor(self) -> QColor:
