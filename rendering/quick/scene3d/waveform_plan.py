@@ -182,9 +182,11 @@ def medium_values(recipe, *, now, origin, count, mirror, grade) -> dict:
     return values
 
 
-def sky_values(fog_uniforms, *, backdrop, reflection) -> dict:
-    """The sky's members: the volume's receiver uniforms, the backdrop and whether it draws the mirrored sky."""
-    return {**fog_uniforms, 'uBackdrop': tuple(backdrop), 'uSkyReflection': int(reflection)}
+def sky_values(fog_uniforms, *, backdrop, reflection, size) -> dict:
+    """The sky's members: the volume's receiver uniforms, the backdrop, whether it draws the mirrored sky and its
+    target's size (the scene's or the reflection's)."""
+    return {**fog_uniforms, 'uBackdrop': tuple(backdrop), 'uSkyReflection': int(reflection),
+            'uViewport': (float(size[0]), float(size[1]))}
 
 
 def floor_values(recipe, *, mvp, eye, view, size, flat=False, lit, give_span=None, field=None, fog_uniforms=None,

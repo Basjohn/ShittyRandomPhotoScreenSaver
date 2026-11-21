@@ -1,11 +1,12 @@
 layout(std140, binding = 18) uniform WaveformFloor {
+    vec2 uViewport;
+    vec2 u_target_px;
     vec4 uFloorGive;
     mat4 uMvp;
     mat4 uFloorInverseMvp;
     vec3 uEye;
     int uFlat;
     int uFogLit;
-    vec2 uViewport;
     vec3 uBackdrop;
     vec3 uAmbient;
     vec3 uFloorTint;
@@ -109,6 +110,7 @@ layout(binding = 1) uniform sampler2D uSlope;      // height slope per uv unit (
 
 
 
+
         // tile, micro tile, reflection gain, f0
     // albedo gain, broad relief amplitude, micro relief amplitude
        // reflection offset per unit slope: broad, micro across, micro along
@@ -163,6 +165,41 @@ vec2 fragPixel(vec2 targetSize) {
 }
 ivec2 fragTexel(ivec2 targetSize) { return ivec2(fragPixel(vec2(targetSize))); }
 vec2 fragUv(vec2 targetSize) { return fragPixel(targetSize) / targetSize; }
+#endif
+
+#ifndef SRPSS_TARGET_CLIP
+#define SRPSS_TARGET_CLIP
+vec4 srpssTargetClip(vec4 clip, vec2 viewport, vec2 targetPx) {
+#ifndef SRPSS_GL_FORM_TARGET
+    if (srpssConventions.z > 0.5) {
+        vec2 s = viewport / targetPx;
+        clip.xy = clip.xy * s + clip.w * (s - 1.0);
+        clip.y = -clip.y;
+    }
+#endif
+    if (srpssConventions.w > 0.5) clip.z = 0.5 * (clip.z + clip.w);
+    return clip;
+}
+#endif
+#if defined(SRPSS_CONVENTIONS_FRAGMENT) && !defined(SRPSS_TARGET_CLIP_FRAGMENT)
+#define SRPSS_TARGET_CLIP_FRAGMENT
+vec2 srpssGlFragUv(vec2 viewport, vec2 targetPx) {
+    vec2 p = fragPixel(targetPx);
+#ifdef SRPSS_GL_FORM_TARGET
+    return p / viewport;
+#else
+    return vec2(p.x, srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) / viewport;
+#endif
+}
+#ifdef SRPSS_SCENE_ITEM_ONLY
+bool srpssOutsideItem(vec2 viewport, vec2 targetPx) {
+    vec2 p = fragPixel(targetPx);
+    return p.x >= viewport.x || (srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) >= viewport.y;
+}
+#define srpssItemOnly(viewport, targetPx) if (srpssOutsideItem(viewport, targetPx)) discard
+#else
+#define srpssItemOnly(viewport, targetPx)
+#endif
 #endif
 
 struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
@@ -585,7 +622,8 @@ vec2 floorGiveReflection(vec3 world, vec3 normal, vec2 screenUv) {
     return clamp(ndcToUv(clip.xy/clip.w)-screenUv,vec2(-0.25),vec2(0.25));
 }
 void main() {
-    vec2 screenUv=fragUv(uViewport);
+    srpssItemOnly(uViewport,u_target_px);
+    vec2 screenUv=srpssGlFragUv(uViewport,u_target_px);  // OpenGL's form (rows bottom-up) on every target
     vec3 vWorldPos;float groundDepth;
     bool hit=floorWorldHit(vWorldPos,groundDepth);
     // Every derivative is taken here, before the miss discards: Vulkan's discard ends the lane (SPIR-V OpKill) where

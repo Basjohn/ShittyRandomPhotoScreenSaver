@@ -89,6 +89,60 @@ vec2 fragUv(vec2 targetSize) {{ return fragPixel(targetSize) / targetSize; }}
 """
 SRPSS_CONVENTIONS_FRAGMENT_GLSL = "\n#define SRPSS_CONVENTIONS_FRAGMENT" + SRPSS_CONVENTIONS_GLSL
 
+# A scene drawn from its own camera (D5.5: OpenGL form, its rows bottom-up and its clip depth -1 to 1; Waveform's) into
+# a target of the drawing renderer's (N5.4). It follows the conventions include and reads the block's z (1 where the
+# drawn target's top row lies at clip NDC -Y: the native core's OpenGL and Vulkan targets) and w (1 where the target's
+# clip depth runs 0 to 1: the native core's Vulkan targets, ABI 36); this OpenGL renderer writes 0 to both, so each is
+# its argument, bit for bit. Under the native core a surface-sized scene target is its 64-pixel bucket with the scene
+# at its bottom left (``mode_content.cpp`` sceneAnchor, Python's SceneTarget): ``viewport`` is the scene's pixels and
+# ``targetPx`` the target's (the core's ``u_target_px``), equal for an explicit-size target. The vertex stage places
+# with ``srpssTargetClip``; a fragment stage reads its own pixel in OpenGL's form with ``srpssGlFragUv`` and samples an
+# exact-size target the scene drew at an OpenGL-form uv (and along an OpenGL-form step) with ``srpssTargetUv``
+# (``srpssTargetStep``). Window depth then reads OpenGL's 0.5 z / w + 0.5 on every backend.
+SRPSS_TARGET_CLIP_GLSL = """
+#ifndef SRPSS_TARGET_CLIP
+#define SRPSS_TARGET_CLIP
+vec4 srpssTargetClip(vec4 clip, vec2 viewport, vec2 targetPx) {
+#ifndef SRPSS_GL_FORM_TARGET
+    if (srpssConventions.z > 0.5) {
+        vec2 s = viewport / targetPx;
+        clip.xy = clip.xy * s + clip.w * (s - 1.0);
+        clip.y = -clip.y;
+    }
+#endif
+    if (srpssConventions.w > 0.5) clip.z = 0.5 * (clip.z + clip.w);
+    return clip;
+}
+#endif
+#if defined(SRPSS_CONVENTIONS_FRAGMENT) && !defined(SRPSS_TARGET_CLIP_FRAGMENT)
+#define SRPSS_TARGET_CLIP_FRAGMENT
+vec2 srpssGlFragUv(vec2 viewport, vec2 targetPx) {
+    vec2 p = fragPixel(targetPx);
+#ifdef SRPSS_GL_FORM_TARGET
+    return p / viewport;
+#else
+    return vec2(p.x, srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) / viewport;
+#endif
+}
+#ifdef SRPSS_SCENE_ITEM_ONLY
+bool srpssOutsideItem(vec2 viewport, vec2 targetPx) {
+    vec2 p = fragPixel(targetPx);
+    return p.x >= viewport.x || (srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) >= viewport.y;
+}
+#define srpssItemOnly(viewport, targetPx) if (srpssOutsideItem(viewport, targetPx)) discard
+#else
+#define srpssItemOnly(viewport, targetPx)
+#endif
+#endif
+"""
+# A fragment stage of such a scene: the fragment conventions and the target clip. Its ``main`` starts with
+# ``srpssItemOnly(viewport, targetPx);``: a pass file drawn into the native core's bucketed scene target defines
+# SRPSS_SCENE_ITEM_ONLY (``waveform_shader_files.FILE_DEFINES``), so nothing lands in the bucket's slack beyond the scene
+# (the Python renderer's viewport clips there, and the bloom reads the slack); without it the line is empty.
+SRPSS_TARGET_CLIP_FRAGMENT_GLSL = SRPSS_CONVENTIONS_FRAGMENT_GLSL + SRPSS_TARGET_CLIP_GLSL
+#: A vertex stage's head for ``SRPSS_TARGET_CLIP_GLSL``: the conventions include, then the target clip.
+SRPSS_TARGET_CLIP_VERTEX_GLSL = SRPSS_CONVENTIONS_GLSL + SRPSS_TARGET_CLIP_GLSL
+
 # The vertex and instance index with OpenGL's meaning on every backend (N1.6): ``srpssVertexIndex`` and
 # ``srpssInstanceIndex``. Vulkan GLSL (``qsb`` compiles with ``VULKAN`` defined) has only ``gl_VertexIndex`` and
 # ``gl_InstanceIndex``, which add the draw's first vertex and first instance; OpenGL's ``gl_VertexID`` adds the first
@@ -191,6 +245,9 @@ __all__ = [
     "SRPSS_CONVENTIONS_FRAGMENT_GLSL",
     "SRPSS_CONVENTIONS_GLSL",
     "SRPSS_GEOMETRY_GLSL",
+    "SRPSS_TARGET_CLIP_FRAGMENT_GLSL",
+    "SRPSS_TARGET_CLIP_GLSL",
+    "SRPSS_TARGET_CLIP_VERTEX_GLSL",
     "SRPSS_VERTEX_INDEX_GLSL",
     "conventions_block",
     "front_face_clockwise",

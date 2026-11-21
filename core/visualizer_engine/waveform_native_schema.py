@@ -61,14 +61,15 @@ def _capacities() -> dict[str, int]:
 CAPACITIES = _capacities()
 
 
-from core.visualizer_engine.waveform_native_names import SHARED_MEMBERS, member_name  # noqa: E402,F401  (the rule's owner)
+from core.visualizer_engine.waveform_native_names import CORE_MEMBERS, SHARED_MEMBERS, member_name  # noqa: E402,F401  (the rule's owner)
 
 
 #: The members the card decides: the route's settings fill them (the pass's own target size, and whether the floor
 #: reads its pre-pass), never the record.
 SETTINGS_MEMBERS = frozenset({
     *(member_name(pass_id, "uViewport") for pass_id in ("ribbon", "ribbon_mirror", "strays", "strays_mirror", "bursts",
-                                                        "bursts_mirror", "floor", "floor_prepass")),
+                                                        "bursts_mirror", "floor", "floor_prepass", "sky",
+                                                        "sky_mirror")),
     member_name("floor", "uSpecMode"), member_name("floor_prepass", "uSpecMode"),
 })
 
@@ -96,7 +97,7 @@ def _member_entries() -> tuple[tuple[str, str, int], ...]:
     for pass_id, members in PASS_MEMBERS:
         for member, numbers, glsl_type in members:
             name = member_name(pass_id, member)
-            if name in seen or name in SETTINGS_MEMBERS:
+            if name in seen or name in SETTINGS_MEMBERS or member in CORE_MEMBERS:
                 continue
             seen.add(name)
             entries.append((name, *field_kind(glsl_type, numbers)))

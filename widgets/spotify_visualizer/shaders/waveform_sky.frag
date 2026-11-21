@@ -1,5 +1,7 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_sky_fragment for the sky pass, its block's members named for it (the arithmetic the body's)
+#define SRPSS_SCENE_ITEM_ONLY
+#define uViewport sky_u_viewport
 #define uBackdrop sky_u_backdrop
 #define uSkyReflection sky_u_sky_reflection
 #define uMist sky_u_mist

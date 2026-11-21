@@ -5,9 +5,9 @@ from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 from rendering.gl_programs.ribbon import (RIBBON_GRADE_FIELDS, RIBBON_GRADE_FUNCTION, RIBBON_GRADE_GLSL,
                                           RIBBON_GRADE_HEAD)
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
+from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_VERTEX_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
-from rendering.gl_programs.fog_volume import FOG_FULLSCREEN_VERTEX
 
 FIELD_RIBBONS=RIBBON_CAPACITY
 FIELD_ROWS=FIELD_RIBBONS*2
@@ -177,9 +177,21 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
 }
 '''
 
-SKY_VERTEX=FOG_FULLSCREEN_VERTEX
-SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\n'+SCENE_EMISSION_OUTPUT_GLSL+'uniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
-void main(){vec4 fog=textureLod(uFogVolume,vec3(ndcToUv(vNdc),1.0),0.0);
+# The fog's full-screen triangle (``FOG_FULLSCREEN_VERTEX``) placed through the target clip (N5.4): vNdc stays OpenGL's.
+SKY_VERTEX='#version 460 core\n'+SRPSS_TARGET_CLIP_VERTEX_GLSL+'''
+uniform vec2 uViewport;
+uniform vec2 u_target_px;
+out vec2 vNdc;
+void main() {
+    vec2 corner=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
+    vNdc=corner*2.0-1.0;
+    gl_Position=srpssTargetClip(vec4(vNdc,0.0,1.0),uViewport,u_target_px);
+}
+'''
+SKY_FRAGMENT='#version 460 core\n'+SRPSS_TARGET_CLIP_FRAGMENT_GLSL+'uniform vec2 uViewport;\nuniform vec2 u_target_px;\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\n'+SCENE_EMISSION_OUTPUT_GLSL+'uniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
+void main(){
+    srpssItemOnly(uViewport,u_target_px);
+vec4 fog=textureLod(uFogVolume,vec3(ndcToUv(vNdc),1.0),0.0);
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}
 '''

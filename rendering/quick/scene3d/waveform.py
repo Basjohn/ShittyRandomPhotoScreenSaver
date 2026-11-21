@@ -329,7 +329,8 @@ class WaveformScene:
         vao,_=self.fog_resources.mesh('sky',bytes(36),(3,))
         gl.glUseProgram(program)
         # The volume at its unit; every value in the pass block (N1.6).
-        values=sky_values(volume.uniforms,backdrop=self.recipe.environment.backdrop,reflection=reflection)
+        size=reflection_size(self.size,self.recipe.floor) if reflection else self.size
+        values=sky_values(volume.uniforms,backdrop=self.recipe.environment.backdrop,reflection=reflection,size=size)
         with self.fog_resources.pass_blocks.bound(pack_block(SKY_BLOCK,values)):
             gl.glBindVertexArray(vao);gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
 

@@ -171,10 +171,22 @@ def body_text(text: str) -> str:
 #: alike): ``SRPSS_NO_EMISSION`` for one without emission (the planar reflection, the floor's pre-pass: the write
 #: lands in a plain variable, ``target.SCENE_EMISSION_OUTPUT_GLSL``), ``SRPSS_NO_DEPTH`` for one without depth (the
 #: pre-pass: the floor leaves ``gl_FragDepth`` unwritten).
-FILE_DEFINES = {name: ("SRPSS_NO_EMISSION",) for name in (
+FILE_DEFINES = {name: ("SRPSS_NO_EMISSION", "SRPSS_GL_FORM_TARGET") for name in (
     "waveform_ribbon_light_mirror.frag", "waveform_strays_mirror.frag", "waveform_bursts_mirror.frag",
     "waveform_sky_mirror.frag")}
-FILE_DEFINES["waveform_floor_prepass.frag"] = ("SRPSS_NO_EMISSION", "SRPSS_NO_DEPTH")
+FILE_DEFINES["waveform_floor_prepass.frag"] = ("SRPSS_NO_EMISSION", "SRPSS_NO_DEPTH", "SRPSS_GL_FORM_TARGET")
+#: The passes into the targets only the floor samples (the planar reflection, the pre-pass) draw in OpenGL's memory
+#: layout on the core too (``SRPSS_GL_FORM_TARGET``: no row flip, ``conventions.SRPSS_TARGET_CLIP_GLSL``): every
+#: backend puts clip -Y at memory row 0, so their box chains pair the rows the Python renderer's pair and the floor
+#: samples them at its OpenGL-form uv, as written.
+FILE_DEFINES.update({name: ("SRPSS_GL_FORM_TARGET",) for name in (
+    "waveform_ribbon_mirror.vert", "waveform_strays_mirror.vert", "waveform_bursts_mirror.vert",
+    "waveform_sky_mirror.vert", "waveform_floor_prepass.vert")})
+#: The pass files drawn into the native core's bucketed scene target: their fragments draw nothing past the scene
+#: (``conventions.SRPSS_TARGET_CLIP_FRAGMENT_GLSL``'s ``srpssItemOnly``; the Python renderer's viewport clips there).
+FILE_DEFINES.update({name: ("SRPSS_SCENE_ITEM_ONLY",) for name in (
+    "waveform_ribbon_body.frag", "waveform_ribbon_body_sorted.frag", "waveform_ribbon_light.frag",
+    "waveform_strays.frag", "waveform_bursts.frag", "waveform_sky.frag", "waveform_floor.frag")})
 
 
 def wrapper_text(body: str, pass_id: str, members: tuple[str, ...], *, defines: tuple[str, ...] = ()) -> str:
@@ -184,7 +196,8 @@ def wrapper_text(body: str, pass_id: str, members: tuple[str, ...], *, defines: 
              f"// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): {body} for the {pass_id} pass, its "
              "block's members named for it (the arithmetic the body's)"]
     lines += [f"#define {name}" for name in defines]
-    lines += [f"#define {member} {member_name(pass_id, member)}" for member in members]
+    lines += [f"#define {member} {member_name(pass_id, member)}" for member in members
+              if member_name(pass_id, member) != member]          # a core member keeps its name
     lines.append(f'#include "{body}.glsl"')
     return "\n".join(lines) + "\n"
 

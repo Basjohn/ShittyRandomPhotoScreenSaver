@@ -1,5 +1,6 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_ribbon_body_sorted for the ribbon pass, its block's members named for it (the arithmetic the body's)
+#define SRPSS_SCENE_ITEM_ONLY
 #define uFloorGive ribbon_u_floor_give
 #define uSurface ribbon_u_surface
 #define uSweepAxis ribbon_u_sweep_axis

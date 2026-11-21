@@ -206,7 +206,7 @@ def waveform_pass_values(state,size,*,camera=None,values=None):
             passes['medium'+name]={**medium,**dispatch}
             passes['integrate'+name]=dict(dispatch)
             passes['sky'+name]=sky_values(receivers[name],backdrop=recipe.environment.backdrop,
-                                          reflection=bool(name))
+                                          reflection=bool(name),size=mirrored_size if name else size)
             counts['fog_grid'+name]=grid
     draws={'':{**frame.draw,'mist':history_mist({**frame.draw['mist'],**receivers['']},frame.mirror)},
            '_mirror':{**frame.draw,'mist':history_mist({**frame.draw['mist'],**receivers['_mirror']},frame.mirror),

@@ -2,6 +2,7 @@
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT, MIST_GLSL
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.ribbon import RIBBON_GRADE_GLSL
+from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_VERTEX_GLSL
 from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
 
 # As authored for OpenGL; ``VERTEX`` and ``FRAGMENT`` below are their portable form (N1.6).
@@ -11,6 +12,7 @@ struct Burst { vec4 p; vec4 velocity; vec4 colour; vec4 look; };
 layout(std430,binding=1) readonly buffer Bursts { Burst particles[]; };
 uniform mat4 uMvp;
 uniform vec2 uViewport;
+uniform vec2 u_target_px;
 uniform float uNow;
 out vec2 vUv;
 out vec3 vWorld;
@@ -36,13 +38,15 @@ void main() {
     float core=max(0.5*b.colour.w*(0.6+0.4*fade),1.0), reach=max(extent,core);
     vCore=core/reach;
     clip.xy+=vUv*2.0*reach/uViewport*clip.w;
-    gl_Position=clip;
+    gl_Position=srpssTargetClip(clip,uViewport,u_target_px);
     vColour=mix(b.colour.rgb,vec3(1.0),b.look.y);
     vLight=b.look.x*fade*(0.8+0.2*sin(age*10.0+b.look.z*6.2831853));
 }
 """
 
-_FRAGMENT="""
+_FRAGMENT=SRPSS_TARGET_CLIP_FRAGMENT_GLSL+"""
+uniform vec2 uViewport;
+uniform vec2 u_target_px;
 in vec2 vUv;
 in vec3 vWorld;
 flat in vec3 vColour;
@@ -52,6 +56,7 @@ flat in float vCore;
 layout(location=0) out vec4 FragColor;
 """+SCENE_EMISSION_OUTPUT_GLSL+MIST_GLSL+RIBBON_GRADE_GLSL+"""
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float r=dot(vUv,vUv);
     if(r>1.0) discard;
     // Core: a soft disc of the authored size. Halo: a broad, coloured falloff filling the glow extent.
@@ -65,6 +70,7 @@ void main() {
 """
 
 # Binding plan: the bursts' storage 1, the mist volume its unit (8), the pass block 18.
-VERTEX, (FRAGMENT,), BURSTS_BLOCK = portable_program("#version 460 core" + _VERTEX, ("#version 460 core" + _FRAGMENT,),
+VERTEX, (FRAGMENT,), BURSTS_BLOCK = portable_program("#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + _VERTEX,
+                                                     ("#version 460 core\n" + _FRAGMENT,),
                                                      block="RibbonBurstDraw",
                                                      samplers={"uFogVolume": FOG_TEXTURE_UNIT})

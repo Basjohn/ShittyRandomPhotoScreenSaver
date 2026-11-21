@@ -421,7 +421,8 @@ def waveform_settings_values(snapshot: Any, size: tuple[int, int] | None = None)
     mirrored = reflection_size(size, recipe.floor)
     prepass = floor_prepass_size(size, recipe.floor)
     viewports = {"ribbon": size, "ribbon_mirror": mirrored, "floor": size, "strays": size, "strays_mirror": mirrored,
-                 "bursts": size, "bursts_mirror": mirrored, "floor_prepass": prepass or _WAVEFORM_IDLE}
+                 "bursts": size, "bursts_mirror": mirrored, "floor_prepass": prepass or _WAVEFORM_IDLE, "sky": size,
+                 "sky_mirror": mirrored}
     from core.visualizer_engine.waveform_native_schema import member_name
 
     values: dict = {member_name(pass_id, "uViewport"): [float(v) for v in viewport]

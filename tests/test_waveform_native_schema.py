@@ -29,7 +29,9 @@ def test_the_fields_are_the_pass_files_members_but_the_cards():
                 for member, numbers in members.items()}
     # Each field holds its member's numbers: an f64x4 field four per element, an f64 or u32 field one.
     record = {name: count * (4 if kind == "f64x4" else 1) for name, kind, count in schema.MEMBER_ENTRIES}
-    assert set(record) == set(expected) - schema.SETTINGS_MEMBERS
+    # A core member (the core fills it itself) is neither a field nor a setting.
+    assert set(record) == set(expected) - schema.SETTINGS_MEMBERS - schema.CORE_MEMBERS
+    assert schema.CORE_MEMBERS <= set(expected)
     assert all(record[name] == expected[name] for name in record)
     # The kinds follow the member types the core fills (an int member u32 under its range rule).
     from rendering.gl_programs.waveform_shader_files import pass_types

@@ -1,5 +1,6 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_strays_fragment for the strays pass, its block's members named for it (the arithmetic the body's)
+#define SRPSS_SCENE_ITEM_ONLY
 #define uFloorGive strays_u_floor_give
 #define uSurface strays_u_surface
 #define uSweepAxis strays_u_sweep_axis

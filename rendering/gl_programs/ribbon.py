@@ -15,6 +15,7 @@ to their average density once sub-pixel to limit crawling under slow motion.
 """
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from core.waveform_ribbon_dynamics import PULSE_GRID
+from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_VERTEX_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL, SCENE_OIT_GLSL
 
@@ -184,11 +185,12 @@ vec3 surfacePoint(vec3 low, vec3 high, vec3 normal, float across) {
 }
 """
 
-RIBBON_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+RIBBON_VERTEX = ("#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + _RIBBON_SURFACE_GLSL + """
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
 uniform vec2 uViewport;     // pixels; with uRim.w (minimum on-screen width) zero, no widening
+uniform vec2 u_target_px;   // the drawn target's pixels (the native core's member; srpssTargetClip)
 uniform vec4 uRim;
 uniform vec3 uEye;
 out vec3 vWorld;
@@ -280,7 +282,7 @@ void main() {
     vColour=paths[owner].colourA;
     vColourB=paths[owner].colourB;
     vTint=mix(left.tint,right.tint,u);
-    gl_Position=uMvp*vec4(vWorld,1);
+    gl_Position=srpssTargetClip(uMvp*vec4(vWorld,1),uViewport,u_target_px);
     vCoverage=1.0; vExpanded=0.0; vFaceScale=1.0;
     // An edge-on sheet projects narrower than a pixel and MSAA catches it in dashes. Keep at least uRim.w pixels
     // across the screen-space tangent. Light per unit length must stay that of the real sheet through the fold:
@@ -303,7 +305,7 @@ void main() {
             // the projected across direction is -sign(N.V) times the tangent's left normal.
             vec2 perp=normalize(vec2(-along.y,along.x))*(dot(next?n1:n0,view)>0.0?-1.0:1.0);
             vec2 centre=cc.xy/cc.w*half_+perp*signWidth*0.5*minimum;
-            gl_Position=vec4(centre/half_*cc.w,cc.z,cc.w);
+            gl_Position=srpssTargetClip(vec4(centre/half_*cc.w,cc.z,cc.w),uViewport,u_target_px);
             vCoverage=max(drawn,1e-3)/minimum;
             vec3 across=cross(view,(l1+r1)*0.5-(l0+r0)*0.5);
             if(dot(across,across)>1e-24) {
@@ -371,7 +373,7 @@ void continuationMain(int owner,int crossDiv) {
     vPhase=paths[owner].meta.z+vLocal/paths[owner].meta.w;
     vColour=paths[owner].colourA;vColourB=paths[owner].colourB;vTint=mix(k0.tint,k1.tint,share);
     vCoverage=1.0;vExpanded=0.0;vFaceScale=1.0;
-    gl_Position=uMvp*vec4(vWorld,1);
+    gl_Position=srpssTargetClip(uMvp*vec4(vWorld,1),uViewport,u_target_px);
 }
 """
 # The main strip draws only the anchored history [tail anchor, head anchor]; the continuation draws the rest.
@@ -472,12 +474,13 @@ void main() {
 # and leaves the surface along a smooth curve (offset zero and flat at the attachment, growing with distance along
 # it and with the knot's age), wobbles gently, tapers to a free tip and carries droplet beads. Every term is a smooth
 # function of (stray coordinate, knot age), so no setting can kink one. The knot's sparkle gates how many live.
-RIBBON_STRAY_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+RIBBON_STRAY_VERTEX = ("#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + _RIBBON_SURFACE_GLSL + """
 uniform int uVertexBase;  // the draw's first vertex (N5.4)
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
 uniform vec2 uViewport;
+uniform vec2 u_target_px;
 uniform vec4 uStray;       // strays per knot, length (knots), reach (world units), chance
 uniform vec4 uStrayLook;   // width (px), light, beads per stray, peel time (s)
 uniform vec2 uStrayClock;  // local now (s), absolute coordinate origin mod 1000 (stable identity)
@@ -569,7 +572,7 @@ void main() {
     // Quad twice the line's width: the droplet beads fill it, the line's core stays narrow.
     float width=admission*uStrayLook.x*(1.0-0.6*s);
     vec2 offset=perp*(outer?1.0:-1.0)*width;
-    gl_Position=vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w);
+    gl_Position=srpssTargetClip(vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w),uViewport,u_target_px);
     vWorld=here;
     vAlong=s;
     vAcross=outer?1.0:-1.0;
@@ -630,12 +633,15 @@ RIBBON_COHORT_STRAY_VERTEX = RIBBON_STRAY_VERTEX.replace(
 ).replace('uStrayLook.x','cohortLook.x'
 ).replace('uStrayLook.y*k.side.w','cohortLook.y*(0.8+0.4*max(k.side.w,0.0)/(1.0+max(k.side.w,0.0)))')
 
-RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n" + SCENE_EMISSION_OUTPUT_GLSL +
+RIBBON_STRAY_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL +
+                         "layout(location=0) out vec4 FragColor;\n" + SCENE_EMISSION_OUTPUT_GLSL +
                          "in vec3 vWorld;\nin float vAlong;\nin float vAcross;\nin float vBright;\nin float vSeed;\n"
                          "flat in vec3 vColour;\nuniform vec3 uMistOrigin;\nuniform vec4 uStrayLook;\n"
                          "uniform vec2 uStrayGlow;  // soft halo around the filament, share sent to the bloom\n"
+                         "uniform vec2 uViewport;\nuniform vec2 u_target_px;\n"
                          + MIST_GLSL + RIBBON_GRADE_GLSL + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float a=vAcross*vAcross;
     float line=exp(-a*9.0);                                   // the filament: narrow core in a quad twice its width
     float along=fract(vAlong*uStrayLook.z+vSeed)-0.5;         // droplets strung along it, round over the full quad
@@ -783,9 +789,11 @@ vec3 ribbonColour() {
 }
 """
 
-RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
+RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL + SCENE_OIT_GLSL
+                        + "layout(location=2) out vec4 Emission;\nuniform vec2 u_target_px;\n"
                         + _RIBBON_MATERIAL_GLSL + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0)*ageFade()
                       *mistTransmittance(vWorld+uMistOrigin)*clamp(vColour.a,0.0,1.0),0.0,0.95);
     sceneTransparent(ribbonColour()*uBody.y*alpha,alpha,viewDepth());
@@ -831,9 +839,11 @@ float pulseRimResponse(float x) {
 """
 # The one line the light pass gains; without it (or with uPulseRim.z 0) the rims are exactly today's.
 PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*pulseRimResponse(vWorld.x+uMistOrigin.x);\n"
-RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n" +
+RIBBON_LIGHT_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL +
+                         "layout(location=0) out vec4 FragColor;\nuniform vec2 u_target_px;\n" +
                          SCENE_EMISSION_OUTPUT_GLSL + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float across=acrossClamped();
     float x=ribbonStrandCoordinate(across,vPhase,uStrands.w,uBody.w,uTone.z)*uStrands.x;
     float w=max(fwidth(x),1e-4);

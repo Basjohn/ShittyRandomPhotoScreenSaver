@@ -1,5 +1,6 @@
 """Waveform infinite wet-floor material; no scene lifetime or simulation."""
-from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.conventions import (SRPSS_CONVENTIONS_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_GLSL,
+                                               SRPSS_TARGET_CLIP_VERTEX_GLSL)
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_UNIFORMS
 from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
@@ -15,10 +16,12 @@ _FLOOR_WORLD_FIELD_GLSL = WORLD_FIELD_GLSL.replace(
     _PATHS_AT_0, f"layout(std430,binding={FLOOR_PATHS_BINDING}) readonly buffer Paths")
 from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
 
-FLOOR_VERTEX = """#version 460 core
+FLOOR_VERTEX = "#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + """
 layout(location=0) in vec3 aPosition;
+uniform vec2 uViewport;
+uniform vec2 u_target_px;
 out vec2 vFloorNdc;
-void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=vec4(vFloorNdc,0.0,1.0); }
+void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=srpssTargetClip(vec4(vFloorNdc,0.0,1.0),uViewport,u_target_px); }
 """
 # The ground is an opaque infinite world plane, not a finite actor: each Perspective
 # pixel ray from the eye meets it, possibly beyond the actor far clip. Only this
@@ -80,6 +83,7 @@ uniform sampler2D uSlope;      // height slope per uv unit (rg), from the smooth
 uniform int uFlat;
 uniform int uFogLit;
 uniform vec2 uViewport;
+uniform vec2 u_target_px;
 uniform vec3 uBackdrop;
 uniform vec3 uAmbient;
 uniform vec3 uFloorTint;
@@ -100,7 +104,7 @@ uniform sampler2D uSpecular;
 uniform vec3 uForward;
 uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
-""" + SCENE_EMISSION_OUTPUT_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + _FLOOR_WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
+""" + SCENE_EMISSION_OUTPUT_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + SRPSS_TARGET_CLIP_GLSL + _FLOOR_WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
 const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
 // The maps' and the reflection's anisotropy (N5.4: the shader's taps, rendering/gl_programs/anisotropic.py, in both
 // renderers; the samplers at 1x, as the native core's are): the maps' former hardware 8x, the reflection's 16x.
@@ -186,7 +190,8 @@ vec2 floorGiveReflection(vec3 world, vec3 normal, vec2 screenUv) {
     return clamp(ndcToUv(clip.xy/clip.w)-screenUv,vec2(-0.25),vec2(0.25));
 }
 void main() {
-    vec2 screenUv=fragUv(uViewport);
+    srpssItemOnly(uViewport,u_target_px);
+    vec2 screenUv=srpssGlFragUv(uViewport,u_target_px);  // OpenGL's form (rows bottom-up) on every target
     vec3 vWorldPos;float groundDepth;
     bool hit=floorWorldHit(vWorldPos,groundDepth);
     // Every derivative is taken here, before the miss discards: Vulkan's discard ends the lane (SPIR-V OpKill) where

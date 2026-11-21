@@ -50,14 +50,17 @@ def test_every_file_is_its_python_text(monkeypatch):
 
     for wrapper, body, pass_id in files.PASS_FILES:
         lines = compose_shader_source(_folder() / wrapper).split("\n")
-        members = files.block_members(files._bodies()[body])
+        from core.visualizer_engine.waveform_native_names import CORE_MEMBERS
+
+        # A core member (the core fills it under its own name) has no define.
+        members = tuple(m for m in files.block_members(files._bodies()[body]) if m not in CORE_MEMBERS)
         named = {files.member_name(pass_id, member) for member in members}
         defines = [line for line in lines if line.startswith("#define ") and line.split()[-1] in named
                    and len(line.split()) == 3]
         assert len(defines) == len(members), wrapper
         # A pass into a target with fewer attachments than the scene's defines exactly its FILE_DEFINES.
         own = [f"#define {name}" for name in files.FILE_DEFINES.get(wrapper, ())]
-        assert [line for line in lines if line.startswith("#define SRPSS_NO_")] == own, wrapper
+        assert [line for line in lines if line.startswith(("#define SRPSS_NO_", "#define SRPSS_SCENE_ITEM_ONLY", "#define SRPSS_GL_FORM_TARGET"))] == own, wrapper
         kept = [line for line in lines if line not in defines and not line.startswith("// Waveform Ribbon")
                 and line not in own]
         assert "\n".join(kept) == files._bodies()[body], wrapper
@@ -73,11 +76,16 @@ def test_every_file_is_its_python_text(monkeypatch):
 
 
 def test_every_pass_names_each_member_once_across_the_program():
+    from core.visualizer_engine.waveform_native_names import CORE_MEMBERS
     from core.visualizer_engine.waveform_native_schema import SHARED_MEMBERS
     from rendering.gl_programs.waveform_shader_files import member_name, pass_members
 
     every = [(pass_id, member, member_name(pass_id, member)) for pass_id, members in pass_members().items()
-             for member in members]
+             for member in members if member not in CORE_MEMBERS]
+    # A core member keeps its own name in every pass (the core fills it: the drawn target's pixels).
+    assert all(member_name(pass_id, member) == member for pass_id, members in pass_members().items()
+               for member in members if member in CORE_MEMBERS)
+    assert {member for members in pass_members().values() for member in members} & CORE_MEMBERS
     own = [name for pass_id, _member, name in every if name.startswith(f"{pass_id}_")]
     assert len(own) == len(set(own))
     # A shared pass (the floor's pre-pass) names exactly its shared pass's own members, and keeps the rest its own.
