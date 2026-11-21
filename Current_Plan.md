@@ -110,7 +110,8 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
   (the capacity zoom, a pixel or world-unit cap or floor on pulse/breath amplitude, size-class thresholds that move
   with the zoom, the renderer's mapping), measured on drawn output not only logical ratios; fix at the owner so the
-  visible reaction is size-independent; test at two sizes with a control on the old code; reaction check on a recorded
+  visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
+  never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
