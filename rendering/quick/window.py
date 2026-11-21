@@ -1125,6 +1125,12 @@ class QuickDisplayWindow(QQuickWindow):
         except Exception:
             virtual_geometry = QRect()
         adjusted = self._fullscreen_compat_geometry(geometry, virtual_geometry)
+        if self._placement_is_current(adjusted):
+            # Every application activation (a click into the saver) revalidates through here. A placed window
+            # is left alone: Qt's logical setGeometry rounds the device-exact rect differently at a fractional
+            # DPR (2163 -> 2162 device rows at 150%), so re-applying it resized the native window twice
+            # (Qt's rect, then the device-exact one) and the swap chain showed a black frame on each click.
+            return
         self.setGeometry(adjusted)
         self._compat_logical_rects = {adjusted.getRect(), self.geometry().getRect()}
 
@@ -1153,6 +1159,26 @@ class QuickDisplayWindow(QQuickWindow):
         if self.isVisible():
             # Qt just re-set the logical geometry; restore the device-exact rect.
             self._apply_native_compat_geometry()
+
+    def _placement_is_current(self, adjusted: QRect) -> bool:
+        """True when the shown window already sits where ``adjusted`` would place it, natively too.
+
+        Placed means: ``adjusted`` is the rect this window was last placed for, Qt's geometry is one of
+        that placement's logical rects, and (on Windows) the native rect is the device-exact one
+        ``_apply_native_compat_geometry`` sets. A displaced window (a resume edge, Windows moving it)
+        fails one of these and is placed again; a hidden window is always placed (show path).
+        """
+
+        if not self.isVisible() or self._close_queued:
+            return False
+        placement = self._compat_logical_rects
+        if adjusted.getRect() not in placement or self.geometry().getRect() not in placement:
+            return False
+        rects = self._native_rects()
+        if rects is None:
+            return not self._native_rects_expected()
+        _hwnd, current, monitor, virtual = rects
+        return current == compat_native_rect(monitor, virtual, float(self.effectiveDevicePixelRatio()))
 
     def _queue_meta_call(self, method: str) -> None:
         if not QMetaObject.invokeMethod(
