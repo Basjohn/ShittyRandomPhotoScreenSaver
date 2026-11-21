@@ -41,7 +41,11 @@ prepositions lowercase, short tags in ALL CAPS, user data (paths, URLs, addresse
 
 Displays use the existing ALL or 1-based monitor selection. The theme page and full Themes tab share
 `ui/settings_theme_selection.py`; the existing Keep Synced relationship alone controls Widget Theme changes.
-Interaction writes `input.interaction_mode`; the practice card has no network or browser behavior.
+Interaction writes `input.interaction_mode`. The same page offers Borderless: two rendered stills of the Media card
+(`borderless_off.png`, `borderless_on.png`, same wallpaper and theme, listed under `borderless` in the onboarding
+manifest and rendered by `tools/onboarding_preview_foundry.py --widgets-only --family borderless`, wallpaper recorded
+in `preview_runs.json`) and one choice that stages `widgets.global.borderless` (the key Style Overrides' Borderless
+writes) in the wizard's draft.
 
 Widget families and dependency admission come from the canonical family catalog and capability normalizer.
 Member controls write their original settings sections, including Media-owned volume/mute controls. Setup sections
