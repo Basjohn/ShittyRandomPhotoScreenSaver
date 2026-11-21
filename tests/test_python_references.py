@@ -3,9 +3,11 @@ a stored reference reads back exactly what was stored, is found only by exactly 
 did not finish is never read. The key follows the Python drawing code."""
 from __future__ import annotations
 
+import sys
 import zlib
 
 import numpy as np
+import pytest
 
 from tools.visualizer_replay import python_references as refs
 
@@ -102,3 +104,81 @@ def test_the_key_follows_the_run_and_the_drawing_code(monkeypatch):
     monkeypatch.setattr(type(files[0]), "read_bytes",
                         lambda self: original(self) + (b"x" if self == files[0] else b""))
     assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] != key
+
+
+def test_a_judge_or_tool_only_change_keeps_the_key(monkeypatch):
+    # The key is what draws the reference and its masks and nothing else: the judge, the tolerance rules and the
+    # tools around them change without a redraw.
+    from tools import pixel_tolerance
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    frames = ["frame 0"]
+    key = refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0]
+    monkeypatch.setattr(parity.LiveJudge, "frame", lambda self, *a: None)
+    monkeypatch.setattr(parity, "rule_a_verdict", lambda *a, **k: {})
+    monkeypatch.setattr(parity, "native_parity", lambda *a, **k: {})
+    monkeypatch.setattr(pixel_tolerance, "judge", lambda *a, **k: {})
+    monkeypatch.setattr(pixel_tolerance, "judge_delta", lambda *a, **k: {})
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] == key
+    # Nothing of the judge or the tolerance rules is a hashed piece or file (a source change would otherwise redraw).
+    pieces = {name for name, _text in refs._harness_sources()}
+    assert not [n for n in pieces if any(w in n for w in ("Judge", "judge", "rule_a_verdict", "Tolerance"))], pieces
+    assert not any(p.name in ("pixel_tolerance.py", "owner_render_parity.py") for p in refs._source_files())
+
+
+@pytest.mark.qt
+@pytest.mark.skipif(sys.platform != "win32", reason="the stale path's open file is a Windows failure")
+def test_the_stale_reference_path_replaces_the_reference_end_to_end(qt_app, monkeypatch, tmp_path):
+    # Audit 9 M2 end to end through native_parity: a stored reference is read (its frames file open), the native
+    # run's logical digests differ, so the reference is drawn again and stored over it, on Windows.
+    import contextlib
+
+    from PySide6.QtGui import QGuiApplication
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    frames = ["frame 0", "frame 1"]
+    dpr = float(QGuiApplication.primaryScreen().devicePixelRatio())
+    real_load = refs.load
+    drawn_again = []
+
+    def load_and_read(folder, made):
+        loaded = real_load(folder, made)
+        loaded[0]["frames"][0]                              # the frames file is open when the stale path runs
+        return loaded
+
+    def redraw(mode, script, settings):
+        drawn_again.append(True)
+        return {**_python(3), "digests": ["native"] * 3, "modes": []}, []
+
+    class Judge:
+        def __init__(self, python, *a, **k):
+            pass
+
+        def frame(self, *a):
+            pass
+
+        def result(self):
+            return {"paths": {"first": None}, "rows": [], "judged": [], "carried": [], "failed": [],
+                    "classes": {}}
+
+    monkeypatch.setattr(refs, "load", load_and_read)
+    monkeypatch.setattr(parity, "_python_reference", redraw)
+    monkeypatch.setattr(parity, "parity_script", lambda clip, mode: [("input", 0), ("mode", "spectrum")])
+    monkeypatch.setattr(parity, "_python_masks", lambda *a: ({}, 3))
+    monkeypatch.setattr(parity, "single_sample_scene_targets", contextlib.nullcontext)
+    monkeypatch.setattr(parity, "card_placement", lambda name: contextlib.nullcontext())
+    monkeypatch.setattr(parity, "native_shader_control", lambda *a: contextlib.nullcontext())
+    monkeypatch.setattr(parity, "LiveJudge", Judge)
+    monkeypatch.setattr(parity, "native_drawn_run", lambda *a, **k: {
+        "digests": ["native"] * 3, "pixels": [], "frames": [], "native_frames": 0, "native_published": 0, "mapping": {}})
+    # The key is made under the stubs (their sources are the drawing code's here), then stored as the first run did.
+    key, made_of = refs.reference_key("bubble", "", {}, "take", frames, "display", dpr)
+    refs.store(tmp_path / key, made_of, _python(5), {}, [], backdrop_frames=5)
+    verdict = parity.native_parity(None, "bubble", "", {}, frames, tmp_path / "out", references=tmp_path,
+                                   clip_name="take")
+    assert drawn_again and verdict["python_reference"]["state"].startswith("stale")
+    again = real_load(tmp_path / key, made_of)
+    assert again is not None and again[3] == 3 and len(again[0]["frames"]) == 3
+    refs.release(again)
+    assert not (tmp_path / f"{key}.old").exists()
