@@ -64,6 +64,21 @@ QJsonObject vulkanDeviceFacts(quint64 device);
 void setDeviceWithoutIndependentBlend(bool without);
 bool deviceWithoutIndependentBlend();
 
+// N3.6, checkpoint audit 11 (harness only; no environment variable is read or set): the device-loss proofs on a real
+// loss Qt's own QRhi reports, with no TDR.
+// M1: Qt's queue of `device` (queue 0 of `family`) answers its next vkQueueSubmit with VK_ERROR_DEVICE_LOST (`sticky`:
+// every later one too, as a really lost device does, until the device is destroyed). It goes through the adopting
+// instance's device-function table, the one Qt's QRhi submits through (QVulkanDeviceFunctions, its private part from
+// Qt6::GuiPrivate), so QRhi itself sets deviceLost; the job queue (queue 1) is untouched. Any thread, between frames.
+// False with the reason when the table's vkQueueSubmit is not found exactly once, or another device is armed.
+bool injectSubmitLoss(quint64 device, quint32 family, bool sticky, QString *error);
+// The injection's counts: armed, sticky, injected (submits answered lost), forwarded (passed to the driver).
+QJsonObject submitLossJson();
+// M2: the next `count` VulkanDevice::create calls fail as a failed vkCreateDevice does (the reason says forced). 0 stops.
+void setDeviceCreateFailures(int count);
+// remaining (failures still to come) and forced (creations failed so far).
+QJsonObject deviceCreateFailuresJson();
+
 // N3.6, release timing (research N3 section 12): a raw Vulkan object the core made itself (never QRhi's, whose deferred
 // release QRhi runs), retired while a frame in flight may still use it. QRhi's own rule applied by the core: the object
 // is stamped with the window's frame edge of its retirement and destroyed at the first frame edge at least
@@ -111,6 +126,13 @@ public:
     // for a device that was lost; {"queried": false, "why": ...} without the extension or its feature. Any thread.
     QJsonObject faultReport() const;
     bool deviceFaultEnabled() const { return m_deviceFault; }
+    // N3.6 (checkpoint audit 11, M2 and L2): a window's QRhi reported this device lost. True the first time only (the
+    // fault detail is logged once per lost device, however often a retried replacement meets it again). The device's
+    // destruction then tells its job service the device was lost before stop(), so the job teardown never saves a lost
+    // device's pipeline cache (the job thread, parked at rest, never met the loss itself). The thread that owns the
+    // device's record (the render thread in the loss path).
+    bool markLost();
+    bool lost() const { return m_lost; }
     // vkDeviceWaitIdle, vkDestroyDevice, resetDeviceFunctions (idempotent). Only after every QRhi on the device is gone.
     QStringList destroy();
 
@@ -130,6 +152,7 @@ private:
     quint32 m_family = 0;
     quint32 m_queues = 1;
     bool m_deviceFault = false;   // VK_EXT_device_fault and its deviceFault feature enabled
+    bool m_lost = false;          // markLost()
     QString m_name;
     std::shared_ptr<JobService> m_jobs;
 };

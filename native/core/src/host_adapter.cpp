@@ -1,5 +1,6 @@
 #include "host_adapter.h"
 
+#include "rhi_owned.h"
 #include "targets.h"
 #include "vulkan_context.h"
 
@@ -250,10 +251,15 @@ void replaceLast(QJsonArray *list, const QJsonObject &entry)
         list->replace(list->size() - 1, entry);
 }
 
-// N3.6, the render thread, in sceneGraphInvalidated after a loss (the lost device's QRhi still alive): the fault detail
-// logged once for this device, then a new device made and given to the window. `device` becomes the new one and
-// `lostDevice` the lost one (an earlier lost one, whose QRhi went before this one was made, is destroyed first). Fills
-// the loss record; false (the device kept) when no new device could be made.
+// N3.6, the render thread, in sceneGraphInvalidated after a loss (the lost device's QRhi still alive), or the hidden
+// host's retry: the device marked lost (the fault detail logged once for it; its destruction tells its job service, audit
+// 11 L2), then a new device made and given to the window. `device` becomes the new one and `lostDevice` the lost one (an
+// earlier lost one, whose QRhi went before this one was made, is destroyed first). Fills the loss record (each attempt
+// counted, each failure's reason kept); false (the device kept) when no new device could be made.
+//
+// Audit 11 M2, a failed creation is retried, never left: a window's Qt makes its next QRhi on the device it holds (the
+// lost one), its next frame meets the loss again (a lost device stays lost) and this runs again from that invalidation;
+// the hidden host never hands Qt a device it could not replace and retries at its next frame (HiddenHost::State::recover).
 bool replaceDevice(QQuickWindow *window, bool reallyLost, std::unique_ptr<VulkanDevice> *device,
                    std::unique_ptr<VulkanDevice> *lostDevice, QJsonObject *loss)
 {
@@ -261,25 +267,33 @@ bool replaceDevice(QQuickWindow *window, bool reallyLost, std::unique_ptr<Vulkan
         return false;
     loss->insert(QStringLiteral("old_device"), QString::number((*device)->device()));
     if (reallyLost) {
-        // A forced loss (the harness) leaves the device alive: the query is for a lost device only.
-        const QJsonObject fault = (*device)->faultReport();
-        loss->insert(QStringLiteral("fault"), fault);
-        qWarning("srpss native core: the Vulkan device %s was lost; VK_EXT_device_fault: %s",
-                 QString::number((*device)->device()).toUtf8().constData(),
-                 QJsonDocument(fault).toJson(QJsonDocument::Compact).constData());
+        // A forced loss (the harness) leaves the device alive: the query is for a lost device only, once per device.
+        if ((*device)->markLost()) {
+            const QJsonObject fault = (*device)->faultReport();
+            loss->insert(QStringLiteral("fault"), fault);
+            qWarning("srpss native core: the Vulkan device %s was lost; VK_EXT_device_fault: %s",
+                     QString::number((*device)->device()).toUtf8().constData(),
+                     QJsonDocument(fault).toJson(QJsonDocument::Compact).constData());
+        } else {
+            loss->insert(QStringLiteral("device_already_lost"), true); // a retry: its fault was logged before
+        }
     }
     if (*lostDevice) {
         loss->insert(QStringLiteral("earlier_lost_device_teardown"), stringsJson((*lostDevice)->destroy()));
         lostDevice->reset();
     }
+    loss->insert(QStringLiteral("replacement_attempts"), loss->value(QStringLiteral("replacement_attempts")).toInt() + 1);
     QString error;
     std::unique_ptr<VulkanDevice> fresh = VulkanDevice::create(&error);
     if (!fresh) {
-        // Qt then re-adopts the lost device and its QRhi fails: the window stays without frames, and says why here.
+        QJsonArray failures = loss->value(QStringLiteral("replacement_failures")).toArray();
+        failures.append(error);
+        loss->insert(QStringLiteral("replacement_failures"), failures);
         loss->insert(QStringLiteral("error"), QStringLiteral("no new device: ") + error);
         loss->insert(QStringLiteral("device_swapped"), false);
         return false;
     }
+    loss->remove(QStringLiteral("error")); // a retry that succeeded (the failures stay listed)
     fresh->giveDeviceTo(window);
     loss->insert(QStringLiteral("new_device"), QString::number(fresh->device()));
     loss->insert(QStringLiteral("device_swapped"), true);
@@ -519,8 +533,13 @@ struct HiddenHost::State
     // Render thread (the GUI thread waiting), read by stateJson between frames.
     bool recovering = false;       // inside recover(): sceneGraphInvalidated is the loss's
     bool reallyLost = false;       // the QRhi reported the loss (a forced loss leaves the device alive)
+    // Audit 11 M2: the loss's replacement device could not be made. Qt's QRhi is gone and the device it ran on is never
+    // handed to Qt again: the next frame retries the replacement (recover), as Qt retries its QRhi at its next frame.
+    bool replacementPending = false;
+    quint64 qrhiDeviceBefore = 0;  // the VkDevice the lost QRhi ran on (the retry's record)
     std::unique_ptr<VulkanDevice> lostDevice;
     QJsonObject loss;              // the loss being recovered
+    bool lossListed = false;       // `loss` is losses' last entry already (a retried replacement updates it)
     QJsonArray losses;
 
     QSizeF logicalSize() const { return QSizeF(width / dpr, height / dpr); }
@@ -544,46 +563,84 @@ struct HiddenHost::State
         }
         if (replaceDevice(window, reallyLost, &device, &lostDevice, &loss))
             deviceFacts = deviceFactsJson(*device);
+        else
+            replacementPending = true; // M2: retried at the next frame
+    }
+
+    // The loss record: appended once, then kept up to date (a retried replacement).
+    void listLoss()
+    {
+        if (lossListed) {
+            replaceLast(&losses, loss);
+        } else {
+            losses.append(loss);
+            lossListed = true;
+        }
     }
 
     // N3.6, render thread, outside any frame (the GUI thread waiting): the lost path. Qt's threaded loop's teardown
     // (the scene graph invalidated with its QRhi alive, then the QRhi destroyed), the lost device destroyed, then Qt's
     // QRhi made again on the window's device (the new one) and Qt Quick's target with it. Every core object comes back
     // from its owner at the next sync (the frame driver's at its next edge; the items' nodes; textures through the lost
-    // edge). False with `error` when Qt's QRhi could not be made again (the host is then closed for rendering).
+    // edge). False with `error` when Qt's QRhi could not be made again (the host is then closed for rendering), or when no
+    // new device could be made (M2: the next frame retries; the host stays open).
+    //
+    // Audit 11 L1: every core wrapper on the old QRhi is retired by its invalidation (core_wrappers_live_after_invalidation:
+    // the count rhi_owned.h keeps, read while that QRhi still lives; zero, or a wrapper would outlive its QRhi).
     bool recover(const QString &reason, QString *error)
     {
         QRhi *rhi = control->rhi();
-        reallyLost = rhi && rhi->isDeviceLost();
-        loss = QJsonObject();
-        loss.insert(QStringLiteral("reason"), reason);
-        loss.insert(QStringLiteral("qrhi_lost"), reallyLost);
-        loss.insert(QStringLiteral("backend"), backend);
-        loss.insert(QStringLiteral("frame"), frames);
-        const quint64 before = qrhiDevice(rhi);
-        recovering = true;
-        window->setRenderTarget(QQuickRenderTarget());
-        target.reset();               // Qt Quick's target is the host's, on the old QRhi
-        control->invalidate();        // sceneGraphInvalidated: the frame driver releases, the nodes go, onInvalidated
-        QQuickRenderControlPrivate::get(control)->resetRhi(window->graphicsConfiguration()); // Qt's QRhi goes
-        recovering = false;
+        if (!replacementPending) {
+            reallyLost = rhi && rhi->isDeviceLost();
+            loss = QJsonObject();
+            lossListed = false;
+            loss.insert(QStringLiteral("reason"), reason);
+            loss.insert(QStringLiteral("qrhi_lost"), reallyLost);
+            loss.insert(QStringLiteral("backend"), backend);
+            loss.insert(QStringLiteral("frame"), frames);
+            qrhiDeviceBefore = qrhiDevice(rhi);
+            loss.insert(QStringLiteral("core_wrappers_live_before"), rhiOwnedLive(rhi));
+            recovering = true;
+            window->setRenderTarget(QQuickRenderTarget());
+            target.reset();               // Qt Quick's target is the host's, on the old QRhi
+            control->invalidate();        // sceneGraphInvalidated: the frame driver releases, the nodes go, onInvalidated
+            loss.insert(QStringLiteral("core_wrappers_live_after_invalidation"), rhiOwnedLive(rhi));
+            QQuickRenderControlPrivate::get(control)->resetRhi(window->graphicsConfiguration()); // Qt's QRhi goes
+            recovering = false;
+        } else {
+            // M2, a frame after a failed replacement: Qt's QRhi went with the loss; the replacement is tried again here,
+            // before Qt's QRhi is made again (the frame Qt would retry its QRhi at).
+            replacementPending = false;
+            loss.insert(QStringLiteral("retried_at_frame"), frames);
+            if (replaceDevice(window, reallyLost, &device, &lostDevice, &loss))
+                deviceFacts = deviceFactsJson(*device);
+            else
+                replacementPending = true;
+        }
         if (lostDevice) {
             loss.insert(QStringLiteral("lost_device_teardown"), stringsJson(lostDevice->destroy()));
             lostDevice.reset();
+        }
+        loss.insert(QStringLiteral("replacement_pending"), replacementPending);
+        if (replacementPending) {
+            listLoss();
+            *error = QStringLiteral("no new device after the loss (%1): %2; the next frame tries again")
+                         .arg(reason, loss.value(QStringLiteral("error")).toString());
+            return false;
         }
         if (!control->initialize()) {
             initialized = false;
             loss.insert(QStringLiteral("error"), QStringLiteral("QQuickRenderControl::initialize failed after the "
                                                                 "loss"));
-            losses.append(loss);
+            listLoss();
             *error = QStringLiteral("the hidden host's QRhi could not be made again after the loss (%1)").arg(reason);
             return false;
         }
         QRhi *fresh = control->rhi();
         const quint64 after = qrhiDevice(fresh);
-        loss.insert(QStringLiteral("qrhi_device_before"), QString::number(before));
+        loss.insert(QStringLiteral("qrhi_device_before"), QString::number(qrhiDeviceBefore));
         loss.insert(QStringLiteral("qrhi_device"), QString::number(after));
-        loss.insert(QStringLiteral("rebuilt_on_new_device"), device && after != 0 && after != before
+        loss.insert(QStringLiteral("rebuilt_on_new_device"), device && after != 0 && after != qrhiDeviceBefore
                                                               && after == device->device());
         loss.insert(QStringLiteral("qrhi_recreated"), true);
         QString failure;
@@ -591,13 +648,13 @@ struct HiddenHost::State
                                &target, &failure, true)) {
             initialized = false;
             loss.insert(QStringLiteral("error"), failure);
-            losses.append(loss);
+            listLoss();
             *error = failure;
             return false;
         }
         primeNote = primeForLoadOutsideFrame(fresh, target.texture.get()); // rule C, at creation
         applyRenderTarget();
-        losses.append(loss);
+        listLoss();
         return true;
     }
     // Render thread (the GUI thread waiting): Qt Quick's target with the device pixel ratio it renders at.
@@ -823,6 +880,23 @@ bool HiddenHost::forceDeviceLoss(bool swapDevice, QString *error)
     return true;
 }
 
+bool HiddenHost::injectDeviceLoss(bool sticky, QString *error)
+{
+    State &s = *m_state;
+    if (s.closed || !s.initialized || s.sceneGraphInvalidated) {
+        *error = QStringLiteral("the hidden host is closed, uninitialised or invalidated");
+        return false;
+    }
+    if (!s.device) {
+        *error = QStringLiteral("a submit that reports the device lost is Vulkan's: this host has no device of the "
+                                "module's");
+        return false;
+    }
+    s.swapDevice = true;
+    // Between frames (the render thread idle): Qt's queue answers its next submit (every one, sticky) with the loss.
+    return injectSubmitLoss(s.device->device(), s.device->family(), sticky, error);
+}
+
 bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error)
 {
     State &s = *m_state;
@@ -842,9 +916,9 @@ bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error
         QuickReadback *read = (readLast && i == count - 1) ? readLast : nullptr;
         s.thread->run([&s, &ok, &lostError, driver, read]() {
             // N3.6, the lost path, outside any frame: the harness's forced loss, or a QRhi that reported its device lost
-            // (the last frame's end, or this frame's begin below).
+            // (the last frame's end, or this frame's begin below), or a replacement device still to be made (M2).
             QRhi *previous = s.control->rhi();
-            if (s.forceLoss || (previous && previous->isDeviceLost())) {
+            if (s.replacementPending || s.forceLoss || (previous && previous->isDeviceLost())) {
                 const bool forced = s.forceLoss;
                 s.forceLoss = false;
                 if (!s.recover(forced ? QStringLiteral("forced") : QStringLiteral("lost"), &lostError)) {
@@ -943,6 +1017,8 @@ QJsonObject HiddenHost::close()
                 s.target.reset();
                 if (!s.sceneGraphInvalidated)
                     s.control->invalidate(); // sceneGraphInvalidated: anything still connected releases now
+                // Audit 11 L1: nothing of the core's outlives its QRhi (read while the QRhi still lives).
+                s.closeRecord.insert(QStringLiteral("core_wrappers_live_after_invalidation"), rhiOwnedLive(rhi));
                 // OpenGL: the QRhi's context is affine to this render thread, which quits next, and the render control
                 // (with its QRhi) is deleted on the GUI thread: hand the context back first (native/spike_p1's order).
                 if (rhi && guiThread && rhi->backend() == QRhi::OpenGLES2) {
@@ -1011,7 +1087,10 @@ QJsonObject HiddenHost::stateJson() const
     o.insert(QStringLiteral("lost_device_alive"), s.lostDevice != nullptr);
     o.insert(QStringLiteral("device_losses"), s.losses);
     o.insert(QStringLiteral("loss_forced_pending"), s.forceLoss);
+    o.insert(QStringLiteral("replacement_pending"), s.replacementPending);
+    o.insert(QStringLiteral("device_lost_marked"), s.device ? s.device->lost() : false);
     o.insert(QStringLiteral("vulkan_live_devices"), vulkanLiveDevices());
+    o.insert(QStringLiteral("core_wrappers_live"), (s.control && s.control->rhi()) ? rhiOwnedLive(s.control->rhi()) : 0);
     o.insert(QStringLiteral("has_content"), !s.content.isNull());
     o.insert(QStringLiteral("close"), s.closeRecord);
     return o;

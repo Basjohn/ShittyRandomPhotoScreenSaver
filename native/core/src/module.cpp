@@ -32,6 +32,7 @@
 #include "packet_reader.h"
 #include "pipeline_cache.h"
 #include "process_counters.h"
+#include "rhi_owned.h"
 #include "scene_targets.h"
 #include "spectrum.h"
 #include "surfaces.h"
@@ -385,6 +386,40 @@ PyObject *host_force_device_lost(PyObject *, PyObject *args)
     if (!host->forceDeviceLoss(swapDevice != 0, &error))
         return runtimeError(error);
     Py_RETURN_NONE;
+}
+
+PyObject *host_inject_device_lost(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int sticky = 0;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &sticky))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    if (!host->injectDeviceLoss(sticky != 0, &error))
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
+PyObject *vulkan_device_create_failures(PyObject *, PyObject *args)
+{
+    int count = -1;
+    if (!PyArg_ParseTuple(args, "|i", &count))
+        return nullptr;
+    if (count >= 0)
+        srpss_core::setDeviceCreateFailures(count);
+    QJsonObject o = srpss_core::deviceCreateFailuresJson();
+    o.insert(QStringLiteral("submit_loss"), srpss_core::submitLossJson());
+    return pyJson(o);
+}
+
+PyObject *rhi_owned_counts(PyObject *, PyObject *)
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("live_total"), srpss_core::rhiOwnedLiveTotal());
+    return pyJson(o);
 }
 
 PyObject *host_set_dpr(PyObject *, PyObject *args)
@@ -2891,6 +2926,14 @@ PyMethodDef methods[] = {
     { "host_force_device_lost", host_force_device_lost, METH_VARARGS,
       "(handle, swap_device=True) -> None: harness (N3.6); the hidden host's next frame takes the lost path (a new "
       "device, Qt's QRhi and every core object made again); swap_device False keeps the device (the control)." },
+    { "host_inject_device_lost", host_inject_device_lost, METH_VARARGS,
+      "(handle, sticky=False) -> None: harness (N3.6 audit 11 M1, Vulkan); Qt's queue answers its next vkQueueSubmit "
+      "(sticky: every one until the device goes) with VK_ERROR_DEVICE_LOST, so Qt's QRhi reports the loss itself." },
+    { "vulkan_device_create_failures", vulkan_device_create_failures, METH_VARARGS,
+      "(count=-1) -> JSON str: harness (N3.6 audit 11 M2); the next count device creations fail as vkCreateDevice "
+      "failing (count < 0 only reads): remaining, forced, and the submit loss injection's counts." },
+    { "rhi_owned_counts", rhi_owned_counts, METH_NOARGS,
+      "() -> JSON str: N3.6 audit 11 L1; the core's QRhi resource wrappers live (live_total)." },
     { "host_close", host_close, METH_VARARGS,
       "(handle) -> JSON str: detaches; a hidden host also tears down its window and device." },
     { "host_probe", host_probe, METH_VARARGS,
