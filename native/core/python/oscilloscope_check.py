@@ -204,6 +204,14 @@ def reference_mask(reference):
     return translucent | (np.asarray(reference)[..., :4].max(axis=-1) > 0)
 
 
+def peer_frame_mask(frame):
+    """Rule (b)'s side of ``reference_mask`` in one native frame (opaque over black): with Glow, every pixel it lights,
+    so a fringe pixel one backend lights and the other's discard cut leaves dark is in the class (checkpoint audit 10
+    L1; the lead, 21 Nov: rule (b)'s mask is the union over both peers). Glow 0's class is translucency alone, which an
+    opaque readback cannot show: None."""
+    return None if GLOW_OFF["on"] else pt.lit(frame)
+
+
 def item_settings_change(settings: dict) -> dict:
     """Rule (g)'s Settings change: the beam's glow colour (and so its light) and the analog dimming; at Glow 0, where
     the glow colour lights nothing, the beam's base half width doubled as well."""
@@ -458,7 +466,9 @@ def round_turned(core, engine, app, api: str, records: list, out: Path) -> dict:
                         if other is None or other.shape != drawn.shape:
                             shapes_equal = False
                             continue
-                        judged.append(dict(pt.judge(drawn[..., :3], other[..., :3], VULKAN_RULE_B, mask=mask), index=i))
+                        peers = pt.peer_mask(mask, peer_frame_mask(drawn), peer_frame_mask(other))
+                        judged.append(dict(pt.judge(drawn[..., :3], other[..., :3], VULKAN_RULE_B, mask=peers),
+                                           index=i))
                 key = f"q{quarters}@{dpr}"
                 width, height = TURNED_SIZES[float(dpr)]
                 rule_a = parity.rule_a_verdict(against_python, MODE_ID)
@@ -796,7 +806,9 @@ def round_offsets(core, engine, app, api: str, records: list, out: Path) -> dict
                         shapes_equal = False
                         continue
                     mask = reference_mask(reference)
-                    against_own.append(dict(pt.judge(drawn[..., :3], item[..., :3], VULKAN_RULE_B, mask=mask),
+                    # Two native frames of one API (peers, rule (b)'s bound): the union of their classes.
+                    peers = pt.peer_mask(mask, peer_frame_mask(drawn), peer_frame_mask(item))
+                    against_own.append(dict(pt.judge(drawn[..., :3], item[..., :3], VULKAN_RULE_B, mask=peers),
                                             index=index))
                     if api == "opengl":
                         against_python.append(dict(parity.rule_a_frame(drawn[..., :3], reference[..., :3], mask,
@@ -836,6 +848,7 @@ def child(args) -> dict:
 base.use_mode(MODE_ID=MODE_ID, _schema=_schema, _passes=_passes,
               capture_runs=capture_runs, round_block=round_block, program_item=program_item,
               control_record=control_record, item_settings_change=item_settings_change, reference_mask=reference_mask,
+              peer_frame_mask=peer_frame_mask,
               ITEM_RECORD_FIELD=ITEM_RECORD_FIELD, item_reshaped=item_reshaped, VULKAN_RULE_B=VULKAN_RULE_B,
               SCRIPT=Path(__file__).resolve(), EVIDENCE_TOPIC="n5_1_oscilloscope", DEFAULT_LABEL="n51_oscilloscope",
               CONTROLS=CONTROLS, child=child,

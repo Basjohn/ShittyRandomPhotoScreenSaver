@@ -231,6 +231,9 @@ def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None 
 
     module, base = _harness(mode)
     tolerance = getattr(module, "VULKAN_RULE_B", base.VULKAN_RULE_B)
+    # Rule (b) judges two peers, neither the reference: its mask is the union of each frame's class (the lead, 21 Nov;
+    # ``pt.peer_mask``): the translucent pixels of either frame, and the mode's own frame-side class where it has one.
+    frame_mask = getattr(module, "peer_frame_mask", None) or getattr(base, "peer_frame_mask", None)
     gl_rows, gl_pixels = _frames(out, "opengl")
     vk_rows, vk_pixels = _frames(out, "vulkan")
     judged, failed = [], []
@@ -247,7 +250,9 @@ def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None 
             equal += 1
             continue
         gl, vk = gl_pixels(a), vk_pixels(b)
-        verdict = pt.judge(vk[..., :3], gl[..., :3], tolerance, mask=pt.translucent_by_alpha(gl))
+        sides = [frame_mask(frame) for frame in (gl, vk)] if frame_mask is not None else []
+        verdict = pt.judge(vk[..., :3], gl[..., :3], tolerance,
+                           mask=pt.peer_mask(pt.translucent_by_alpha(gl), pt.translucent_by_alpha(vk), *sides))
         verdict["input"] = a["input"]
         judged.append(verdict)
         if not verdict["pass"]:

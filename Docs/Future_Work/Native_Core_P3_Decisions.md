@@ -1104,8 +1104,10 @@ float16 bloom values that the two compilers round apart. On the glow's faint fri
 over the cut, and shows its dither (the composite's hash at those texels reproduces the kept values), while OpenGL and
 Python discard it. The fringe is a contour, so its flips come in neighbouring runs. Over the 126 frames, all 10 rule (b)
 pixels outside the mask are such flips; the other 15 past their allowance are on-mask 2-level ties within the bound.
-With the mask taken from both frames (pixels either frame lights) every frame passes. That mask is the lead's decision
-(evidence `n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`).
+With the mask taken from both frames (pixels either frame lights) every frame passes (evidence
+`n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`). *The lead's decision (21
+Nov): rule (b) compares two peer APIs, neither the reference, so its mask is the union over both frames, for every
+mode* ("The pixel tolerance", rule (b)'s mask).
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
@@ -1132,6 +1134,22 @@ each harness states its bounds beside their measured reasons:
    alpha in a target cleared to zero (`devcurve_check.py`, the scene targets' RGBA8 textures), and the pixels a blended
    layer sums into (`mesh_buffer_check.py`: alpha strictly between 0 and 255, or above 0 in an additive scene). A float
    texture's unit is its own rounding (one float16 ulp, or the depth bound), which every texel may reach.
+   *Rule (b)'s mask (the lead's decision, 21 Nov; checkpoint audit 10 L1):* rule (b) judges two peer APIs, neither
+   of them the reference, so its mask is the union of what the mode's class marks in each frame, and in the
+   reference where the harness has one (`pixel_tolerance.peer_mask`). A class is read from a frame only where the
+   frame can show it: the pixels a layer lights (`pixel_tolerance.lit`, the Oscilloscope's glow) from an opaque native
+   readback, translucency from a frame's own alpha (`native_stream_player.py`'s frames). A harness readback over
+   black cannot show translucency, so for Spline Curve and Bubble there the mask stays the reference's. Spectrum's
+   rule (b) has no explained class (scatter only, `masked_level` 0), so it has no mask. A literal "every lit pixel of
+   either frame" was not taken for those modes: it would give Bubble's opaque bubbles the one-level class (a uniform
+   one-level shift of them would pass) and turn Spectrum's one-level scatter into ties. Every rule (b) rerun under it
+   (`n5_1_oscilloscope/20261121_rule_b_peer_mask/`, its scripts and JSON): the Oscilloscope's kept frames judged both
+   ways change one verdict, L1's frame 918 (fail to pass); its ABI 28 run, and the ABI 29 run's pixels (126 frames)
+   and turned (168) rounds, change none. Bubble's four 60 s takes, every frame on both APIs on the ABI 29 module
+   (`fast_proof/20261121_rule_b_peer_mask_*`), judged both ways: none fails either way and no figure moves (scatter
+   worst 276, 193, 129 and 237, as measured on 21 Nov); their frames hold no translucent pixel on either side.
+   Bubble's harness rule (b) (`n5_1_bubble/20261121_n51_bubble_rule_b_peer_mask/`): 684 frames pass, scatter worst 21.
+   Spectrum's (`n2_5/20261121_n25_spectrum_rule_b_peer_mask/`): 513 frames pass, scatter worst 83, both as before.
 3. *Scatter*: single-level pixels outside the mask where two compilers round a value within float error of a half
    level (a `NativeFragmentPass` against its Python renderer; Vulkan against OpenGL on one pack), at most a measured
    number a frame: a share of the frame, never the frame.

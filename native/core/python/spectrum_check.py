@@ -1073,6 +1073,8 @@ def vulkan_against_opengl(out: Path) -> dict:
             continue
         compared += 1
         stats["compared"] += 1
+        # Rule (b)'s mask is the union of both peers' classes (``pt.peer_mask``, the lead, 21 Nov); Spectrum's rule (b)
+        # has no explained class (its one-level pixels are scatter, masked_level 0), so the union is empty here.
         verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B)
         judged.append(verdict)
         level = int(verdict["max_level"])
