@@ -299,6 +299,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --studio - Enable the Visualizer Studio lifecycle sidecar (screensaver_studio.log)
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --devsteam - Show the unfinished Steam Journey scaffold
+    - --vulkan - Run on Vulkan (short for --graphics-backend=vulkan; core.diagnostics.experiment_flags)
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
@@ -307,7 +308,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     _filtered = {
         "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam", "--feeds", "--studio",
         "--noupdates", "--frame-trace", "--gui-stall-stacks",
-        "--fresh", "--devsteam",
+        "--fresh", "--devsteam", "--vulkan",
     }
     # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
     # --viz-switch-telemetry) are owned by the diagnostics resolver, not by mode
