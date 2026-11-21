@@ -160,6 +160,12 @@ def _passes():
     return program(not GLOW_OFF["on"])["passes"]
 
 
+def configure_from_settings(settings: dict) -> None:
+    """Glow 0 or not from a delivered settings dict (``native_stream_player``'s delivery stream):
+    ``oscilloscope_settings_values`` carries the glow composite's ``u_hdr_exposure`` exactly when Glow is above 0."""
+    GLOW_OFF["on"] = "u_hdr_exposure" not in settings
+
+
 def program_item(mode, entry: dict, dpr: float, first: bool) -> None:
     """The route's order: the program with its target and stream and the first settings, afterwards the settings."""
     settings = base.settings_at(entry, dpr)
