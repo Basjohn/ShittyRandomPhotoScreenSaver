@@ -327,8 +327,10 @@ _CONTINUATION_VERTEX = """
 // One draw (N5.4): the culled body, then the before and the after extension, as consecutive vertex ranges (the native
 // core's draw is a count from vertex 0, D15 point 6; one pass where three draws were). Each part's vertex count and its
 // first vertex in the culled strip, and each extension's packet-local min/max x, subdivisions and side (-1, +1).
-uniform ivec4 uDrawCounts;
-uniform ivec4 uDrawBases;
+// The ranges are whole numbers held as floats (exact below 2^24): the native core fills a vec4 from the record, an
+// int vector only under a range rule its schema gives scalars alone.
+uniform vec4 uDrawCounts;
+uniform vec4 uDrawBases;
 uniform vec4 uContinuationBefore;
 uniform vec4 uContinuationAfter;
 int drawnVertex;
@@ -389,8 +391,9 @@ _ANCHORED_STRIP = """
 """
 _DRAWN_PART = """
     int drawn=gl_VertexID;
-    int part=drawn<uDrawCounts.x?0:(drawn<uDrawCounts.x+uDrawCounts.y?1:2);
-    drawnVertex=drawn-(part==0?0:(part==1?uDrawCounts.x:uDrawCounts.x+uDrawCounts.y))+uDrawBases[part];
+    ivec4 drawCounts=ivec4(uDrawCounts), drawBases=ivec4(uDrawBases);
+    int part=drawn<drawCounts.x?0:(drawn<drawCounts.x+drawCounts.y?1:2);
+    drawnVertex=drawn-(part==0?0:(part==1?drawCounts.x:drawCounts.x+drawCounts.y))+drawBases[part];
     drawnContinuation=part==0?vec4(0.0):(part==1?uContinuationBefore:uContinuationAfter);
 """
 RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {'+_DRAWN_PART,1)

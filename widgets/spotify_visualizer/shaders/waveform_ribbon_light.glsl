@@ -9,8 +9,8 @@ layout(std140, binding = 18) uniform RibbonDraw {
     vec2 u_target_px;
     vec4 uRim;
     vec3 uEye;
-    ivec4 uDrawCounts;
-    ivec4 uDrawBases;
+    vec4 uDrawCounts;
+    vec4 uDrawBases;
     vec4 uContinuationBefore;
     vec4 uContinuationAfter;
     int uDiagnostic;
