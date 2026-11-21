@@ -1202,6 +1202,11 @@ the feature (D3D11 is not stated).
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
+  - [ ] Source reading first (Sonnet, research only, no code), as Waveform's and Extruded Bubble's readings: the
+    record per frame and per Settings or card change, stream size rules, every pass with its targets and formats, how
+    it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
+    boxes (one C++ box each, with what its proof must show) and which of theirs it shares. File:line for every claim.
+    Neon Lake's persisted id is `shockwave_grid`.
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking).
