@@ -154,10 +154,13 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
         scene = fsc.Scene(core, engine, host, 1.0)
         values = fsc._values("crossfade", {}, images, fsc.CARD, {}, "crossfade")
         _core, settings, record = fsc.split_values("crossfade", values[PROGRESS])
-        scene.pictures(images)
+        # The program first: a frame of the item with pictures and no program records the driver's error "the mode has
+        # no program", which would then stand for every later reading of the driver's error.
         scene.program("crossfade", fsc.transition_pass("crossfade", folder / "loss"), settings)
+        scene.pictures(images)
         before = scene.show(record)
         checks["drawn_before_the_loss"] = float(before[..., :3].max()) > 0.0
+        checks["no_driver_error_before_the_loss"] = not (host.state().get("driver") or {}).get("error")
         calls: list[list[str]] = []
 
         def lost(names) -> None:
@@ -176,8 +179,10 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
                 if len(calls) > index:
                     break
                 host.frames(1)
-            scene.settle()                          # the images sent again, committed
-            after = scene.read()
+            scene.settle()                          # the images sent again, handed to their jobs and waited for
+            app.processEvents()                     # the jobs' frame requests (queued to the item on the GUI thread)
+            scene.mode.update()
+            after = scene.read()                    # the commit's frame
             state = host.state()
             losses = state.get("device_losses") or []
             loss = losses[-1] if losses else {}
@@ -200,6 +205,9 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
                 checks[prefix + "resent_through_the_devices_jobs"] = resent_through_jobs(
                     services, loss.get("qrhi_device"), len(images))
             facts["losses"].append({"loss": loss, "comparison": comparison, "texture_jobs": jobs_after,
+                                    "driver": {k: driver.get(k) for k in ("released", "error", "edges",
+                                                                          "frames_recorded", "detach_requested")},
+                                    "edges_before": edges_before,
                                     "job_services": services, "job_counts": core.job_counts(),
                                     "vulkan_live_devices": state.get("vulkan_live_devices")})
             tiles.extend([_tile(before), _tile(lost_frame), _tile(after)])
