@@ -94,9 +94,14 @@ class Host:
         """A new frame driver on the host's window (after :meth:`detach`)."""
         self._module.host_reattach(self._live())
 
-    def detach(self) -> None:
-        """The frame driver stops recording now and releases its resources on the render thread."""
-        self._module.host_detach(self._live())
+    def detach(self, *, at_frame_edge: bool = False) -> None:
+        """The frame driver stops recording now and releases its resources on the render thread. ``at_frame_edge``
+        (N3.6, harness only, a hidden host): the release waits for the next frame and runs inside it, as a window host's
+        always does (the in-frame release path, which hands raw Vulkan objects to the device's deferred queue)."""
+        if at_frame_edge:
+            self._module.host_detach(self._live(), True)
+        else:
+            self._module.host_detach(self._live())
 
     def set_probe(self, **config: Any) -> None:
         """The probe pass from the next frame, with these options (``PROBE_OPTIONS``; the defaults are the decided
@@ -188,6 +193,15 @@ class HiddenHost(Host):
     def invalidate_scene_graph(self) -> None:
         """Harness only: actual render-thread scene-graph invalidation. Rendering is refused afterward; close next."""
         self._module.host_invalidate_scene_graph(self._live())
+
+    def force_device_loss(self, *, swap_device: bool = True) -> None:
+        """Harness only (N3.6; never the product, no environment flag): the next frame takes the path a lost device
+        takes. Qt's scene graph is invalidated, its QRhi destroyed; on Vulkan a new device is given to the window from
+        the invalidation's slot and the lost one destroyed; Qt's QRhi is made again and every core object is made again
+        by its owner (textures and meshes through their lost edges). ``swap_device=False`` (Vulkan) keeps the device:
+        the control that the slot's ``setGraphicsDevice`` is what moves the rebuild. ``state()["device_losses"]``
+        records each loss."""
+        self._module.host_force_device_lost(self._live(), bool(swap_device))
 
     def set_device_pixel_ratio(self, dpr: float) -> None:
         """Qt Quick renders the host's device pixels at this ratio (its render target's); the content is resized to

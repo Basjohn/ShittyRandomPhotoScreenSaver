@@ -138,9 +138,11 @@ public:
     // Render thread, at a frame edge: true once every frame that wrote a query completed and its results were read (or
     // the ring went round without them), so the objects can go without a wait and no result is lost.
     bool drained(QRhi *rhi, qint64 edge) const;
-    // Render thread: the query objects go. Inside a frame that is not drained, Vulkan waits for its queue once (a detach);
-    // outside a frame QRhi::finish() completes the earlier frames first.
-    void release(QRhi *rhi, bool outsideFrame);
+    // Render thread: the query objects go. Outside a frame QRhi::finish() completes the earlier frames first. Inside a
+    // frame that is not drained (a detach at the frame edge), N3.6: Vulkan's pool goes to the device's deferred queue
+    // stamped with the window's edge `windowEdge` (vulkan_context.h, deferRawVulkanDestroy), never a wait inside the frame;
+    // only without an edge (windowEdge < 0) does it wait for its queue once, as before.
+    void release(QRhi *rhi, bool outsideFrame, qint64 windowEdge = -1);
     bool hasObjects() const { return m_queryObjects > 0; }
 
     void setWaitForResults(bool wait) { m_config.waitForResults = wait; }
@@ -202,7 +204,8 @@ private:
     qint64 m_slotBusyFrames = 0;   // frames left untimed because their slot still held unread results
     qint64 m_abandonedSlots = 0;   // slots given up on, unread for more frames than the ring (R-223's safety net)
     qint64 m_overCapacity = 0;     // passes left untimed because the frame's slot was full
-    qint64 m_releaseWaits = 0;     // releases that waited for the queue (a detach inside a frame)
+    qint64 m_releaseWaits = 0;     // releases that waited for the queue (a detach inside a frame, no window edge)
+    qint64 m_deferredReleases = 0; // N3.6: pools handed to the device's deferred queue instead (a detach inside a frame)
     qint64 m_resolveNsMax = 0;     // CPU time of one edge's reads, the longest
     qint64 m_resolveNsTotal = 0;
     qint64 m_latencyMin = -1;      // edges between a pass's recording and its read

@@ -29,6 +29,7 @@
 // (job_service.cpp RhiUploadBackend).
 #pragma once
 
+#include "pipeline_cache.h"
 #include "thread_probe.h"
 
 #include <QtCore/QAtomicInteger>
@@ -171,6 +172,10 @@ struct JobDevice
     quint32 family = 0;         // Qt's graphics family
     quint32 queueIndex = 1;     // the job queue
     bool debugMarkers = false;  // validation loaded: the job QRhi names its objects
+    // N3.6 (pipeline_cache.h): the core's pipeline cache file and the device it must have been made on. The job QRhi
+    // loads it when it is created and saves it at its orderly teardown (not after a device loss).
+    PipelineCacheIdentity cacheIdentity;
+    QString cacheFile;
 };
 std::unique_ptr<JobBackend> createRhiUploadBackend(const JobDevice &device);
 

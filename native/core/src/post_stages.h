@@ -32,6 +32,7 @@
 #pragma once
 
 #include "scene_targets.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
@@ -243,39 +244,39 @@ private:
     {
         BloomSpec spec;
         QSize sizes[kBloomLevels];
-        std::unique_ptr<QRhiTexture> levels[kBloomLevels];
-        std::unique_ptr<QRhiRenderPassDescriptor> passes[kBloomLevels];
-        std::unique_ptr<QRhiTextureRenderTarget> targets[kBloomLevels];
+        RhiOwned<QRhiTexture> levels[kBloomLevels];
+        RhiOwned<QRhiRenderPassDescriptor> passes[kBloomLevels];
+        RhiOwned<QRhiTextureRenderTarget> targets[kBloomLevels];
         QRhiTexture *source = nullptr;   // the source's readable texture (the target's)
         // Build: a linear sampler; the downsamples' bindings (level k samples level k - 1, level 0 the source) and the
         // upsamples' (up[k] samples level k and draws into level k - 1); three pipelines over level 0's render pass.
-        std::unique_ptr<QRhiSampler> sampler;
-        std::unique_ptr<QRhiShaderResourceBindings> down[kBloomLevels];
-        std::unique_ptr<QRhiShaderResourceBindings> up[kBloomLevels];
-        std::unique_ptr<QRhiGraphicsPipeline> downFirst;
-        std::unique_ptr<QRhiGraphicsPipeline> downRest;
-        std::unique_ptr<QRhiGraphicsPipeline> upAdd;
+        RhiOwned<QRhiSampler> sampler;
+        RhiOwned<QRhiShaderResourceBindings> down[kBloomLevels];
+        RhiOwned<QRhiShaderResourceBindings> up[kBloomLevels];
+        RhiOwned<QRhiGraphicsPipeline> downFirst;
+        RhiOwned<QRhiGraphicsPipeline> downRest;
+        RhiOwned<QRhiGraphicsPipeline> upAdd;
         qint64 bytes = 0;
     };
     struct Defocus
     {
         DefocusSpec spec;
         QSize belowSize;
-        std::unique_ptr<QRhiTexture> below;
-        std::unique_ptr<QRhiRenderPassDescriptor> belowPass;
-        std::unique_ptr<QRhiTextureRenderTarget> belowTarget;
+        RhiOwned<QRhiTexture> below;
+        RhiOwned<QRhiRenderPassDescriptor> belowPass;
+        RhiOwned<QRhiTextureRenderTarget> belowTarget;
         QRhiTexture *colour = nullptr;   // the near layer's (the target's)
         QRhiTexture *circle = nullptr;
         QSize layerSize;
         // Build: the layer's sampler (linear, nearest mips), the read level's (linear), three bindings, three pipelines.
-        std::unique_ptr<QRhiSampler> mipSampler;
-        std::unique_ptr<QRhiSampler> linearSampler;
-        std::unique_ptr<QRhiShaderResourceBindings> clipBindings;
-        std::unique_ptr<QRhiShaderResourceBindings> gatherBindings;
-        std::unique_ptr<QRhiShaderResourceBindings> spriteBindings;
-        std::unique_ptr<QRhiGraphicsPipeline> clip;
-        std::unique_ptr<QRhiGraphicsPipeline> gather;
-        std::unique_ptr<QRhiGraphicsPipeline> sprites;
+        RhiOwned<QRhiSampler> mipSampler;
+        RhiOwned<QRhiSampler> linearSampler;
+        RhiOwned<QRhiShaderResourceBindings> clipBindings;
+        RhiOwned<QRhiShaderResourceBindings> gatherBindings;
+        RhiOwned<QRhiShaderResourceBindings> spriteBindings;
+        RhiOwned<QRhiGraphicsPipeline> clip;
+        RhiOwned<QRhiGraphicsPipeline> gather;
+        RhiOwned<QRhiGraphicsPipeline> sprites;
         qint64 bytes = 0;
     };
 
