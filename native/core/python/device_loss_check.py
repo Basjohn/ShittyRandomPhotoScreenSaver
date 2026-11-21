@@ -25,8 +25,12 @@ Rounds (one child process per API):
             host's release): no wait inside that frame, and on Vulkan the timer's raw query pool handed to the device's
             deferred queue; a driver attached again destroys it at a later edge, once Qt's frames waited for its last
             use; a second pool left with no later frame goes at the host's close, its device idle; the scene graph
-            invalidated outside any frame (no frame follows) is met by QRhi::finish() at that edge. Its negative control
-            is the ABI 29 module, whose in-frame release waited for the queue (release_waits 1).
+            invalidated outside any frame (no frame follows) is met by QRhi::finish() at that edge. On Vulkan the
+            round's power is pool_deferred_not_destroyed with the frames really overlapping (Qt's offscreen frame waits
+            only for readbacks, so two are in flight and validation would see a pool destroyed early); the tests hold
+            each reading changed. No older module was run as its control (ABI 29 has no in-frame detach). On OpenGL no
+            frame ever waits for a queue, so the timer's release_waits there is a fact (opengl_release_waits), not a
+            check (checkpoint audit 11 L4).
   scenes    (checkpoint audit 11 M3) the same forced losses, LOSSES in a row, across the owners the Crossfade never
             crosses one with, each frame after a loss equal to the frame before (nothing published): "program", one mode
             program with a compute kernel writing mode storage, a scene target with depth, a mesh, a bloom step and the
@@ -556,10 +560,12 @@ def judge_release(steps: dict, *, vulkan: bool) -> dict:
     checks = {
         "released_inside_the_next_frame": detached.get("released") is True
         and str(detached.get("release_reason", "")).startswith("detached: released at the frame edge"),
-        "no_wait_inside_the_frame": last.get("release_waits") == 0,
         "finish_where_no_frame_follows": (steps.get("invalidated") or {}).get("no_frame_finishes") == 1,
     }
     if vulkan:
+        # Audit 11 L4: only Vulkan's release could wait for its queue; OpenGL never does (round_release keeps its count
+        # as the fact opengl_release_waits).
+        checks["no_wait_inside_the_frame"] = last.get("release_waits") == 0
         deferred, edges, closed = (steps.get(k) or {} for k in ("deferred", "edges", "closed"))
         checks["pool_deferred_not_destroyed"] = (last.get("deferred_releases") == 1
                                                  and deferred.get("raw_vulkan_deferred") == 1
@@ -614,6 +620,8 @@ def round_release(core, app, api: str) -> dict:
             facts["last_host_close"] = host.close()
         _flush(app)
     checks = judge_release(steps, vulkan=vulkan)
+    if not vulkan:
+        facts["opengl_release_waits"] = ((steps.get("detached") or {}).get("gpu_timer_last") or {}).get("release_waits")
     facts["steps"] = steps
     facts["raw_counts_at_end"] = core.raw_vulkan_counts()
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}

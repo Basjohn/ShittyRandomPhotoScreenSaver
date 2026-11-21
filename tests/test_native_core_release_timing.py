@@ -178,6 +178,13 @@ def test_the_release_round_passes_and_each_changed_reading_fails_its_check(vulka
         assert dlc.judge_release(bad, vulkan=vulkan)[check] is False, (step, key, check)
 
 
+def test_only_vulkans_release_is_judged_for_a_wait_inside_the_frame():
+    """Checkpoint audit 11 L4: OpenGL never waits for a queue, so its release_waits is a fact, never a check."""
+    steps = _release_steps()
+    assert "no_wait_inside_the_frame" in dlc.judge_release(steps, vulkan=True)
+    assert "no_wait_inside_the_frame" not in dlc.judge_release(steps, vulkan=False)
+
+
 def test_the_face_passes_the_in_frame_detach_and_the_raw_counts():
     from rendering.native import loader
 
