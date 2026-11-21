@@ -1917,7 +1917,8 @@ the lead rejects any still or showcase frame that shows one.
 ### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
 
 - [~] The theme list's and the popup's scrollbars (native black/white bars in off-screen captures): 1B.14's Settings
-  and Studio box.
+  and Studio box. Root cause (product or capture-only) with Sonnet agent a50cccb24fe71080c, 21 Nov, with 1C.9's
+  Sources list bars.
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (contract: plan 01 M3c)
 
