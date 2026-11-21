@@ -1618,8 +1618,12 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report; Sonnet agent a9c166d87f2e0801b, 21 Nov): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
-  live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
+- [ ] Side defect (Sonnet agent a9c166d87f2e0801b, 21 Nov, UI-3's renders): on a narrow Visualizer card (150 x 70) the
+  common hover glyphs (`WidgetHoverEditGlyphs`: Restore and a transfer arrow) draw over the card's own bottom-right
+  `glyphRow` (the preset steps and Studio), with or without Rotate; the row's own members do not overlap. Reproduce:
+  the Spectrum card at `viewport_extent=(150, 70)`, every glyph property on, pointer centred
+  (`.artifacts/evidence/visualizers/shared/hover_rotate_glyph/20261121_row/narrow_norotate_hover_card.png`). Fix at the
+  owner of the two glyph groups' placement so they never collide at any card size.
 
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
