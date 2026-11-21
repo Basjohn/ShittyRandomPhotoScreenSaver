@@ -452,17 +452,16 @@ def test_system_stats_header_flip_swaps_metric_rails_and_restores_authored_spaci
         header = item.findChild(QObject, "systemStatsHeaderFrame")
         label = item.findChild(QObject, "systemStatsCpuLabel")
         value = item.findChild(QObject, "systemStatsCpuValue")
-        accent = item.findChild(QObject, "systemStatsCpuAccent")
-        assert all(obj is not None for obj in (header, label, value, accent))
-        baseline = (header.x(), label.x(), value.x(), accent.x())
+        assert all(obj is not None for obj in (header, label, value))
+        # No accent bar at the tile's left edge (the accent colours the label and the track).
+        assert item.findChild(QObject, "systemStatsCpuAccent") is None
+        baseline = (header.x(), label.x(), value.x())
         assert label.x() < value.x()
-        assert accent.x() == pytest.approx(0.0)
         assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
         qt_app.processEvents()
         assert bool(item.property("headerFlipped"))
         assert header.parentItem().x() > baseline[0]
         assert label.x() > value.x() + value.width() + 1.0
-        assert accent.x() > 0.0
         # The flip now owns all repeated metric internals as one semantic layout;
         # no independently movable label/value/track edit roles remain.
         assert int(label.property("horizontalAlignment")) != int(
@@ -471,7 +470,7 @@ def test_system_stats_header_flip_swaps_metric_rails_and_restores_authored_spaci
         assert model.set_custom_child_geometry({})
         qt_app.processEvents()
         assert not bool(item.property("headerFlipped"))
-        assert (header.x(), label.x(), value.x(), accent.x()) == pytest.approx(baseline)
+        assert (header.x(), label.x(), value.x()) == pytest.approx(baseline)
     finally:
         item.setParentItem(None)
         item.setParent(None)

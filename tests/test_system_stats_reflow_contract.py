@@ -110,8 +110,10 @@ def test_system_stats_metrics_are_one_editable_stack_with_authored_flipped_child
     assert qml.count("function metricRoleX(roleId, panelWidth, roleWidth)") == 1
     # Every real metric still shares the same QML flip rails, with no extra
     # delegate for its label, value, accent, detail or track.
-    for id_ in ("metric_accents", "metric_labels", "metric_details",
-                "metric_values", "metric_tracks"):
+    for id_ in ("metric_labels", "metric_details", "metric_values", "metric_tracks"):
         assert qml.count(f'statsRoot.metricRoleX("{id_}", panel.width, width)') == 1
+    # The tile has no accent bar at its left edge: the accent colours the label and the track only.
+    assert "metric_accents" not in qml
+    assert 'objectPrefix + "Accent"' not in qml
     for forbidden in ("Timer {", "Connections {", "Qt.callLater", "SettingsManager"):
         assert forbidden not in qml, forbidden
