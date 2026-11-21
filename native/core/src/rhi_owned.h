@@ -27,6 +27,7 @@
 #include <rhi/qrhi.h>
 
 #include <cstddef>
+#include <memory> // kept: every includer of this header had std::unique_ptr and std::shared_ptr through it
 
 namespace srpss_core {
 
