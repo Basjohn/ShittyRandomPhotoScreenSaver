@@ -316,12 +316,19 @@ def retire(worktree: Path, keep: list[str] | None = None) -> int:
         return 1
     # The copy above went through the junctions (the top of each kept folder may be one); only after it succeeded are
     # the worktree's own targets on the scratch drive deleted. Links inside them are removed as links, never entered.
-    for target in drive_targets(worktree):
+    targets = drive_targets(worktree)
+    for target in targets:
         try:
             remove_tree(target)
         except OSError as exc:
             print(f"{worktree.name}: could not delete scratch-drive folder {target}: {exc}")
             return 1
+    # The worktree's own folder on the scratch drive (the targets' parent) goes once it is empty; never anything else.
+    for parent in {str(Path(target).parent) for target in targets}:
+        try:
+            Path(parent).rmdir()
+        except OSError:
+            pass                                  # not empty or already gone: left as it is
     error = remove_worktree(ROOT, worktree)
     if error:
         print(f"{worktree.name}: worktree remove failed: {error}")
