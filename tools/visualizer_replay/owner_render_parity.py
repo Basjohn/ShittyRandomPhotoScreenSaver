@@ -553,6 +553,8 @@ NATIVE_SURFACE_FORMAT: str | None = None
 JUDGE_WORKERS = 0
 #: ``--native-control``: a negative control on the native frames (``shift``: one level up on every colour channel).
 NATIVE_CONTROL: str | None = None
+#: ``--shader-control``: the native item draws this ``native_stream_player.SHADER_CONTROLS`` pack (``native_shader_control``).
+NATIVE_SHADER_CONTROL: str | None = None
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
 #: N29 round 2, M3: the product's unprimed path, its first frame waiting on the window's edge), a reported case, not a
 #: gate.
@@ -896,8 +898,15 @@ class LiveJudge:
     process, ``tests/test_owner_render_parity_judge.py``). ``result`` is ``judged_pass``'s."""
 
     def __init__(self, python: dict, masks, switch_input: int, mode: str | None = None,
-                 progress: Path | None = None, workers: int = 0) -> None:
+                 progress: Path | None = None, workers: int = 0, accepted: dict | None = None,
+                 hash_lines: bool = True) -> None:
         self.python = python
+        #: An accepted native run against the same Python reference (``accepted_entry``): a frame whose native hash is
+        #: that run's keeps its accepted verdict (and failing record) instead of being judged again.
+        self.accepted = accepted
+        self.carried: list[int] = []
+        #: False: progress lines only for failing frames (the drawing wrote each frame's hash line already).
+        self.hash_lines = bool(hash_lines)
         self.masks = masks
         self.switch_input = int(switch_input)
         self.mode = mode
@@ -927,6 +936,12 @@ class LiveJudge:
         elif index < len(records) and record != records[index]:
             self.differing.append(index)
             # Each frame under the bounds of the mode that drew it (the partner's after the switch: its own).
+            carried = self._carried(index, record)
+            if carried is not None:
+                self.carried.append(index)
+                self._pending.append((index, record, carried))
+                self._drain(block=False)
+                return
             modes = self.python.get("modes") or ()
             drawn_by = (modes[index] if index < len(modes) else None) or self.mode
             arguments = (index, record, records[index], frame, self.python["frames"][index], self.masks.get(index),
@@ -936,6 +951,19 @@ class LiveJudge:
         else:
             self._pending.append((index, record, None))
         self._drain(block=False)
+
+    def _carried(self, index: int, record: dict) -> dict | None:
+        """The accepted run's result for input ``index`` when the native frame is hash-identical to that run's (None:
+        judge it)."""
+        accepted = self.accepted
+        if accepted is None:
+            return None
+        hashes = accepted["hashes"]
+        verdict = accepted["verdicts"].get(index)
+        if index >= len(hashes) or hashes[index] != record.get("hash") or verdict is None:
+            return None
+        return {"region_differs": False, "verdict": dict(verdict), "failed": accepted["failed"].get(index),
+                "row": None, "classes": None, "max_pixels": 0, "max_level": 0}
 
     def _drain(self, *, block: bool) -> None:
         """Merge the pending frames' results in input order, as far as they are done (all, when ``block``)."""
@@ -965,9 +993,10 @@ class LiveJudge:
                         total["pixels"] += entry["pixels"]
                         total["max_level"] = max(total["max_level"], entry["max_level"])
                         total["inputs"] += entry["inputs"]
-            if self.progress is not None:
+            failing = verdict is not None and not verdict["pass"]
+            if self.progress is not None and (self.hash_lines or failing):
                 line = {"input": index, "hash": record.get("hash")}
-                if verdict is not None and not verdict["pass"]:
+                if failing:
                     line["failed"] = {k: verdict.get(k) for k in ("reasons", "max_level", "scatter", "ties",
                                                                   "scatter_group", "scatter_window")}
                 with Path(self.progress).open("a", encoding="utf-8") as stream:
@@ -984,7 +1013,7 @@ class LiveJudge:
                                                                                               python_frames))
         paths = {"first": first, "frames": len(differing), **self.paths}
         result = {"paths": paths, "rows": self.rows, "judged": self.judged, "classes": self.classes,
-                  "failed": self.failed}
+                  "failed": self.failed, "carried": list(self.carried)}
         if self.skipped:
             result["skipped"] = sorted(self.skipped)
         return result
@@ -1238,15 +1267,61 @@ def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: 
     return verdict
 
 
+def accepted_entry(entry: dict) -> dict:
+    """An accepted report's run entry as ``LiveJudge(accepted=...)`` reads it: its native hashes, every judged frame's
+    verdict and every failing frame's record, by input."""
+    if "judged_verdicts" not in entry:
+        raise ValueError("the accepted run has no judged_verdicts (a report written before --accepted existed)")
+    failed = list(entry["rule_a"].get("failed_frames") or [])
+    for section in (entry.get("partner") or {}).values():
+        failed += list(section.get("failed_frames") or [])
+    return {"hashes": list(entry["native_hashes"]),
+            "verdicts": {int(v["input"]): v for v in entry["judged_verdicts"]},
+            "failed": {int(f["input"]): f for f in failed},
+            "reference": (entry.get("python_reference") or {}).get("folder")}
+
+
+@contextlib.contextmanager
+def native_shader_control(mode: str, name: str | None, out: Path):
+    """The native item draws ``mode``'s pack baked with one line changed (``native_stream_player.SHADER_CONTROLS``):
+    the route's ``mode_fragment_pack`` is the control's for ``mode`` while this holds; the Python reference is not
+    touched (it compiles the shader source itself)."""
+    if name is None:
+        yield
+        return
+    from rendering.native import program_values
+    from tools.visualizer_replay import native_stream_player
+    from widgets.spotify_visualizer import shaders
+
+    import probe_rings                                     # native/core/python (native_stream_player's path)
+
+    filename, line, replacement = native_stream_player.SHADER_CONTROLS[mode][name]
+    text = (Path(shaders.__file__).resolve().parent / filename).read_text(encoding="utf-8")
+    if text.count(line) != 1:
+        raise RuntimeError(f"{filename}: the shader control's line is not found exactly once")
+    pack = probe_rings.bake(text.replace(line, replacement), filename, Path(out) / "work" / "control_packs")
+    original = program_values.mode_fragment_pack
+    program_values.mode_fragment_pack = lambda mode_id: pack if mode_id == mode else original(mode_id)
+    try:
+        yield
+    finally:
+        program_values.mode_fragment_pack = original
+
+
 def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
                   placement: str = "display", *, references: Path | None = None, clip_name: str = "",
-                  windows: dict | None = None) -> dict:
+                  windows: dict | None = None, accepted: dict | None = None) -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
     sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
     the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
     classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``). ``references``: the root of
     the cached Python references (``python_references``): the Python run and its masks are read from there when a
-    reference made of exactly this run exists, and stored there when not."""
+    reference made of exactly this run exists, and stored there when not. ``accepted``: an accepted run of the same
+    reference (``accepted_entry``): native frames hash-identical to it keep its verdicts.
+
+    The native run is drawn first, each frame's hash line written as it is drawn, and judged after: the owner's
+    activation deadline is on the wall clock, so judging inside its frame loop could cancel a mode switch
+    (``owner_worker_gate.TransitionDeadlineFired``)."""
     from tools.visualizer_replay import python_references
 
     script = parity_script(clip_frames, mode)
@@ -1264,7 +1339,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
     run = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
-    # One line per native frame as it is judged (fast-proof part 2 step 4): a killed run keeps what it judged.
+    # One line per native frame as it is drawn, then one per failing frame as it is judged (fast-proof part 2
+    # step 4): a killed run keeps what it had.
     progress = Path(out) / f"progress_{run.replace(':', '_').replace('=', '-').replace('@', '_at_')}.jsonl"
     Path(out).mkdir(parents=True, exist_ok=True)
     progress.write_text("", encoding="utf-8")
@@ -1277,28 +1353,37 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
             masks, backdrop_frames = _python_masks(mode, script, settings, python)
             if references is not None:
                 python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
-        judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS)
         draw_inputs = None
         if windows is not None:
             from tools.visualizer_replay.coverage_windows import window_inputs
 
             draw_inputs = window_inputs(windows)
-        native = native_drawn_run(mode, script, settings=settings, core=core,
-                                  python_mappings=mappings if mode == "spectrum" else None, on_frame=judge.frame,
-                                  draw_inputs=draw_inputs)
+
+        def drawn(index: int, record: dict, _frame) -> None:
+            line = {"input": index, "hash": record.get("hash")}
+            if record.get("skipped"):
+                line["skipped"] = True
+            with progress.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(line) + "\n")
+
+        with native_shader_control(mode, NATIVE_SHADER_CONTROL, Path(out)):
+            native = native_drawn_run(mode, script, settings=settings, core=core,
+                                      python_mappings=mappings if mode == "spectrum" else None, on_frame=drawn,
+                                      draw_inputs=draw_inputs)
         if cached is not None and python["digests"] != native["digests"]:
-            # The simulation moved since the reference was drawn: never judged against it; drawn again and the
-            # native frames judged again against the new reference.
+            # The simulation moved since the reference was drawn: never judged against it; drawn again.
             reference_state = "stale (logical digests differ): drawn again and stored"
-            judge.result()                                # its workers ended; its verdicts discarded
             python_references.release(cached)             # the stale reference's open files (audit 9 M2)
             python, mappings = _python_reference(mode, script, settings)
             masks, backdrop_frames = _python_masks(mode, script, settings, python)
             python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
-            progress.write_text("", encoding="utf-8")    # the progress judged against the stale one goes
-            judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS)
-            for index, record in enumerate(native["pixels"]):
-                judge.frame(index, record, native["frames"][index])
+        if accepted is not None and (reference_state != "read" or accepted.get("reference") != str(folder)):
+            accepted = None                               # another reference: every frame is judged
+            reference_state += "; the accepted run's reference differs: every frame judged"
+        judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS,
+                          accepted=accepted, hash_lines=False)
+        for index, record in enumerate(native["pixels"]):
+            judge.frame(index, record, native["frames"][index])
     single = judge.result()
     paths, rows = single["paths"], single["rows"]
     origin = native.get("outer_origin")
@@ -1324,6 +1409,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     # partner's (after the switch) their own section under their own bounds.
     drew = {i: (m or mode) for i, m in enumerate(python.get("modes") or ())}
     all_judged = single["judged"]
+    # Every judged frame's verdict: a later run against the same reference keeps them for its unchanged frames
+    # (``accepted_entry``); and which of this run's came from an accepted run instead of a rejudge.
+    verdict["judged_verdicts"] = all_judged
+    verdict["carried_from_accepted"] = single["carried"]
+    verdict["rejudged"] = len(all_judged) - len(single["carried"])
     judged = [v for v in all_judged if drew.get(v.get("input"), mode) == mode]
     partner_judged = [v for v in all_judged if drew.get(v.get("input"), mode) != mode]
     verdict["rule_a"] = rule_a_verdict(judged, mode)
@@ -1373,13 +1463,14 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
                recording: str | None = None, references: Path | None = None,
-               native_only_run: bool = False, windows: dict | None = None) -> dict:
+               native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
     (``against_baseline``). ``native_only_run``: ``native_only`` instead (no Python render; with ``against``, each
     run's native hashes against that report's)."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
+    accepted_report = json.loads(Path(accepted).read_text(encoding="utf-8")) if accepted is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
     from tools import conventions_identity
@@ -1423,11 +1514,21 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                          f"{len(changed)} frames changed {verdict['against']['changed_halves']} "
                          f"(first {changed[:10]}): {'IDENTICAL' if verdict['identical'] else 'CHANGED'}"), flush=True)
                 continue
+            entry = None
+            if accepted_report is not None:
+                entry = (accepted_report.get("results") or {}).get(key)
+                if entry is None:
+                    raise ValueError(f"the accepted report {accepted} has no run {key!r}")
+                entry = accepted_entry(entry)
             verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement,
-                                    references=references, clip_name=clip.name, windows=windows)
+                                    references=references, clip_name=clip.name, windows=windows, accepted=entry)
             report["results"][key] = verdict
+            carried = len(verdict["carried_from_accepted"])
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
-                  f" published; differing inputs {verdict['differing_inputs']}, pixels "
+                  + (f" published; {verdict['rejudged']} judged, {carried} kept from the accepted run (hash-"
+                     f"identical: their verdicts, not sized here); of the judged, differing inputs "
+                     if entry is not None else " published; differing inputs ")
+                  + f"{verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
                   f"{'bit-identical' if verdict['identical'] else 'not bit-identical'}; edge pixels in the worst "
@@ -1610,6 +1711,13 @@ def main(argv=None) -> int:
     parser.add_argument("--native-control", choices=("shift",), default=None,
                         help="with --native: a negative control on the native frames (shift: one level up); rule (a) "
                              "must fail")
+    parser.add_argument("--accepted", type=Path, default=None,
+                        help="with --native --references: an accepted native_render_parity.json of the same runs and "
+                             "references; a native frame hash-identical to it keeps its accepted verdict, every other "
+                             "frame is judged (the guide's section 7 split: full-take native runs)")
+    parser.add_argument("--shader-control", default=None,
+                        help="with --native: the native item draws a shader control (native_stream_player's "
+                             "SHADER_CONTROLS, e.g. ulp_ring); the Python reference is untouched")
     parser.add_argument("--judge-workers", type=int, default=0,
                         help="with --native: rule (a)'s frames judged in this many worker processes (0: in this one; "
                              "the same verdicts either way)")
@@ -1640,7 +1748,8 @@ def main(argv=None) -> int:
     app = QApplication(["owner-render-parity"])
     try:
         if args.native:
-            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS, NATIVE_CONTROL
+            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS, NATIVE_CONTROL, NATIVE_SHADER_CONTROL
+            NATIVE_SHADER_CONTROL = args.shader_control
             JUDGE_WORKERS = max(0, int(args.judge_workers))
             NATIVE_CONTROL = args.native_control
             NATIVE_SURFACE_FORMAT = args.surface_format
@@ -1651,7 +1760,8 @@ def main(argv=None) -> int:
                                 placements=tuple(args.placements), mode=args.mode, recording=args.recording,
                                 references=args.references, native_only_run=bool(args.native_only),
                                 windows=None if args.windows is None else json.loads(
-                                    args.windows.read_text(encoding="utf-8")))
+                                    args.windows.read_text(encoding="utf-8")),
+                                accepted=None if args.accepted is None else args.accepted.resolve())
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

@@ -315,7 +315,8 @@ class OwnerRig:
             thread_manager=lambda: manager, process_supervisor=lambda: self.supervisor,
             display_power_on=lambda: True, set_construct_outcome=lambda *args: record.update(outcome=args),
             committed_layout_profile_resolver=lambda _mode: None, edit_layout_profile_activator=lambda _mode: True,
-            transition_failure=lambda reason: record.update(transition_failure=reason),
+            transition_failure=lambda reason: (record.update(transition_failure=reason),
+                                               setattr(self, "transition_failure", reason)),
             presentation_kwargs=_presentation_kwargs,
             media_model_for=lambda _unit: type(
                 "Media", (), {"playbackState": "playing" if self.playing[0] else "paused"})(),
@@ -472,6 +473,7 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
                 controller.seed_mode_generators(REPLAY_SEED)
             if worker:
                 report["namespace"] = owner._worker.label_namespace
+            deadlines = watch_transition_deadlines(owner)
             inputs = 0
             for kind, value in script:
                 if worker and owner._worker is None:
@@ -518,6 +520,12 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
                     rig.settle()
             report.update(inputs=inputs, final_mode=controller.mode_id, phase=owner._mode_transition_phase,
                           on_worker=bool(owner._worker is not None) if worker else None)
+            # The replay runs on a logical clock, the owner's activation deadline on the wall clock: a deadline that
+            # cancelled or failed a transition here means a slow harness (not the product) changed the run.
+            if deadlines or record_failure(rig):
+                raise TransitionDeadlineFired(
+                    f"the owner's wall-clock activation deadline acted during the replay ({deadlines or record_failure(rig)}"
+                    "): the harness held the owner's frame loop past it, so this is not the logical run")
             report["digests"] = [evidence.frame_digest(logical) for logical in rig.published]
             report["phases"] = list(rig.phases)
             if scene_mirror is not None:
@@ -528,6 +536,36 @@ def identity_run(mode: str, script, *, worker: bool | None, supervisor: Any = No
         rig.close()
         extruded_bubble_drift_log._REVISIONS = saved_revisions
     return report
+
+
+class TransitionDeadlineFired(RuntimeError):
+    """The owner's wall-clock activation deadline (``_ACTIVATION_TRANSACTION_DEADLINE_MS``) cancelled or failed a
+    transition during a logical replay: work the harness did inside the owner's frame loop (a slow judge) held it past
+    the deadline, and the run is no longer the product's logical run (a cancelled fade-out keeps the outgoing mode
+    live)."""
+
+
+def watch_transition_deadlines(owner) -> list:
+    """The phases at which ``owner``'s activation deadline cancelled a transition (filled as they fire). Installed
+    before any deadline is armed: the arming passes ``self._on_transition_deadline``, so the instance's wrapper is the
+    one the single-shot holds. A deadline that extends a slow but alive target is not recorded; one that fails the
+    transition is recorded by the rig's ``transition_failure`` (``record_failure``)."""
+    fired: list = []
+    original = owner._on_transition_deadline
+
+    def on_deadline(serial: int, _original=original) -> None:
+        phase = owner._mode_transition_phase
+        _original(serial)
+        if phase == "fading_out" and owner._mode_transition_phase == "idle" and owner._pending_mode_activation is None:
+            fired.append(f"cancelled {phase}")
+
+    owner._on_transition_deadline = on_deadline
+    return fired
+
+
+def record_failure(rig) -> str | None:
+    """The transition failure the owner signalled to the rig's host services (None: none)."""
+    return getattr(rig, "transition_failure", None)
 
 
 def identity_gate(mode: str, clip_frames, supervisor: Any, *, default_path: bool = False) -> dict:

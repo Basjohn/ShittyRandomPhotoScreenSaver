@@ -891,19 +891,6 @@ the feature (D3D11 is not stated).
     `native_stream_player.py --windows` and `owner_render_parity.py --windows` draw only the windows. Bubble's four
     takes: 11, 10, 12 and 8 windows, 972, 954, 1,143 and 856 of 5,313 inputs drawn, late windows at 45.1, 43.8,
     50.6 and 57.1 s, all 14 fields covered (`fast_proof/20261121_coverage_bubble_<take>/`).
-  - [ ] The split the method proof set (the guide's section 7, lead 21 Nov): confirm a full-take native-only run
-    judges every frame against the cached Python references (frames hash-identical to the accepted native baseline
-    skip the rejudge), prove it catches `ulp_ring`'s 3 frames per take and the one-level shift with a run, and record
-    its wall time per 60 s take beside the full replay's.
-  - [ ] Side defect: `owner_render_parity --native --native-control shift` never unbinds the native route at the
-    mode switch. The route publishes every input (5.5 s Studio clip: 549 against 360 without the control; human_heavy1
-    60 s: 5,503 against 5,314) and the native run's logical digests differ from the Python reference's, so a stored
-    reference is judged stale and redrawn (2,200 s on human_heavy1). Reproduce: `--mode bubble --runs bubble
-    --references --native-control shift` against the same command without the control
-    (`fast_proof/20261121_shift_control_digests_bubble_studio*`). The control only re-encodes each native frame in
-    `NativeSceneMirror.frame` (`_SpilledFrames.replace_last`, a new record hash) and the clock is logical; the cause
-    is not found yet. The control's verdict stands (its Bubble frames fail), but the run must match the uncontrolled
-    one apart from the shifted pixels.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).

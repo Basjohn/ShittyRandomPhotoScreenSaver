@@ -248,3 +248,58 @@ def test_rule_a_halves_and_failed_frames_keep_every_failing_input():
     assert parity.rule_a_halves(judged[:1], switch_input=6)["second"]["pass"]
     orphan = [{"pass": False, "reasons": ["no input"], "max_level": None}]
     assert not any(h["pass"] for h in parity.rule_a_halves(orphan, switch_input=6).values())
+
+
+@pytest.mark.qt
+@pytest.mark.skipif(sys.platform != "win32", reason="the hidden production scene needs the Windows QPA GL")
+def test_judging_never_holds_the_owners_frame_loop_past_its_wall_clock_deadline(qt_app, no_device, monkeypatch,
+                                                                                 tmp_path):
+    """The shift control's defect (21 Nov): rule (a) judged each native frame inside the owner's frame loop, and a
+    run whose every frame failed (the one-level shift) spent seconds a frame there. The owner's activation deadline
+    is wall time, so it cancelled the fade-out and the outgoing mode stayed live: the native route published every
+    input and the logical digests left the Python reference's. ``native_parity`` now draws first and judges after,
+    and a replay whose deadline acted raises ``TransitionDeadlineFired``. Here the judge is slow around the switch
+    (what an all-failing frame costs) under a short deadline: the switch must complete as in a quick run. Control:
+    the same slowness inside the owner's frame loop is caught."""
+    from pathlib import Path as _Path
+
+    import time
+
+    import tools.expanded_visualizer_evidence as evidence
+    from rendering import native
+    from rendering.native import loader
+    from tools.visualizer_replay import owner_render_parity as parity
+    from tools.visualizer_replay.owner_worker_gate import PARTNER, TransitionDeadlineFired
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    if qt_app.platformName().strip().lower() != "windows":
+        pytest.skip("the hidden production scene needs the Windows QPA GL")
+    module_dir = _Path(__file__).resolve().parents[1] / "release" / "native_module"
+    if not (module_dir / f"{loader.MODULE_NAME}.pyd").is_file():
+        pytest.skip("the native core is not built in this checkout")
+    core = native.load(module_dir)
+    mode = "spectrum"
+    frames = evidence.shipped_clip(5.5).frames
+    script = parity.parity_script(frames, mode)
+    settings = parity.section_settings(mode, "a")
+    switch = sum(1 for kind, _v in script[:next(i for i, (k, _v) in enumerate(script) if k == "mode")]
+                 if kind == "input")
+    monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 2000)
+
+    def slow(index: int) -> None:
+        if switch <= index < switch + 40:
+            time.sleep(0.15)                       # 40 frames: 6 s, three times the deadline
+
+    judged = parity.LiveJudge.frame
+    monkeypatch.setattr(parity.LiveJudge, "frame", lambda self, i, r, f: (slow(i), judged(self, i, r, f))[1])
+    verdict = parity.native_parity(core, mode, "", settings, frames, tmp_path)
+    assert verdict["digests_identical"], {k: verdict[k] for k in ("native_published", "differing_inputs")}
+    assert 0 < verdict["native_published"] < verdict["inputs"]          # the route unbound at the switch
+    # Control: the same slowness inside the owner's frame loop cancels the fade-out, and the replay says so.
+    engine_worker_link.reset_run_state_for_testing()
+    with parity.single_sample_scene_targets(), parity.card_placement("display"):
+        with pytest.raises(TransitionDeadlineFired, match="cancelled fading_out"):
+            parity.native_drawn_run(mode, script, settings=settings, core=core,
+                                    on_frame=lambda index, record, frame: slow(index))
+    assert PARTNER[mode]
