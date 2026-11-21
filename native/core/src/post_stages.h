@@ -107,6 +107,10 @@ bool bloomSameTexture();
 // ABI 27), not at the item's own pixel (u_scene_item reads the whole target; read per record).
 void setBloomAtTargetOrigin(bool atOrigin);
 bool bloomAtTargetOrigin();
+// ABI 29's negative control: a turned card's scene anchored in the surface's (turned) frame, as ABI 28 anchors an
+// unturned one, not in the window's frame its composite declares (u_scene_from_target the surface's; read per record).
+void setSceneFrameSurface(bool surface);
+bool sceneFrameSurface();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)

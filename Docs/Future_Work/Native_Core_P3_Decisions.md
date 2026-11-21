@@ -1062,6 +1062,52 @@ a turned card is refused (M3): the native surface of a turned card is itself tur
 `oscilloscope_check.py` now draws its Python reference in a window 72 pixels larger than the item on every side (an
 item-sized window had cut the overrun on every side) and places every display (M1). On ABI 27 it fails as it should:
 rule (a) on OpenGL at both ratios, and the offsets round at every placement (`20261121_n51_oscilloscope_m1_abi27/`).
+*Turned cards (ABI 29; the turned-card box, checkpoint audit 10 M3).* The plan offered two designs: the scene target in
+physical pixels, or the composite and first downsample taking the turn as Python's `sceneTexel` does
+(`_ORIENTED_COMPOSITES`). Python's turned path settles it. `_ORIENTED_COMPOSITES` serve only scenes drawn in
+`orient_visualizer_scene_frame`'s turned virtual viewport (Waveform Ribbon, Extruded Bubble, Neon Lake, Extruded
+Spectrum). The Oscilloscope hands its `SceneTarget` the physical frame (`scene_output_rotation` 0) and turns its content
+at the vertex (`physicalPoint`), so its target, allocation slack, bloom pairs and levels, glow read and dither key are
+all in the window's physical pixels. A native scene kept in the turned surface with only its reads turned cannot match
+that: the target would hold the light past the turned item's right and top edges (other physical sides than Python's)
+and the bloom would pair pixels from another corner whenever a side is odd. *The choice: the scene stays in the frame
+Python draws it in, declared by the composite step.* A composite step may declare `"scene_frame": "window"` (the
+Oscilloscope's two programs do). Under a turned card the core then builds Python's physical `SceneTarget`
+(`sceneAnchor`): the item's window rect (the card's `scene_item` through its exact `window_from_target`), its
+bottom-left pixel at the content's bottom left, the content the bucket of that rect. The beam draws into it through
+`itemClipMatrix` unchanged, and the bloom runs on it unchanged. The composite forms read Python's texel through the core
+members `u_scene_from_target_x`/`_y`: the surface pixel's centre to the scene's texel, which under a turned card is the
+window pixel less the rect's origin (Python's `gl_FragCoord.xy - uOrigin`) and for an unturned card ABI 28's own local
+texel, in exact integer arithmetic. This is Python's arithmetic in Python's frame, so no tolerance class is added.
+Without the declaration a turned card's bloom or composite is still refused, fail closed. A later turned Scene3D consumer
+adds a second frame value: Python's `sceneTexel` in `u_scene_from_target` and the anchor in the turned viewport. The
+member and the anchor are already a general signed permutation, so that consumer brings only its frame value and its
+proof. Proof (`oscilloscope_check.py --rounds turned`): each run's first three samples at quarters 1 to 3 on odd sides
+(421 x 281 at dpr 1, 633 x 423 at 1.5), rule (a) on OpenGL against the Python renderer drawn through a window 72 pixels
+larger, rule (b) on Vulkan. Pre-change control: on the ABI 28 module every turned frame is refused (the M3 reason in the
+item's state), nothing is drawn, and rule (a) fails at all six (`20261121_n51_turned_abi28_refused/`). Negative control
+`scene_frame_surface` (the turned scene anchored in the surface's frame). The test
+`test_a_turned_card_keeps_the_scene_in_the_windows_frame` derives every expectation from Python's own `item_pixel_rect`
+and float32 item matrix. On the ABI 29 build (of 6cd5f3cf3): the native tests pass with it, and the round first failed
+at quarter 0 too: the graticule's tick band ended on a hard cut that ties exactly on odd sides (R-244, fixed with a
+half-pixel ramp in ff9c255c5; the round now draws quarter 0 at the same sides, so what the turn adds is read against
+it). With the ramp every round passes on both APIs (`20261121_n51_turned_abi29_band/`). Turned rule (a): at most 2
+levels at quarters 0 to 3 at both ratios, at most 5 scatter and 1 tie a frame. Turned rule (b): at most 2 levels.
+Validation is clean (none unexplained; the turned round's phase none at all). The unturned pixels round's native frames (OpenGL and Vulkan) and its Python references are
+hash-identical to ABI 28's (`20261121_n51_oscilloscope_abi28/`, 126 of 126 each). The offsets round's figures are
+identical at all 8 placements; ABI 28 kept no offset frames to hash. The control `scene_frame_surface` fails at quarters
+1 to 3 at both ratios, on 20 of 21 frames each, up to 41 levels; quarter 0 is untouched by it.
+*Rule (b)'s one red at the audit's edge sizes (checkpoint audit 10 L1; root-caused 21 Nov).* It is frame 918 at 32/35
+(384 x 256), not 48/35. The pair is one level each, outside the mask, and it counts as ties only because rule (b) admits
+no scatter. Cause: the `overlay_glow` composite's discard cut, Python's own (`scene.a <= 0 && max(glow) < 1/512`), meets
+float16 bloom values that the two compilers round apart. On the glow's faint fringe Vulkan keeps the pixel, its glow just
+over the cut, and shows its dither (the composite's hash at those texels reproduces the kept values), while OpenGL and
+Python discard it. The fringe is a contour, so its flips come in neighbouring runs. Over the 126 frames, all 10 rule (b)
+pixels outside the mask are such flips; the other 15 past their allowance are on-mask 2-level ties within the bound.
+With the mask taken from both frames (pixels either frame lights) every frame passes (evidence
+`n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`). *The lead's decision (21
+Nov): rule (b) compares two peer APIs, neither the reference, so its mask is the union over both frames, for every
+mode* ("The pixel tolerance", rule (b)'s mask).
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
@@ -1088,6 +1134,22 @@ each harness states its bounds beside their measured reasons:
    alpha in a target cleared to zero (`devcurve_check.py`, the scene targets' RGBA8 textures), and the pixels a blended
    layer sums into (`mesh_buffer_check.py`: alpha strictly between 0 and 255, or above 0 in an additive scene). A float
    texture's unit is its own rounding (one float16 ulp, or the depth bound), which every texel may reach.
+   *Rule (b)'s mask (the lead's decision, 21 Nov; checkpoint audit 10 L1):* rule (b) judges two peer APIs, neither
+   of them the reference, so its mask is the union of what the mode's class marks in each frame, and in the
+   reference where the harness has one (`pixel_tolerance.peer_mask`). A class is read from a frame only where the
+   frame can show it: the pixels a layer lights (`pixel_tolerance.lit`, the Oscilloscope's glow) from an opaque native
+   readback, translucency from a frame's own alpha (`native_stream_player.py`'s frames). A harness readback over
+   black cannot show translucency, so for Spline Curve and Bubble there the mask stays the reference's. Spectrum's
+   rule (b) has no explained class (scatter only, `masked_level` 0), so it has no mask. A literal "every lit pixel of
+   either frame" was not taken for those modes: it would give Bubble's opaque bubbles the one-level class (a uniform
+   one-level shift of them would pass) and turn Spectrum's one-level scatter into ties. Every rule (b) rerun under it
+   (`n5_1_oscilloscope/20261121_rule_b_peer_mask/`, its scripts and JSON): the Oscilloscope's kept frames judged both
+   ways change one verdict, L1's frame 918 (fail to pass); its ABI 28 run, and the ABI 29 run's pixels (126 frames)
+   and turned (168) rounds, change none. Bubble's four 60 s takes, every frame on both APIs on the ABI 29 module
+   (`fast_proof/20261121_rule_b_peer_mask_*`), judged both ways: none fails either way and no figure moves (scatter
+   worst 276, 193, 129 and 237, as measured on 21 Nov); their frames hold no translucent pixel on either side.
+   Bubble's harness rule (b) (`n5_1_bubble/20261121_n51_bubble_rule_b_peer_mask/`): 684 frames pass, scatter worst 21.
+   Spectrum's (`n2_5/20261121_n25_spectrum_rule_b_peer_mask/`): 513 frames pass, scatter worst 83, both as before.
 3. *Scatter*: single-level pixels outside the mask where two compilers round a value within float error of a half
    level (a `NativeFragmentPass` against its Python renderer; Vulkan against OpenGL on one pack), at most a measured
    number a frame: a share of the frame, never the frame.

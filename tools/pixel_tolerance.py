@@ -312,6 +312,32 @@ def judge(candidate, reference, tolerance: Tolerance, *, mask=None, delta=None) 
     return judge_delta(delta, tolerance, mask=mask, edges=lambda flags: content_edges_at(b, flags, contrast))
 
 
+def peer_mask(*masks):
+    """Rule (b)'s mask (the lead's decision, 21 Nov; D12 "The pixel tolerance"): rule (b) judges two peer backends,
+    neither of them the reference, so its explained class is the union of what the mode's mask marks in each frame (and
+    in the reference, where the harness has one), never one side's alone. A pixel the class covers on either side may
+    move by the class's level: the Oscilloscope's glow lights a faint fringe pixel on one backend that the other's
+    discard cut leaves dark (checkpoint audit 10 L1). ``None`` masks (a side whose frame cannot show the class) are
+    skipped; ``None`` when every one is."""
+    import numpy as np
+
+    given = [np.asarray(m, bool) for m in masks if m is not None]
+    if not given:
+        return None
+    union = given[0].copy()
+    for m in given[1:]:
+        union |= m
+    return union
+
+
+def lit(frame):
+    """The pixels a frame lights (any colour channel above 0; an opaque readback over black): the frame-side form of
+    a mask class of "every pixel a blended layer sums into" (the Oscilloscope's glow)."""
+    import numpy as np
+
+    return np.asarray(frame)[..., :3].max(axis=-1) > 0
+
+
 def translucent_by_alpha(reference, *, additive: bool = False):
     """The explained pixels of a reference drawn into a target cleared to zero: alpha strictly between 0 and 255 (a
     translucent result), or with ``additive`` every pixel a layer added to (alpha above 0: each sum rounds per layer)."""

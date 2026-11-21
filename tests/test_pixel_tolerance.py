@@ -108,6 +108,37 @@ def test_the_one_level_class_moves_only_the_masked_pixels():
         assert not pt.judge(moved, reference, tolerance, mask=mask)["pass"]
 
 
+def test_rule_b_masks_the_union_of_both_peers_classes():
+    """The lead's decision (21 Nov, checkpoint audit 10 L1): rule (b) judges two peer backends, neither the reference,
+    so its mask is the union of what the mode's class marks in each frame. L1's case: a glow fringe one backend lights
+    a level above black where the other (and the reference) discards it, an adjacent pair. Controls: the reference's
+    mask alone fails it (as rule (b) did); the union admits no more than the class's level; a mask of one side only
+    misses a pixel the other side lights."""
+    from tools import pixel_tolerance as pt
+
+    oscilloscope = _harness("oscilloscope_check")
+    tolerance = oscilloscope.VULKAN_RULE_B
+    reference = np.zeros((40, 60, 4), np.uint8)
+    reference[10:12, 10:50, :3] = 1                             # a glow's faint fringe (the class: every lit pixel)
+    reference[10:12, 10:50, 3] = 0
+    opengl = reference.copy()
+    opengl[..., 3] = 255                                        # a native readback: opaque over black
+    vulkan = opengl.copy()
+    vulkan[12, 30:32, :3] = 1                                   # the fringe pair Vulkan keeps (dither, one level)
+    reference_only = oscilloscope.reference_mask(reference)
+    assert not pt.judge(vulkan[..., :3], opengl[..., :3], tolerance, mask=reference_only)["pass"]
+    union = pt.peer_mask(reference_only, pt.lit(vulkan), pt.lit(opengl))
+    assert pt.judge(vulkan[..., :3], opengl[..., :3], tolerance, mask=union)["pass"]
+    # Controls: two levels on the fringe pair is past the class (two adjacent ties off an edge: fails); OpenGL's side
+    # alone does not cover the pixels only Vulkan lights.
+    louder = vulkan.copy()
+    louder[12, 30:32, :3] = 2
+    assert not pt.judge(louder[..., :3], opengl[..., :3], tolerance, mask=union)["pass"]
+    assert not pt.peer_mask(reference_only, pt.lit(opengl))[12, 30:32].any()
+    assert pt.peer_mask(None, None) is None
+    assert pt.peer_mask(None, reference_only).tolist() == reference_only.tolist()
+
+
 def test_ties_are_capped_and_isolated_or_on_an_edge():
     from tools import pixel_tolerance as pt
 

@@ -132,6 +132,24 @@ _OUT: dict = {"dir": "."}
 #: the cost of the two empty passes).
 _VARIANT: dict = {"name": None}
 _AMBIENT_PASSES = ("bubble_ambient_points", "bubble_ambient_mask")
+#: The cost matrix's stage variants of ``bubble.frag`` (``bubble_cost_matrix.py``): one stage of the ``bubble`` pass
+#: left out, its cost the difference (name -> (the line, found exactly once, and its replacement)). ``no_wake``: the
+#: ripple wake loop; ``no_ghost``: the ghost loop; ``no_heroes``: the hero loop (bodies, outlines, speculars, the big
+#: heroes' coverage).
+_HERO_LOOP = ("    for (int i = 0; i < count; i++) {\n        vec4 bpos = u_bubbles_pos[i];\n"
+              "        vec2 bxy = bpos.xy;       // bubble center (normalised 0..1)\n")
+STAGE_VARIANTS = {
+    "no_wake": ("    if (u_trail_strength > 0.001 && u_tail_opacity > 0.001) {\n", "    if (false) {\n"),
+    "no_ghost": ("    if (u_ghost_alpha > 0.001) {\n", "    if (false) {\n"),
+    "no_heroes": (_HERO_LOOP, _HERO_LOOP.replace("i < count", "i < 0")),
+}
+_STAGE_PACKS: dict = {}
+
+
+def _stage_pack(name: str) -> bytes:
+    if name not in _STAGE_PACKS:
+        _STAGE_PACKS[name] = _control_pack("bubble.frag", *STAGE_VARIANTS[name])
+    return _STAGE_PACKS[name]
 #: The settings only the ambient points' pass reads (``bubble_ambient_settings_values``).
 _POINTS_ONLY_SETTINGS = frozenset({"uTexelScale", "uSpriteScale", "uGlowSpread", "uMicroColor", "uParticleColor"})
 
@@ -147,6 +165,8 @@ def program(sizes: dict) -> dict:
     pack = mode_fragment_pack(MODE_ID)
     if base.CONTROL == "whole_allocation":
         pack = _control_pack("bubble.frag", _RATIO_LINE, _RATIO_WHOLE)
+    if _VARIANT["name"] in STAGE_VARIANTS:
+        pack = _stage_pack(_VARIANT["name"])
     built = native_route.bubble_program(pack, sizes)
     passes = list(built["passes"])
     if base.CONTROL == "sprite_y_up":

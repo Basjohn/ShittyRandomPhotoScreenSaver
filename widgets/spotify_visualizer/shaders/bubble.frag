@@ -487,8 +487,15 @@ void main() {
         // Distance from fragment to bubble center (aspect-corrected)
         vec2 delta = uv - bxy;
         delta.x *= aspect;
+        // Output-preserving square reject (item 8b's measured offender: this loop ran its whole body for every
+        // fragment x live hero, about 55 % of the pass at 4K). Past r + 4 px along either axis the fragment lies
+        // outside the outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.35 px), the body's and the
+        // dot's edge (r + 0.5 px) and the big heroes' own reject below (r + px): the ring, the dot, the specular and
+        // the coverage are each exactly 0 there, mix() leaves both layers unchanged, and skipping is byte-identical
+        // (tests/test_bubble_hero_reject.py).
+        if (abs(delta.x) > brad + 4.0 * px || abs(delta.y) > brad + 4.0 * px) continue;
         float dist = length(delta);
-        
+
         // Radius in aspect-corrected space
         float r = brad;
         // Exact rendered radius, not a guessed class/radius threshold. Cheap

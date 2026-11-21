@@ -12,6 +12,9 @@
 // the scene holds Python's own content (ABI 28, sceneAnchor: the item's pixel at the allocation's bottom left, the
 // allocation the bucket of the item), so the scene, the glow (its uv Python's texel centre over the allocation, mirrored
 // to the image's top-first rows) and the dither's key are all read at Python's texel: the same values at the same place.
+// ABI 29: Python's texel is u_scene_from_target of the surface pixel's centre: the surface's own unturned (as ABI 28),
+// and under a turned card the window's frame its scene declares (Python's gl_FragCoord.xy - uOrigin: its SceneTarget
+// is physical, the item turned at the vertex), so the turned surface reads the physical scene, glow and dither key.
 layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 FragColor;
 
@@ -21,6 +24,8 @@ layout(std140, binding = 0) uniform SceneComposite {
     float u_bloom_strength;  // the mode's (a setting, or a record field: the Oscilloscope's changes each frame)
     float u_hdr_exposure;    // the mode's: > 0 an HDR scene tone mapped at this exposure; 0 as drawn
     vec4 u_scene_item;       // the core's: the item's cover in the surface's pixels (left, top, width, height)
+    vec3 u_scene_from_target_x; // the core's (ABI 29): the surface's pixel to the scene's texel, rows x and y
+    vec3 u_scene_from_target_y;
 };
 layout(binding = 1) uniform sampler2D uScene;
 layout(binding = 2) uniform sampler2D uBloom;
@@ -55,9 +60,12 @@ void main()
     ivec2 content = ivec2(u_target_px + 0.5);
     ivec2 pixel = clamp(ivec2(floor(vec2(vUv.x, 1.0 - vUv.y) * u_target_px)), ivec2(0), content - ivec2(1));
     ivec4 item = ivec4(floor(u_scene_item + 0.5));
-    // Python's texel: x from the item's left, rows up from its bottom.
-    ivec2 local = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
-    if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, item.zw))) discard;
+    // Nothing outside the item (its cover in the surface).
+    ivec2 shown = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
+    if (any(lessThan(shown, ivec2(0))) || any(greaterThanEqual(shown, item.zw))) discard;
+    // Python's texel: x from the item's left, rows up from its bottom, in the scene's frame.
+    vec3 centre = vec3(vec2(pixel) + 0.5, 1.0);
+    ivec2 local = ivec2(floor(vec2(dot(u_scene_from_target_x, centre), dot(u_scene_from_target_y, centre))));
     // ABI 28: the scene holds Python's SceneTarget content (sceneAnchor): the item's pixel at its allocation's bottom
     // left, so the item's texel is read (Python's texelFetch(uScene, texel)): top-first rows here.
     ivec2 texel = ivec2(local.x, allocation.y - 1 - local.y);

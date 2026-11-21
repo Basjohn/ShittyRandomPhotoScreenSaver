@@ -15,6 +15,8 @@ layout(std140, binding = 0) uniform SceneComposite {
     vec2 u_target_px;    // the core's: the surface's pixels (the scene's content size)
     float u_fade;        // the core's: the content fade (Python's uOpacity)
     vec4 u_scene_item;   // the core's: the item's cover in the surface's pixels (left, top, width, height)
+    vec3 u_scene_from_target_x; // the core's (ABI 29): the surface's pixel to the scene's texel (as the glow form's)
+    vec3 u_scene_from_target_y;
 };
 layout(binding = 1) uniform sampler2D uScene;
 
@@ -24,8 +26,11 @@ void main()
     ivec2 content = ivec2(u_target_px + 0.5);
     ivec2 pixel = clamp(ivec2(floor(vec2(vUv.x, 1.0 - vUv.y) * u_target_px)), ivec2(0), content - ivec2(1));
     ivec4 item = ivec4(floor(u_scene_item + 0.5));
-    ivec2 local = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
-    if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, item.zw))) discard;
+    ivec2 shown = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
+    if (any(lessThan(shown, ivec2(0))) || any(greaterThanEqual(shown, item.zw))) discard;
+    // Python's texel in the scene's frame (composite_overlay_glow.frag).
+    vec3 centre = vec3(vec2(pixel) + 0.5, 1.0);
+    ivec2 local = ivec2(floor(vec2(dot(u_scene_from_target_x, centre), dot(u_scene_from_target_y, centre))));
     // ABI 28: the scene holds Python's SceneTarget content (sceneAnchor): the item's pixel at its allocation's bottom
     // left, so the item's texel is read (Python's texelFetch(uScene, texel)): top-first rows here.
     ivec2 texel = ivec2(local.x, allocation.y - 1 - local.y);

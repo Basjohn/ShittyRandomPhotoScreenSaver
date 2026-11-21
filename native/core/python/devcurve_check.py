@@ -141,6 +141,14 @@ def reference_mask(reference):
     return pt.translucent_by_alpha(reference)
 
 
+def peer_frame_mask(frame):
+    """What the mode's mask class marks in one native frame (an opaque readback over black) for rule (b), whose mask is
+    the union over both peers and the reference (``pt.peer_mask``; the lead, 21 Nov). The translucency class (Spline
+    Curve's, Bubble's) cannot be read from an opaque readback: None. A mode whose class is the pixels a layer lights
+    (the Oscilloscope's glow) names its own."""
+    return None
+
+
 def item_settings_change(settings: dict) -> dict:
     """Rule (g)'s Settings change: a layer colour and its outline width."""
     changed = dict(settings)
@@ -586,8 +594,10 @@ def vulkan_against_opengl(out: Path, control: str | None = None) -> dict:
             missing += 1
             continue
         compared += 1
+        # Rule (b)'s mask is the union over the peers and the reference (the lead, 21 Nov; ``pt.peer_mask``).
         verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B,
-                           mask=reference_mask(refs[key]))
+                           mask=pt.peer_mask(reference_mask(refs[key]), peer_frame_mask(vk[key]),
+                                             peer_frame_mask(gl[key])))
         judged.append(verdict)
         differing += int(verdict["differing"] > 0)
         max_level = max(max_level, int(verdict["max_level"]))

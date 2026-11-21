@@ -141,4 +141,12 @@
 // allocation slack holds; the composite forms read the scene at the item's texel. M2, the card's optional "scene_item"
 // (Python's item_pixel_rect in the target's pixels) is the core's one source of the item's rect (u_scene_item; no
 // re-derivation). M3, a bloom or composite step under a turned card is refused (its anchoring is unturned only).
-#define SRPSS_NATIVE_CORE_ABI 28
+// 29 (N5.1, turned-card anchoring; checkpoint audit 10 M3): a composite step may declare "scene_frame": "window" (the
+// mode's Python scene drawn through Quick's window, unturned: the Oscilloscope turns at the vertex). Under a turned card
+// such a program's surface-sized scene target takes Python's SceneTarget geometry in the window's frame (sceneAnchor:
+// the item's window rect, from scene_item through window_from_target, its bucket the content), and the composite forms
+// read the scene, glow and dither key at Python's texel through the core members u_scene_from_target_x/_y (the surface's
+// pixel to the scene's texel; the surface's own, as at ABI 28, for an unturned card). A turned card's bloom or composite
+// without the declaration is still refused. stage_control's scene_frame_surface (the negative control: the turned scene
+// anchored in the surface's frame). Unchanged for an unturned card.
+#define SRPSS_NATIVE_CORE_ABI 29

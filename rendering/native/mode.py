@@ -99,6 +99,8 @@ MODE_CORE_MEMBERS = {
     "u_window_from_target_y": (3, True),
     "u_target_px": (2, False),
     "u_scene_item": (4, True),     # ABI 27: the item's cover in the target's pixels (left, top, width, height)
+    "u_scene_from_target_x": (3, True),  # ABI 29: the target's pixel to the scene's texel (the composite's), rows x
+    "u_scene_from_target_y": (3, True),  # and y: the surface's own unturned, the window's frame under a turned card
     "uOriented": (2, True),
     "uQuarters": (1, True),
     "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
@@ -664,23 +666,32 @@ class CompositeStep:
     ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule. ABI 27: every form
     reads the core's ``u_scene_item`` (the item's cover in the surface) as Python's ``SceneTarget`` reads its own rect:
     its texel, glow and dither from the item's own pixel, nothing drawn outside the item; a :class:`BloomStep` from a
-    surface-sized target pairs its first downsample's pixels from there too."""
+    surface-sized target pairs its first downsample's pixels from there too. ABI 29: ``scene_frame="window"`` says the
+    mode's Python scene is drawn through Quick's window, unturned (its ``SceneTarget`` given the physical frame, the
+    content turned at the vertex: the Oscilloscope); under a turned card the core then keeps the scene in the window's
+    frame and the composite reads it at Python's texel (``u_scene_from_target``). Without it a turned card's bloom or
+    composite is refused (Python's turned Scene3D frame, ``orient_visualizer_scene_frame``, is not built)."""
 
     name: str
     form: str
     scene: str
     glow: str | None = None
+    scene_frame: str | None = None
 
     def __post_init__(self) -> None:
         if self.form not in COMPOSITE_FORMS:
             raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
         if (self.glow is None) != (self.form == "overlay"):
             raise ValueError("the glow forms read a bloom step's glow; the overlay reads none")
+        if self.scene_frame not in (None, "window"):
+            raise ValueError(f"unknown scene frame {self.scene_frame!r} (the window's, \"window\", or none)")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "composite": self.form, "scene": self.scene}
         if self.glow is not None:
             entry["glow"] = self.glow
+        if self.scene_frame is not None:
+            entry["scene_frame"] = self.scene_frame
         return entry
 
 
