@@ -44,6 +44,7 @@ import contextlib
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -107,11 +108,96 @@ SCRATCH_ROOT = ARTIFACTS_ROOT / "scratch"
 LAYOUT_ROOTS = (WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT)
 
 
+# -- linked worktrees: heavy output lands on D:, not on F: ----------------------------------------------------
+# The main checkout's three folders are junctions to this root. A linked worktree (an agent's) would get real
+# folders and fill F:, so on first use it gets the same junctions, to ``SCRATCH_DRIVE_ROOT/worktrees/<name>/<folder>``.
+# ``tools/agent_handover.py --retire`` copies the keep group through them and then deletes these targets.
+SCRATCH_DRIVE_ROOT = Path(r"D:\Temp\Scratch\SRPSS")
+WORKTREE_TARGETS = "worktrees"
+# Long-term control data that no cleanup ever deletes (proof guide sections 6 and 7).
+PROTECTED_REFERENCES_NAME = "references"
+PROTECTED_FILE_NAME = "native_render_parity.json"
+_LAYOUT_LINKED = False
+
+
+def _norm(path: str | Path) -> str:
+    return os.path.normcase(os.path.realpath(str(path)))      # junctions resolved: a drive root may sit behind one
+
+
+def _inside(path: str | Path, root: str | Path) -> bool:
+    child, parent = _norm(path), _norm(root)
+    return child == parent or child.startswith(parent.rstrip("\\/") + os.sep)
+
+
+def junction_target(link: str | Path) -> str | None:
+    """The target of a directory junction or symlink, or None when ``link`` is neither."""
+    is_junction = getattr(os.path, "isjunction", None)
+    if os.path.islink(link) or (is_junction and is_junction(link)):
+        return os.path.realpath(link)
+    return None
+
+
+def make_junction(link: Path, target: Path) -> None:
+    result = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
+    if result.returncode != 0 or not os.path.lexists(link):
+        raise ArtifactPathError(f"could not make junction {link} -> {target}: {result.stdout} {result.stderr}")
+
+
+def link_worktree_artifacts(repo: Path | None = None, drive_root: Path | None = None) -> list[Path]:
+    """In a linked worktree, make each missing ``.artifacts/{webp,evidence,scratch}`` a junction to
+    ``<drive_root>/worktrees/<worktree name>/<folder>``. Returns the junctions made.
+
+    The main checkout is unchanged, and an existing real folder is never moved or replaced. A junction (existing or
+    to be made) whose target lies outside ``drive_root`` is refused with ``ArtifactPathError``. Nothing happens
+    where ``drive_root`` does not exist (a machine without the scratch drive keeps real folders).
+    """
+    repo = Path(REPO_ROOT if repo is None else repo)
+    drive_root = Path(SCRATCH_DRIVE_ROOT if drive_root is None else drive_root)
+    if sys.platform != "win32" or main_checkout(repo) == repo or not drive_root.is_dir():
+        return []
+    made = []
+    artifacts = repo / ".artifacts"
+    for folder in ("webp", "evidence", "scratch"):
+        link = artifacts / folder
+        if os.path.lexists(link):
+            target = junction_target(link)
+            if target is not None and not _inside(target, drive_root):
+                raise ArtifactPathError(f"refusing {link}: its junction target {target} is outside {drive_root}")
+            continue
+        target = drive_root / WORKTREE_TARGETS / repo.name / folder
+        if not _inside(target, drive_root) or ".." in repo.name:
+            raise ArtifactPathError(f"refusing junction target {target}: outside {drive_root}")
+        target.mkdir(parents=True, exist_ok=True)
+        artifacts.mkdir(exist_ok=True)
+        make_junction(link, target)
+        made.append(link)
+    return made
+
+
+def _ensure_layout() -> None:
+    """First use of the layout in a linked worktree: junction its three folders to the scratch drive (once)."""
+    global _LAYOUT_LINKED
+    if _LAYOUT_LINKED:
+        return
+    _LAYOUT_LINKED = True
+    link_worktree_artifacts()
+
+
+def is_protected(path: str | Path) -> bool:
+    """True for ``<drive root>/fast_proof/references`` and everything under it, and for every file named
+    ``native_render_parity.json``: cleanups never delete these."""
+    candidate = Path(path)
+    if candidate.name == PROTECTED_FILE_NAME:
+        return True
+    return _inside(candidate, SCRATCH_DRIVE_ROOT / "fast_proof" / PROTECTED_REFERENCES_NAME)
+
+
 @contextlib.contextmanager
 def use_root(artifacts_root: Path) -> Iterator[Path]:
     """Tests: redirect the whole layout under ``artifacts_root`` (e.g. ``tmp_path``) for the block."""
-    global ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS
-    saved = (ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS)
+    global ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS, _LAYOUT_LINKED
+    saved = (ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS, _LAYOUT_LINKED)
+    _LAYOUT_LINKED = True      # a redirected layout is a test's own; the worktree's folders are not touched
     ARTIFACTS_ROOT = Path(artifacts_root).resolve()
     WEBP_ROOT = ARTIFACTS_ROOT / "webp"
     EVIDENCE_ROOT = ARTIFACTS_ROOT / "evidence"
@@ -120,7 +206,7 @@ def use_root(artifacts_root: Path) -> Iterator[Path]:
     try:
         yield ARTIFACTS_ROOT
     finally:
-        ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS = saved
+        ARTIFACTS_ROOT, WEBP_ROOT, EVIDENCE_ROOT, SCRATCH_ROOT, LAYOUT_ROOTS, _LAYOUT_LINKED = saved
 
 # Top-level areas. "visualizers" and "transitions" take one sub-name (``visualizers/<mode>``).
 AREAS = frozenset({
@@ -241,16 +327,19 @@ def _stamped(label: str, date: str | None) -> str:
 
 def evidence_dir(area: str, topic: str, label: str, *, date: str | None = None) -> Path:
     """``.artifacts/evidence/<area>/<topic>/<YYYYMMDD>_<label>/`` (not created)."""
+    _ensure_layout()
     return EVIDENCE_ROOT.joinpath(*area_parts(area), _require_slug("topic", topic), _stamped(label, date))
 
 
 def webp_path(area: str, topic: str, label: str, *, date: str | None = None) -> Path:
     """``.artifacts/webp/<area>/<topic>/<YYYYMMDD>_<label>.webp`` (parent not created)."""
+    _ensure_layout()
     return WEBP_ROOT.joinpath(*area_parts(area), _require_slug("topic", topic), _stamped(label, date) + ".webp")
 
 
 def scratch_root(owner: str) -> Path:
     """``.artifacts/scratch/<owner>/`` (not created)."""
+    _ensure_layout()
     return SCRATCH_ROOT / _require_slug("scratch owner", owner)
 
 
@@ -308,6 +397,7 @@ def checked_output(path: str | Path, *, kind: str = "evidence") -> Path:
     """
     # Both sides are resolved, so a layout root that is a directory junction or symlink to another drive
     # (the archive on a large HDD, scratch on a fast NVMe) still contains the paths written through it.
+    _ensure_layout()
     resolved = Path(path).expanduser().resolve()
     roots = {"evidence": (EVIDENCE_ROOT, SCRATCH_ROOT), "webp": (WEBP_ROOT, SCRATCH_ROOT),
              "any": LAYOUT_ROOTS}.get(kind)
@@ -473,6 +563,7 @@ def scan(*, max_age_h: float = DEFAULT_PRUNE_AGE_H, now: float | None = None) ->
     ``max_age_h`` and its process is no longer running. Anything else in ``scratch/<owner>/`` (a tool's own
     folder) ages the same way, without the process check.
     """
+    _ensure_layout()
     now = time.time() if now is None else now
     runs = []
     if SCRATCH_ROOT.exists():
@@ -506,6 +597,8 @@ def prune_scratch(*, apply: bool = False, max_age_h: float = DEFAULT_PRUNE_AGE_H
     for run in report["scratch"]:
         if apply and run["delete"]:
             path = Path(run["path"])
+            if is_protected(path):
+                raise ArtifactPathError(f"refusing to delete protected fast-proof data: {path}")
             if _relative_to_root(path.resolve(), scratch_root_resolved) is None:
                 raise ArtifactPathError(f"refusing to delete outside scratch: {path}")
             shutil.rmtree(path)
@@ -553,6 +646,7 @@ __all__ = [
     "EVIDENCE_ROOT",
     "LAYOUT_ROOTS",
     "REPO_ROOT",
+    "SCRATCH_DRIVE_ROOT",
     "SCRATCH_ROOT",
     "WEBP_ROOT",
     "area_parts",
@@ -561,6 +655,9 @@ __all__ = [
     "default_webp",
     "evidence_arg",
     "evidence_dir",
+    "is_protected",
+    "junction_target",
+    "link_worktree_artifacts",
     "main_checkout",
     "output_dir",
     "output_webp",
