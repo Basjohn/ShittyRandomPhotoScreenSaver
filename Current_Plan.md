@@ -86,10 +86,10 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   N3.6. The Oscilloscope's 60 s takes and layer L go to a Medium once the fast proof's split is confirmed. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
 - [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 3.
-- [ ] Second Medium (Opus Medium, while the High slot audits): step 2's scene-fade fix.
+- [ ] Second Medium (Opus Medium): step 3, the Bubble GPU optimisation (step 2's scene-fade fix is merged).
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
-  hygiene item 6's closed-report cleanup, and the low-risk section 1E items.
+  and hygiene (item 6).
 
 ### Item 0. Operator defects of 11 Nov: section 1B (backlog; its own internal order; see Order point 5)
 
@@ -172,7 +172,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (lead, 21 Nov): `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`
+- [ ] Side defect (lead, 21 Nov; Sonnet agent a3126f102728843ef): `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`
   failed once in a combined focused run (with `test_visualizer_card_clip_contract.py` and the native-route files) while
   other agents ran heavy replays; it passed alone and in the same pairing on the merged and the pre-merge tree. Likely
   timing-dependent under load: find what it waits on and make it wait on its completion edge, not on time.
@@ -991,7 +991,8 @@ the feature (D3D11 is not stated).
     Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
   - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
     output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
-- [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
+- [ ] Bubble GPU optimisation (Opus Medium agent ae6c6e5974266bad5, 21 Nov; the live Display 1 baseline is the lead's)
+  (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
   about 55 %, on a stale build; "all guarded gains are valuable"). Every candidate passes
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` for what it touches (its change-type table).
   - [ ] Baseline in the operator's case first: Bubble fullscreen (expanded) at 4K on Display 1, where Python OpenGL
@@ -1618,11 +1619,6 @@ borderless fullscreen transfers working smoothly.
 - [ ] Watch R-192's enclosed axis. A monitor with no exterior edge on an axis whose extent is not whole at its
   DPR (the middle of three in a row; the centre of a 3 x 3 grid) keeps Qt Quick's stretch there, and Borders To
   Edge's frame shows it. `test_the_enclosed_axis_stretch_is_recorded_not_hidden` records it.
-
-## 1E. Operator requests (20 Nov; backlog under section 1's Order, point 5)
-
-Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
-by risk; none takes a slot native work can use.
 
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
