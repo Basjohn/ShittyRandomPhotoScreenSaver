@@ -662,9 +662,12 @@ the feature (D3D11 is not stated).
   - [ ] Layer P, the three 60 s takes (distinct regimes) under the split: full-take native-only runs judged against the
     cached Python references on both APIs, variants as Bubble's, halves reported apart, cold start; the Choice offers
     by coverage windows on the same takes. Rule (b) Vulkan against OpenGL over the same takes.
-  - [ ] L1's remaining red: rule (b) at 48/35 (a 576 x 384 item, outside the harness's ratios) fails one frame, an
-    adjacent pair of 2-level ties (Vulkan against native OpenGL), neither isolated nor on a content edge. Root cause
-    first (`n5_1_oscilloscope/20261121_n51_audit10_edge_abi28/`).
+  - [ ] L1's remaining red: rule (b) at 32/35 (a 384 x 256 item, outside the harness's ratios) fails one frame, 918:
+    an adjacent pair of one-level pixels outside the mask (Vulkan against native OpenGL; rule (b) admits no scatter, so
+    they count as ties), neither isolated nor on a content edge (`n5_1_oscilloscope/20261121_n51_audit10_edge_abi28/`).
+    Root cause: the glow composite's discard cut on float16 bloom values, Vulkan keeping the faint fringe with its
+    dither (D12, `n5_1_oscilloscope/20261121_l1_discard_flip/`). The lead's decision: rule (b)'s mask is the union of
+    both peers' classes.
   - [ ] Turned-card anchoring (required before registration: the Oscilloscope is rotatable, and ABI 28 refuses a bloom
     or composite under a turned card, so a rotated Oscilloscope would fade out). The scene target in physical pixels,
     or the composite and first downsample taking the turn as Python's `sceneTexel` does (`_ORIENTED_COMPOSITES`); prove
@@ -686,6 +689,13 @@ the feature (D3D11 is not stated).
     ignores it), and `generic_mode_check.py`'s product-pack round admits it as "the Oscilloscope's" pack. Retire it with
     its registry entry once the route no longer reads a mode's pack for a mode with its own program, and move the
     harness's admission check to the beam's packs.
+  - [ ] Side defect (found 21 Nov by the turned-card agent): Python's `item_pixel_rect` (`rendering/quick/scene3d/
+    frame.py`) gives the item one device pixel more than its size at some whole-pixel origins: a card 641 x 361 at
+    (803, 517) in a 1920 x 1080 window at dpr 1 gets a SceneTarget rect 642 wide (at (801, 515) it is 641; at (800, 512)
+    641 x 362), so its float32 snap misses an edge that is a whole pixel. It is the oracle the card's `scene_item` copies,
+    so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
+    `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
+    `outer_origin=(803.0, 517.0)`, dpr 1.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
