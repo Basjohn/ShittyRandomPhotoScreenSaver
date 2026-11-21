@@ -56,7 +56,9 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 
 1. **Plan first.** The task exists in `Current_Plan.md` as an item with one box per step, starting with a
    root-cause box (the cause proved on the real product path, with a negative control), then the contract, the
-   fix at the owner, the guard test, the evidence, the docs. Commit and push the plan before dispatching.
+   fix at the owner, the guard test, the evidence, the docs. Commit and push the plan before dispatching. A defect
+   under about one agent-hour needs one box with the agent id, no more. A box holds its verdict and evidence path;
+   figures go in commits and evidence, never into the plan.
 2. **Brief.** Short: "read `Docs/Guardrails/Agent_Worktree_Rules.md`, then `Current_Plan.md` item X; the item is
    your brief", plus only what the item cannot say (the review point where it must stop, files another agent is
    in, anything the operator said that day). Never restate the environment rules.
@@ -68,9 +70,13 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
    trim the copied evidence to what the report cites,
    delete the landed boxes from the plan, write what the audit left open as new boxes, push.
 
-## 4. Audit checklist (every merge)
+## 4. Audit checklist (every merge; an audit agent only where the risk pays)
 
-- Each box claimed done: find it in the diff; run its tests on the merge, not only on the branch.
+An audit agent is scaled to risk: core, lifecycle and concurrency changes get one; small slices are batched into
+one audit; docs, tests and tooling merges get none (the lead's own check below suffices).
+
+- Each box claimed done: find it in the diff; run its tests on the merge, not only on the branch (skip the rerun when
+  `git log <branch>..main` is empty: main has not moved since the branch was cut).
 - A negative control exists for every new test and the agent says how it saw it fail.
 - Caller sweep: a changed shared owner (DisplayManager, a runtime, a settings owner, the frame codec) has every
   test file that names it run.
@@ -204,8 +210,9 @@ defaults, the installer script) are committed and pushed at once, silently.
 - **Proof economy.** Cached Python references are keyed on what draws them (shaders, renderer, settings), never on
   judge or tool code, so tool merges never force redraws; one agent builds a reference per change and the others
   reuse it; changes run with `--accepted`, full sweeps only at acceptance; trim a proof to what the merge needs.
-- **Builds.** Batch C++ changes so one GitHub build serves several; give concurrent C++ branches distinct ABI numbers
-  at dispatch, not at merge.
+- **Builds.** Batch C++ changes so one GitHub build serves several; reserve each C++ branch's ABI number in its plan
+  item at dispatch, beside the agent id, so two branches never claim one; build main once after a batch of C++
+  merges, not after each.
 - **Usage protocol** (section 5) still binds; check `get_usage` before each dispatch, not only at the end of a turn.
 - **Never throw away valuable work.** When a direction is stopped (wrong priority, a usage cut), what it built and
   proved is committed, kept on its branch or merged when it is sound and nearly done, and written into its plan box with
@@ -236,15 +243,16 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at
   the background family's switch). A port with one record is not merged as done.
 - **Vulkan in a real window is the lead's alone** until the flip: the rehearsal (decision D10) runs through
-  `tools/d1_run.py` with the diagnostic backend switch, on Display 1, bounded, once per port. Agents prove Vulkan
-  in hidden hosts only.
+  `tools/d1_run.py` with the diagnostic backend switch, on Display 1, bounded, once per port; layer T's Vulkan live
+  run is that rehearsal, not a second run. Agents prove Vulkan in hidden hosts only.
 - **A native route beside QRhi needs its line first.** An agent that wants raw Vulkan or raw OpenGL for a pass
   stops and reports the measurement; the lead admits it as one of D5.3's services (with its twin on the other
   backend) or refuses it. The same holds for anything that would run on Vulkan only.
 - **Qt is upgraded only between stages** (decision D11), by the lead, through the scripted step; never inside an
   agent's item.
 - **Two ordered tracks, one High slot each,** once the substrate exists (modes; the background family), and a
-  primitives track that never holds the flip. A track's next port is dispatched only when its last one is merged.
+  primitives track that never holds the flip. A track's next port's C++ is dispatched only when its last one is
+  merged; its reading, research and design boxes may start as soon as the last port's code is merged.
 
 - Retiring a worktree also deletes its remote branch when the lead pushed it for a GitHub build (`git push origin --delete <branch>`); old branches are archived as `archive/<name>` tags only when they hold unported work (13 Nov: the Linux branch).
 

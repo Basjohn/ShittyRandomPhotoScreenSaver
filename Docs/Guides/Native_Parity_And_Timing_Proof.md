@@ -163,9 +163,9 @@ Each accepted port keeps:
 
 Spectrum, Spline Curve and Bubble are accepted (operator, 17 Nov). Their four-take hashes are their reference. Rerun
 the gate after:
-- a GPU driver, Qt or shader-compiler upgrade;
-- a native core ABI change that touches drawing;
-- any optimisation.
+- a GPU driver, Qt or shader-compiler upgrade (all accepted modes);
+- a native core ABI change that touches drawing: only the modes section 3's regression-guard rule names;
+- an optimisation: the mode it optimises.
 
 An unexplained hash change after an upgrade is investigated, never re-baselined silently. A re-baseline is a lead
 decision, recorded with its reason.

@@ -70,13 +70,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Resume here (lead, 21 Nov ~09:30 UTC; spend stopped: weekly 39 %, 5-hour 97 %; start a fresh lead session):**
 - [ ] Efficiency first (operator, 21 Nov: the day spent too much, a Spline residual chase above all): critical path only
   (the Oscilloscope's blockers, the core features the ports need, then Waveform); no slot for non-blocking residuals of
-  accepted modes; key cached Python references on what draws them (shaders, renderer, settings), not on judge or tool
-  code, so tool merges stop forcing slow redraws; one reference build per change, shared; `--accepted` by default; one
+  accepted modes (references are keyed on drawing inputs only: audit 9 M1/M2 and tests 268bf53db); one reference build per change, shared; `--accepted` by default; one
   C++ build per batch; fresh agents instead of resuming ones with huge contexts.
 - [ ] Two built, unmerged C++ branches both at ABI 31 (renumber the second merged to 32, rebuild main after each):
   - `worktree-agent-a8797a6d7c59d45af` (audit 11's fixes for N3.6, built 87f8c4974): run `device_loss_check.py` all
     rounds and `make_controls.py` controls (sent to the same agent, 21 Nov ~12:10), then merge.
-  - Reference-cache key (line above plus audit 9 M1 and M2): agent ae692e0bed28707c6 (Sonnet Medium).
   - `worktree-agent-aea35d28be699535f` (the card quad, built 55433ebff; agent stopped by the lead): Spline Curve 23
     failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
     failures on three takes. Still to run before merge (regression guards only, the generic modes it touches):
@@ -925,17 +923,6 @@ the feature (D3D11 is not stated).
     (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
     frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
     own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
-  - [ ] Checkpoint audit 9 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov21.md`): the cached reference's key
-    (`python_references._source_files`) misses `rendering/gl_programs/conventions.py` (spliced into every composed
-    shader), the composer `widgets/spotify_visualizer/shaders/__init__.py`, `rendering/gl_programs/*`, the QML shaders
-    and the mask and capture code (`rule_a_masks`, `content_backdrop`, `SceneMirror`,
-    `pixel_tolerance.translucent_by_backgrounds`). Key on the composed sources of every shader the renderer compiles,
-    a declared module list and the mask code; the conventions change (seen not changing the key) becomes the test's
-    control.
-  - [ ] Checkpoint audit 9 M2: the stale-reference path dies on Windows (WinError 32: `store` removes the folder whose
-    `frames.bin` the loaded `StoredFrames` still holds open), leaving the stale reference so every later run dies
-    too. Close the stored frames (or store aside and swap), rewrite the progress file from the rejudge with the
-    run's `--judge-workers`, and test the stale path end to end.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
     Built (21 Nov, b4cd47802): `tools/visualizer_replay/coverage_windows.py` selects from the take's continuous
     delivery stream (cold start, switch, a late window in the last 15 s, loudest, quietest, each record field's

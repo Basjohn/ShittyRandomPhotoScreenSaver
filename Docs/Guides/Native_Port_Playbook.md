@@ -64,8 +64,10 @@ found in this kind of code: the port proves it absent, with the negative control
     18; D15 point 5); one clear value for every attachment (Research section 8); no clamp-to-border (Research
     section 13); core targets top-left, Y down, one correction at upload (`Primitives.md` section 7, Portability).
 18. **Registration comes last.** Offering a mode on a backend (`GENERIC_MODE_SETTINGS`, the descriptor's
-    `renderer_backends`) is the port's last code step, after rule (a), rule (b) and layer T pass
-    (`Native_Parity_And_Timing_Proof.md`). A commit that registers earlier is held out of the merge (D10).
+    `renderer_backends`) is the port's last code step, after rule (a) and rule (b) pass
+    (`Native_Parity_And_Timing_Proof.md`). Layer T needs the registration to time the native path, so the lead
+    registers it in the main checkout uncommitted, runs layer T (its Vulkan live run is also the D10 rehearsal), and
+    commits the registration once T passes. A commit that registers before rule (b) passes is held out (D10).
 
 ## 2. The standard proof (named "standard" in each section)
 
