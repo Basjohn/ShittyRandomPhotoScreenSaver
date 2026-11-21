@@ -836,9 +836,11 @@ the feature (D3D11 is not stated).
     - Lead decision (21 Nov): the recommendation. `clear` is declared once as backdrop x .35 when Python builds the
       program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
 - [ ] Waveform travel-speed reactivity (operator; after N5.4's acceptance, additive to its native record): the mesh's
-  travel has no reactivity control for its speed. Add a min-max speed range driven by overall intensity with quick
-  attack and slow decay (as options), and check for a missing base speed and idle speed. Audit these controls so they
-  complement rather than conflict. Every preset's default stays exactly what it is now (Settings spec system,
+  travel has no reactivity control for its speed. Add ONE range slider (two handles): its low end is the minimum
+  speed at the least energy, its high end the maximum speed at the highest energy, and the speed between follows
+  the overall music energy (wired to real energy, calibrated on recorded music, never pinned at either end). Attack
+  is faster than decay and the decay is gentle (both exposed as options with those defaults). Check for a missing
+  base speed and idle speed; audit these controls so they complement rather than conflict. Every preset's default stays exactly what it is now (Settings spec system,
   `core/settings/visualizer_mode_settings.py`); reaction check with `waveform_music_response.py`.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
