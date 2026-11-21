@@ -215,3 +215,24 @@ def test_the_content_lists_and_the_filter_popup_scrollbars_are_the_themes_not_th
     for view in owners:
         assert accent in (_bar_colours(view) or ""), view
         assert "QScrollBar:vertical" in view.styleSheet(), view
+
+
+def test_every_settings_tabs_scroll_area_wears_the_one_themed_scrollbar(dialog):
+    """1B.11 side defect: each tab's QScrollArea takes the same bar from the same owner, live across themes."""
+    from PySide6.QtWidgets import QScrollArea
+    from ui.settings_theme_qss import render_qss_color
+    accent = render_qss_color(get_active_settings_theme().color("control.list.selected_accent"))
+    covered = []
+    for key in dialog._tab_keys:
+        tab = _tab(dialog, key)
+        if tab is None:
+            continue
+        areas = ([tab] if isinstance(tab, QScrollArea) else []) + tab.findChildren(QScrollArea)
+        for area in areas:
+            sheet = area.styleSheet()
+            assert "SCROLL_AREA_STYLE" in shared_styles._LIVE_STYLE_BUNDLES[area][1], (key, area)
+            assert "QScrollBar:vertical" in sheet and "QScrollBar::handle:vertical" in sheet, (key, area)
+            assert accent in (_bar_colours(area) or ""), (key, area)
+            covered.append(key)
+    # A tab with no scroll area (About is a fixed card) has no bar to theme; every other tab was covered.
+    assert len(set(covered)) >= len(dialog._tab_keys) - 1, covered

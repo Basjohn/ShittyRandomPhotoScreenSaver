@@ -68,7 +68,6 @@ from ui.tabs.shared_styles import (
     NAV_TAB_FONT_STYLE,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
-    SCROLL_AREA_STYLE,
     style_group_box,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
@@ -819,7 +818,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet(SCROLL_AREA_STYLE)
+        shared_styles.apply_scroll_area_style(scroll)
 
         content = QWidget()
         layout = QVBoxLayout(content)

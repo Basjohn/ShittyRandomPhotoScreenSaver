@@ -187,7 +187,7 @@ class Scene3DTab(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        shared_styles.apply_scroll_area_style(scroll)
 
         content = QWidget()
         layout = QVBoxLayout(content)

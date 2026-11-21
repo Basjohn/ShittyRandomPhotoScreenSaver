@@ -357,8 +357,7 @@ class TransitionsTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
-        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
+        shared_styles.apply_scroll_area_style(scroll, "SLIDER_STYLE")
         self._scroll_area = scroll
         
         # Layout helpers are instance methods (see below) so lazy per-transition

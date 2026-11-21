@@ -1592,6 +1592,23 @@ def _build_settings_list_style() -> str:
 SETTINGS_LIST_STYLE = _build_settings_list_style()
 
 
+def _build_scroll_area_style() -> str:
+    """A Settings tab's scroll area: frameless and transparent, with the one themed bar of `_settings_scrollbar_qss`."""
+    return (
+        "QScrollArea { border: none; background: transparent; }"
+        "QScrollArea > QWidget > QWidget { background: transparent; }"
+        + _settings_scrollbar_qss("QScrollArea")
+    )
+
+
+SCROLL_AREA_STYLE = _build_scroll_area_style()
+
+
+def apply_scroll_area_style(scroll: QWidget, *extra_roles: str) -> None:
+    """Give a scroll area the shared scroll-area style (kept live across theme changes), plus any extra shared roles."""
+    bind_shared_styles(scroll, "SCROLL_AREA_STYLE", *extra_roles, base_style="")
+
+
 def apply_settings_list_style(list_widget: QWidget) -> None:
     """Give one Settings content list the shared list style, kept live across theme changes."""
     bind_shared_styles(list_widget, "SETTINGS_LIST_STYLE", base_style="")
@@ -1862,6 +1879,7 @@ _THEME_STYLE_BUILDERS = {
     "THEME_LINK_BUTTON_STYLE": _build_theme_link_button_style,
     "THEME_FILTER_INPUT_STYLE": _build_theme_filter_input_style,
     "SETTINGS_LIST_STYLE": _build_settings_list_style,
+    "SCROLL_AREA_STYLE": _build_scroll_area_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "STATUS_SUCCESS_LABEL_STYLE": _build_status_success_label_style,
     "STATUS_WARNING_LABEL_STYLE": _build_status_warning_label_style,
@@ -1928,11 +1946,6 @@ def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
 _install_theme_styles(_SETTINGS_THEME)
 _THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_shared_widgets)
 
-
-SCROLL_AREA_STYLE = """
-QScrollArea { border: none; background: transparent; }
-QScrollArea > QWidget > QWidget { background: transparent; }
-"""
 
 def bind_bucket_accordion(
     toggle: QToolButton,
