@@ -217,6 +217,10 @@ def _project_import_state(
         if section_key == "widgets":
             if not isinstance(section_value, Mapping):
                 raise TypeError("widgets SST section must be a mapping")
+            if isinstance(section_value.get("global"), Mapping):
+                from core.settings.widget_opacity_base_input_compat import bridge_widget_opacity_base
+                bridged_global, _opacity_changed = bridge_widget_opacity_base(section_value["global"])
+                section_value = {**section_value, "global": bridged_global}
             incoming = _coerce_nested_import_mapping(mgr, "widgets", section_value)
             incoming = _normalize_widgets_mapping(incoming)
             existing = state.get("widgets", {})

@@ -33,6 +33,18 @@ def resolve_opacity_adjust(widgets: Mapping | None, target: str) -> float:
     return admit_opacity_adjust(values.get(f"{target}_opacity_adjust")) if isinstance(values, Mapping) else 0.0
 
 
+# The Widget surface's theme-authored base: the density operators found legible on every theme
+# (checked at this value). The stored Widget Opacity is an offset from it; 0 draws the base.
+# The legibility guard solves from the effective adjustment like any other, it never lifts back.
+WIDGET_OPACITY_BASE = -0.35
+
+
+def effective_opacity_adjust(widgets: Mapping | None, target: str) -> float:
+    """The adjustment the surfaces draw: the stored offset plus the target's base."""
+    stored = resolve_opacity_adjust(widgets, target)
+    return admit_opacity_adjust(stored + WIDGET_OPACITY_BASE) if target == "widget" else stored
+
+
 def settings_opacity_adjust() -> float:
     return _settings_adjustment
 
