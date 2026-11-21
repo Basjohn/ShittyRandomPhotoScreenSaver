@@ -1347,6 +1347,11 @@ the feature (D3D11 is not stated).
     (Glow is a setting: a program change), the backdrop clear (every clear is a constant).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
+  - [ ] Source reading first (Sonnet agent a32125875bef33af0, 21 Nov; research only, no code), one reading per mode as the Waveform,
+    Extruded Bubble and Neon Lake readings: the record, meshes and streams, every pass with its targets and formats, how
+    each turns, the clear; then what each port needs that the ABI 29 core lacks beyond the earlier boxes (one C++ box
+    each, with its proof) and which earlier boxes they share. File:line for every claim; any suspected Python defect is
+    reported, not fixed. Sphere's persisted id is `sphere`.
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking).
   Rerun 21 Nov after the scene-fade fix (R-242) on all four 60 s takes, both variants, display placement: full
   replays with the Python references drawn and cached (`D:\Temp\Scratch\SRPSS\fast_proof\references\`), every
