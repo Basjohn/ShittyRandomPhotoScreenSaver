@@ -72,15 +72,14 @@ four layers, scaled as in section 3.
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
 
-**A transition port** (no music, no reaction modes).
-- **L:** the per-frame uniform record against Python's over the full canonical duration and several image pairs.
-- **P:** rule (a) and rule (b) as above, every frame of that duration, through `transition_route_check.py`.
-- **T:** not a parity gate (operator, 21 Nov: 1:1 timing is not important for transitions). One native Vulkan run
-  of the transition (`preflip_pack.py --rows "transition/<id>/*" --name <post> --backend native-vulkan
-  --app-arg=--graphics-backend=vulkan`) checked only for hitches and stalls: no late frames past the lifecycle
-  windows, no first-frame compile stall. No pre-port baseline and no comparison are needed.
-- **C:** per pass at 2560 x 1440 and 4K, on both backends.
-- Registration (offering it on Vulkan) waits for rules (a) and (b) and the hitch check.
+**A transition port** needs fidelity and performance, nothing else (operator, 21 Nov).
+- **Fidelity:** rule (a) and rule (b) through `transition_route_check.py` over the full canonical duration and
+  several image pairs; no separate logic layer (the pixels prove it), no response tool, no reaction modes.
+- **Performance:** C per pass at 2560 x 1440 and 4K on both backends, and one native Vulkan run for hitches and
+  stalls (`preflip_pack.py --rows "transition/<id>/*" --name <post> --backend native-vulkan
+  --app-arg=--graphics-backend=vulkan`): no late frames past the lifecycle windows, no first-frame compile stall. No
+  pre-port baseline and no timing parity.
+- Registration (offering it on Vulkan) waits for both.
 
 **An optimisation of a landed port.**
 - **No coverage sampling:** P hashes every frame of all three takes.
