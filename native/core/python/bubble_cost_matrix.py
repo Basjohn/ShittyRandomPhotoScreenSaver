@@ -22,7 +22,8 @@ ambient passes drawn twice: with the decoration off, the two empty passes' cost)
 candidate's edit of ``bubble.frag``, timed before it lands). On OpenGL the Python renderer's own cost of the same frame.
 ``nvidia-smi`` and the whole-machine CPU load before and after each child.
 
-    python native/core/python/bubble_cost_matrix.py --label <label> [--apis opengl vulkan] [--candidate hero_reject]
+    python native/core/python/bubble_cost_matrix.py --label <label> [--apis opengl vulkan] [--candidate <name>]
+        [--only <case/shape/scale prefix> ...] [--no-python]; --table <cost_matrix.json> rewrites its table
 Evidence: .artifacts/evidence/native_core/bubble_gpu_optimisation/<date>_<label>/ (cost_matrix.json, its table).
 Exit 0 whenever it ran.
 """
@@ -61,22 +62,10 @@ SHAPES = {
 DECORATION = ("bubble_microbubble_stream", "bubble_microbubble_drift", "bubble_particle_stream",
               "bubble_particle_drift", "bubble_particle_glow")
 VARIANTS = (None, "no_points", "no_mask", "no_wake", "no_ghost", "no_heroes", "empty_twice")
-#: Candidates (``--candidate``): name -> (the line of bubble.frag, its replacement), timed as variants before they land.
-#: ``hero_reject``: the hero loop's square reject. A fragment farther than r + 4 px from a hero's centre along either
-#: axis is past its outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.35 px) and its body's edge
-#: (r + 0.5 px), so the ring, the dot and the specular are each exactly 0 there and mix() leaves the layer unchanged;
-#: the big heroes' coverage above keeps its own reject (r + px), so it is taken before the skip.
-_BIG_COVERAGE_END = ("            big_coverage = max(big_coverage, body_cover * clamp(balpha, 0.0, 1.0));\n"
-                     "        }\n")
-CANDIDATES = {
-    "hero_reject": (_BIG_COVERAGE_END,
-                    _BIG_COVERAGE_END + "        if (abs(delta.x) > r + 4.0 * px || abs(delta.y) > r + 4.0 * px) continue;\n"),
-    # The same reject before the length and the big heroes' coverage (outside r + 4 px that coverage is 0 too).
-    "hero_reject_early": ("        delta.x *= aspect;\n        float dist = length(delta);\n",
-                          "        delta.x *= aspect;\n"
-                          "        if (abs(delta.x) > brad + 4.0 * px || abs(delta.y) > brad + 4.0 * px) continue;\n"
-                          "        float dist = length(delta);\n"),
-}
+#: Candidates (``--candidate``): name -> (a line of bubble.frag found exactly once, its replacement), each timed as a
+#: variant before it lands; a landed candidate is removed (its line is gone). The hero loop's square reject was timed
+#: here as ``hero_reject_early`` (20261121_matrix_before) and landed (20261121_matrix_after).
+CANDIDATES: dict[str, tuple[str, str]] = {}
 
 
 def _settings_overlay(case: str) -> dict:
