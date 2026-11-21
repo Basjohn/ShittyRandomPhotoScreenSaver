@@ -72,9 +72,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
   environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
   merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
-- [ ] Beam leftover (merged 21 Nov; registered before its T, against checklist 18): its T row
-  (`preflip_pack.py --rows beam --compare`), C per pass at 1440p and 4K on both backends, the per-rule negative
-  controls and retirement to zero, recorded in its D13 record. Lead, unattended.
+- [ ] Beam leftover (merged 21 Nov): performance only, the transition rule: cost per pass at 1440p and 4K on both
+  backends, and its Vulkan hitch run (running 21 Nov). Lead, unattended.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
