@@ -747,14 +747,6 @@ the feature (D3D11 is not stated).
   - [ ] Bubble's 60 s takes under today's rules (audit 8 M2's rejudge, 20 and 21 Nov; D12's Bubble line;
     `fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`). Classify and decide;
     no bound raised.
-    - [ ] Rule (a) variant b on the 60 s takes (first drawn 21 Nov; the M2 runs drew variant a only): human_heavy1
-      and nightsolong each fail the same 4 cold-reveal frames, inputs 8, 12, 24 and 25 (max level 2): 926 and 882
-      ties at input 8 (a 29- and 26-pixel group, 36 and 34 in one 16x16 window), 2,136 and 2,307 ties at input 12, 92
-      and 93 at input 24, 151 and 153 scatter at input 25 (`fast_proof/20261121_rule_a_rerun_60s_<take>/`). Same
-      inputs on two different takes and all inside the reveal (scene fade below 1 until input 30): suspected the
-      scene-fade double-rounding class below, wider on variant b's settings. Classify (force scene fade 1 on both
-      paths for one take; if they pass, they join that class's tracked exceptions; if not, a new class); no bound
-      raised. Variant b on the 5.5 s Studio clip passes.
     - [ ] Rule (b) on 60 s (`native_stream_player.py`): ragdoll 18 and human_heavy1 12 of 5,313 frames fail the
       5.5 s-measured bound (32 scatter, groups of 11, no tie): scatter up to 237 a frame but spread (groups at most
       11, densest window 13), 2-level ties in 6 frames, all steady (content fade 1), 8 of ragdoll's in inputs 74-197
@@ -1062,7 +1054,10 @@ the feature (D3D11 is not stated).
   scene-fade double-rounding fix, then a rerun as their control). The scene-fade fix is merged (R-242, 21 Nov): Spline Curve's cold-start frames and Bubble variant b's
   cold-reveal frames pass on the 5.5 s prefix; still to rerun on the 60 s takes under the split. Bubble's input 22 and
   Spectrum's switch frames are disproved as this cause (their own boxes below). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
-  replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
+  replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open. Bubble
+  variant b's four 60 s takes pass after the fix (21 Nov, 0 failed frames each; first half scatter 55-62, groups 2,
+  ties 2-4; second half scatter 9-12, ties 0; Bubble's own Python frames identical to the pre-fix run, native changed
+  only at inputs 0-27; `fast_proof/20261121_rule_a_fix_rerun_60s_<take>/`).
   - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
     support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
     first-eight-failing-frames record 92c721fc9 land with N5.1). Bounds: D12 "The pixel tolerance"
@@ -1106,15 +1101,29 @@ the feature (D3D11 is not stated).
     both), not by a bound. Probe and values: `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`
     (`reveal_values.json`, probe `reveal_probe.py`); the existing Bubble box's "non-unit inherited scene opacity"
     follow-up is the same question.
-  - [ ] Spline Curve (`devcurve`), variant a: 27 failed frames, all ties over the 10-a-frame bound, not isolated and
-    not on a content edge; max 3 levels, no scatter, no flips. 20 are inputs 0-25 (cold start: worst input 10, 162 ties
-    at 2 levels), 2 at inputs 728 and 829, 5 in the second half (2991, 3170, 3385, 3446, 4042; 1-9 ties). Root cause
-    first: (1) the cold-start frames: compare the first 26 inputs' logical state Python vs native (warm-up order, the
-    first record's settings, the Dynamic Floor's first value) before treating them as a class; (2) the steady
-    failures: classify their pixels with the 3x3 reference range (curve edges vs flat interior) and test whether one
-    source (the adaptive normaliser's float path, a uniform's precision, the line raster) explains every one. Fix at
-    the owner; if they prove to be a D12 class, the bound is a lead decision with the measured worst stated.
-  - [ ] Spectrum, variant a: steady passes the whole take (0 failures, 0 ties, 0 scatter, both halves); 3 failed
+  - [ ] Spline Curve (`devcurve`), rerun 21 Nov after R-242 (ABI 28 module of 1843914e8, main 9fe1ef4ea, display
+    placement, 60 s, both variants, full replay with Python references drawn and cached; every one of 5,313 shown
+    frames judged a run; halves 0-2645 / 2645-5291). The cold start (inputs 0-25) passes on every take and both
+    variants. What fails is steady and deterministic (nightsolong variant a fails exactly 17 Nov's seven: 728, 829,
+    2991, 3170, 3385, 3446, 4042). Failed frames (first half / second half; worst ties per half):
+    - ragdoll: a 1 (2570 / none; ties 10 / 9); b 1 (2460 / none; 11 / 10).
+    - human_heavy1: a 1 (none / 3376; 10 / 9); b 4 (1176, 1394, 2495 / 4646; 11 / 10).
+    - anything_mixed2: a 3 (643, 810 / 5091; 9 / 9); b 2 (2384 / 5015; 11 / 11).
+    - nightsolong: a 7 (728, 829 / 2991, 3170, 3385, 3446, 4042; 10 / 9); b 4 (205 / 3174, 5088, 5204; 10 / 12).
+    Two classes, every pixel listed by a window probe that reproduces the full run's native hash at each failing
+    input (`classify_<run>/` beside each report): (A) "11-12 ties": 9-10 two-level pixels on the translucency mask
+    at the curve's anti-aliased edges (3x3 reference range 36-208), each isolated, plus 1-2 one-level opaque edge
+    pixels; the count is one or two over the bound of 10, never the placement; variant b only. (B) "ties neither
+    isolated nor on a content edge": a pair of diagonally touching one-level pixels in the curve's opaque near-white
+    core (Python 251-255 against native one level off), 3x3 range 22-31, just under the edge contrast of 32; both
+    variants. Scatter 0 and flips 0 everywhere. Not proved yet: the source of each class (the line raster's coverage
+    rounding is the candidate for A, the core colour's float path for B). Fix at the owner; if either proves a D12
+    class, the bound is a lead decision with the measured worst stated (A: 12 ties; B: a touching pair at range 22).
+    Evidence: `native_core/longclip_recheck/20261121_devcurve_<take>_display_fix_rerun/`.
+  - [ ] Spectrum, rerun 21 Nov after R-242 (same conditions as Spline Curve's): steady passes on every take run so
+    far, both variants, both halves (max level 1, scatter 0). ragdoll: a and b pass (ties 2 / 1 and 0 / 0).
+    human_heavy1: a fails 1 frame, input 5311 in the switch fade (3 one-level ties off the mask, not isolated); b
+    passes (0 / 0). anything_mixed2 and nightsolong: running. Before: 3 failed
     frames (5310-5312) in the fade after the replay's mode switch, 69 ties at 1 level, not isolated. Variant b passes.
     Root cause first: the fade class (the composite's translucent mask during a mode switch). Check whether the mask
     from the reference's two-background draw covers fading pixels; if the mask misses them, the judge is wrong, not
