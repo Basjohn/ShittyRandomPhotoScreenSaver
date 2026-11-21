@@ -17,7 +17,10 @@ It never pushes, never merges and never stops a process. ``--retire`` is the one
 agent's worktree: it refuses a branch that is not merged into ``main`` or a worktree with uncommitted work or a
 running process, copies the worktree's whole ``.artifacts/evidence`` and ``.artifacts/webp`` trees into this checkout's (a file that already
 exists here is never overwritten; a differing one is reported), and only then removes the worktree and deletes the
-branch. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
+branch. Paths past Windows' 260 characters are copied and deleted through extended-length paths, and a file that
+fails to copy is reported and stops the removal. The folder is deleted by this tool's own walk, which removes a
+junction or symlink as a link and never enters it; git's own ``worktree remove`` is not used, because it follows
+junctions and deletes their targets (measured 21 Nov 2026) and fails on long paths. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
 sheets were lost that way), so the handbook's merge steps use this instead. Trimming kept evidence to what the
 report cites is done afterwards in this checkout, where nothing is lost by mistake.
 """
@@ -159,6 +162,63 @@ def remove_worktree(root: Path, worktree: Path) -> str:
     return "" if not os.path.lexists(str(worktree)) else "folder still present"
 
 
+def _walk_files(top: str):
+    """Yield (path, is_link_note) for every file under ``top`` in extended-length form. The top itself may be a link
+    (evidence folders are junctions); links met below it are reported, never entered."""
+    stack = [_long(top)]
+    while stack:
+        folder = stack.pop()
+        with os.scandir(folder) as entries:
+            children = sorted(entries, key=lambda entry: entry.name)
+        for entry in children:
+            child = _long(entry.path)
+            if _is_link(child):
+                yield child, True
+            elif entry.is_dir(follow_symlinks=False):
+                stack.append(child)
+            else:
+                yield child, False
+
+
+def _copy_file(path: str, destination: str) -> None:
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    shutil.copy2(path, destination)
+
+
+def copy_kept(root: Path, worktree: Path) -> tuple[int, int, list[str], list[str], list[str]]:
+    """Copy the worktree's evidence, WebPs and handover files into ``root``'s artifacts; paths of any length.
+    Returns (copied, already present, differing, failed with the reason, links not entered). A file that exists
+    there is never overwritten."""
+    copied, kept, differing, failed, links = 0, 0, [], [], []
+    jobs = [(worktree / ARTIFACTS_NAME / name, root / ARTIFACTS_NAME / name, name != "handover") for name in KEPT_NAMES]
+    jobs.append((worktree / JOURNAL.parent, root / JOURNAL.parent / "retired" / worktree.name, False))
+    for source, target, compare in jobs:
+        if not os.path.isdir(_long(str(source))):
+            continue
+        try:
+            files = list(_walk_files(str(source)))
+        except OSError as exc:
+            failed.append(f"{source}: {exc}")
+            continue
+        for path, is_link in files:
+            relative = os.path.relpath(path, _long(str(source)))
+            if is_link:
+                links.append(f"{source.name}/{relative}")
+                continue
+            destination = _long(str(target / relative))
+            try:
+                if os.path.exists(destination):
+                    kept += 1
+                    if compare and not filecmp.cmp(path, destination, shallow=False):
+                        differing.append(str(target / relative))
+                    continue
+                _copy_file(path, destination)
+                copied += 1
+            except OSError as exc:
+                failed.append(f"{source.name}/{relative}: {exc}")
+    return copied, kept, differing, failed, links
+
+
 def retire(worktree: Path) -> int:
     """Copy a merged agent's evidence into this checkout, then remove its worktree and branch."""
     if not (worktree / ".git").exists():
@@ -180,37 +240,15 @@ def retire(worktree: Path) -> int:
     if running_from(worktree):
         print(f"{worktree.name}: REFUSED, a process is still running from it")
         return 1
-    copied, kept, differing = 0, 0, []
-    for name in KEPT_NAMES:
-        source = worktree / ARTIFACTS_NAME / name
-        target = ROOT / ARTIFACTS_NAME / name
-        if not source.is_dir():
-            continue
-        for path in sorted(source.rglob("*")):
-            if not path.is_file():
-                continue
-            destination = target / path.relative_to(source)
-            if destination.exists():
-                kept += 1
-                if not filecmp.cmp(path, destination, shallow=False):
-                    differing.append(str(destination.relative_to(ROOT)))
-                continue
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, destination)
-            copied += 1
-    # The agent's handover folder (its journal and anything it parked there, e.g. a work-in-progress patch) is kept
-    # under this checkout's .artifacts/handover/retired/<worktree>/, so a parked change is never lost with it.
-    handover = worktree / JOURNAL.parent
-    if handover.is_dir():
-        target = ROOT / JOURNAL.parent / "retired" / worktree.name
-        for path in sorted(handover.rglob("*")):
-            if path.is_file():
-                destination = target / path.relative_to(handover)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                if not destination.exists():
-                    shutil.copy2(path, destination)
-                    copied += 1
+    copied, kept, differing, failed, links = copy_kept(ROOT, worktree)
     print(f"{worktree.name}: evidence, WebPs and handover files copied {copied} file(s), {kept} already present")
+    for name in links[:20]:
+        print(f"   LINK (not entered, its target stays where it is): {name}")
+    for name in failed[:20]:
+        print(f"   COPY FAILED: {name}")
+    if failed:
+        print(f"{worktree.name}: REFUSED to remove, {len(failed)} file(s) did not copy; nothing was deleted")
+        return 1
     for name in differing[:20]:
         print(f"   DIFFERS (kept this checkout's): {name}")
     if differing:
