@@ -49,8 +49,11 @@ def test_every_quick_shader_pack_is_current_and_holds_every_target():
              if not status.current]
     assert not stale, "run tools/regen_qrc.py --shaders:\n" + "\n".join(stale)
     wanted = _target_names(regen_qrc.quick_shader_targets()) | {"SPIR-V 100"}
-    # N5.2a: the fullscreen transitions' packs (baked from their Python renderers' fragments) are among them.
-    transitions = [regen_qrc.transition_pack_path(tid) for tid in regen_qrc.transition_fragment_sources()]
+    # N5.2a: the fullscreen transitions' packs (baked from their Python renderers' fragments) are among them, and
+    # (N5.2b's leftover) the instanced passes' two stages.
+    transitions = [regen_qrc.transition_shader_dir() / f"{name}.qsb" for name in regen_qrc.transition_shader_sources()]
+    assert set(regen_qrc.transition_pack_path(tid) for tid in regen_qrc.transition_fragment_sources()) <= set(transitions)
+    assert any(name.endswith(".vert") for name in regen_qrc.transition_shader_sources())
     assert transitions and all(p.is_file() for p in transitions)
     for pack in [source.with_name(source.name + ".qsb") for source in sources] + transitions:
         dump = subprocess.run([str(qsb), "-d", str(pack)], capture_output=True, text=True, timeout=120).stdout

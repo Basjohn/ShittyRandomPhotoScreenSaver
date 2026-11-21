@@ -23,7 +23,9 @@ keeps. On OpenGL nothing here is created: production keeps the Python presenter 
   (the destination uploaded into the other one by its job), every value is the Python renderer's own
   (``FullscreenPassRenderer.block_values``) less the core's members, and the run's clock is the window's
   ``afterAnimating`` while the run lasts (the frame Qt Quick is preparing, as the Python renderer samples the run at its
-  render): nothing is connected and nothing is drawn again at rest. A transition with no pass on the core is drawn as
+  render): nothing is connected and nothing is drawn again at rest. Beam's sparks (N5.2b's leftover) follow its
+  fragment as instanced quads of their own vertex stage (``transition_program``'s ``instanced``), in the run's program
+  only while its Sparks switch is on. A transition with no pass on the core is drawn as
   Crossfade. At the run's end the slots swap and the background's pass draws the destination (the run's last frame is
   the destination itself: no pop).
 
@@ -91,27 +93,47 @@ def transition_pack_path(transition_id: str) -> Path:
     return quick_qml_root() / "shaders" / "transitions" / f"{transition_id}.frag.qsb"
 
 
+def instanced_pack_paths(name: str) -> tuple[Path, Path]:
+    """An instanced pass's vertex and fragment packs (N5.2b's leftover, ``NativeQuadInstances``), baked from its Python
+    renderer's own texts beside the transitions' fragment packs."""
+    folder = transition_pack_path(name).parent
+    return folder / f"{name}.vert.qsb", folder / f"{name}.frag.qsb"
+
+
 def native_transition_renderer(transition_id: str) -> Any:
-    """The Python renderer whose values the core's pass reads, when the core draws ``transition_id`` (a one-fragment
-    pass, ``NativeFragmentPass``, with its pack shipped); None otherwise."""
+    """The Python renderer whose values the core's passes read, when the core draws ``transition_id`` (a fragment
+    pass, ``NativeFragmentPass``, with its pack shipped, and the packs of every instanced pass it may draw); None
+    otherwise."""
     from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
     from rendering.quick.transitions.implementation_registry import resolve_quick_transition_renderer
 
     if not transition_pack_path(transition_id).is_file():
         return None
     renderer = resolve_quick_transition_renderer(transition_id, enabled_transition_ids=frozenset({transition_id}))
-    return renderer if isinstance(renderer, NativeFragmentPass) else None
+    if not isinstance(renderer, NativeFragmentPass):
+        return None
+    shipped = all(path.is_file() for p in renderer.instanced_passes for path in instanced_pack_paths(p.name))
+    return renderer if shipped else None
 
 
-def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None) -> list:
-    """The transition's one pass over the whole target (replace): its fragment's two pictures bound to the item's
-    textures ``old`` and ``new``, in the Python renderer's sampler state (linear, clamped, no mips)."""
-    from rendering.native.mode import ModePass, PassSampler
+def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None,
+                       instanced: tuple = ()) -> list:
+    """The transition's fragment pass over the whole target (replace): its two pictures bound to the item's textures
+    ``old`` and ``new``, in the Python renderer's sampler state (linear, clamped, no mips); then each of ``instanced``
+    (``NativeQuadInstances``, the run's ``native_instanced_passes``): the built-in quad drawn its instances from its own
+    vertex stage, blended over the picture as the Python renderer blends it."""
+    from rendering.native.mode import BUILTIN_QUAD_MESH, ModePass, PassGeometry, PassSampler
 
     data = transition_pack_path(transition_id).read_bytes() if pack is None else bytes(pack)
-    return [ModePass(transition_id, data, "replace",
-                     (PassSampler(OLD_SAMPLER, old, "linear", "clamp", "none"),
-                      PassSampler(NEW_SAMPLER, new, "linear", "clamp", "none")))]
+    passes = [ModePass(transition_id, data, "replace",
+                       (PassSampler(OLD_SAMPLER, old, "linear", "clamp", "none"),
+                        PassSampler(NEW_SAMPLER, new, "linear", "clamp", "none")))]
+    for extra in instanced:
+        vertex, fragment = (path.read_bytes() for path in instanced_pack_paths(extra.name))
+        passes.append(ModePass(extra.name, fragment, extra.blend,
+                               geometry=PassGeometry(vertex, topology="triangle_strip", mesh=BUILTIN_QUAD_MESH,
+                                                     vertices="mesh", instances=int(extra.instances))))
+    return passes
 
 
 def transition_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float],
@@ -260,6 +282,7 @@ class NativeBackgroundLayer:
         request = run.request
         renderer = native_transition_renderer(request.transition_id)
         transition_id = request.transition_id
+        instanced = () if renderer is None else renderer.native_instanced_passes(request.parameter_dict())
         if renderer is None:
             if not self._fallback_logged:
                 logger.warning("[BACKGROUND][NATIVE] %s has no pass on the core; drawn as %s", transition_id,
@@ -276,7 +299,7 @@ class NativeBackgroundLayer:
         mode.texture(other, destination.rgba8, destination.pixel_size)
         self.sent += 1
         self._run, self._renderer, self._next_image = run, renderer, destination
-        mode.program(transition_program(transition_id, self._slot, other), self._frame_settings())
+        mode.program(transition_program(transition_id, self._slot, other, instanced=instanced), self._frame_settings())
         self._settings = None                                     # the background's settings are given again at the end
         self.runs += 1
         self._connect_clock()
@@ -515,5 +538,5 @@ def attach_native_background(item: Any, backend: str | None = None) -> NativeBac
 __all__ = ["FALLBACK_TRANSITION", "NEW_SAMPLER", "NEXT_TEXTURE", "NativeBackgroundLayer", "OLD_SAMPLER", "PASS_NAME",
            "SAMPLER", "TEXTURE", "attach_native_background", "background_card", "background_layer_pack_path",
            "background_layer_program",
-           "background_layer_settings", "native_background_wanted", "native_transition_renderer",
+           "background_layer_settings", "instanced_pack_paths", "native_background_wanted", "native_transition_renderer",
            "transition_pack_path", "transition_program", "transition_settings"]

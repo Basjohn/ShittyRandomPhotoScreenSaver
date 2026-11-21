@@ -1,4 +1,7 @@
-"""Lazy Quick renderer for Beam: a beam of light crosses the picture, leaving the next one."""
+"""Lazy Quick renderer for Beam: a beam of light crosses the picture, leaving the next one.
+
+On the native core (N5.2b's leftover) the beam's fragment is drawn between the two pictures and its sparks after it, as
+instanced quads of their own vertex stage (``NativeQuadInstances``), from the same texts and ``block_values``."""
 
 from __future__ import annotations
 
@@ -26,9 +29,13 @@ from rendering.gl_programs.beam_program import (
 )
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import NativeFragmentPass, NativeQuadInstances
 from ..render_contract import QuickTransitionRenderFrame
 
 _CODES = frozenset(("left", "right", "up", "down", "diag_tl_br", "diag_tr_bl", "diag_bl_tr", "diag_br_tl"))
+#: The sparks: the item quad drawn once a spark, light added (ONE, ONE, as the Python renderer blends them).
+BEAM_SPARK_PASS = NativeQuadInstances("beam_sparks", BEAM_SPARK_VERTEX_SOURCE, BEAM_SPARK_FRAGMENT_SOURCE, BEAM_SPARKS,
+                                      "additive")
 
 
 def beam_parameters(parameters: Mapping[str, object]
@@ -50,8 +57,10 @@ def beam_parameters(parameters: Mapping[str, object]
     return (float(color[0]), float(color[1]), float(color[2])), float(glow), float(scorch), float(cure), sparks, seed
 
 
-class QuickBeamRenderer:
+class QuickBeamRenderer(NativeFragmentPass):
     transition_id = "beam"
+    fragment_source = BEAM_FRAGMENT_SOURCE
+    instanced_passes = (BEAM_SPARK_PASS,)
 
     # Every other value is in the programs' pass blocks (BEAM_BLOCK, BEAM_SPARK_BLOCK).
     _BEAM_SAMPLERS = ("uOldTex", "uNewTex")
@@ -63,12 +72,41 @@ class QuickBeamRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources
 
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
+    def native_instanced_passes(self, parameters: Mapping[str, object]) -> tuple[NativeQuadInstances, ...]:
+        """The sparks pass while the run's Sparks switch is on; none otherwise."""
+        return self.instanced_passes if beam_parameters(parameters)[4] else ()
+
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the beam's block and, with Sparks on, the sparks' block for this frame (validated first; no
+        GL): the one owner, packed by ``render`` and filled by the native core (N5.2b's leftover)."""
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
         code = str(frame.run.request.direction)
         if code not in _CODES:
             raise ValueError(f"unknown resolved Beam direction: {code!r}")
         color, glow, scorch, cure_time, sparks, seed = beam_parameters(frame.run.request.parameter_dict())
+        width, height = frame.logical_size
+        aspect = width / height
+        direction = beam_direction(code, aspect)
+        span = beam_span(direction, aspect)
+        reach = beam_reach(glow)
+        path = beam_path(*span, reach)
+        sweep_end = beam_sweep_end(beam_cure(cure_time))
+        line = beam_line(progress, *path, sweep_end)
+        values: dict[str, object] = {
+            "uMatrix": frame.matrix_values, "uItemSize": frame.logical_size,
+            "uSweepEnd": sweep_end, "uDirection": direction, "uProgress": progress, "uLine": line, "uPath": path,
+            "uReach": reach, "uColor": color, "uGlow": glow, "uIntensity": beam_intensity(progress, sweep_end),
+            "uSeed": float(seed), "uScorch": scorch, "uCure": beam_cure(cure_time)}
+        if sparks:
+            duration_s = frame.run.request.duration_ms / 1000.0
+            values["uDurationS"] = duration_s
+            values["uMaxLife"] = beam_spark_life_limit(duration_s, sweep_end)
+            values["uSpan"] = span
+        return values
+
+    def render(self, frame: QuickTransitionRenderFrame) -> None:
+        values = self.block_values(frame)
+        progress = values["uProgress"]
         try:
             if progress <= 0.0:
                 self._resources.draw_image(frame, frame.source_texture_id)
@@ -76,7 +114,7 @@ class QuickBeamRenderer:
             if progress >= 1.0:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            self._draw(frame, progress, code, color, glow, scorch, beam_cure(cure_time), sparks, seed)
+            self._draw(frame, values)
         except Exception:
             self.release_resources()
             raise
@@ -95,44 +133,19 @@ class QuickBeamRenderer:
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""
 
-    def _common(self, values, frame, progress: float, sweep_end: float, direction, line: float, path,
-                reach: float, color, glow: float, seed: int) -> None:
-        values["uSweepEnd"] = sweep_end
-        values["uDirection"] = direction
-        values["uProgress"] = progress
-        values["uLine"] = line
-        values["uPath"] = path
-        values["uReach"] = reach
-        values["uColor"] = color
-        values["uGlow"] = glow
-        values["uIntensity"] = beam_intensity(progress, sweep_end)
-        values["uSeed"] = float(seed)
-
-    def _draw(self, frame, progress: float, code: str, color, glow: float, scorch: float, cure: float,
-              sparks: bool, seed: int) -> None:
-        width, height = frame.logical_size
-        aspect = width / height
-        direction = beam_direction(code, aspect)
-        span = beam_span(direction, aspect)
-        reach = beam_reach(glow)
-        path = beam_path(*span, reach)
-        sweep_end = beam_sweep_end(cure)
-        line = beam_line(progress, *path, sweep_end)
+    def _draw(self, frame, block: dict) -> None:
         r = self._resources
-
         program = r.program("beam", BEAM_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)
         uniforms = r.uniforms("beam", self._BEAM_SAMPLERS)
         values = r.values("beam")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        self._common(values, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
-        values["uScorch"] = scorch
-        values["uCure"] = cure
+        values.update(block)
         with r.pass_blocks.bound(pack_block(BEAM_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        if not sparks:
+        if "uDurationS" not in block:                  # Sparks off: block_values gave no spark values
             return
 
         program = r.program("sparks", BEAM_SPARK_VERTEX_SOURCE, BEAM_SPARK_FRAGMENT_SOURCE)
@@ -140,11 +153,7 @@ class QuickBeamRenderer:
         uniforms = r.uniforms("sparks", (), required=False)
         values = r.values("sparks")
         bind_frame(program, uniforms, frame, values)
-        self._common(values, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
-        duration_s = frame.run.request.duration_ms / 1000.0
-        values["uDurationS"] = duration_s
-        values["uMaxLife"] = beam_spark_life_limit(duration_s, sweep_end)
-        values["uSpan"] = span
+        values.update(block)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendEquation(gl.GL_FUNC_ADD)
         gl.glBlendFunc(gl.GL_ONE, gl.GL_ONE)

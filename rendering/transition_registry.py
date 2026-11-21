@@ -41,7 +41,8 @@ class TransitionDescriptor:
 
 # N5.2a: the fullscreen transitions the native core draws from their own fragment over the background layer
 # (``rendering/quick/render/native_background.py``) on the Vulkan rehearsal path; N5.2b added the five
-# item-quad programs that are one fragment between two pictures (Beam's sparks are a second pass: not).
+# item-quad programs that are one fragment between two pictures, and Beam, whose sparks follow its fragment as
+# instanced quads of their own vertex stage (N5.2b's leftover).
 _ON_THE_CORE: tuple[str, ...] = ("opengl", "vulkan")
 
 _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
@@ -101,6 +102,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Beam",
         stable_id="beam",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
