@@ -1138,11 +1138,12 @@ OverlayWidget {
                             objectName: "achievementProgressRingMaterial"
                             card: achievementRoot
                             materialOverride: progressCircleFace.ringMaterialChoice
-                            fillColor: achievementRoot.achievementModel.progressRingColor
+                            // Tinted exactly as a card is (its own background), so the
+                            // chosen material reads as itself; the ring colour is the outline.
+                            fillColor: achievementRoot.cardBackgroundColor
                             cornerRadius: progressCircleFace.width * 0.5
                             ringWidth: progressCircleFace.ringWidth
-                            tintAlphaScale: 0.4
-                            legibilityPanel: false
+                            legibilityPanel: true
                         }
                     }
 

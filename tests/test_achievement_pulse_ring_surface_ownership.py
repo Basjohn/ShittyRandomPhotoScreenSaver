@@ -251,11 +251,27 @@ def test_ring_material_is_a_border_only_surface_drawn_in_the_scene_not_through_a
         assert ring_material.property("active") is True
         surface = ring_material.property("item")
         assert surface.property("fillSurfaceEnabled") == 0.0
-        assert surface.property("borderSurfaceEnabled") == 1.0
+        # 2.0 = the annulus carries the FULL card surface; 1.0 was the border-stroke recipe,
+        # which tinted every material with the ring colour so all of them read as one silver band.
+        assert surface.property("borderSurfaceEnabled") == 2.0
         assert surface.property("borderWidth") > 0.0
+        # Tinted and guarded exactly as a card is, so a material reads as itself.
+        assert surface.property("tintColor") == item.property("cardBackgroundColor")
+        assert surface.property("legibilityPanel") is True
         node = surface
         while node is not None:
             assert not _layer_enabled(node), node.objectName()
             node = node.parentItem()
     finally:
         _teardown(qt_app, model, item, component, engine, backdrop)
+
+
+def test_shader_gives_a_child_ring_the_card_surface_not_the_border_stroke_recipe() -> None:
+    from pathlib import Path
+
+    shader = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml" / "shaders"
+              / "surface_material.frag").read_text(encoding="utf-8")
+    ring = shader[shader.index("if (ringCoverage > 0.0001) {"):]
+    ring = ring[:ring.index("fragColor")]
+    assert "borderSurfaceEnabled > 1.5" in ring
+    assert ring.index("surfaceAt(") < ring.index("borderAt(")
