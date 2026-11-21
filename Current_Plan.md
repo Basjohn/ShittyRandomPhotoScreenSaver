@@ -1207,6 +1207,143 @@ the feature (D3D11 is not stated).
     it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
     boxes (one C++ box each, with what its proof must show) and which of theirs it shares. File:line for every claim.
     Neon Lake's persisted id is `shockwave_grid`.
+    Reading (Sonnet, 21 Nov, no code touched; sizes measured with a probe over the real mesh builders). `ng.py` is
+    `rendering/quick/visualizer/implementations/shockwave_grid.py`; `basin.py` is `rendering/gl_programs/neon_lake_basin_program.py`;
+    `target.py` and `shafts.py` are in `rendering/quick/scene3d/`; `mc.h` is `native/core/src/mode_content.h`; `D15` etc. are in
+    `Native_Core_P3_Decisions.md`. Neon Lake has no compute, no storage image, no reflection target (its water reflection is the
+    basin mesh drawn again mirrored, `ng.py:609-621`, `basin.py:507-511,694-706`), no depth texture, no HDR, no OIT.
+    - Per frame from the logical frame (`ShockwaveGridFrame`, `widgets/spotify_visualizer/render_state.py:405-430`, on Spectrum's
+      payload): the bars (at most 64, scaled by 0.55 at upload, `ng.py:388-389`, `rendering/quick/visualizer/implementations/spectrum.py:127-155`),
+      peaks, the onset ring (age, x, z, strength; at most 48, `rendering/gl_programs/shockwave_grid_program.py:27`), the five terrain lane
+      drives, their phase and the Growth and Indents drives, the animation time, the content fade. The Settings parameters ride
+      frozen in the same frame.
+    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box): the newest 16 live events as records
+      (`ng.py:390`, `shockwave_grid_program.py:23,191-196`), the mid-band mean (`ng.py:392-394`), the beat pulse (`:397-398`), the music
+      drive (`:402`, `shockwave_grid_program.py:148-174`), the camera with its terrain-floor eye (`ng.py:200-209`, `basin.py:89-113`: it
+      reads the terrain's cells round the eye, so the worker needs the terrain it already holds as a parameter), the Sun or
+      Moon placement at infinity and its orbit (`ng.py:303-333`), the beat-star cells (up to 24 vec4, tested against the terrain
+      and the body, `:438-452`, `rendering/gl_programs/neon_celestial.py:115`), the shaft light (`:718-727`), the halo light (`:730-735`),
+      the cloud and nebula time terms (`:325-332`), the scroll, the idle swell and the wave terms (`:272-274,466`), the
+      reaction-off flag when nothing drives the land (`:282-285`). The record is a few hundred bytes (events 16 x 16 B, 64 bars):
+      no slot pressure.
+    - Per Settings or card change only: the tier's samples, glow and mesh cells (`ng.py:94-104`; High 4 samples and 192 cells
+      clamped to 180 x 120, Balanced 2 and 128, below single-sampled, `rendering/gl_programs/scene3d.py:81-92`,
+      `shockwave_grid_program.py:29,54-58`), which stages exist (marks `ng.py:677`, sky `:710`, rays `:738`, glow), the three programs'
+      blocks (about 100 uniforms: 5,488 B basin, 4,576 B skyline, 5,232 B sky; arrays `uBars` float[64] `basin.py:172`, the reaction
+      lanes, bias and bands float[160], [32], [5] `rendering/gl_programs/neon_terrain_reaction.py:165-169`, the baked shaper
+      tables `ng.py:681-699`), the terrain's adoption (`:167-176`), the mark diameter in pixels from the item's matrix
+      (`basin_pixel_scale`, `ng.py:608`, `basin.py:36-44`: a card-derived value).
+    - Meshes and textures (no per-frame bytes): the basin is non-indexed triangles of vec2 (`neon_lake_basin_mesh.py:97-154`), 385,320
+      vertices = 3.08 MB at 180 x 120, 168,264 = 1.35 MB at 90 x 60, 78,864 = 0.63 MB at 40 x 27, keyed by the tier, the origin's
+      reach and the painted tiles (`ng.py:136-154,664-669`); the marks are its unique vertices, 51,939 = 415 KB at 180 x 120, ten
+      percent more with Wire Display's vertices (`ng.py:98-103`); the sky is a one-cell grid (`:242`). The terrain is a float32
+      heightfield of at most 257 x 257 (`rendering/gl_programs/heightfield.py:16`): the stored cells RGBA32F (R height, G bank
+      distance, B and A unwritten: 1.06 MB, `rendering/quick/scene3d/heightfield.py:59-62`; N1.7: QRhi has no RG32F) and, for a grown
+      grid only, the overlay R32F (264 KB, `ng.py:132,182-185`), each uploaded once per data and released when the overlay goes
+      (`heightfield.py:45-49`). The events are one std430 storage block at binding 3 (`ng.py:51,516`).
+    - Passes of a frame in order (`ng.py:413-593`; one scene target, overlay, multisampled): 1 sky background (`:520-529`,
+      depth test off, mask off); 2 depth-only prepass of the basin mesh, only with a Sun or a sky (`:531-540`, depth less, write on,
+      blend ZERO, ONE_MINUS_SRC_ALPHA on colour and on emission, `:743-764`, to subtract the covered sky); 3 the mirrored basin,
+      lines only, and 4 the mirrored marks, only with Reflection above 0 and the eye above the water (`:544,609-621`, depth always
+      after a prepass, write off); 5 the surface (`:622-630`, depth less-or-equal, write on) and 6 the marks as `GL_POINTS`
+      (`:631-633,640-645`); 7 the skyline, the basin mesh again with a displaced vertex stage (`:549-567`, `basin.py:1077-1190`, less-or-equal,
+      write off); 8 the Sun or Moon body (`:568-577`, skyPass 2, `gl_FragDepth` 0.999999, `basin.py:1335`); 9 the shaft source (`:578-593`,
+      skyPass 3, only while the body is in front of the camera, `gl_FragDepth` 1.0, `basin.py:1222`, written alone into attachment 2:
+      `target.py:595-614`). On leaving the scope (`target.py:937-1013`): the shafts, a half-allocation downsample resolving the samples
+      and two 16-tap radial gathers (`shafts.py:116-153`, three draws on two R16F targets), the emission's bloom chain
+      (`target.py:966-968`, strength 1.4 x Glow, `ng.py:413`), and one composite of the scene with glow and shafts added
+      (`target.py:228-277,1057-1104`). 14 entries (9 draws, 3 shafts, bloom, composite) against `kMaxModePasses` 16 (`mc.h:192`),
+      3 scene targets (the scene and two shaft levels) of `kMaxSceneTargets` 4 (`scene_targets.h:69`), 1 storage buffer, 3 meshes of 8
+      (`mesh_buffers.h:54`), at most 2 samplers a pass of 8 (`basin.py:1350`, `mc.h:277`): every limit fits, no limits box.
+    - Attachments and formats: the scene's colour is RGBA8 (no HDR, `target.py:1202`); the emission RGBA16F only with Glow above 0
+      (`:1207-1208`); the shaft source R16F only with rays admitted (`:1209-1210`), all multisampled at the tier's count; depth a D24
+      renderbuffer, never sampled (`:1213-1220`), where the core's target depth is D32F (`scene_targets.h:9,102`). The fragments
+      write `FragColor`, `Emission` at 1 and the sky also `ShaftSource` at 2 unconditionally (`basin.py:546,1158,1201-1202`); Python's
+      shafts attachment is slot 2 even without emission, slot 1 draw-buffer NONE (`target.py:1222-1229`), and the core refuses an
+      output past the target's attachments or an attachment left unwritten (`mode_content.cpp:664-683`, from Extruded Bubble's reading):
+      fragment variants by attachment set (a `#define`, one file for both renderers, `mc.h:3-4`). Blends are Quick's inherited
+      premultiplied over on colour, additive ONE, ONE on the emission (`target.py:585-588`) and off on the shafts (`:606`): with Glow
+      above 0 every pass writes attachments of differing state, so the program needs the core's per-attachment blending
+      (`mc.h:86-90`, device-gated: refused and Python's to log where it is not real).
+    - Turning: the frame is oriented before anything (`ng.py:222,375`, `rendering/quick/scene3d/frame.py:38-66`), the scene draws unturned at the
+      oriented size and only the composite and the bloom's first samples are oriented (`target.py:937-941,980-1000`); the core refuses
+      a turned bloom or composite unless the scene is in the window's frame (`mc.h:150-155,445-447`, ABI 29), so Neon Lake is the
+      turned-card anchoring box's fourth consumer (after the Oscilloscope, Waveform, Extruded Bubble). Suspected Python defect, not
+      run: under a quarter turn `end` replaces `frame` by the physical output frame (`target.py:940-941`) before `_apply_shafts`
+      maps the light's item point through its matrix (`:1042-1055`), while the shaft source was drawn in the oriented scene frame, so
+      the rays' centre may be taken in the wrong frame for quarters 1 to 3. Reproduce: rays on, content quarter 1, compare the
+      rays' centre with the Sun's drawn position; settle in Python before the port.
+    - Clear: all constants. One `glClear` of every attachment to 0 (overlay: transparent, `target.py:918-926`) and depth 1; the
+      emission and shafts attachments clear with it. No port decision is open. With the content fade at 0 or an empty content
+      rect Python draws nothing at all (`ng.py:382-385`).
+    - Found while reading, shapes the port:
+      - The terrain is read with a hardware-filtered `textureLod` on RGBA32F (`rendering/gl_programs/heightfield_glsl.py:4-12`,
+        `basin.py:260`) and its G channel's filtered value is compared to a threshold (`:411,443,596,848`), while the plan's N4.e
+        decision reads the heightfield with `texelFetch` so that 32-bit float filtering is never required (plan N4.e, research
+        section 16). R16F cannot hold the authored float32 heights. The shared shader either does a four-tap bilinear from
+        `texelFetch` in both renderers (Python's pixels move by the hardware's quantised weights; rule (a) of D12) or the device
+        proves linear RGBA32F (Waveform's box on 32-bit float filtering, for a mode texture instead of an image).
+      - The basin deliberately keeps loose uniforms: on its pass block the Glass surfaces drew a few pixels one 8-bit level apart on
+        OpenGL in 19 to 215 of 549 recorded frames (`basin.py:1365-1368`, the 14 Nov identity record), left "to its port". The
+        port has no loose form, so that difference must be found and removed first, in Python, with the block form shown
+        byte-identical on the Glass frames.
+      - `uPass`, `uMarks`, `uDepthOnly`, `uSkyPass` are uniforms the renderer flips between draws of one program
+        (`basin.py:233-235,1207`; `ng.py:525-592`). One rule fills each member from exactly one source (`mc.h:55-65`) and there is no
+        per-pass constant, so each becomes a compile-time variant (a `#define`): about eight bakes of the large basin fragment,
+        each with its own 5.5 KB block copy and pipeline, built a step at a time. Python's frames must stay byte-identical across
+        the shader change.
+      - The marks are `GL_POINTS` with `gl_PointSize` and `gl_PointCoord` (`basin.py:507-519,707-716`); the core refuses points
+        (`mc.h:102`). Instanced quads on the primitive N5.1 builds (D15; the plan's N4 topology rule), the corner supplying the
+        coverage, from the mesh's instance stream; one shader for both renderers.
+      - The basin writes its clip depth by hand in GL's range after the matrix (`basin.py:193-202`), and the sky's `gl_FragDepth`
+        constants 0.999999 and 1.0 assume GL's window depth; QRhi's correction covers x and y and a zero-to-one z on Vulkan
+        (`native/core/src/conventions.h` rule 1; Waveform's floor maps `0.5 * (z / w + 1)`, `rendering/gl_programs/waveform_ribbon.py:55`).
+        The body is depth-tested at 0.999999 against far land near the horizon, where D24 (Python) and D32F (core) quantise
+        differently: the horizon frames are the proof.
+      - Both renderers skip work per frame that the core records every time: everything at fade 0, the mirrored passes while the
+        eye is at or below the water (`ng.py:544`: it moves with the orbit and the terrain floor; the shader would otherwise draw
+        reflections from below, so this is parity, not only cost), and the shaft chain while the body is behind the camera
+        (`:721-722`; a zero source gives zero rays, cost only). The record u32 that skips an entry is Extruded Bubble's box below.
+      - A mesh change (tier, painted tiles, origin reach) uploads up to 3.1 MB in the record that first draws it
+        (`mesh_buffers.h:4-11`), where Python warms it over not-ready steps (`ng.py:229-231,236-239`): the old mesh kept drawn until the
+        new is resident is Extruded Bubble's geometry box's rule.
+      - Shaft targets are half the allocation (`shafts.py:155-161`, the 64 px bucket of the item), so they need the exact explicit size
+        Waveform's first box answers; the allocation's slack carries Python's own content under ABI 28's anchoring (`scene_targets.h:12-17`).
+      - Already in the plan: N4.k's merged shafts owner (Extruded Bubble's port, then Neon Lake) decides whether the shafts keep
+        the source attachment, the two gathers and a composite term, or become ordinary additive passes.
+  - [ ] C++: a 32-bit float mode texture for the heightfield (N4.e's primitive). Mode textures are RGBA8 pixels from the GUI
+    thread (`mc.h:35-37,488-500`, `setTexture` `:578`; Waveform's half-float box adds RGBA16F with mips, this is RGBA32F and R32F,
+    no mips, one `format` member serving both). Needed: a declared format on a texture (RGBA32F, R32F), float bytes uploaded once
+    per data and replaced in place at the same size (another size recreates), both stages reading it by name (`PassSampler.stages`,
+    `mc.h:296`), `texelFetch` and `textureLod` at the base level, byte counts in `modeTextureCounts` (1.06 MB and 0.26 MB at
+    257 x 257), the overlay removed when the grid is not grown, and the job-service route (`mc.h:46-53`) or its in-frame fallback
+    for float bytes. Proof, both backends, sizes 2 to 257 including odd: every texel of both channels read back equal to Python's
+    float32 bits (row order as Python's: the RGBA8 form is top-first); a vertex-stage `texelFetch` and `textureLod` of it
+    (QRhi has no feature flag for vertex sampling, N4.e) reproducing Python's displaced surface; a replacement at the same and at
+    another size mid-run without a pipeline rebuild; nothing uploaded at rest; zero textures after teardown; if the filtered
+    read stays, Python's bilinear against the core's on the water classification and the bank-distance threshold, inside rule (a)
+    of D12 (else the four-tap form in both renderers, same bound). Negative controls: R16F storage (heights and the water
+    classification leave the bound), a flipped row order, the overlay left bound after the grid shrinks.
+  - [ ] C++: the composite with light shafts, unless N4.k's merged owner draws its rays as ordinary additive passes. Core
+    composites are overlay, overlay_glow and opaque_glow (`mc.h:147-155`, `native/core/shaders/composite_overlay_glow.frag:57-85`) and
+    nothing under `native/core` mentions shafts. Python adds the half-size shaft texture, times the rays' colour and times the
+    scene's coverage ("never the empty card around it"), into the glow before the dither test, bound in the glow's place when
+    Glow is 0 (`target.py:259-277,1057-1104`). Needed: a composite input naming a shaft level (`"<target>.<attachment>"`, read
+    at the glow's uv) and a three-component colour the record fills (the shafts' colour times strength, per frame), over both
+    forms with and without bloom. Proof, both backends, every sample count: the composite against Python's
+    `scene_overlay_shafts(_samples)` frame for frame, with bloom on, bloom off (the shafts alone), rays off and each tier; the
+    dither where shafts alone clear its floor; a quarter turn (the fourth consumer of the anchoring box). Negative controls: the
+    coverage factor left out (rays over the empty card), the dither keyed on bloom only, the glow read at the content size
+    instead of the allocation's.
+  - Shared with Waveform's and Extruded Bubble's boxes (not repeated): the turned-card anchoring box (fourth consumer); the exact-size
+    explicit target (Waveform's first box: the two shaft levels, no mips); the record u32 that skips an entry (Extruded Bubble's
+    box: fade 0, the mirrored passes while the eye is under the water, the shaft chain, with a proof frame at each; if the lead
+    drops that box for Extruded Bubble these three cases argue to keep it); the geometry residency rule for a mesh swap
+    (Extruded Bubble's geometry box, only its old-key-kept half); per-attachment blending (N3.4's gate); the fragment-variant rule
+    for outputs; instanced quads (N5.1); the merged shafts owner (N4.k); Waveform's 32-bit float filtering box, only if the
+    filtered terrain read stays. Not needed here: the pass, target and storage limits (all within the ABI 29 values), anisotropy,
+    the half-float texture, the scene probe, the drift and geometry arena, the readback check, defocus, bloom off per record
+    (Glow is a setting: a program change), the backdrop clear (every clear is a constant).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking).
