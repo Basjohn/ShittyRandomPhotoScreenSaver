@@ -62,6 +62,9 @@ sys.path.insert(0, str(ROOT))
 from tools import artifact_paths  # noqa: E402
 
 BASELINES = ROOT / "tools" / "baselines" / "preflip"
+#: Tokens for the live check's ``--app-arg`` (``--app-arg`` here; set once by ``main``): a native Vulkan row passes
+#: ``--graphics-backend=vulkan``. Empty for the product's default OpenGL path.
+APP_ARGS: list[str] = []
 WALLPAPER = Path("D:/Temp/Scratch/SRPSS/wallpaper_usu")
 CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"
 APPLICATION = "Screensaver_MC"
@@ -307,6 +310,7 @@ def session_command(rows: list[Row], out: Path, *, interval_s: int, clip: Path =
                "--transition-session", ",".join(row.label for row in rows)]
     if rows[0].state == "loaded":
         command += ["--load", "game60"]
+    command += [f"--app-arg={token}" for token in APP_ARGS]
     for key, value in session_settings(rows, interval_s):
         command.append(f"--setting={key}={json.dumps(value)}")
     return command
@@ -324,6 +328,7 @@ def row_command(row: Row, out: Path, *, clip: Path = CLIP, preset_slot=None, pyt
         command += ["--preset", str((preset_slot or default_preset_slot)(row.ident)), "--resource-readings"]
     if row.state == "loaded":
         command += ["--load", "game60"]
+    command += [f"--app-arg={token}" for token in APP_ARGS]
     for key, value in row_settings(row):
         command.append(f"--setting={key}={json.dumps(value)}")
     return command
@@ -820,6 +825,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--load", choices=LOADS, help="the loaded state: game60 (explicit only: lead only, after the "
                                                        "operator's yes, 10 minutes at most per run window)")
     parser.add_argument("--backend", help="a label stored with the baseline (e.g. python-vulkan, native-opengl)")
+    parser.add_argument("--app-arg", action="append", default=[], metavar="=TOKEN",
+                        help="passed to the live check's --app-arg (an experiment_flags token, e.g. --app-arg=--graphics-backend=vulkan for a native Vulkan row); repeatable")
     parser.add_argument("--per-row", action="store_true",
                         help="one saver process per transition row instead of one session per size and state "
                              "(single-row reruns; a lone pending transition row is always per-row)")
@@ -900,6 +907,7 @@ def print_plan(rows: list[Row], *, loaded: bool, per_row: bool = False, log=prin
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    APP_ARGS[:] = [str(token).lstrip("=") for token in args.app_arg]
     if args.compare_only:
         old, new = (load_baseline(p) for p in args.compare_only)
         report = compare_baselines(old, new)
