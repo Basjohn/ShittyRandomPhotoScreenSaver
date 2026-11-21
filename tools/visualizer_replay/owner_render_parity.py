@@ -426,8 +426,13 @@ MASK_BACKDROP = (255, 0, 255)
 #: level off, the NativeFragmentPass two-compiler case (Python's driver-compiled composed GLSL against the qsb pack).
 #: Bubble: measured worst 45 a frame on the four 60 s recorded takes (38, 36, 40 and 45; n5_1_bubble/
 #: 20261117_rule_a_60s_*), 34 on the 5.5 s replay (20261117_steady_residual_classes/), times 1.5: 68 (checkpoint audit
-#: 7 M3). Every other mode admits none.
-RULE_A_SCATTER_PIXELS = {"bubble": 68}
+#: 7 M3). Oscilloscope (lead's decision 21 Nov; D12 "The pixel tolerance"): its beam's one-level pixels outside the
+#: mask are judged against Python's own placement variance. The Python renderer against itself, the same frames
+#: drawn through the owner's window and through an item-sized window plus a margin (the rasteriser's interpolation
+#: follows the viewport), differs by at most 52 such pixels a frame: 48 at 1.5 and 52 at 48/35, over 7 runs x 36
+#: frames each (n5_1_oscilloscope/20261121_viewport_class_1_5/ and _48_35/, viewport_probe.py). Bound: that worst,
+#: not multiplied. Every other mode admits none.
+RULE_A_SCATTER_PIXELS = {"bubble": 68, "oscilloscope": 52}
 #: The scatter's spread per mode (checkpoint audit 7 M1): the largest group of touching scatter pixels a frame may hold.
 #: Bubble: measured largest 15 on the 5.5 s replay's 2,430 steady pixels (1,908 with no scatter neighbour; most
 #: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22 (17 on the

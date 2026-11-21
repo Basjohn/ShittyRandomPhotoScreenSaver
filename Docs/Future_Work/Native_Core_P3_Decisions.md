@@ -1127,7 +1127,19 @@ tie off a content edge with 3 or more scatter pixels in its 3x3 (the isolation c
 once the clause is retired, 21 Nov), and nightsolong input 22 as before. No bound changed. Two tracked exceptions of the same scene-fade
 double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
 337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
-`20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. Bubble's rule (b)
+`20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. The Oscilloscope's
+owner rule (a) (lead's decision, 21 Nov): one-level pixels outside the mask on its beam are judged against Python's own
+placement variance, at most 52 a frame, as scatter (one level only, outside the translucency mask); rule (a)'s ties
+(10 a frame, at most 3 levels), isolation and every other limit are unchanged, and no group or density bound is added.
+The reason: the rasteriser's interpolation follows the viewport the vertices pass through. The same Python frames
+drawn through the owner's window and through an item-sized window plus a margin differ on 30 to 110 beam pixels a
+frame, at most 2 levels. The native picture is placement-invariant (its offsets round is bit-identical across
+placements), so fitting the core to one Python placement would change the viewport convention of every mode for no
+visible gain. The bound is the Python-against-Python worst of one-level pixels outside the mask, not multiplied: 48 at
+1.5 and 52 at 48/35, over the 7 offer runs x 36 frames each, with at most one 2-level pixel outside the mask
+(`n5_1_oscilloscope/20261121_viewport_class_1_5/`, `_48_35/`; `viewport_probe.py` in `20261121_tie_cause_scripts/`).
+It is `owner_render_parity.RULE_A_SCATTER_PIXELS["oscilloscope"]`, and the harness's rule (a) reads it too. Its
+controls: `old_origin` and a one-level brightening of the whole native beam both fail. Bubble's rule (b)
 (`bubble_check.py`, Vulkan against native OpenGL; lead's decision 21 Nov, measured on the acceptance material, every
 frame of the four 60 s takes through `native_stream_player.py`, `fast_proof/20261121_rule_b_60s_*`): every differing
 pixel is one level outside the mask or an isolated (or on-edge) 2-level tie, nothing else; bounds the worst times 1.5
