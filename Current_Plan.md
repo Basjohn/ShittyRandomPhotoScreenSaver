@@ -120,7 +120,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
-- [ ] Widget consistency with the Feed/Games You Follow tile treatment (operator, 21 Nov; pattern: 8b5bf3454, Games You
+- [ ] Widget consistency with the Feed/Games You Follow tile treatment (agent a46843a7773612d34, Sonnet Medium; operator, 21 Nov; pattern: 8b5bf3454, Games You
   Follow's tile = Feed's ink wash + header hairline, no opaque slab, no tile shadow):
   - [ ] System Stats: its four stat tiles (CPU, Memory, Uptime, Network) draw the extra opaque slab, and keep a
     (pink, accent) border even with Borderless on.
