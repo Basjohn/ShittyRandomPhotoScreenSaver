@@ -253,10 +253,14 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 
 <a id="pb-e5"></a>
 ### E5 and E6 Motion blur and trails (N4.i; catalogue: [E5](../Reference/Primitives.md#e5), [E6](../Reference/Primitives.md#e6))
-- Status: decided, not built.
+- Status: built (ABI 37, N5.2d: data on the core, no stage of its own).
 - Contract: the velocity is two R16F attachments (QRhi has no RG16F), RGBA16F only if measurement shows two cost more;
-  it resolves through the core's per-sample nearest pass; the tile max is compute over a storage image in a format
-  both backends list as load-store (Plan formats box and N4.i; Research section 14; D14 point 10).
+  multisampled, it resolves through QRhi's average (the lead, 21 Nov: Python averages its samples too; a core "mean"
+  resolve only if rule (b) shows the backends differ, and N5.2d's 4x frames showed none); the tile max is compute
+  (trigger "draw") over a storage image in a format both backends list as load-store (Plan formats box and N4.i;
+  Research section 14; D14 point 10). The post passes are Python's texts with an `SRPSS_NATIVE_CORE` frame helper (the
+  core's target is Python's allocation flipped whole, its velocity y negated: read back on the build). A vertex stage
+  writing its own clip depth after `uMatrix` ends with `native_clip_depth`'s line (Vulkan's depth is 0..w).
 - Traps: a biased RG16 cannot encode zero velocity under one clear value; velocity averaged across an edge is wrong
   on Vulkan and arbitrary on OpenGL; a tile loop in one fragment pass starves the GPU (Lessons); a missing barrier
   hidden by the vendor (Lessons).

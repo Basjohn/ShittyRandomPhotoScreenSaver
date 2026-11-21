@@ -498,11 +498,17 @@ def _native_scene_classes() -> list[type]:
 def transition_scene_sources() -> dict[str, str]:
     """N5.2c: every scene pass a native 3D transition may draw (``NativeScenePasses.native_scene_passes``):
     ``<id>_<pass>.vert`` and ``<id>_<pass>.frag`` -> the texts its Python renderer compiles."""
+    from rendering.quick.transitions.native_scene import motion_post_sources
+
     found: dict[str, str] = {}
     for cls in _native_scene_classes():
         for scene_pass in cls.native_scene_passes():
+            if scene_pass.core_triangle:
+                continue                      # N5.2d: a shared post pass (motion_post_sources), baked once
             found[f"{cls.transition_id}_{scene_pass.name}.vert"] = scene_pass.vertex_source
             found[f"{cls.transition_id}_{scene_pass.name}.frag"] = scene_pass.fragment_source
+    # N5.2d (N4.i): the motion blur's tile max and gather and the trails' edges, once for every scene.
+    found.update(motion_post_sources())
     return found
 
 

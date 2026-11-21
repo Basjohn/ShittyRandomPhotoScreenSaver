@@ -5,7 +5,9 @@ Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``) and to Beam, whose spa
 quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover), and by N5.2c to the 3D transitions drawn as
 scenes (``N52C_VARIANTS``: Blinds in both styles, Cube Turn, Depth Card Cascade, Jigsaw; N4.j's photo environment, the
 scene target and the opaque composite; ``--topic n5_2c``), whose photo environment must be drawn exactly once a run
-(``environment_once_per_photo``). The Python reference is the product's frame at the run's dpr
+(``environment_once_per_photo``), and by N5.2d to the scenes that also draw N4.i's motion blur and trails
+(``N52D_VARIANTS``: 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion; ``--topic n5_2d``). The Python reference is
+the product's frame at the run's dpr
 (``product_capture``: the item's logical size over the display's device pixels, as the runtime gives it).
 
 A photo change runs the configured transition natively over N5.7a's background layer: the transition's own product
@@ -95,7 +97,8 @@ BEAM_RULE_B = pt.Tolerance("Beam (fragment and sparks), Vulkan against OpenGL (r
 REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
-ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options")
+ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options",
+                  "block_spins_both")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -191,12 +194,60 @@ SLAT_VARIANTS = ("blinds", "blinds_slats", "blinds_slats_few")
 #: left edge, its fwidth ramp).
 N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
                            tie_pixels=TIE_PIXELS, flip_pixels=3)
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + N52C_TRANSITIONS
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **N52C_VARIANTS}
+#: N5.2d (with N4.i): the 3D transitions whose scenes also draw motion blur (the velocity, its tile max, the gather) and
+#: trails (the ghosts' R8 buffer, its edges). Each at its production defaults, and single-sampled with motion blur
+#: alone, trails alone, both and neither (rule a's forms), and with both at the tier's 4 samples (rule b: the velocity's
+#: average resolve on both backends).
+N52D_TRANSITIONS = ("block_spins", "crumble", "glass_shatter", "pixel_accretion")
+N52D_VARIANTS = {
+    "crumble": {},
+    "crumble_motion": {"motion_blur": True, "motion_trails": False, "samples": 0, "collisions": True,
+                       "piece_count": 80, "debris": 1.0},
+    "crumble_trails": {"motion_blur": False, "motion_trails": True, "samples": 0, "piece_count": 24,
+                       "weight_mode": 3.0, "debris": 0.4},
+    "crumble_both": {"motion_blur": True, "motion_trails": True, "samples": 0, "collisions": True, "debris": 0.85},
+    "crumble_plain": {"motion_blur": False, "motion_trails": False, "samples": 0, "debris": 0.0, "depth": 1.0,
+                      "thickness": 0.5},
+    "crumble_both_4x": {"motion_blur": True, "motion_trails": True, "samples": 4},
+    "glass_shatter": {},
+    "glass_shatter_motion": {"motion_blur": True, "motion_trails": False, "samples": 0,
+                             "request_direction": "center_out", "shards": 140},
+    "glass_shatter_trails": {"motion_blur": False, "motion_trails": True, "samples": 0, "request_direction": "up",
+                             "reshatter": False, "collisions": False},
+    "glass_shatter_both": {"motion_blur": True, "motion_trails": True, "samples": 0, "request_direction": "diag_bl_tr",
+                           "refraction": 1.0, "dispersion": 1.0},
+    "glass_shatter_plain": {"motion_blur": False, "motion_trails": False, "samples": 0, "request_direction": "left",
+                            "sheen": 0.0, "transparency": 0.8},
+    "glass_shatter_both_4x": {"motion_blur": True, "motion_trails": True, "samples": 4},
+    "pixel_accretion": {},
+    "pixel_accretion_motion": {"motion_blur": True, "motion_trails": False, "samples": 0, "request_direction": "up",
+                               "tile_size": 4, "travel": 1.0},
+    "pixel_accretion_trails": {"motion_blur": False, "motion_trails": True, "samples": 0,
+                               "request_direction": "diag_tr_bl", "tile_size": 32, "travel": 0.1},
+    "pixel_accretion_both": {"motion_blur": True, "motion_trails": True, "samples": 0, "request_direction": "right"},
+    "pixel_accretion_plain": {"motion_blur": False, "motion_trails": False, "samples": 0,
+                              "request_direction": "down", "tile_size": 6},
+    "pixel_accretion_both_4x": {"motion_blur": True, "motion_trails": True, "samples": 4},
+    "block_spins": {},
+    "block_spins_motion": {"motion_blur": True, "motion_trails": False, "samples": 0, "request_direction": "up",
+                           "edge_glass": "Both"},
+    "block_spins_trails": {"motion_blur": False, "motion_trails": True, "samples": 0,
+                           "request_direction": "diag_tr_bl", "edge_glass": "Off"},
+    "block_spins_both": {"motion_blur": True, "motion_trails": True, "samples": 0, "request_direction": "right",
+                         "edge_glass": "Refraction"},
+    "block_spins_plain": {"motion_blur": False, "motion_trails": False, "samples": 0, "request_direction": "down",
+                          "edge_glass": "Reflection"},
+    "block_spins_both_4x": {"motion_blur": True, "motion_trails": True, "samples": 4, "request_direction": "left",
+                            "edge_glass": "Both"},
+}
+SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS
+SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS}
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS)
 
 
 def variant_progress(variant: str) -> tuple[float, ...]:
@@ -318,7 +369,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 scene.settle()
                 entry: dict = {}
                 # N5.2c: a scene's samples (rule a's form) and its photo environment's copies over the run.
-                entry["scene"] = variant_transition(variant) in N52C_TRANSITIONS
+                entry["scene"] = variant_transition(variant) in SCENE_TRANSITIONS
                 entry["samples"] = int(run.request.parameter_dict().get("samples", 0) or 0)
                 copies_before = _environment_copies(core)
                 clock.at(run, PROGRESS[0])
@@ -614,7 +665,7 @@ def vulkan_against_opengl(work: Path) -> dict:
         worst = max(worst, result.get("max_level", 255))
         drawn = variant.split("_", 1)[1]
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
-                     N52C_RULE_B if drawn in N52C_VARIANTS else
+                     N52C_RULE_B if drawn in SCENE_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
