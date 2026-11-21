@@ -166,7 +166,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (lead, 21 Nov, the Media smoke's review sheet): with no artwork, a long title ("A Very Long Track
+- [ ] Side defect (lead, 21 Nov, the Media smoke's review sheet; Sonnet agent aa4d1b4291e2f8cec): with no artwork, a long title ("A Very Long Track
   Name For Layout Proof") and its metadata shrink to about 6 px, unreadable, though the no-art layout has more room
   than the art layout. Reproduce with `tools/qtquick_media_smoke.py`, cases `media_playing_no_art_w` and
   `media_progress_glow_off_reference`. Find the auto-fit owner and give it a legibility floor: elide before
