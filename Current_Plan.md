@@ -907,7 +907,7 @@ the feature (D3D11 is not stated).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
-  - [ ] Source reading first (Sonnet agent af6ce7875bfd45d8f, 21 Nov; research only, no code), as the Oscilloscope's: the record each frame carries
+  - Reading (reference; Sonnet agent af6ce7875bfd45d8f, 21 Nov, merged), as the Oscilloscope's: the record each frame carries
     (what is per frame from the logical frame, what is per Settings or card change), each stream's size rule, every
     pass with its targets and attachments (the five compute passes, the three rings, the planar reflection, the fog
     volume, the floor and pulse-rim textures, bloom if any), how it turns (Waveform is a turned scene consumer: the
@@ -1061,6 +1061,8 @@ the feature (D3D11 is not stated).
       rule for every stage, D17 E), with no C++ and no pass. If Settings ever expose the backdrop, take the first pass:
       it is data and costs a pass of the budget, where the setting-filled clear costs C++ and an ABI bump for a
       value no other consumer varies.
+    - Lead decision (21 Nov): the recommendation. `clear` is declared once as backdrop x .35 when Python builds the
+      program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
