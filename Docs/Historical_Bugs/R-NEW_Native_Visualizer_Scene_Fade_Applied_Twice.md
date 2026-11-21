@@ -19,8 +19,12 @@ Python node and the native route fold it into the drawn content fade through one
 (`render_contract.scene_faded_snapshot`). The Python path's pixels are bit-identical before and after (548 of 548
 frames, chrome included); the native frames change only in the reveal (inputs 0-27).
 
-Proof (nightsolong_acousticsoft1, 5.5 s, display placement): Spline Curve failed 20 inputs (0-25) before and passes
-after (worst ties 7, the steady figure); the scene fade forced to 1 on both paths passes too. Not this class: Bubble's
-input 22 (its two 2-level pixels are identical with the fade folded; the fade value itself, not where it is applied)
-and Spectrum's mode-switch frames (a content fade, never a Qt opacity). Evidence:
-`native_core/scene_fade/20261121_*`; guard: `tests/test_visualizer_scene_fade_once.py`.
+Proof (nightsolong_acousticsoft1, its first 5.5 s, whose inputs 0-337 are the 60 s take's; display placement; ABI 28;
+before = main's files, after = the fix): Spline Curve variant a failed inputs 0-25 (20 frames, worst 162 ties) and
+variant b inputs 2-26 (19 frames); both pass after (worst ties 7, the steady figure). Bubble variant b failed 8, 12, 24
+and 25 (up to 2,307 ties; 153 scatter at 25), the same four as on the 60 s takes; it passes after. The scene fade
+forced to 1 on both paths passes too (ABI 25). In every run the Python frames are bit-identical before and after (548
+of 548) and the native frames change only at inputs 0-27. Not this class: Bubble variant a's input 22 (the same two
+2-level pixels, same values, before and after: the fade value inside Bubble's mixes, not where it is applied) and
+Spectrum's mode-switch frames (a content fade with the scene fade at 1). Evidence: `native_core/scene_fade/20261121_*`;
+guard: `tests/test_visualizer_scene_fade_once.py`.
