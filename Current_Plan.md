@@ -752,6 +752,31 @@ the feature (D3D11 is not stated).
     ignores it), and `generic_mode_check.py`'s product-pack round admits it as "the Oscilloscope's" pack. Retire it with
     its registry entry once the route no longer reads a mode's pack for a mode with its own program, and move the
     harness's admission check to the beam's packs.
+  - [ ] Audit 10 H1 (blocks registration; `Docs/Future_Work/Checkpoint_Audits_Nov21.md`, checkpoint audit 10): the
+    Trace display fails owner rule (a) on ABI 27 (5.5 s, `--offers --runs oscilloscope:osc_display=0`: 429 of 546
+    frames, at most 8 levels, a glow wedge along the card's right edge). Python's `SceneTarget` keeps the beam's overrun
+    right of and above the item in its allocation's slack and cuts it left of and below; the native surface-sized target
+    holds 1 to 2 pixels of it on every side; the bloom spreads the difference into the item. Lead decides: (a) C++ ABI
+    28, the target is Python's own (origin the item's pixel, allocation the bucket of its rect, grow-only, drawn through
+    the window's viewport), or (b) Python's `SceneTarget` scissors its passes to its rect and the core scissors to
+    `u_scene_item`. Then: owner rule (a) for every display (`--offers`, 5.5 s), the offsets round over every sampled
+    frame, audit 10 L1's 64-multiple case rerun, and D12's bucket sentence corrected.
+  - [ ] Audit 10 M1: `oscilloscope_check.py`'s offsets round places only the first 16 samples (Ring and Phase), and its
+    Python reference is drawn through a viewport the item's size (all overrun cut, unlike the product). Place every
+    sampled frame; draw the reference as the product does or state it is not the edge's oracle; run the box's owner
+    smoke with `--offers`. Control: the Trace owner run fails on ABI 27 (`20261121_audit10_owner_trace/`).
+  - [ ] Audit 10 M2: one owner of the item's pixel rect. `sceneItemRect` snaps at a fixed 1e-3 with no viewport clamp;
+    `item_pixel_rect` snaps within its float32 matrix's rounding and clamps. They disagree within about 1e-4 to 1e-3 of a
+    whole pixel (`snap_probe.py`: six of eight fractions), a one-pixel phase error. The core applies Python's rule
+    exactly, its test deriving every expectation from `item_pixel_rect` over near-integer fractions (or the card carries
+    one Python computation).
+  - [ ] Audit 10 M3 (before the first turned bloom consumer: Waveform Ribbon, Extruded Bubble, Neon Lake, Extruded
+    Spectrum): `u_scene_item`, `bloomTriangle` and the composite forms anchor in physical pixels, Python's turned scenes
+    in the turned frame (`_ORIENTED_COMPOSITES`' `sceneTexel`). Take the turn as Python does, or refuse a bloom or
+    composite program on a turned card until then; prove at quarters 1 to 3 with odd item sides.
+  - [ ] Audit 10 M4: a regression test for ABI 27's stale-stream fix: a new stream whose first frame the admission
+    rejects shows nothing of the old stream (`generic_mode_check.py` case or a module test, `stale_stream_probe.py`'s
+    steps), its negative control seen failing; the R number at merge.
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
   Bubble"). Owner rule (a) passes on the 5.5 s replay; on the four 60 s recorded takes, rejudged 21 Nov under today's
