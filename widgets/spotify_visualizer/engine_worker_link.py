@@ -633,13 +633,14 @@ class EngineWorkerLink:
             return False
         from core.framed_view import VIEW_MESSAGE_VERSION
 
-        extent, rotations, override_extent, override_rotations, framed_view = snapshot
+        extent, rotations, override_extent, override_rotations, framed_view, drawn_world_extent = snapshot
         self._view_sent = snapshot
         sent.update(changed)
         self._view_in_flight = True
         payload = {"version": VIEW_MESSAGE_VERSION, "extent": extent, "rotations": rotations,
                    "override_extent": override_extent, "override_rotations": override_rotations,
-                   "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view)}
+                   "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view),
+                   "drawn_world_extent": drawn_world_extent}
         if changed:
             payload["presentation"] = changed
         self._send(MessageType.VIS_SET_VIEW, payload, on_reply=self._view_answered)

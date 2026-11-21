@@ -257,13 +257,15 @@ def test_published_logical_frames_are_identical_ordinary_and_expanded(qt_app, lo
     controller's committed extent (Bubble's world, Waveform's visible span), so a display-wide record reaching the
     controller would change their frames (``tools/expanded_visualizer_evidence.leak_control``).
 
-    The one input the logical side legitimately takes from the drawn card is its framed view (R-196, N0.4: Waveform's
-    pulse is born at the edge of the part of the scene the drawn card's camera shows), so an expanded owner's frames
-    may differ from the ordinary owner's by exactly that. The contract is therefore: every view an owner sends
-    (``VIS_SET_VIEW``) carries the ordinary committed metrics, expanded or not; and each owner's frames are exactly
-    the logical side's (the engine session, which has no presentation record) fed that owner's own views before
-    each tick, as ``test_visualizer_engine_worker`` replays them. Nothing else of the display-wide record reaches
-    the frames. Where the framed view does not feed a mode, both reduce to identical frames."""
+    The inputs the logical side legitimately takes from the drawn card are its framed view (R-196, N0.4: Waveform's
+    pulse is born at the edge of the part of the scene the drawn card's camera shows) and, while the display-wide
+    card is drawn, its world extent (Bubble's simulation lives in the world the renderer lays its frame onto:
+    operator, 21 Nov, ``tests/test_bubble_expanded_world.py``), so an expanded owner's frames may differ from the
+    ordinary owner's by exactly those. The contract is therefore: every view an owner sends (``VIS_SET_VIEW``)
+    carries the ordinary committed metrics, expanded or not; and each owner's frames are exactly the logical side's
+    (the engine session, which has no presentation record) fed that owner's own views before each tick, as
+    ``test_visualizer_engine_worker`` replays them. Nothing else of the display-wide record reaches the frames. Where
+    neither feeds a mode, both reduce to identical frames."""
     clip = looped_clip
     if mode == "waveform_ribbon":
         from tools.expanded_visualizer_evidence import shipped_clip

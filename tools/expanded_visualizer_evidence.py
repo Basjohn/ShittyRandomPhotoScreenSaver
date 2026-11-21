@@ -105,7 +105,7 @@ def fresh_drift_revisions():
 def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None, expand_at: int | None = None,
                  collapse_at: int | None = None, animate: bool = False, generation: int = 9001,
                  committed: tuple[tuple[float, float, float, float], tuple[float, float]] | None = None,
-                 bar_count: int = 32) -> dict:
+                 bar_count: int = 32, keep_frames: bool = False) -> dict:
     """Replay ``clip`` through the production owner's publication path; optionally expand/collapse it.
 
     No cadence thread runs: each recorded frame is accepted, ticked once (the authored step) and published through
@@ -114,6 +114,8 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
     ``bar_count``: the owner and engine are built at it (32 by default, as every existing digest was made; the
     configuration then applies the mode's own bar count, which advances the engine's identity when it differs). The
     host binding builds them at the mode's resolved bar count (``tools/visualizer_replay/owner_production_replay.py``).
+    ``keep_frames``: also return each published logical frame (``frames``) and the record the scene drew after it
+    (``presentations``), for checks that measure the frames on the drawn card.
     """
     from PySide6.QtWidgets import QApplication
 
@@ -139,6 +141,8 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
     extents: list[tuple[float, float]] = []
     views: list[tuple] = []
     events: list[tuple[int, str]] = []
+    frames: list[Any] = []
+    presentations: list[Any] = []
     ordinary_records: dict[str, Any] = {}
     current = [0]
     factory = QuickSceneFactory()
@@ -190,6 +194,9 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
                 presentation = item.visualizer_item.presentation if item.visualizer_item is not None else None
                 drawn.append(tuple(presentation.outer_rect) if presentation is not None else ())
                 extents.append(tuple(controller.committed_viewport_extent))
+                if keep_frames:
+                    frames.append(logical)
+                    presentations.append(presentation)
             if collapse_at is not None:
                 ordinary_records["after"] = owner._resolve_current_presentation()
                 ordinary_records["after_extent"] = controller.committed_viewport_extent
@@ -201,8 +208,11 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
         runtime.close_runtime()
         factory.deleteLater()
         app.processEvents()
-    return {"digests": digests, "drawn": drawn, "extents": extents, "events": events,
-            "ordinary": ordinary_records, "display": display, "views": views}
+    result = {"digests": digests, "drawn": drawn, "extents": extents, "events": events,
+              "ordinary": ordinary_records, "display": display, "views": views}
+    if keep_frames:
+        result.update(frames=frames, presentations=presentations)
+    return result
 
 
 def view_message(snapshot: tuple) -> dict:
@@ -210,10 +220,11 @@ def view_message(snapshot: tuple) -> dict:
 
     from core.framed_view import VIEW_MESSAGE_VERSION
 
-    extent, rotations, override_extent, override_rotations, framed_view = snapshot
+    extent, rotations, override_extent, override_rotations, framed_view, drawn_world_extent = snapshot
     return {"version": VIEW_MESSAGE_VERSION, "extent": extent, "rotations": rotations,
             "override_extent": override_extent, "override_rotations": override_rotations,
-            "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view)}
+            "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view),
+            "drawn_world_extent": drawn_world_extent}
 
 
 # ------------------------------------------------------------------------------- production host, hidden render

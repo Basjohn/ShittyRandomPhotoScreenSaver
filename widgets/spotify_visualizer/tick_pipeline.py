@@ -748,12 +748,13 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         and source_generation == engine_generation
         and source_activation == engine_activation
     )
-    # Latest committed CUSTOM viewport extent (baseline default until a retained
-    # edge drag publishes a wide/tall world). Read as configuration only; it never
+    # The world of the card the scene draws (the committed CUSTOM extent, baseline
+    # default until an edge drag publishes a wide/tall world, or the display-wide
+    # card's grown world while it is drawn). Read as configuration only; it never
     # ticks or gates the authored Bubble step.
     viewport_extent = None
     try:
-        viewport_extent = controller.presentation_viewport_extent
+        viewport_extent = controller.logical_world_extent
     except Exception:
         viewport_extent = None
     step_token = cadence.begin_step()
