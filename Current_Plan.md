@@ -70,7 +70,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] The fast-proof tools are merged (6055b0f97). Agent a6257c36aeee45f10 is running the held heavy runs: the
   Bubble method proof (it decides whether coverage windows become the default), and the rule (a) reruns of
   human_heavy1 and nightsolong. The Oscilloscope partner control follows the Oscilloscope merge.
-- [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
+- [ ] The Oscilloscope branch: audit 10 is done (High H1: Trace fails rule (a), the native target holds other overrun
+  light past the item than Python's SceneTarget; M1-M4; boxes on branch worktree-agent-a6c19089ac30a8e94, b5c2d898f).
+  Lead decision: H1 option (a), an ABI 28 native target with Python's origin and bucket allocation; Python's pictures
+  stay frozen. Agent a652d2d5a77e690ff fixes H1, M1-M4 and L2 on its branch (it merges the audit branch first), then
+  the lead builds ABI 28 on GitHub, merges, and runs the quiet cost round and layer T. Retire the audit worktree only
+  after the Oscilloscope branch is on main (its branch contains it; never -s ours it before).
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
   identical counts before the HUD fix; order-dependent bubble-normal failures too). Sonnet agent a62cc0db13acbcc4d (21 Nov): root cause first. The protected clip commits rule
   applies: root cause first, never retune production to satisfy the oracle.
