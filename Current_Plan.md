@@ -70,23 +70,21 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Resume here (lead, 21 Nov, usage cut):**
 - [ ] The fast proof is complete (8578ae50f): full-take native runs against cached references, `--accepted` keeping
   unchanged frames' verdicts (a 60 s Bubble take in 57.6 s against 399 s). Next under it (Medium): the 60 s reruns the
-  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b; Opus Medium agent a40f1b6d7aec65276), then Bubble's rule (b) 60 s failures once the
-  rule (b) union mask lands with the Oscilloscope's turned work.
-- [ ] The Oscilloscope at ABI 28 is merged (audit 10's H1, M1-M4 and L2 fixed; Trace, Ring and Phase pass rule (a)
-  on both APIs). Open before its 60 s takes, layer T and registration, agent a652d2d5a77e690ff (details under the
-  N5.1 H1 box): audio block sizes 0 and 3 exceed rule (a)'s 10 ties (12-21, at most 2 levels); graticule 0 input 167;
-  L1 (576 x 384 on OpenGL). Lead decision: no ABI 29; the beam's one-level ties form a D12 class bounded by Python's
-  own placement variance (Python vs Python up to 49 ties a frame); graticule 0 needs its confirming run. The partner
-  judge passes Bubble's post-switch frames. Lead: the quiet cost round and layer T.
+  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b; Opus Medium agent a40f1b6d7aec65276).
+  Bubble's rule (b) passes all four 60 s takes on both APIs under its re-measured bound and the union mask.
+- [ ] The Oscilloscope at ABI 29 is merged (main built a4e59ccb): every display passes the 5.5 s owner smoke, turned
+  cards pass at quarters 0-3. Before registration: its 60 s takes under the split, layer L, the lead's layer T and
+  cost round, the legacy shader, the item_pixel_rect side defect.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): the Oscilloscope's turned-card anchoring and L1's rule (b) frame, then
-  N3.6. The Oscilloscope's 60 s takes and layer L go to a Medium once the fast proof's split is confirmed. Defects between N steps: 1D.6 (design note
+- [ ] High (Opus High, core-critical C++): N3.6, then Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
+  layer L go to a Medium. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
 - [ ] Medium (Opus Medium): the 60 s reruns under the fast proof (Spline Curve, Spectrum, Bubble variant b), then
-  Bubble's long-take rule (b); the lead runs layer T.
-- [ ] Second Medium (Opus Medium): step 3, the Bubble GPU optimisation (step 2's scene-fade fix is merged).
+  the Oscilloscope's 60 s takes and layer L; the lead runs layer T.
+- [ ] Second Medium (Opus Medium): step 3 continues: the hero reject is merged (-40 % OpenGL, -52 % Vulkan at 4K);
+  next the wake loop's byte-identical bound, now the largest stage.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   and hygiene (item 6).
@@ -733,10 +731,6 @@ the feature (D3D11 is not stated).
       in D12 "As built: Bubble" with the figures, and ask the operator.
     - [ ] Then Bubble's own T tools (its diagnostics guide).
 
-  - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
-    rule (b) has run over the 5.5 s replay's 684 sampled frames only.
-    The tool exists (21 Nov): `native_record_identity.py --deliveries` then `native_stream_player.py`, about 9
-    minutes a take on an idle machine; ragdoll and human_heavy1 ran and fail (the 60 s box below).
   - [ ] Checkpoint audit 8 M1, what is left (ties joined into groups, the 16 x 16 density bound of 26 for rule (a) and
     the split-line and dithered-patch controls landed 21 Nov, c432c1359; D12's Bubble line):
     - [ ] The audit's line split by two exact pixels (65 one-level pixels in a straight line, groups of 22) still
@@ -757,18 +751,6 @@ the feature (D3D11 is not stated).
       scene-fade double-rounding class below, wider on variant b's settings. Classify (force scene fade 1 on both
       paths for one take; if they pass, they join that class's tracked exceptions; if not, a new class); no bound
       raised. Variant b on the 5.5 s Studio clip passes.
-    - [ ] Rule (b) on 60 s (`native_stream_player.py`): ragdoll 18 and human_heavy1 12 of 5,313 frames fail the
-      5.5 s-measured bound (32 scatter, groups of 11, no tie): scatter up to 237 a frame but spread (groups at most
-      11, densest window 13), 2-level ties in 6 frames, all steady (content fade 1), 8 of ragdoll's in inputs 74-197
-      (the reveal and the synthesised pause). anything_mixed2 and nightsolong not run yet (their streams are in
-      `D:\Temp\Scratch\SRPSS\fast_proof\deliveries\`).
-  - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
-  - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
-    reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
-    into the shader fade while native composites it afterward; the operator-accepted input-22 pair (D12 Bubble line)
-    sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
-    the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
-    `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
   - [ ] Tracked exceptions of the scene-fade double-rounding class (lead, 17 Nov; no bound or class change; D12's
     Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
     `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
