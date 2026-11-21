@@ -665,7 +665,7 @@ the feature (D3D11 is not stated).
   - [ ] L1's remaining red: rule (b) at 48/35 (a 576 x 384 item, outside the harness's ratios) fails one frame, an
     adjacent pair of 2-level ties (Vulkan against native OpenGL), neither isolated nor on a content edge. Root cause
     first (`n5_1_oscilloscope/20261121_n51_audit10_edge_abi28/`).
-  - [ ] Turned-card anchoring (required before registration: the Oscilloscope is rotatable, and ABI 28 refuses a bloom
+  - [ ] Turned-card anchoring (Opus High agent a698143754befedb3, 21 Nov; required before registration: the Oscilloscope is rotatable, and ABI 28 refuses a bloom
     or composite under a turned card, so a rotated Oscilloscope would fade out). The scene target in physical pixels,
     or the composite and first downsample taking the turn as Python's `sceneTexel` does (`_ORIENTED_COMPOSITES`); prove
     at quarters 1 to 3 with odd item sides against the Python renderer, with the refusal's negative control. The same
