@@ -210,4 +210,8 @@
 // a pass's "viewport": "allocation" (the core's triangle over a scene target's whole allocation: the trails' edges);
 // the item texture format rgba32f (composite_mode_texture's eighth argument full_float, no mips: Crumble's motion
 // table). Backward compatible for every earlier program and caller (none declares any of them).
-#define SRPSS_NATIVE_CORE_ABI 37
+// 38: Waveform's (on its branch).
+// 39 (black flicker at a transition's start on Vulkan): a content waiting for its textures or meshes keeps the frame its
+// target holds (as a refused build does, M4) instead of recording no pass over a cleared target; composite_mode_state's
+// waiting_kept counts those records. Backward compatible for every caller (only a waiting content's frame changes).
+#define SRPSS_NATIVE_CORE_ABI 39

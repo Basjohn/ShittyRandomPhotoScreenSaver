@@ -592,6 +592,7 @@ struct TextureReport
     qint64 retired = 0;          // job outputs handed to the window's retire list
     qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
     qint64 stillKept = 0;        // N5.7a: a still's records that kept the target (what it draws had not changed)
+    qint64 waitingKept = 0;      // records that kept the target's frame while the content waited for textures or meshes
 };
 
 // One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":

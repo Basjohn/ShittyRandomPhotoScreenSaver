@@ -40,6 +40,7 @@ BACKGROUND_RENDER_BEGIN, BACKGROUND_RENDER_READY = 19, 23
 QUICK_BEFORE_RENDERING, QUICK_AFTER_RENDERING = 51, 54
 LIFECYCLE_BEGIN, LIFECYCLE_END = 62, 63
 NATIVE_TRANSITION_TICK, NATIVE_TRANSITION_END = 81, 82
+NATIVE_TRANSITION_WAITING_KEPT = 83      # with a native run's end: its frames kept while it waited (ABI 39)
 LATE_MS, HITCH_MS = 25.0, 50.0
 #: A transition run's hitch verdict (the lead, 21 Nov; Native_Parity_And_Timing_Proof.md "A transition port"): no gap
 #: between the render thread's frames inside the run longer than this, the run's first frame included (a first-run
@@ -174,10 +175,12 @@ def cut_windows(events) -> dict[int, dict]:
     (the run's end, before the destination's handover), and it is incomplete without the end record."""
     first_begin, last_begin, last_ready = {}, {}, {}
     native_first, native_last, native_end = {}, {}, {}
-    screens = {}
-    for ts, event, screen, _revision, aux in events:
+    screens, waiting_kept = {}, {}
+    for ts, event, screen, revision, aux in events:
         if aux <= 0:
             continue
+        if event == NATIVE_TRANSITION_WAITING_KEPT:
+            waiting_kept[aux] = int(revision)
         if event == BACKGROUND_RENDER_BEGIN:
             first_begin.setdefault(aux, ts)
             last_begin[aux] = ts
@@ -195,7 +198,7 @@ def cut_windows(events) -> dict[int, dict]:
         end = native_end.get(run_id)
         complete = end is not None and end >= native_last[run_id]
         windows[run_id] = {"begin_ns": begin, "end_ns": end if complete else None, "complete": complete, "native": True,
-                           "screen": screens[run_id],
+                           "screen": screens[run_id], "waiting_kept": waiting_kept.get(run_id),
                            "reason": None if complete else ("no end record (NATIVE_TRANSITION_END) after the run's last "
                                                             "tick: the trace or the process ended inside the run")}
     for run_id, begin in first_begin.items():
@@ -314,6 +317,8 @@ def analyse_session(events, state: dict | None, planned: list[str], *, samples=N
                 row.update(window_figures(events, window["begin_ns"], window["end_ns"], screen=window["screen"],
                                           samples=samples, process_summary=process_summary))
                 row["begin_ns"], row["end_ns"], row["screen"] = window["begin_ns"], window["end_ns"], window["screen"]
+                if window.get("native"):
+                    row["waiting_kept"] = window.get("waiting_kept")    # ABI 39: the frames held, never black
             last_run_id = max(last_run_id, run["run_id"])
         if row["status"] != "ok":
             failures.append(f"{name}: {row['reason']}")
