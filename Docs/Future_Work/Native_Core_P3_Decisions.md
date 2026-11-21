@@ -1089,6 +1089,15 @@ item's state), nothing is drawn, and rule (a) fails at all six (`20261121_n51_tu
 `scene_frame_surface` (the turned scene anchored in the surface's frame). The test
 `test_a_turned_card_keeps_the_scene_in_the_windows_frame` derives every expectation from Python's own `item_pixel_rect`
 and float32 item matrix. The ABI 29 build's runs are recorded here when they land.
+*Rule (b)'s one red at the audit's edge sizes (checkpoint audit 10 L1; root-caused 21 Nov).* It is frame 918 at 32/35
+(384 x 256), not 48/35. The pair is one level each, outside the mask, and it counts as ties only because rule (b) admits
+no scatter. Cause: the `overlay_glow` composite's discard cut, Python's own (`scene.a <= 0 && max(glow) < 1/512`), meets
+float16 bloom values that the two compilers round apart. On the glow's faint fringe Vulkan keeps the pixel, its glow just
+over the cut, and shows its dither (the composite's hash at those texels reproduces the kept values), while OpenGL and
+Python discard it. The fringe is a contour, so its flips come in neighbouring runs. Over the 126 frames, all 10 rule (b)
+pixels outside the mask are such flips; the other 15 past their allowance are on-mask 2-level ties within the bound.
+With the mask taken from both frames (pixels either frame lights) every frame passes. That mask is the lead's decision
+(evidence `n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`).
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
