@@ -108,6 +108,7 @@ MODE_CORE_MEMBERS = {
     "u_scene_item": (4, True),     # ABI 27: the item's cover in the target's pixels (left, top, width, height)
     "u_scene_from_target_x": (3, True),  # ABI 29: the target's pixel to the scene's texel (the composite's), rows x
     "u_scene_from_target_y": (3, True),  # and y: the surface's own unturned, the window's frame under a turned card
+    "u_scene_rows_up": (1, False),  # ABI 38: 1 where the program's scene holds OpenGL's rows (composite "scene_rows")
     "uOriented": (2, True),
     "uQuarters": (1, True),
     "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
@@ -701,13 +702,16 @@ class CompositeStep:
     says the scene is drawn in the content's orientation (Python's ``orient_visualizer_scene_frame``: Waveform): under a
     turned card the scene target is Python's SceneTarget of the oriented frame and the composite turns its texels into
     the window (the card's ``scene_oriented`` and ``scene_from_window``). Without either a turned card's bloom or
-    composite is refused."""
+    composite is refused. ABI 38: ``scene_rows="up"`` (overlay_glow only) says the scene holds OpenGL's rows (its
+    bottom row at the target's memory row 0, Python's SceneTarget memory: Waveform's own-camera scene); the composite
+    reads it there (the core's ``u_scene_rows_up``)."""
 
     name: str
     form: str
     scene: str
     glow: str | None = None
     scene_frame: str | None = None
+    scene_rows: str | None = None
 
     def __post_init__(self) -> None:
         if self.form not in COMPOSITE_FORMS:
@@ -716,6 +720,8 @@ class CompositeStep:
             raise ValueError("the glow forms read a bloom step's glow; the overlay and the opaque form read none")
         if self.scene_frame not in SCENE_FRAMES:
             raise ValueError(f"unknown scene frame {self.scene_frame!r} (\"window\", \"oriented\", or none)")
+        if self.scene_rows not in (None, "up") or (self.scene_rows is not None and self.form != "overlay_glow"):
+            raise ValueError("scene_rows is \"up\" (an overlay_glow composite's scene in OpenGL's rows) or none")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "composite": self.form, "scene": self.scene}
@@ -723,6 +729,8 @@ class CompositeStep:
             entry["glow"] = self.glow
         if self.scene_frame is not None:
             entry["scene_frame"] = self.scene_frame
+        if self.scene_rows is not None:
+            entry["scene_rows"] = self.scene_rows
         return entry
 
 

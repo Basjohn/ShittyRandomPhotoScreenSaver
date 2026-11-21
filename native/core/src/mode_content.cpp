@@ -132,6 +132,10 @@ void valueSceneFromTargetY(const ModeCard &card, const QSize &target, double *ou
 {
     valueSceneFromTarget(card, target, out, 1);
 }
+void valueSceneRowsUp(const ModeCard &card, const QSize &, double *out)
+{
+    out[0] = card.sceneRowsUp ? 1.0 : 0.0;
+}
 
 } // namespace
 
@@ -271,6 +275,8 @@ const ModeCoreMember kModeCoreMembers[] = {
     // surface's own unturned, the window's frame under a turned card (Python's gl_FragCoord.xy - uOrigin).
     { "u_scene_from_target_x", 3, true, valueSceneFromTargetX },
     { "u_scene_from_target_y", 3, true, valueSceneFromTargetY },
+    // ABI 38: 1 where the program's scene holds OpenGL's rows (its composite's "scene_rows": "up"), else 0.
+    { "u_scene_rows_up", 1, false, valueSceneRowsUp }, // the program's (packFrame sets it on the card), no card key
     // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
     // 2 L7's scan of implementations/oscilloscope.py).
     { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
@@ -2294,7 +2300,7 @@ bool ModeCard::operator==(const ModeCard &o) const
         && hasSceneItem == o.hasSceneItem && std::memcmp(sceneItem, o.sceneItem, sizeof sceneItem) == 0
         && hasSceneOriented == o.hasSceneOriented && std::memcmp(sceneOriented, o.sceneOriented, sizeof sceneOriented) == 0
         && std::memcmp(sceneFromWindow, o.sceneFromWindow, sizeof sceneFromWindow) == 0
-        && orientedFrame == o.orientedFrame;
+        && orientedFrame == o.orientedFrame && sceneRowsUp == o.sceneRowsUp;
 }
 
 // ------------------------------------------------------------------------------------------------- blends
@@ -2598,10 +2604,15 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             // ABI 35: "oriented": drawn in the content's orientation, Python's orient_visualizer_scene_frame).
             const bool withFrame = o.contains(QStringLiteral("scene_frame"));
             const QJsonValue frame = o.value(QStringLiteral("scene_frame"));
+            // ABI 38: "scene_rows": "up" (overlay_glow only): the scene holds OpenGL's rows.
+            const bool withRows = o.contains(QStringLiteral("scene_rows"));
+            const QJsonValue rows = o.value(QStringLiteral("scene_rows"));
             const bool parsed = parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form);
             const bool glowForm = form == CompositeForm::OverlayGlow || form == CompositeForm::OpaqueGlow; // N5.2c
             if (!parsed
-                || o.size() != 3 + (withGlow ? 1 : 0) + (withFrame ? 1 : 0) || !passName(pass.name)
+                || o.size() != 3 + (withGlow ? 1 : 0) + (withFrame ? 1 : 0) + (withRows ? 1 : 0)
+                || !passName(pass.name)
+                || (withRows && (rows != QJsonValue(QStringLiteral("up")) || form != CompositeForm::OverlayGlow))
                 || !fragmentPack.isEmpty() || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
                 || withGlow != glowForm || (withGlow && !glowOf(glow.toString().toLatin1()))
                 || (withFrame && frame != QJsonValue(QStringLiteral("window"))
@@ -2609,11 +2620,13 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow, "
                                         "opaque_glow or opaque, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom "
                                         "step>.glow\" (the glow forms only, a bloom step before it), \"scene_frame\"?: "
-                                        "\"window\" or \"oriented\"} with an empty pack").arg(i);
+                                        "\"window\" or \"oriented\", \"scene_rows\"?: \"up\" (overlay_glow "
+                                        "only)} with an empty pack").arg(i);
                 return false;
             }
             pass.sceneFrameWindow = withFrame && frame == QJsonValue(QStringLiteral("window"));
             pass.sceneFrameOriented = withFrame && frame == QJsonValue(QStringLiteral("oriented")); // ABI 35
+            pass.sceneRowsUp = withRows;                                                            // ABI 38
             coreFragment = compositeShader(form);
             QJsonArray samplers;
             samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uScene") },
@@ -3019,6 +3032,8 @@ QJsonObject ModeProgram::toJson() const
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("window")); // ABI 29
         if (pass.sceneFrameOriented)
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("oriented")); // ABI 35
+        if (pass.sceneRowsUp)
+            p.insert(QStringLiteral("scene_rows"), QStringLiteral("up")); // ABI 38
         p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
         QJsonArray outputs;
         for (const PassOutput &output : pass.outputs)
@@ -3176,6 +3191,19 @@ bool ModeProgram::sceneFrameWindow() const
         if (pass.stage != StageKind::Composite)
             continue;
         if (!pass.sceneFrameWindow)
+            return false;
+        composite = true;
+    }
+    return composite;
+}
+
+bool ModeProgram::sceneRowsUp() const
+{
+    bool composite = false;
+    for (const ModePass &pass : passes) {
+        if (pass.stage != StageKind::Composite)
+            continue;
+        if (!pass.sceneRowsUp)
             return false;
         composite = true;
     }
@@ -3693,6 +3721,7 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
     // nothing allocated).
     ModeCard surfaceCard = card;
     surfaceCard.orientedFrame = sceneFrameOriented();
+    surfaceCard.sceneRowsUp = sceneRowsUp();      // ABI 38
     if (quint32(record.size()) != schema.recordBytes) {
         *error = QStringLiteral("a %1-byte record is not schema 0x%2's %3").arg(record.size())
                      .arg(schema.schemaId, 0, 16).arg(schema.recordBytes);

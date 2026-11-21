@@ -1,7 +1,6 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_sky_fragment for the sky_mirror pass, its block's members named for it (the arithmetic the body's)
 #define SRPSS_NO_EMISSION
-#define SRPSS_GL_FORM_TARGET
 #define uViewport sky_mirror_u_viewport
 #define uBackdrop sky_mirror_u_backdrop
 #define uSkyReflection sky_mirror_u_sky_reflection

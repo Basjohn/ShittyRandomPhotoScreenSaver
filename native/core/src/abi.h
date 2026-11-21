@@ -210,5 +210,10 @@
 // depth runs 0 to 1 (QRhi::isClipDepthZeroToOne: Vulkan, D3D, Metal; it was a reserved 0), read by
 // rendering/gl_programs/conventions.py SRPSS_TARGET_CLIP_GLSL; a graphics pass's samplers take their declared wrap on W
 // too (QRhi's default Repeat blended a 3D image's first and last slices; 2D samplers unchanged). Backward compatible
-// for every earlier program (no shader before Waveform reads w or samples a 3D image in a graphics pass).
+// for every earlier program (no shader before Waveform reads w or samples a 3D image in a graphics pass). And a
+// composite step's "scene_rows": "up" (overlay_glow only): the scene holds OpenGL's rows (its bottom row at the
+// target's memory row 0, Python's SceneTarget memory), read there by the composite through the new core member
+// u_scene_rows_up (0 for every other program: their composites read as before). Waveform draws its scene so: drawn
+// flipped, its anti-aliased edges met the multisample pattern mirrored and differed from Python's (the bloom carried
+// them; one sample a pixel drew alike).
 #define SRPSS_NATIVE_CORE_ABI 38

@@ -1,7 +1,6 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_strays_fragment for the strays_mirror pass, its block's members named for it (the arithmetic the body's)
 #define SRPSS_NO_EMISSION
-#define SRPSS_GL_FORM_TARGET
 #define uFloorGive strays_mirror_u_floor_give
 #define uSurface strays_mirror_u_surface
 #define uSweepAxis strays_mirror_u_sweep_axis

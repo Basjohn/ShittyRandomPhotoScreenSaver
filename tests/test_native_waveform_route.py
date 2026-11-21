@@ -54,6 +54,24 @@ def test_one_program_holds_every_stage_with_nothing_unread():
     assert program_json(other["passes"], other["targets"], other["streams"], images=other["images"])[0] != declared
 
 
+def test_the_scene_is_composited_in_opengl_rows():
+    """ABI 38: Waveform's scene holds OpenGL's rows (drawn unflipped, Python's SceneTarget memory), so its composite
+    declares "scene_rows": "up"; the step admits it on overlay_glow alone."""
+    import pytest
+
+    from rendering.native.mode import CompositeStep
+    from rendering.quick.visualizer.native_route import waveform_program, waveform_variant
+
+    show = next(p for p in waveform_program(waveform_variant(_snapshot()))["passes"] if p.name == "waveform_show")
+    assert show.declaration()["scene_rows"] == "up"
+    # Negative controls: another form or another value is refused; without it nothing is declared.
+    with pytest.raises(ValueError):
+        CompositeStep("show", "overlay", "scene.colour", scene_rows="up")
+    with pytest.raises(ValueError):
+        CompositeStep("show", "overlay_glow", "scene.colour", "bloom.glow", scene_rows="down")
+    assert "scene_rows" not in CompositeStep("show", "overlay_glow", "scene.colour", "bloom.glow").declaration()
+
+
 def test_a_stage_off_draws_nothing_through_its_counts():
     from rendering.quick.visualizer.native_route import waveform_settings_values, waveform_stages
 

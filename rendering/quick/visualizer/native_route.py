@@ -391,7 +391,7 @@ def waveform_program(variant: tuple) -> dict:
                stray("", WAVEFORM_SCENE, light, lit), burst("", WAVEFORM_SCENE, light, lit)]
     passes += [BloomStep("waveform_bloom", f"{WAVEFORM_SCENE}.emission"),
                CompositeStep("waveform_show", "overlay_glow", f"{WAVEFORM_SCENE}.colour", "waveform_bloom.glow",
-                             scene_frame="oriented")]
+                             scene_frame="oriented", scene_rows="up")]
     targets = [
         ModeTarget(WAVEFORM_SCENE, (TargetAttachment("colour", "rgba16f", clear=(*(c * .35 for c in backdrop), 1.)),
                                     TargetAttachment("emission", "rgba16f")), depth=True, samples=SCENE_SAMPLES),

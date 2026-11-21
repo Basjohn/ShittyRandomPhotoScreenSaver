@@ -60,7 +60,7 @@ def test_every_file_is_its_python_text(monkeypatch):
         assert len(defines) == len(members), wrapper
         # A pass into a target with fewer attachments than the scene's defines exactly its FILE_DEFINES.
         own = [f"#define {name}" for name in files.FILE_DEFINES.get(wrapper, ())]
-        assert [line for line in lines if line.startswith(("#define SRPSS_NO_", "#define SRPSS_SCENE_ITEM_ONLY", "#define SRPSS_GL_FORM_TARGET"))] == own, wrapper
+        assert [line for line in lines if line.startswith(("#define SRPSS_NO_", "#define SRPSS_SCENE_ITEM_ONLY"))] == own, wrapper
         kept = [line for line in lines if line not in defines and not line.startswith("// Waveform Ribbon")
                 and line not in own]
         assert "\n".join(kept) == files._bodies()[body], wrapper

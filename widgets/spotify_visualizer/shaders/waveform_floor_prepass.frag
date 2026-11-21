@@ -2,7 +2,6 @@
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_floor_fragment for the floor_prepass pass, its block's members named for it (the arithmetic the body's)
 #define SRPSS_NO_EMISSION
 #define SRPSS_NO_DEPTH
-#define SRPSS_GL_FORM_TARGET
 #define uViewport floor_prepass_u_viewport
 #define uFloorGive floor_u_floor_give
 #define uMvp floor_u_mvp

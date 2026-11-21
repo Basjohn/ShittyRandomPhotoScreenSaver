@@ -75,31 +75,21 @@ vec2 fragUv(vec2 targetSize) { return fragPixel(targetSize) / targetSize; }
 #ifndef SRPSS_TARGET_CLIP
 #define SRPSS_TARGET_CLIP
 vec4 srpssTargetClip(vec4 clip, vec2 viewport, vec2 targetPx) {
-#ifndef SRPSS_GL_FORM_TARGET
     if (srpssConventions.z > 0.5) {
         vec2 s = viewport / targetPx;
         clip.xy = clip.xy * s + clip.w * (s - 1.0);
-        clip.y = -clip.y;
     }
-#endif
     if (srpssConventions.w > 0.5) clip.z = 0.5 * (clip.z + clip.w);
     return clip;
 }
 #endif
 #if defined(SRPSS_CONVENTIONS_FRAGMENT) && !defined(SRPSS_TARGET_CLIP_FRAGMENT)
 #define SRPSS_TARGET_CLIP_FRAGMENT
-vec2 srpssGlFragUv(vec2 viewport, vec2 targetPx) {
-    vec2 p = fragPixel(targetPx);
-#ifdef SRPSS_GL_FORM_TARGET
-    return p / viewport;
-#else
-    return vec2(p.x, srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) / viewport;
-#endif
-}
+vec2 srpssGlFragUv(vec2 viewport, vec2 targetPx) { return fragPixel(targetPx) / viewport; }
 #ifdef SRPSS_SCENE_ITEM_ONLY
 bool srpssOutsideItem(vec2 viewport, vec2 targetPx) {
     vec2 p = fragPixel(targetPx);
-    return p.x >= viewport.x || (srpssConventions.z > 0.5 ? targetPx.y - p.y : p.y) >= viewport.y;
+    return p.x >= viewport.x || p.y >= viewport.y;
 }
 #define srpssItemOnly(viewport, targetPx) if (srpssOutsideItem(viewport, targetPx)) discard
 #else
