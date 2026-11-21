@@ -10,6 +10,7 @@
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMutex>
+#include <QtGui/QOpenGLContext>
 
 #include <cmath>
 #include <cstring>
@@ -37,6 +38,7 @@ QAtomicInteger<int> g_writeAsRead { 0 };
 QAtomicInteger<int> g_singlePass { 0 };
 QAtomicInteger<int> g_triggerEveryRecord { 0 };
 QAtomicInteger<int> g_skipStorageRelease { 0 };
+QAtomicInteger<int> g_noFloat32Linear { 0 };   // ABI 33: the faked device's control
 
 const char *const kAccessNames[] = { "read", "write", "read_write" };
 const char *const kResourceNames[] = { "buffer", "image", "stream", "mesh" };
@@ -383,11 +385,58 @@ bool computeTriggerEveryRecord() { return g_triggerEveryRecord.loadRelaxed() != 
 void setSkipStorageRelease(bool on) { g_skipStorageRelease.storeRelaxed(on ? 1 : 0); }
 bool skipStorageRelease() { return g_skipStorageRelease.loadRelaxed() != 0; }
 
+void setComputeNoFloat32Linear(bool on) { g_noFloat32Linear.storeRelaxed(on ? 1 : 0); }
+bool computeNoFloat32Linear() { return g_noFloat32Linear.loadRelaxed() != 0; }
+
+bool storageImageLinearFilter(QRhi *rhi, QRhiTexture::Format format, QString *why)
+{
+    const bool float32 = format == QRhiTexture::RGBA32F || format == QRhiTexture::R32F;
+    const QString name = storageFormatName(format);
+    if (float32 && computeNoFloat32Linear()) {
+        if (why)
+            *why = QStringLiteral("this device does not filter %1 linearly (the harness's faked device without linear "
+                                  "filtering of 32-bit float formats)").arg(name);
+        return false;
+    }
+    if (!rhi)
+        return true;
+    if (rhi->backend() == QRhi::Vulkan) {
+        const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+        const QJsonObject facts = handles && handles->dev
+            ? vulkanDeviceFacts(quint64(reinterpret_cast<quintptr>(handles->dev))) : QJsonObject();
+        const QJsonValue formats = facts.value(QStringLiteral("linear_filter_formats"));
+        if (formats.isObject()) {
+            const bool linear = formats.toObject().value(name).toBool(false);
+            if (!linear && why)
+                *why = QStringLiteral("this Vulkan device does not filter %1 linearly "
+                                      "(VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT is not set)").arg(name);
+            return linear;
+        }
+        return true;                          // a device of Qt's own: no facts read (never the product's)
+    }
+    if (rhi->backend() == QRhi::OpenGLES2 && float32) {
+        // Desktop OpenGL filters every float format; OpenGL ES 3 filters 32-bit floats only with the extension.
+        const QOpenGLContext *context = QOpenGLContext::currentContext();
+        if (context && context->isOpenGLES() && !context->hasExtension(QByteArrayLiteral("GL_OES_texture_float_linear"))) {
+            if (why)
+                *why = QStringLiteral("this OpenGL ES context does not filter %1 linearly (no "
+                                      "GL_OES_texture_float_linear)").arg(name);
+            return false;
+        }
+    }
+    return true;
+}
+
 QJsonObject computeDeviceFacts(QRhi *rhi)
 {
     QJsonObject o;
     if (!rhi)
         return o;
+    QJsonObject linear;                       // ABI 33 (N5.4)
+    for (const FormatName &f : kFormats)
+        linear.insert(QLatin1String(f.name), storageImageLinearFilter(rhi, f.format, nullptr));
+    o.insert(QStringLiteral("linear_filter_formats"), linear);
+    o.insert(QStringLiteral("float32_linear_control"), computeNoFloat32Linear());
     o.insert(QStringLiteral("compute"), rhi->isFeatureSupported(QRhi::Compute));
     o.insert(QStringLiteral("three_dimensional_textures"), rhi->isFeatureSupported(QRhi::ThreeDimensionalTextures));
     o.insert(QStringLiteral("max_thread_groups_per_dimension"),

@@ -21,6 +21,7 @@ QAtomicInteger<int> g_onePixelBucket { 0 };
 QAtomicInteger<int> g_allocationStepLimit { 0 };
 QAtomicInteger<int> g_skipScissor { 0 };
 QAtomicInteger<int> g_oversizeViewport { 0 };
+QAtomicInteger<qint64> g_selfMips { 0 };    // ABI 33
 
 QMutex &removedMutex()
 {
@@ -178,13 +179,14 @@ bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
         || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
         || surfaceSized() != o.surfaceSized()
-        || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips) // N3.4
+        || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips // N3.4
+        || exact != o.exact || selfMips != o.selfMips) // ABI 33
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
         const TargetAttachment &a = colour.at(i);
         const TargetAttachment &b = o.colour.at(i);
         if (a.name != b.name || a.format != b.format || a.read != b.read || a.nearest != b.nearest
-            || a.borrowed != b.borrowed || a.ownerColour != b.ownerColour)
+            || a.borrowed != b.borrowed || a.ownerColour != b.ownerColour || a.mipsRead != b.mipsRead) // ABI 33
             return false;
         for (int c = 0; c < 4; ++c) {
             if (a.clear[c] != b.clear[c])
@@ -220,6 +222,7 @@ QJsonObject TargetDeclaration::toJson() const
         c.insert(QStringLiteral("read"), a.read);
         c.insert(QStringLiteral("resolve"), a.nearest ? QStringLiteral("nearest") : QStringLiteral("average"));
         c.insert(QStringLiteral("borrowed"), a.borrowed); // N3.4
+        c.insert(QStringLiteral("mips_read"), a.mipsRead); // ABI 33
         list.append(c);
     }
     o.insert(QStringLiteral("colour"), list);
@@ -237,6 +240,8 @@ QJsonObject TargetDeclaration::toJson() const
         borrowed.append(QString::fromLatin1(b));
     o.insert(QStringLiteral("borrow"), borrowed);
     o.insert(QStringLiteral("mips"), mips);
+    o.insert(QStringLiteral("self_mips"), selfMips);                                   // ABI 33
+    o.insert(QStringLiteral("allocation"), exact ? QStringLiteral("exact") : QStringLiteral("bucket"));
     return o;
 }
 
@@ -350,7 +355,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                          "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
                                          "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
                                          "\"depth\"?: true or false, "
-                                         "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false}")
+                                         "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false, \"mips\"?: "
+                                         "true or false, \"allocation\"?: bucket or exact}")
                                 .arg(kMaxTargetColour).arg(kMaxSceneSamples);
     if (!value.isObject()) {
         *error = shape;
@@ -359,7 +365,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
     const QJsonObject o = value.toObject();
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
                                QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame"),
-                               QStringLiteral("transparency"), QStringLiteral("mips") }; // N3.4
+                               QStringLiteral("transparency"), QStringLiteral("mips"), // N3.4
+                               QStringLiteral("allocation") };                         // ABI 33
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -386,6 +393,15 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         return false;
     }
     d.mips = mips.toBool(false);
+    // ABI 33: the allocation rule (D14 point 2's buckets, or the content's exact size).
+    const QJsonValue allocation = o.value(QStringLiteral("allocation"));
+    if (!allocation.isUndefined()
+        && !(allocation.isString() && (allocation.toString() == QLatin1String("bucket")
+                                       || allocation.toString() == QLatin1String("exact")))) {
+        *error = QStringLiteral("target '%1': allocation is bucket or exact").arg(label);
+        return false;
+    }
+    d.exact = allocation.toString() == QLatin1String("exact");
     const QJsonValue size = o.value(QStringLiteral("size"));
     if (size.isString() && size.toString() == QLatin1String("surface")) {
         d.size = QSize();
@@ -492,14 +508,16 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         return false;
     }
     if (d.mips) {
-        // N3.4 (D17 point 6): the defocus layer's shape: single-sampled, surface-sized (it shares the scene's
-        // allocation), no nearest attachment, no depth.
+        // N3.4 (D17 point 6): single-sampled (its chains are generated from the texture drawn), no nearest attachment,
+        // no previous_frame. ABI 33: a depth and an explicit size are allowed (a drawable mipped target: Waveform's
+        // reflection); the defocus step still takes only a surface-sized, bucketed layer without depth
+        // (mode_content.cpp parseStageStep).
         bool nearest = false;
         for (const TargetAttachment &a : d.colour)
             nearest = nearest || a.nearest;
-        if (d.samples != 1 || !d.surfaceSized() || nearest || d.depth || d.previousFrame) {
-            *error = QStringLiteral("target '%1': a mipped target is single-sampled, surface-sized, without depth, "
-                                    "nearest resolves or previous_frame").arg(label);
+        if (d.samples != 1 || nearest || d.previousFrame) {
+            *error = QStringLiteral("target '%1': a mipped target is single-sampled, without nearest resolves or "
+                                    "previous_frame").arg(label);
             return false;
         }
     }
@@ -549,6 +567,18 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
     else
         reason->clear();
     return next;
+}
+
+QSize exactAllocation(const QSize &current, const QSize &needed, QString *reason)
+{
+    const QSize exact(qMax(1, needed.width()), qMax(1, needed.height()));
+    if (current.isEmpty())
+        *reason = QStringLiteral("made");
+    else if (current != exact)
+        *reason = QStringLiteral("resized");
+    else
+        reason->clear();
+    return exact;
 }
 
 QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSize &content)
@@ -713,6 +743,7 @@ SceneTargetCounts sceneTargetCounts()
     c.depthPrimes = g_depthPrimes.loadRelaxed();
     c.resolvePrimes = g_resolvePrimes.loadRelaxed();
     c.nearestResolves = g_nearestResolves.loadRelaxed();
+    c.generatedMips = g_selfMips.loadRelaxed();
     return c;
 }
 
@@ -808,6 +839,7 @@ void SceneTargets::releaseTarget(Target &t)
         t.borrowedColour[i] = nullptr;        // N3.4: the owner's, never ours
     }
     t.borrowedDepth = nullptr;
+    releaseChain(t);                          // ABI 33: its chain's bindings name these textures
     if (t.textures > 0 || t.bytes > 0)
         g_targets.fetchAndAddRelaxed(-1);
     g_textures.fetchAndAddRelaxed(-t.textures);
@@ -899,7 +931,8 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
             || (!t.renderPass && t.allocation.isEmpty())
             || (owner && relaid[d.owner]);
         QString reason;
-        QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
+        QSize allocation = d.exact ? exactAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason) // ABI 33
+                                   : nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
         if (owner) {
             // Its owner's allocation (the owner, declared before it, was decided above): a new owner allocation is a new
             // one here, so the borrower's render target is made again over the owner's re-made objects.
@@ -1013,7 +1046,10 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             return true;                      // N3.4: the owner's (taken at the render target's step)
         const QRhiTexture::Format format = targetRhiFormat(a.format);
         const QByteArray name = label + QByteArrayLiteral(".") + a.name;
-        bool ok = make(t.colour[k], format, t.samples, t.samples > 1 ? QRhiTexture::RenderTarget : readableFlags, name);
+        QRhiTexture::Flags flags = t.samples > 1 ? QRhiTexture::Flags(QRhiTexture::RenderTarget) : readableFlags;
+        if (t.decl.selfMips && a.mipsRead)
+            flags |= QRhiTexture::UsedWithLoadStore; // ABI 33: its chain is the core's box kernel's (image stores)
+        bool ok = make(t.colour[k], format, t.samples, flags, name);
         // A resolve only for an attachment a sampler or the capture reads (D14 point 8). An unread resolve is never
         // read between two passes' stores, and its render pass's UNDEFINED transition then races the last store
         // (SYNC-HAZARD-WRITE-AFTER-WRITE, build round 1's msaa round).
@@ -1186,6 +1222,59 @@ int SceneTargets::averageResolves(int index, QRhiTexture **out) const
     return n;
 }
 
+int SceneTargets::generateSelfMips(QRhi *rhi, QRhiCommandBuffer *cb, int index, bool *ok, QString *error)
+{
+    *ok = true;
+    Target *t = target(index);
+    if (!rhi || !cb || !t || !t->decl.selfMips || t->dormant || t->samples != 1)
+        return 0;
+    bool any = false;
+    for (int c = 0; c < int(t->decl.colour.size()) && c < kMaxTargetColour; ++c)
+        any = any || (t->decl.colour.at(c).mipsRead && t->colour[c]);
+    if (!any)
+        return 0;                             // no sampler reads a level past 0: nothing to make
+    if (t->chainGeneration != t->generation || t->chainBindings() == 0) {
+        // The bindings over this allocation's textures (made once per allocation, never per record).
+        releaseChain(*t);
+        for (int c = 0; c < int(t->decl.colour.size()) && c < kMaxTargetColour; ++c) {
+            if (!t->decl.colour.at(c).mipsRead || !t->colour[c])
+                continue;
+            if (!m_chainKernel.bind(rhi, t->colour[c].get(), t->allocation, &t->chain[c], error)) {
+                *ok = false;
+                *error = QStringLiteral("target '%1': %2").arg(QString::fromLatin1(t->decl.name), *error);
+                releaseChain(*t);
+                return 0;
+            }
+        }
+        t->chainGeneration = t->generation;
+    }
+    int made = 0;
+    for (int c = 0; c < int(t->decl.colour.size()) && c < kMaxTargetColour; ++c) {
+        if (!t->decl.colour.at(c).mipsRead || !t->colour[c])
+            continue;
+        m_chainKernel.record(cb, t->chain[c]); // one compute pass a level (mip_chain.h)
+        ++made;
+    }
+    if (made)
+        g_selfMips.fetchAndAddRelaxed(made);
+    return made;
+}
+
+int SceneTargets::Target::chainBindings() const
+{
+    int bindings = 0;
+    for (const MipChain &c : chain)
+        bindings += c.bindings;
+    return bindings;
+}
+
+void SceneTargets::releaseChain(Target &t)
+{
+    for (int c = kMaxTargetColour - 1; c >= 0; --c)
+        t.chain[c].release();
+    t.chainGeneration = 0;
+}
+
 int SceneTargets::liveObjects() const
 {
     int objects = 0;
@@ -1193,7 +1282,7 @@ int SceneTargets::liveObjects() const
         if (!m_targets[i])
             continue;
         objects += m_targets[i]->textures + (m_targets[i]->renderTarget ? 2 : 0)
-            + (m_targets[i]->captureTarget ? 2 : 0);
+            + (m_targets[i]->captureTarget ? 2 : 0) + m_targets[i]->chainBindings(); // ABI 33: the chain's
         for (int s = 0; s < kNearestSlots; ++s)
             objects += m_targets[i]->nearestTarget[s] ? 2 : 0;
     }
@@ -1211,6 +1300,7 @@ void SceneTargets::release()
         }
     }
     m_count = 0;
+    m_chainKernel.release();                  // ABI 33 (ABI 35: mip_chain.h)
     m_rhi = nullptr;
     m_supportedRhi = nullptr;                 // a later QRhi may take the address: its counts are read again
     ++m_layoutGeneration;

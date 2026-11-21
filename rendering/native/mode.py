@@ -24,7 +24,8 @@ member, and an unbound, unknown or doubly bound sampler, each with its reason. A
 new pack, new settings or a new record: never C++.
 
 The textures (N4.a, :meth:`NativeMode.texture`): pixels Python holds (RGBA8, rows top first, tight) are copied once
-into the core and uploaded once (mips generated on the GPU when asked), never again at rest; a removed texture is
+into the core and uploaded once (ABI 35: with mips, their chain made by the core's box kernel,
+``rendering.gl_programs.mip_chain``, the text the Python renderer runs), never again at rest; a removed texture is
 released on the render thread. N3.8 (D9): on a Vulkan device with a job service the upload is a job on the job queue,
 and the item's changed textures are drawn together once their jobs are published; elsewhere it is recorded in the
 frame. A texture whose node was made again is lost: the owner's :meth:`NativeMode.on_textures_lost` is called with its
@@ -80,6 +81,12 @@ DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_e
 MAX_TARGETS = 4
 MAX_TARGET_COLOUR = 4
 MAX_TARGET_SAMPLES = 8
+#: ABI 33 (N5.4): a scene target's allocation rule (D14 point 2's 64 px buckets, or the content's exact size).
+TARGET_ALLOCATIONS = ("bucket", "exact")
+#: ABI 33 (N5.4): the most passes a program declares (``kMaxModePasses``; Waveform's 28).
+MAX_PASSES = 28
+#: ABI 33 (N5.4): an item texture's formats (``ModeTextureFormat``: RGBA8, or RGBA16F half floats).
+TEXTURE_FORMATS = ("rgba8", "rgba16f")
 #: The core's conventions (``kModeCoreMembers`` in ``mode_content.cpp``; a test holds the two equal): name ->
 #: (components, read from the card). Every other member of a pass's block is a setting or a record field.
 MODE_CORE_MEMBERS = {
@@ -111,6 +118,10 @@ MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade
                   "item_from_window", "scene_item")
 #: The card's optional keys (ABI 28: ``scene_item``, Python's SceneTarget rect; without it the item covers its target).
 MODE_CARD_OPTIONAL_KEYS = ("scene_item",)
+#: ABI 35: the card's keys under a turned card only, both or neither: Python's oriented scene frame
+#: (``rendering.native.spectrum.oriented_scene_card``; ``ModeCard::fromJson``'s ``scene_oriented`` and
+#: ``scene_from_window``), read by a program whose composite declares ``scene_frame="oriented"``.
+MODE_CARD_ORIENTED_KEYS = ("scene_oriented", "scene_from_window")
 
 
 def schema_table_entry(schema: Any) -> dict:
@@ -141,7 +152,7 @@ def mode_card(presentation: Any, geometry: Any, *, window_size: tuple[float, flo
 
     card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
                                  scene_item=True)
-    values = {key: card[key] for key in MODE_CARD_KEYS if key in card}
+    values = {key: card[key] for key in MODE_CARD_KEYS + MODE_CARD_ORIENTED_KEYS if key in card}
     values["border_width"] = float(getattr(presentation, "border_width", 0.0) or 0.0)
     return values
 
@@ -220,16 +231,24 @@ class ModeTarget:
     samples: int = 1
     previous_frame: bool = False
     #: N3.4 (D17 point 6): a mipped target (the defocus layer): single-sampled, surface-sized, without depth; its mips
-    #: are QRhi's generateMips when a :class:`DefocusStep` reads it (D17 choice G: this layer only).
+    #: are QRhi's generateMips when a :class:`DefocusStep` reads it (D17 choice G). ABI 33 (N5.4): a mipped target no
+    #: defocus step reads is drawn like any target (a depth and an explicit size allowed); a :class:`PassSampler` with
+    #: ``mips`` reads the levels of its RGBA16F attachments, whose chain the core's box kernel makes after each run
+    #: (``rendering.gl_programs.mip_chain``, the text the Python renderer runs; never the driver's generateMips).
     mips: bool = False
+    #: ABI 33 (N5.4): ``"exact"``: allocated at the content's exact size (no bucket: the coarse levels and the 1x1 mean
+    #: hold the content alone, Python's reflection target's), ``"bucket"``: D14 point 2's 64 px buckets.
+    allocation: str = "bucket"
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
             raise ValueError(f"a target has 1 to {MAX_TARGET_COLOUR} colour attachments")
         if not 1 <= int(self.samples) <= MAX_TARGET_SAMPLES:
             raise ValueError(f"a target requests 1 to {MAX_TARGET_SAMPLES} samples")
-        if self.mips and (int(self.samples) != 1 or self.size is not None or self.depth or self.previous_frame):
-            raise ValueError("a mipped target is single-sampled, surface-sized, without depth or previous_frame")
+        if self.mips and (int(self.samples) != 1 or self.previous_frame):
+            raise ValueError("a mipped target is single-sampled, without previous_frame")
+        if self.allocation not in TARGET_ALLOCATIONS:
+            raise ValueError(f"unknown allocation {self.allocation!r} (the rules are {', '.join(TARGET_ALLOCATIONS)})")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name,
@@ -243,6 +262,8 @@ class ModeTarget:
             entry["previous_frame"] = True
         if self.mips:
             entry["mips"] = True
+        if self.allocation != "bucket":
+            entry["allocation"] = self.allocation
         return entry
 
 
@@ -493,7 +514,7 @@ STORAGE_ACCESS = ("read", "write", "read_write")
 COMPUTE_RESOURCES = ("buffer", "image", "stream", "mesh")
 STORAGE_IMAGE_FORMATS = ("rgba8", "rgba16f", "rgba32f", "r16f", "r32f")
 MAX_STORAGE_BUFFERS = 8
-MAX_STORAGE_IMAGES = 8
+MAX_STORAGE_IMAGES = 9                 # ABI 33 (N5.4): Waveform with Floor Give on
 MAX_COMPUTE_BINDINGS = 8
 #: The lost edge's prefix for storage a content made again found gone (``mode_content.h``).
 _STATE_LOST = "state:"
@@ -621,6 +642,8 @@ class CapturePass:
 COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow", "opaque")
 #: The forms that add a bloom step's glow.
 GLOW_FORMS = ("overlay_glow", "opaque_glow")
+#: A composite step's scene frames (ABI 29: the window's; ABI 35: the content's orientation; None: the surface's).
+SCENE_FRAMES = (None, "window", "oriented")
 RESOLVE_ALPHAS = ("coverage", "keep")
 #: N3.4: the bloom chain's levels (``post.py`` ``BLOOM_LEVELS``), and the most bloom and defocus steps a program takes.
 BLOOM_LEVELS = 4
@@ -674,8 +697,11 @@ class CompositeStep:
     surface-sized target pairs its first downsample's pixels from there too. ABI 29: ``scene_frame="window"`` says the
     mode's Python scene is drawn through Quick's window, unturned (its ``SceneTarget`` given the physical frame, the
     content turned at the vertex: the Oscilloscope); under a turned card the core then keeps the scene in the window's
-    frame and the composite reads it at Python's texel (``u_scene_from_target``). Without it a turned card's bloom or
-    composite is refused (Python's turned Scene3D frame, ``orient_visualizer_scene_frame``, is not built)."""
+    frame and the composite reads it at Python's texel (``u_scene_from_target``). ABI 35: ``scene_frame="oriented"``
+    says the scene is drawn in the content's orientation (Python's ``orient_visualizer_scene_frame``: Waveform): under a
+    turned card the scene target is Python's SceneTarget of the oriented frame and the composite turns its texels into
+    the window (the card's ``scene_oriented`` and ``scene_from_window``). Without either a turned card's bloom or
+    composite is refused."""
 
     name: str
     form: str
@@ -688,8 +714,8 @@ class CompositeStep:
             raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
         if (self.glow is None) == (self.form in GLOW_FORMS):
             raise ValueError("the glow forms read a bloom step's glow; the overlay and the opaque form read none")
-        if self.scene_frame not in (None, "window"):
-            raise ValueError(f"unknown scene frame {self.scene_frame!r} (the window's, \"window\", or none)")
+        if self.scene_frame not in SCENE_FRAMES:
+            raise ValueError(f"unknown scene frame {self.scene_frame!r} (\"window\", \"oriented\", or none)")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "composite": self.form, "scene": self.scene}
@@ -864,19 +890,23 @@ class NativeMode:
         self._module.composite_mode_card(self._handle(), _card(card))
 
     def texture(self, name: str, pixels: bytes, size: tuple[int, int], *, mips: bool = False,
-                in_frame: bool = False) -> None:
+                in_frame: bool = False, format: str = "rgba8") -> None:
         """The item's texture ``name`` (N4.a): ``pixels`` RGBA8, rows top first, tight, of ``size`` (width, height);
         copied once into the core and uploaded from the next record; ``mips``: generated on the GPU. On a Vulkan device
         with a job service the upload is a job (N3.8, D9): the item draws the textures it held until the job is
         published, then every changed texture of the item at once. ``in_frame`` is the harness control of D9's in-frame
-        form (the measurement both ways). Refused (ValueError) for a bad name, size or byte count, too many textures, or
-        mips a sampler reads that it lacks."""
-        if in_frame:
-            self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])),
-                                                bytes(pixels), bool(mips), True)
-        else:
-            self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])),
-                                                bytes(pixels), bool(mips))
+        form (the measurement both ways). ABI 33 (N5.4): ``format`` ``"rgba16f"`` takes half floats (8 bytes a texel,
+        e.g. ``numpy.float16`` rows), uploaded as given and its chain generated on the GPU alike (Waveform's slope map).
+        Refused (ValueError) for a bad name, size or byte count, too many textures, or mips a sampler reads that it
+        lacks."""
+        if format not in TEXTURE_FORMATS:
+            raise ValueError(f"unknown texture format {format!r} (the formats are {', '.join(TEXTURE_FORMATS)})")
+        arguments = [self._handle(), str(name), (int(size[0]), int(size[1])), bytes(pixels), bool(mips)]
+        if in_frame or format != "rgba8":
+            arguments.append(bool(in_frame))
+        if format != "rgba8":
+            arguments.append(True)                        # half_float (ABI 33)
+        self._module.composite_mode_texture(*arguments)
 
     def on_textures_lost(self, callback: Callable[[list[str]], None] | None) -> None:
         """The owner's lost-texture edge (N3.8, N4.a's leftover): ``callback`` is called on the GUI thread with the

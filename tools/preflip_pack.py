@@ -14,6 +14,9 @@ The matrix (``--list`` prints it and the time it needs, starting nothing):
   transition instead, and a single pending transition row always does): the saver cycles the five in a fixed order, one
   per image change, and each one's window is cut from the frame trace by its run's first and last background-render
   records (``tools/live_check_transition_session.py``); a transition whose window has no end record is stored failed.
+  Every other registered transition is selectable as a row by ``--rows`` (``transition/<id>/*``) at the same size and
+  state, without joining the default matrix; a transition port records its pre-port row on its own (``--name`` an existing
+  baseline adds rows, leaving the rest) and compares the native row against it (``--compare``).
   The profile copy's transition durations are pinned to the canonical ones. A transition window has no swap records
   (the saver has no Visualizer), so its frame pacing, stored as the swap gap, is the gap between Quick's rendered frames;
 * one size: ``2160p`` = Display 1 at 3840 x 2160, invisible saver (the windows have an empty region and never show a
@@ -26,6 +29,7 @@ The matrix (``--list`` prints it and the time it needs, starting nothing):
     python tools/preflip_pack.py --list
     python tools/preflip_pack.py --rows "visualizer/*"                              # one window, one slice
     python tools/preflip_pack.py --rows "transition/crossfade/*"                    # one row: its own process
+    python tools/preflip_pack.py --rows "transition/beam/*" --name before_beam --backend python-gl   # any registered one
     python tools/preflip_pack.py --name before_flip                                 # resumable: reruns skip ok rows
     python tools/preflip_pack.py --name after_flip --compare tools/baselines/preflip/before_flip.json
     python tools/preflip_pack.py --compare-only OLD.json NEW.json
@@ -58,6 +62,9 @@ sys.path.insert(0, str(ROOT))
 from tools import artifact_paths  # noqa: E402
 
 BASELINES = ROOT / "tools" / "baselines" / "preflip"
+#: Tokens for the live check's ``--app-arg`` (``--app-arg`` here; set once by ``main``): a native Vulkan row passes
+#: ``--graphics-backend=vulkan``. Empty for the product's default OpenGL path.
+APP_ARGS: list[str] = []
 WALLPAPER = Path("D:/Temp/Scratch/SRPSS/wallpaper_usu")
 CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"
 APPLICATION = "Screensaver_MC"
@@ -138,6 +145,15 @@ def registry_transitions(names=SESSION_TRANSITIONS) -> list[tuple[str, str]]:
     if missing:
         raise ValueError(f"SESSION_TRANSITIONS names {missing}, which the transition registry does not offer")
     return [(name, available[name]) for name in names]
+
+
+def all_registry_transitions() -> list[tuple[str, str]]:
+    """``(stable_id, setting_name)`` of every transition the registry offers, in registry order. These are selectable as
+    rows by ``--rows`` (a transition port's layer T) without joining the default matrix, which stays the five of
+    ``SESSION_TRANSITIONS``; their keys are ``transition/<stable_id>/<size>/<state>`` like the default rows'."""
+    from rendering.transition_registry import iter_transition_descriptors
+
+    return [(item.stable_id, item.setting_name) for item in iter_transition_descriptors() if item.available]
 
 
 def canonical_transition_durations() -> dict[str, float]:
@@ -294,6 +310,7 @@ def session_command(rows: list[Row], out: Path, *, interval_s: int, clip: Path =
                "--transition-session", ",".join(row.label for row in rows)]
     if rows[0].state == "loaded":
         command += ["--load", "game60"]
+    command += [f"--app-arg={token}" for token in APP_ARGS]
     for key, value in session_settings(rows, interval_s):
         command.append(f"--setting={key}={json.dumps(value)}")
     return command
@@ -311,6 +328,7 @@ def row_command(row: Row, out: Path, *, clip: Path = CLIP, preset_slot=None, pyt
         command += ["--preset", str((preset_slot or default_preset_slot)(row.ident)), "--resource-readings"]
     if row.state == "loaded":
         command += ["--load", "game60"]
+    command += [f"--app-arg={token}" for token in APP_ARGS]
     for key, value in row_settings(row):
         command.append(f"--setting={key}={json.dumps(value)}")
     return command
@@ -801,10 +819,14 @@ def build_parser() -> argparse.ArgumentParser:
                                                                + ", ".join(SIZES))
     parser.add_argument("--rows", metavar="PATTERN[,PATTERN]",
                         help="only rows whose key (kind/id/size/state) matches a glob, e.g. 'visualizer/*' or "
-                             "'transition/crossfade/*'")
+                             "'transition/crossfade/*'. With --rows (or --compare) every registered transition is "
+                             "selectable, e.g. 'transition/beam/*'; rows are added to an existing --name baseline "
+                             "without touching its other rows, and each says its own commit and backend")
     parser.add_argument("--load", choices=LOADS, help="the loaded state: game60 (explicit only: lead only, after the "
                                                        "operator's yes, 10 minutes at most per run window)")
     parser.add_argument("--backend", help="a label stored with the baseline (e.g. python-vulkan, native-opengl)")
+    parser.add_argument("--app-arg", action="append", default=[], metavar="=TOKEN",
+                        help="passed to the live check's --app-arg (an experiment_flags token, e.g. --app-arg=--graphics-backend=vulkan for a native Vulkan row); repeatable")
     parser.add_argument("--per-row", action="store_true",
                         help="one saver process per transition row instead of one session per size and state "
                              "(single-row reruns; a lone pending transition row is always per-row)")
@@ -830,10 +852,32 @@ def parse_sizes(text: str) -> list[str]:
     return names
 
 
-def plan_rows(args, *, modes=None, transitions=None, old: dict | None = None) -> tuple[list[Row], list[str]]:
+def stamp_new_rows(baseline: dict, keys, *, commit: str, backend: str | None) -> None:
+    """Record the commit and backend a row was measured at on the row itself, for the rows measured in this run only:
+    a named baseline that several runs add rows to (a transition's pre-port row recorded on its own) keeps the file's
+    own commit and backend, and every row says what it was measured on."""
+    for key in keys:
+        record = baseline.get("rows", {}).get(key)
+        if record is not None:
+            record["commit"], record["backend"] = commit, backend or baseline.get("backend")
+
+
+def open_baseline(path: Path, name: str, *, commit: str, load: str | None, backend: str | None) -> dict:
+    """The named baseline: loaded when it exists (new rows are added to it, its other rows and its own commit, backend and
+    controls untouched), else new. ``--backend`` labels a new file only; rows say their own backend (``stamp_new_rows``)."""
+    if path.exists():
+        return load_baseline(path)
+    return new_baseline(name, commit=commit, load=load, backend=backend)
+
+
+def plan_rows(args, *, modes=None, transitions=None, old: dict | None = None,
+              all_transitions=None) -> tuple[list[Row], list[str]]:
     """The rows this invocation covers: the matrix for its sizes and state, filtered by ``--rows`` and, for a
-    ``--compare`` rerun, restricted to rows the old baseline holds."""
+    ``--compare`` rerun, restricted to rows the old baseline holds. With ``--rows`` or ``--compare`` every transition the
+    registry offers is selectable (``all_transitions``, injected by tests); without either, the default matrix."""
     state = "loaded" if args.load else "idle"
+    if transitions is None and (args.rows or old is not None):
+        transitions = all_registry_transitions() if all_transitions is None else list(all_transitions)
     rows = enumerate_rows(parse_sizes(args.size), state, modes=modes, transitions=transitions,
                           viz_seconds=args.viz_seconds, transition_seconds=args.transition_seconds)
     rows, unmatched = filter_rows(rows, split_patterns(args.rows))
@@ -863,6 +907,7 @@ def print_plan(rows: list[Row], *, loaded: bool, per_row: bool = False, log=prin
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    APP_ARGS[:] = [str(token).lstrip("=") for token in args.app_arg]
     if args.compare_only:
         old, new = (load_baseline(p) for p in args.compare_only)
         report = compare_baselines(old, new)
@@ -886,10 +931,7 @@ def main(argv: list[str] | None = None) -> int:
     path = baseline_path(name)
     if old is not None and path.resolve() == args.compare.resolve():
         raise SystemExit("--compare reruns into a new baseline: give --name a different name")
-    baseline = load_baseline(path) if path.exists() else new_baseline(name, commit=commit, load=args.load,
-                                                                      backend=args.backend)
-    if args.backend:
-        baseline["backend"] = args.backend
+    baseline = open_baseline(path, name, commit=commit, load=args.load, backend=args.backend)
     required = {size: SIZES[size] for size in sorted({row.size for row in rows})}
     todo = pending_rows(rows, baseline, redo=args.redo)
     print(f"{len(rows)} rows, {len(rows) - len(todo)} already stored ok; about "
@@ -904,8 +946,14 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"WARNING: no session control for {size}: {exc}")
                 else:
                     save_baseline(path, baseline)
+    fresh = {row.key for row in todo}
+
+    def save_stamped(target, data):
+        stamp_new_rows(data, fresh, commit=commit, backend=args.backend)
+        save_baseline(target, data)
+
     outcome = measure_rows(
-        todo, baseline, path,
+        todo, baseline, path, save=save_stamped,
         measure=lambda row, out: run_live_check_row(row, out, timeout_s=row.seconds + 240.0, keep_logs=args.keep_logs),
         conditions_fn=lambda: collect_conditions(required=required, displays_fn=system_displays,
                                                  processes_fn=system_cpu_processes,

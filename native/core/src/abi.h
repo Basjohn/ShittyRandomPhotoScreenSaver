@@ -173,9 +173,34 @@
 // core's steps, vUv passes and a card-less content are unchanged. stage_control's card_triangle (harness: the full
 // triangle again, its negative control). Every generic mode's native frames may change (regression guards on the branch's ABI 31 build: every generic
 // mode's harness on both APIs, Bubble variant a on one take).
-// 36 (N5.2c; 34 retired unused, 35 is Waveform's mip chain): a program's environment step ({"name", "environment": an
-// item texture, "size": [w, h]}: N4.j's photo environment, post_stages.h; its copy "<step>.environment" read with mips),
-// the composite form "opaque" (no glow), composite_live's stage_environments and stage_environment_copies, and the lost
-// edge's "mesh:<name>" (a mesh a content made again has nothing to upload from: the owner sends it again). Backward
-// compatible for every earlier program (no program declares either; an owner without a mesh listener ignores the name).
+// 33 (N5.4, Waveform's five C++ boxes): a target's "allocation": "exact" (the content's exact
+// size, no bucket) and a drawable mipped target (a mipped target no defocus step reads: a depth and an explicit size
+// allowed; a sampler reading an RGBA16F attachment's levels with "mips", whose chain the core's box kernel makes after
+// each run on it, shaders/mip_box.comp, never generateMips; the layout JSON's targets carry "self_mips" and
+// "allocation", their attachments "mips_read"; composite_live's scene_target_mips); composite_mode_texture's
+// seventh argument half_float (an RGBA16F item texture, its chain generated on the GPU; the textures' state "format");
+// kMaxModePasses 28 (16 before) and kMaxStorageImages 9 (8 before); compute_control's no_float32_linear (harness: a
+// device without linear filtering of 32-bit floats), the device facts' linear_filter_formats (Vulkan's
+// SAMPLED_IMAGE_FILTER_LINEAR_BIT per storage format) and the compute facts' linear_filter_formats and
+// float32_linear_control; a linear sampler over a storage image this device does not filter linearly fails the
+// content with its reason. Backward compatible for every earlier program and caller.
+// 34: retired unused (N5.2c moved to 36).
+// 35 (N5.4, the Waveform port's two core gaps): (1) an item texture with mips has its chain made by the core's box kernel
+// (the lead's decision of 21 Nov: every level chain a sampler reads), shaders/mip_box.comp (RGBA16F) and
+// shaders/mip_box_rgba8.comp (RGBA8), the texts rendering/gl_programs/mip_chain.py gives the Python renderer, on both
+// upload routes (in the frame; a job uploads level 0 and the render thread makes the chain after the import), never
+// generateMips; one kernel owner for the textures and the self-mipped targets (mip_chain.h); a device without compute
+// refuses such a texture with its reason; composite_live's mode_texture_chains. (2) A composite step's "scene_frame":
+// "oriented" (Python's orient_visualizer_scene_frame: Waveform's scene drawn in the content's orientation): under a turned
+// card the scene target is Python's SceneTarget of the oriented frame and the composite reads Python's sceneTexel; the
+// card's optional scene_oriented (the item's rect in the oriented viewport) and scene_from_window (the window's pixel to
+// that viewport's), both or neither; a turned card of such a program without them is refused. Item textures with mips
+// may draw differently where a level is made from an odd size (no product mode samples them before Waveform);
+// backward compatible for every other program and caller.
+// 36 (N5.2c with N4.j): a program's environment step ({"name", "environment": an item texture, "size": [w, h]}: N4.j's
+// photo environment, post_stages.h; its copy "<step>.environment", its chain made by the core's box kernel (mip_chain.h,
+// never generateMips), read with mips), the composite form "opaque" (no glow), composite_live's stage_environments and
+// stage_environment_copies, and the lost edge's "mesh:<name>" (a mesh a content made again has nothing to upload from:
+// the owner sends it again). Backward compatible for every earlier program (no program declares either; an owner without
+// a mesh listener ignores the name).
 #define SRPSS_NATIVE_CORE_ABI 36

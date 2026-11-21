@@ -1,4 +1,4 @@
-# Native parity and timing proof (every port, every optimisation)
+# Native parity and timing proof (Visualizer mode ports and optimisations; transitions: section 3's own list)
 
 The method for proving that a native port, or an optimisation of one, loses nothing: no fidelity, reactivity,
 smoothness or timing. It is also the long-term control. The stored references are rerun after a driver, Qt, compiler or
@@ -19,8 +19,10 @@ Decided with the operator on 17 Nov 2026, after Bubble's parity had been resting
 | **T, timing and smoothness** | Is anything drawn later or less evenly? | Live cadence and presentation in the real process (section 4). | Invisible saver on Display 1, never Display 0 |
 | **C, cost** | What does it cost? | GPU time per pass, median and p90 of 240 frames, with the GPU state and display state recorded. | Hidden host plus the invisible saver |
 
-A hash cannot see timing, and a timing trace cannot see a wrong pixel. Every port and every optimisation needs all
-four layers, scaled as in section 3.
+A hash cannot see timing, and a timing trace cannot see a wrong pixel. Every Visualizer mode port and every optimisation
+needs all four layers, scaled as in section 3. A transition is not a mode: it needs fidelity and performance only
+(section 3, "A transition port"); none of the mode material (recorded takes, reaction modes, coverage windows, layer
+L, response tools, timing parity) applies to it.
 
 ## 2. Material: recorded music, never short synthetic clips
 
@@ -41,7 +43,9 @@ four layers, scaled as in section 3.
 **A port.**
 - **L:** every frame of every take and reaction mode.
 - **P:** the Python reference hashes are rendered once per take, reaction mode and placement, then cached. The Python
-  renderers are frozen until N5.2h deletes them, so the references never need re-rendering. Each native run renders
+  renderers are frozen until N5.2h deletes them, so the references never need re-rendering, except after a
+  checklist-16 conversion (a port's decided change to the Python renderer): its references redraw once through the
+  cache key, with stills before and after and the port's showcase WebP. Each native run renders
   only the native path against the cache.
 - **Coverage:** per reaction mode, one full 60 s take, plus coverage-selected windows from the other takes. L's
   records choose the windows: the extremes of each record field, the cold start, mode switches and fades, the loudest
@@ -63,8 +67,21 @@ four layers, scaled as in section 3.
   overscan placements (and Spectrum's mapping control its maps); the stream player's rule (b) proves Vulkan at the
   harness's one placement only, so a Vulkan-only error at a fractional product placement is covered by no layer
   (checkpoint audit 9 L4).
+- **Response:** the mode's own response tool (section 4's list; Waveform `waveform_music_response.py`, Neon Lake
+  `neon_lake_music_response.py`) for every reaction mode separately, before against after, on the recorded
+  continuous-play chain; also for any later change that touches the mode's simulation or its visible response
+  (operator, 21 Nov: part of the fast proof for every mode). It is CPU only: run it in parallel with L, not after it.
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
+
+**A transition port** needs fidelity and performance, nothing else (operator, 21 Nov).
+- **Fidelity:** rule (a) and rule (b) through `transition_route_check.py` over the full canonical duration and
+  several image pairs; no separate logic layer (the pixels prove it), no response tool, no reaction modes.
+- **Performance:** C per pass at 2560 x 1440 and 4K on both backends, and one native Vulkan run for hitches and
+  stalls (`preflip_pack.py --rows "transition/<id>/*" --name <post> --backend native-vulkan
+  --app-arg=--graphics-backend=vulkan`): no late frames past the lifecycle windows, no first-frame compile stall. No
+  pre-port baseline and no timing parity.
+- Registration (offering it on Vulkan) waits for both.
 
 **An optimisation of a landed port.**
 - **No coverage sampling:** P hashes every frame of all three takes.
@@ -97,8 +114,13 @@ the run. A mode the change cannot reach is not re-run. An all-mode run happens o
 every C++ change. Parity is not re-measured on accepted modes; a guard checks they did not move (native before
 against native after, hashes, `--accepted`).
 
-**Gates in general.** Gates run unattended in the background, with references and native runs in separate processes
-and several takes at once. A full gate runs at acceptance and once per batch of optimisations, never once per
+**The backstop for guards-only** (lead, 21 Nov): because a change judged unable to reach a mode may still reach
+it, one full gate over every accepted mode and transition runs once before the flip (NF), unattended by the lead:
+one full take per mode per backend with `--accepted`, every transition's pack row. Not before, not per change.
+
+**Gates in general.** The lead runs batch gates unattended in the background, with references and native runs in
+separate processes and several takes at once. An agent runs its gate in the foreground (agents run nothing in the
+background), one process per take, at most the number its brief states at once, each under its timeout. A full gate runs at acceptance and once per batch of optimisations, never once per
 candidate.
 
 ## 4. Timing and smoothness (layer T)
@@ -149,9 +171,9 @@ The acceptance figures:
 | Extruded Bubble (N5.6) | its variants | drift compute, defocus, transparency (OIT) | its response comparison | Heavy render; less variance, so coverage windows are fewer. |
 | Neon Lake (N5.5) | its variants | reaction and growth arrays, terrain | `neon_lake_music_response.py` | Persisted id `shockwave_grid`. |
 | Extruded Spectrum, Sphere (N5.3) | their variants | none beyond the frame | the live run | Meshes, lighting, silhouette shadows. |
-| Transitions (N5.2) | each transition | per transition | the session pack (`preflip_pack.py`) | Full canonical duration over several image pairs; no music. |
+| Transitions (N5.2) | not a mode: fidelity and performance only (section 3) | none | none (one Vulkan hitch run) | Full canonical duration over several image pairs; no music, no layers. |
 
-A port's brief names this guide plus the playbook. Its plan box lists its four layers' commands and states its
+A mode port's brief names this guide plus the playbook. Its plan box lists its four layers' commands and states its
 warm-up length before dispatch.
 
 ## 6. The long-term control
@@ -163,7 +185,8 @@ Each accepted port keeps:
 
 Spectrum, Spline Curve and Bubble are accepted (operator, 17 Nov). Their four-take hashes are their reference. Rerun
 the gate after:
-- a GPU driver, Qt or shader-compiler upgrade (all accepted modes);
+- a GPU driver, Qt or shader-compiler upgrade: one full take per accepted mode per backend with `--accepted`; every
+  take only for a mode whose hashes moved;
 - a native core ABI change that touches drawing: only the modes section 3's regression-guard rule names;
 - an optimisation: the mode it optimises.
 
@@ -200,8 +223,10 @@ decision, recorded with its reason.
   (`ulp_ring` flips 3 frames per full take, none in a window). A one-ulp change flips only pixels on a rounding
   boundary, and no record predicts those frames. Evidence: `.artifacts/evidence/native_core/fast_proof/20261121_method_*`.
 - **The split this sets (lead, 21 Nov):** what changed decides the material.
-  - A shader, core or optimisation change, and every port's acceptance: a native-only run over each full take, every
-    frame judged against the cached Python references (a frame hash-identical to the accepted native baseline needs
+  - A mode's own shader or optimisation change, and every port's acceptance: a native-only run over each full take
+    of that mode. A shared core change on accepted modes is a regression guard (section 3): one full take per mode it
+    is likely to touch, with `--accepted`, never every take of every mode. Either way every frame is judged against
+    the cached Python references (a frame hash-identical to the accepted native baseline needs
     no rejudge). Coverage windows never stand in for this. The run: `owner_render_parity.py --native --recording TAKE
     --seconds 60 --references --accepted ACCEPTED.json`. Confirmed 21 Nov on Bubble, nightsolong, variant a: the
     accepted run is the full replay (399.2 s, Python drawn and stored); with `--accepted`, 57.6 s (all 5,266 judged

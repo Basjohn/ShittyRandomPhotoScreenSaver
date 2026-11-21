@@ -100,6 +100,24 @@ def item_target_rect(matrix: tuple, item_size: tuple[float, float], window_pixel
     return [float(x0), float(y0), float(round(max(xs)) - x0), float(round(max(ys)) - y0)]
 
 
+def oriented_scene_card(matrix: tuple, item_size: tuple[float, float], oriented_size: tuple[float, float],
+                        viewport: tuple[int, int, int, int], quarters: int) -> dict:
+    """ABI 35: the card's Python oriented scene frame under a turned card (``orient_visualizer_scene_frame``, the frame
+    Waveform's scene draws in): ``scene_oriented``, ``item_pixel_rect`` of the oriented frame (left, bottom, width,
+    height in the oriented virtual viewport, y up: its SceneTarget's rect and the composite's ``uOrigin``), and
+    ``scene_from_window``, the window's pixel to that viewport's (the oriented composite's ``sceneTexel``)."""
+    from types import SimpleNamespace
+
+    from rendering.quick.scene3d.frame import item_pixel_rect, oriented_scene_geometry, scene_from_window
+
+    turned, oriented_viewport = oriented_scene_geometry(tuple(float(v) for v in matrix),
+                                                        (float(item_size[0]), float(item_size[1])), viewport, quarters)
+    rect = item_pixel_rect(SimpleNamespace(matrix_values=tuple(turned),
+                                           logical_size=(float(oriented_size[0]), float(oriented_size[1])),
+                                           viewport=oriented_viewport))
+    return {"scene_oriented": [float(v) for v in rect], "scene_from_window": scene_from_window(quarters, viewport)}
+
+
 def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, window_size: tuple[float, float],
                           window_pixels: tuple[int, int], host_origin: tuple[float, float] | None = None,
                           item_origin: tuple[float, float] | None = None, scene_item: bool = False) -> dict:
@@ -155,6 +173,9 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
         # ABI 28 (the generic item's card): Python's SceneTarget rect, from the same float32 matrix as the rows above.
         extra["scene_item"] = item_target_rect(_ortho_item_matrix(window_size, (window_x, window_y), single=True),
                                                item_size, window_pixels, window_from_target)
+        if quarters:
+            extra.update(oriented_scene_card(_ortho_item_matrix(window_size, (window_x, window_y), single=True),
+                                             item_size, oriented_size, viewport, quarters))
     return extra | {
         "quarters": quarters,
         "item_size": [outer_width, outer_height],

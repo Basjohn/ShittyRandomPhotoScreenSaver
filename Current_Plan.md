@@ -62,38 +62,27 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
-**Resume here (lead, 21 Nov ~09:30 UTC; spend stopped: weekly 39 %, 5-hour 97 %; start a fresh lead session):**
-- [ ] Efficiency first (operator, 21 Nov: the day spent too much, a Spline residual chase above all): critical path only
-  (the Oscilloscope's blockers, the core features the ports need, then Waveform); no slot for non-blocking residuals of
-  accepted modes (references are keyed on drawing inputs only: audit 9 M1/M2 and tests 268bf53db); one reference build per change, shared; `--accepted` by default; one
-  C++ build per batch; fresh agents instead of resuming ones with huge contexts.
-- [ ] Two built, unmerged C++ branches both at ABI 31 (renumber the second merged to 32, rebuild main after each):
-  - `worktree-agent-a8797a6d7c59d45af` (audit 11's fixes for N3.6, built 87f8c4974): run `device_loss_check.py` all
-    rounds and `make_controls.py` controls (sent to the same agent, 21 Nov ~12:10), then merge.
-  - `worktree-agent-aea35d28be699535f` (the card quad, built 55433ebff; agent stopped by the lead): Spline Curve 23
-    failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
-    failures on three takes. Still to run before merge (regression guards only, the generic modes it touches):
-    the content harnesses on both APIs and Bubble variant a on one take; Spectrum's own item is not touched, so no
-    Spectrum run. Merge if clean; otherwise park it.
-- [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
-  it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
-  (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
-  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered and documented
-  21 Nov. Left: its two side defects and the backlog line.
-- [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
-  - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
-    generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
-    backlog line with its evidence paths; shrink figure-heavy boxes (N5.1, the N2.x-N5.7 leftovers) to a verdict and
-    evidence path per box, moving the leftovers to a backlog section; fold or delete `Docs/testfailures20261119.md`
-    (no handoff docs).
-  - [ ] `tools/agent_handover.py --retire --keep <paths file>`: copy only the listed evidence paths, with a test;
-    one handbook line in the retire step to use it. (Plan trim: agent dispatched 21 Nov; --keep: agent dispatched
-    21 Nov, both Sonnet Medium.)
+**Resume here (lead, 21 Nov ~16:30 UTC; main at ABI 33, built; weekly about 47 %):**
+- [ ] Working rules (operator, 21 Nov; handbook 7a and section 3-4, proof guide section 3): critical path only; related
+  work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
+  at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
+  ABI numbers reserved at dispatch; main built once per batch of C++ merges.
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
+  its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
+- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
+  environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
+  merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
+- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends. Its Vulkan hitch run passed 21 Nov (0 % late,
+  render 0.43/0.61 ms against Python OpenGL 1.03/1.5).
+- [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
+  Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
+  Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
+  that path) before NF; evidence `tools/baselines/preflip/beam_*` and `crossfade_native_vulkan*`.
+- [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): Waveform's five C++ boxes (N5.4) in one branch at ABI 33 (32 is the card
-  quad's), one GitHub build (agent a6688ad0cd2ae360a, Opus High). Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] High (Opus High): the Waveform port (N5.4) on the landed ABI 33 core (agent a6688ad0cd2ae360a; ABI 35 reserved). Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -626,8 +615,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 Slots (lead, 12 Nov): the first port of each kind, and the heavy 3D ports (Waveform Ribbon, Extruded Bubble, Neon
 Lake, Extruded Spectrum and Sphere), go to Opus High. Once Spectrum (N2.5) has proved the pattern, the simple modes
 (Spline Curve, Oscilloscope, Bubble) go to Opus Medium, proved frame by frame against the Python renderer with the
-identity harnesses. A difference that is not byte for byte goes back to the lead to judge. An Opus High audit
-reruns every port's parity proof and its negative controls before merge.
+identity harnesses. A difference that is not byte for byte goes back to the lead to judge. An audit reruns the port's
+negative controls and one take per backend from the cited evidence; it never repeats the full parity sweep.
 
 Rule for every port here (Qt 6.12): where a mode's small instanced batches (bars, specks, snow, sprite families)
 are measured above a handful per frame, one pipeline and one indirect call with `QRhi::ShaderDrawParameters`
@@ -812,53 +801,13 @@ the feature (D3D11 is not stated).
         the Python shader changes with it (one shader file for both renderers, `mode_content.h:3-4`).
       - Already in the plan: the quiet-GPU `stream_ring` recheck before a Waveform consumer (the N3.2 box "Awaiting
         Validation before a Waveform consumer"; D15's watch, `Native_Core_P3_Decisions.md:225`).
-  - [ ] C++: an exact-size, mipped, drawable target (the planar reflection and the floor's reduced pre-pass). The core's
-    mipped target is the defocus layer's: single-sampled, its mips made by that step, allocated in 64 px buckets, and a
-    sampler reads a target with no mips (`scene_targets.h:11-17,40-43,119-122`, `post_stages.h:26-27`,
-    `mode_content.h:98-99`; D17 G, H). Waveform draws ordinary passes (sky, light, strays, sparks; additive, depth
-    tested) into an RGBA16F target with a full chain at the exact capped size, then reads its levels trilinearly and
-    its 1x1 level as the scene mean (`waveform.py:432,466`, `reflection.py:59-74,111`,
-    `rendering/gl_programs/waveform_ribbon.py:125,218`). A bucketed allocation puts empty texels into every coarse level
-    and the mean, and a pass reading another target has no member for that target's content-to-allocation ratio. Its
-    shaders declare two outputs (`ribbon.py:800-801`) over a one-attachment target: say how the core treats that.
-    Proof, both backends, odd sizes: the chain's levels against Python's `glGenerateTextureMipmap` of the same pixels
-    (Vulkan's blit differs on odd levels, D17 G), the floor's reflection read and the mean level inside rule (a) of D12,
-    mode passes drawing into it, the pre-pass target alike. Negative control: the bucketed allocation (the mean and
-    the floor's level move).
-  - [ ] C++: sampler anisotropy. `PassSampler` carries filter, wrap and mip filter only (`mode_content.h:266-282`) and
-    nothing under `native/core` or the native docs mentions anisotropy. Python sets 16x on the reflection (capped by the
-    device, `reflection.py:62-65`) and 8x on the three floor maps (`waveform.py:111,135`), and the floor reads the
-    reflection with `textureGrad` footprints that rely on it (`Docs/Reference/Scene3D_Resources.md:187`). Whether
-    QRhi's sampler can carry it on either backend is not established (no Qt SDK on this machine to read); answer that
-    first. Proof: the floor and reflection frames natively and in Python, with the means chosen (a raw sampler setting,
-    or taps along the gradient in the shader in both renderers), inside rule (a) of D12 on grazing-view frames.
-    Negative control: the native read at 1x fails the bound on the same frames.
-    - Answered (agent a6688ad0cd2ae360a): QRhi's sampler carries no anisotropy on either backend (PySide6 6.12). Lead
-      decision (21 Nov): taps along the footprint's long axis in the shader, one text for both renderers
-      (`rendering/gl_programs/anisotropic.py`), not a raw sampler route beside QRhi. Python's Waveform floor moves
-      to the same taps at the port (a slight look change, judged on the port's showcase); before the build its taps
-      sit at 0.0115/0.0097 mean error from hardware 8-16x against 1x's 0.026/0.037 (evidence
-      `n5_4/20261121_n54_aniso_reference/`).
-  - All five boxes built on branch `worktree-agent-a6688ad0cd2ae360a` at ABI 33 (d3721eff3, main merged in), GitHub
-    build running; then `scene_target_check.py --rounds wave_floor wave_limits wave_filter` on both APIs, then merge.
-  - [ ] C++: a mode texture in half float with GPU mips. Mode textures are RGBA8 only (`mode_content.h:35-37,472-493`);
-    the floor's slope map is RGBA16F with a full chain, baked once from the height map to save six fetches a pixel
-    (`waveform.py:96-114`). Proof: the map and its levels against Python's values at the levels the floor reads (its
-    mip bias, `rendering/gl_programs/waveform_ribbon.py:95-98`), both backends. Negative control: the slope baked into
-    RGBA8 (the relief shading and the reflection breakup leave the bound). If refused, the eight-fetch form goes into
-    both renderers.
-  - [ ] C++: the program's limits. `kMaxModePasses` 16 to at least 28 (the mesh mask holds 32 passes,
-    `mode_content.cpp:5040-5041`), storage images 8 to at least 9, targets stay 4 (the reading's counts). Proof: the
-    real Waveform program (every stage on, Floor Give on) admitted on both backends with its warm-up (pipeline builds
-    per step) counted and nothing at rest; one pass or one image past the new limits refused with its reason, as the
-    existing limit tests do.
-  - [ ] C++: linear filtering of 32-bit float images. The world field and floor give are RGBA32F images read with
-    linear samplers (`waveform_field.py:38-42`, `floor_give.py:20-26`); Vulkan does not guarantee linear filtering of
-    32-bit float formats, the core checks an image's format against the device's facts only when it is made
-    (`compute_passes.h:19-20`), and a linear sampler on it is not part of that check (nothing in `compute_passes.cpp`
-    reads a filter). Proof: both backends on this machine report the capability; a faked device without it refuses the
-    program with its reason, or the images fall back to RGBA16F with the loss measured on the field (positions to
-    80 world units). Negative control: the faked device.
+  - Core features landed (ABI 33, merged 21 Nov, proofs in the merge commit): exact-size drawable mipped targets,
+    shader anisotropic taps, RGBA16F item textures with GPU mips, 28 passes and 9 storage images, linear-filter facts.
+    Port decisions (lead, 21 Nov): the floor's anisotropy is the shared tap text (`rendering/gl_programs/anisotropic.py`)
+    in both renderers; every level chain a sampler reads is the core's box kernel (`mip_box.comp`, Python's
+    `rendering/gl_programs/mip_chain.py`), so Python's reflection and Waveform's own read item textures (the 1254 px maps)
+    move to it at the port, by an opt-in flag (existing mipped item textures keep their path); the look change is judged on the port's showcase. Next: the port itself (records, streams,
+    passes and the proof), Opus High.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
@@ -1459,7 +1408,8 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw.
+- [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw. Dispatched 21 Nov with N4.j
+  (agent a77d7d16afb481093, Opus High), ABI 34 reserved.
   - Reading (Opus High agent, worktree agent-a77d7d16afb481093, 21 Nov; no Python pixel touched). Files under
     `rendering/quick/transitions/implementations/`: `ct.py` cube_turn, `bl.py` blinds, `dc.py` depth_cascade, `jg.py`
     jigsaw; under `rendering/gl_programs/`: `ctp.py` cube_turn_program, `bsp.py` blinds_slats_program, `dcp.py`

@@ -46,8 +46,9 @@ found in this kind of code: the port proves it absent, with the negative control
     graphics configuration is entered there, and a hidden host calls the product's Quick graphics configuration
     (`Docs/Guardrails/Agent_Worktree_Rules.md`, Environment; the test is the list).
 11. **Cost by absolute times**, GPU median and p90 per pass over at least 90 frames on the GPU timer, the GPU state
-    recorded (`nvidia-smi`, other processes, the display state); a figure taken on a busy GPU is evidence, not a
-    verdict (D14 point 13; D16 "Cost"; Lessons "Measuring"; memory notes on display state).
+    recorded (`nvidia-smi`, other processes, the display state); timing and cost run as soon as they are due (the operator
+    is not using the machine; never wait for a "quiet machine"); rerun only a figure that fails and whose recorded
+    conditions show load from another run (D14 point 13; D16 "Cost"; Lessons "Measuring"; memory notes on display state).
 12. **Declared data, one owner per name.** Every member, count and selector is filled by name from exactly one of the
     core's conventions, the settings or a record field; unknown, unfilled and doubly owned names are refused with a
     reason (D12 point 2; D15 point 1). A record field fills a block member or a stream, never both.
@@ -81,8 +82,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   the shared tolerance (checklist 9) with the mask named: the translucent pixels found by drawing the reference over
   two backgrounds or from its own alpha, or the pixels a blended layer sums into; float textures judged by their own
   ulp (D12 "The pixel tolerance"). Bounds are the measured worst times 1.5, stated beside their measured reasons.
-- Owner-level parity on recorded music, logic, timing and cost: `Native_Parity_And_Timing_Proof.md` owns the
-  method (layers L, P, T, C; material, how much to run, acceptance). It is not repeated here.
+- A Visualizer mode: owner-level parity on recorded music, logic, timing and cost; `Native_Parity_And_Timing_Proof.md`
+  owns the method (layers L, P, T, C; material, how much to run, acceptance). It is not repeated here. A transition:
+  fidelity and performance only (that guide's section 3, "A transition port"), never the mode method.
 - Negative controls for every rule, each seen failing on the broken form (a one-level shift on every pixel, a fixed
   artefact, the wrong order, the skipped release); `tests/test_pixel_tolerance.py` holds the tolerance's own.
 - Vulkan validation with synchronisation checks and the shader-access opt-in: `syncval_shader_accesses_heuristic` is
@@ -91,10 +93,14 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   between them: a harness that reads back between records hides a missing barrier (audit 2 H1).
 - Nothing at rest, no object or allocation over a steady minute (a remade-streams control must fail), retirement to
   zero with a skipped-release control (D15 "proof"; D16 "proof").
-- Cost under the layer and, where the GPU allows, without it, with the GPU state recorded (checklist 11).
-- The earlier harnesses rerun unchanged (`generic_mode_check`, `scene_target_check`, `mesh_buffer_check`,
-  `compute_pass_check`, `fullscreen_pass_check`, `background_layer_check`, `backdrop_pyramid_check`,
-  `transition_route_check`, `devcurve_check`; D15 choice C).
+- Cost once, without the validation layer (it distorts GPU times), with the GPU state recorded (checklist 11).
+- A port's core change is additive: a new path, key or flag that only the port's own content asks for, so every
+  existing user (accepted modes, transitions) stays byte for byte on its current path and needs no re-proof.
+  Changing what an existing shared path does for its current users is the lead's decision first, never a port's.
+- The earlier harnesses rerun unchanged only where the port's change reaches them (D15 choice C, narrowed by the
+  regression-guard rule, `Native_Parity_And_Timing_Proof.md` section 3): the harness of every primitive or core path
+  the port's C++ touches, named with the reason in the report. A data-only port reruns none but its own; all of them
+  only after a change to a path every mode shares (the generic content, the route, the packet ABI's layout).
 - Run each negative control in its own process (checklist 6).
 
 ## 3. Sections by primitive
