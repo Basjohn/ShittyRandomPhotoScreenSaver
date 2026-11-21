@@ -1,3 +1,16 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_medium
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_medium for the medium pass, its block's members named for it (the arithmetic the body's)
+#define uFogInvView medium_uFogInvView
+#define uFogLens medium_uFogLens
+#define uFogRange medium_uFogRange
+#define uFieldOrigin medium_uFieldOrigin
+#define uFieldSide medium_uFieldSide
+#define uGradeStops medium_uGradeStops
+#define uGrade medium_uGrade
+#define uBodySpan medium_uBodySpan
+#define uBodyShape medium_uBodyShape
+#define uAtmosphereLight medium_uAtmosphereLight
+#define uAtmosphere medium_uAtmosphere
+#define uAtmosphereMotion medium_uAtmosphereMotion
+#define uAtmosphereAmbient medium_uAtmosphereAmbient
 #include "waveform_medium.glsl"

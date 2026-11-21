@@ -5,46 +5,30 @@ Why it exists: the Python renderer composes its programs from Python texts (``re
 ``waveform_ribbon``, ``waveform_atmosphere``, ``ribbon_bursts``, ``fog_volume``, ``waveform_floor_give``), converted
 portable (N1.6: one std140 pass block a program); the native core loads ``.qsb`` packs baked from the shader folder
 (``widgets/spotify_visualizer/shaders``, ``tools/regen_qrc.py --shaders``). Each program's converted text is written
-there as a body (``waveform_*.glsl``, its version line left to the wrapper) and a test holds every file equal to its
+there as a body (``waveform_*.glsl``, its version line left to the pass file) and a test holds every file equal to its
 text (``tests/test_waveform_shader_files.py``), so the two renderers draw one source.
 
-The wrappers: the core fills a block member by its name, from one source for every pass that declares it
-(``native/core/src/mode_content.cpp``), while Waveform draws one program with other values in another pass: the
-mirrored camera's (the planar reflection's passes and the mirrored fog volume) and the floor's reduced pre-pass. A
-variant is a wrapper file (``#version``, ``#define`` renames of those members, ``#include`` of the body): the
-arithmetic is the body's, only the members' names differ, so each pass's values reach its own members. The Python
-renderer packs by its layout's offsets, which the renames leave as they are. The varying members were measured on the
-Python renderer's packs of every curated preset (N5.4 port record).
+The pass files: the core fills a block member by its name, from one source for every pass that declares it
+(``native/core/src/mode_content.cpp``), while Waveform's programs share member names that hold other values in other
+passes (``uMvp`` is the ribbons' rebased clip matrix, the floor's world one and the sparks' history one; the mirrored
+camera's passes and the floor's reduced pre-pass draw a program with other values again). So each pass file is
+``#version``, a ``#define`` per member of its block giving it its pass's prefix (``uMvp`` -> ``ribbon_uMvp``), and
+the body's ``#include``: the arithmetic is the body's, only the names differ, and each pass's values reach its own
+members (``member_name``). The Python renderer packs by its layout's offsets, which the renames leave as they are.
 
 ``waveform_shader_files()`` gives every file's name and text; ``tools/waveform_shader_files.py`` writes them.
 """
 from __future__ import annotations
 
+import re
+
 _VERSION = "#version 460 core\n"
 
-#: The members whose values differ between the camera's passes and the mirrored camera's (the planar reflection's
-#: draws, its sky and its fog volume), renamed in a mirror variant.
-MIRROR_MEMBERS = ("uMvp", "uEye", "uViewZ", "uViewport", "uFogView", "uFogRange", "uFogInvView", "uSkyReflection")
-#: The floor's reduced pre-pass (``WaveformScene._floor``: the reflection term alone into its own target): its mode
-#: and its target's size.
-PREPASS_MEMBERS = ("uSpecMode", "uViewport")
 
-
-def mirror_name(member: str) -> str:
-    """A member's name in the mirror variants (``uMvp`` -> ``uMirrorMvp``)."""
-    return "uMirror" + member[1:]
-
-
-def prepass_name(member: str) -> str:
-    """A member's name in the floor's pre-pass variant (``uSpecMode`` -> ``uPrepassSpecMode``)."""
-    return "uPrepass" + member[1:]
-
-
-VARIANTS = {
-    "": {},
-    "_mirror": {member: mirror_name(member) for member in MIRROR_MEMBERS},
-    "_prepass": {member: prepass_name(member) for member in PREPASS_MEMBERS},
-}
+def member_name(pass_id: str, member: str) -> str:
+    """A block member's name in a pass file: its pass's prefix (``member_name("ribbon", "uMvp")`` -> ``ribbon_uMvp``),
+    the name the native record or settings fill."""
+    return f"{pass_id}_{member}"
 
 
 def _bodies() -> dict[str, str]:
@@ -72,64 +56,88 @@ def _bodies() -> dict[str, str]:
     }
 
 
-#: Each pass file: (wrapper file, body, variant). The ribbon's body and both extensions are one draw (its vertex stage
-#: decodes the part), so the ribbon needs no per-part variant.
+#: Each pass file: (file, body, pass id). The ribbon's body and both continuation extensions are one draw (its vertex
+#: stage decodes the part); its body and light passes share their values (one prefix).
 PASS_FILES = (
-    ("waveform_ribbon.vert", "waveform_ribbon_vertex", ""),
-    ("waveform_ribbon_mirror.vert", "waveform_ribbon_vertex", "_mirror"),
-    ("waveform_ribbon_body.frag", "waveform_ribbon_body", ""),
-    ("waveform_ribbon_light.frag", "waveform_ribbon_light", ""),
-    ("waveform_ribbon_light_mirror.frag", "waveform_ribbon_light", "_mirror"),
-    ("waveform_strays.vert", "waveform_strays_vertex", ""),
-    ("waveform_strays_mirror.vert", "waveform_strays_vertex", "_mirror"),
-    ("waveform_strays.frag", "waveform_strays_fragment", ""),
-    ("waveform_strays_mirror.frag", "waveform_strays_fragment", "_mirror"),
-    ("waveform_bursts.vert", "waveform_bursts_vertex", ""),
-    ("waveform_bursts_mirror.vert", "waveform_bursts_vertex", "_mirror"),
-    ("waveform_bursts.frag", "waveform_bursts_fragment", ""),
-    ("waveform_bursts_mirror.frag", "waveform_bursts_fragment", "_mirror"),
-    ("waveform_floor.vert", "waveform_floor_vertex", ""),
-    ("waveform_floor_prepass.vert", "waveform_floor_vertex", "_prepass"),
-    ("waveform_floor.frag", "waveform_floor_fragment", ""),
-    ("waveform_floor_prepass.frag", "waveform_floor_fragment", "_prepass"),
-    ("waveform_sky.vert", "waveform_sky_vertex", ""),
-    ("waveform_sky_mirror.vert", "waveform_sky_vertex", "_mirror"),
-    ("waveform_sky.frag", "waveform_sky_fragment", ""),
-    ("waveform_sky_mirror.frag", "waveform_sky_fragment", "_mirror"),
-    ("waveform_field.comp", "waveform_field", ""),
-    ("waveform_medium.comp", "waveform_medium", ""),
-    ("waveform_medium_mirror.comp", "waveform_medium", "_mirror"),
-    ("waveform_fog_integrate.comp", "waveform_fog_integrate", ""),
-    ("waveform_fog_integrate_mirror.comp", "waveform_fog_integrate", "_mirror"),
-    ("waveform_give_section.comp", "waveform_give_section", ""),
-    ("waveform_give_blur.comp", "waveform_give_blur", ""),
+    ("waveform_ribbon.vert", "waveform_ribbon_vertex", "ribbon"),
+    ("waveform_ribbon_mirror.vert", "waveform_ribbon_vertex", "ribbon_mirror"),
+    ("waveform_ribbon_body.frag", "waveform_ribbon_body", "ribbon"),
+    ("waveform_ribbon_light.frag", "waveform_ribbon_light", "ribbon"),
+    ("waveform_ribbon_light_mirror.frag", "waveform_ribbon_light", "ribbon_mirror"),
+    ("waveform_strays.vert", "waveform_strays_vertex", "strays"),
+    ("waveform_strays_mirror.vert", "waveform_strays_vertex", "strays_mirror"),
+    ("waveform_strays.frag", "waveform_strays_fragment", "strays"),
+    ("waveform_strays_mirror.frag", "waveform_strays_fragment", "strays_mirror"),
+    ("waveform_bursts.vert", "waveform_bursts_vertex", "bursts"),
+    ("waveform_bursts_mirror.vert", "waveform_bursts_vertex", "bursts_mirror"),
+    ("waveform_bursts.frag", "waveform_bursts_fragment", "bursts"),
+    ("waveform_bursts_mirror.frag", "waveform_bursts_fragment", "bursts_mirror"),
+    ("waveform_floor.vert", "waveform_floor_vertex", "floor"),
+    ("waveform_floor_prepass.vert", "waveform_floor_vertex", "floor_prepass"),
+    ("waveform_floor.frag", "waveform_floor_fragment", "floor"),
+    ("waveform_floor_prepass.frag", "waveform_floor_fragment", "floor_prepass"),
+    ("waveform_sky.vert", "waveform_sky_vertex", "sky"),
+    ("waveform_sky_mirror.vert", "waveform_sky_vertex", "sky_mirror"),
+    ("waveform_sky.frag", "waveform_sky_fragment", "sky"),
+    ("waveform_sky_mirror.frag", "waveform_sky_fragment", "sky_mirror"),
+    ("waveform_field.comp", "waveform_field", "field"),
+    ("waveform_medium.comp", "waveform_medium", "medium"),
+    ("waveform_medium_mirror.comp", "waveform_medium", "medium_mirror"),
+    ("waveform_fog_integrate.comp", "waveform_fog_integrate", "integrate"),
+    ("waveform_fog_integrate_mirror.comp", "waveform_fog_integrate", "integrate_mirror"),
+    ("waveform_give_section.comp", "waveform_give_section", "give_section"),
+    ("waveform_give_blur.comp", "waveform_give_blur", "give_blur"),
 )
+
+_BLOCK = re.compile(r"layout\s*\(\s*std140\s*,\s*binding\s*=\s*\d+\s*\)\s*uniform\s+(\w+)\s*\{(.*?)\}\s*;", re.S)
+_MEMBER = re.compile(r"^\s*\w+\s+(\w+)\s*(?:\[[^\]]*\])?\s*;", re.M)
+
+
+def block_members(text: str) -> tuple[str, ...]:
+    """The members of the one std140 block a body declares as its own, in order (comments ignored; the conventions
+    block, ``SrpssConventions``, is the core's)."""
+    stripped = re.sub(r"//[^\n]*", "", text)
+    blocks = [block for block in _BLOCK.findall(stripped) if block[0] != "SrpssConventions"]
+    if len(blocks) != 1:
+        raise ValueError(f"a Waveform program declares one block of its own, not {len(blocks)}")
+    return tuple(_MEMBER.findall(blocks[0][1]))
 
 
 def body_text(text: str) -> str:
-    """A converted text as its body file holds it: without its version line (the wrapper's first line)."""
+    """A converted text as its body file holds it: without its version line (the pass file's first line)."""
     if not text.startswith(_VERSION):
         raise ValueError("a Waveform program's text starts with its version line")
     return text[len(_VERSION):]
 
 
-def wrapper_text(body: str, variant: str) -> str:
-    """A pass file: the version line, the variant's renames and the body's include."""
-    renames = VARIANTS[variant]
+def wrapper_text(body: str, pass_id: str, members: tuple[str, ...]) -> str:
+    """A pass file: the version line, the pass's member names and the body's include."""
     lines = [_VERSION.rstrip("\n"),
-             f"// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): {body}"
-             + (f", the {variant[1:]} variant (its members renamed, the arithmetic the body's)" if renames else "")]
-    lines += [f"#define {old} {new}" for old, new in renames.items()]
+             f"// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): {body} for the {pass_id} pass, its "
+             "block's members named for it (the arithmetic the body's)"]
+    lines += [f"#define {member} {member_name(pass_id, member)}" for member in members]
     lines.append(f'#include "{body}.glsl"')
     return "\n".join(lines) + "\n"
 
 
+def pass_members() -> dict[str, tuple[str, ...]]:
+    """Each pass id's block members (unprefixed), in order."""
+    bodies = _bodies()
+    found: dict[str, tuple[str, ...]] = {}
+    for _name, body, pass_id in PASS_FILES:
+        members = block_members(bodies[body])
+        if found.setdefault(pass_id, members) != members:
+            raise ValueError(f"the {pass_id} pass's stages declare different blocks")
+    return found
+
+
 def waveform_shader_files() -> dict[str, str]:
     """Every Waveform shader file's name and text: the bodies (``.glsl``) and the pass files."""
-    files = {f"{name}.glsl": body_text(text) for name, text in _bodies().items()}
-    files.update({name: wrapper_text(body, variant) for name, body, variant in PASS_FILES})
+    bodies = _bodies()
+    files = {f"{name}.glsl": body_text(text) for name, text in bodies.items()}
+    files.update({name: wrapper_text(body, pass_id, block_members(bodies[body])) for name, body, pass_id in PASS_FILES})
     return files
 
 
-__all__ = ["MIRROR_MEMBERS", "PASS_FILES", "PREPASS_MEMBERS", "VARIANTS", "body_text", "mirror_name", "prepass_name",
-           "waveform_shader_files", "wrapper_text"]
+__all__ = ["PASS_FILES", "block_members", "body_text", "member_name", "pass_members", "waveform_shader_files",
+           "wrapper_text"]

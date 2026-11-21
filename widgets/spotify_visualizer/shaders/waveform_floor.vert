@@ -1,3 +1,41 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_floor_vertex
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_floor_vertex for the floor pass, its block's members named for it (the arithmetic the body's)
+#define uFloorGive floor_uFloorGive
+#define uMvp floor_uMvp
+#define uFloorInverseMvp floor_uFloorInverseMvp
+#define uEye floor_uEye
+#define uFlat floor_uFlat
+#define uFogLit floor_uFogLit
+#define uViewport floor_uViewport
+#define uBackdrop floor_uBackdrop
+#define uAmbient floor_uAmbient
+#define uFloorTint floor_uFloorTint
+#define uFloor floor_uFloor
+#define uFloorTone floor_uFloorTone
+#define uRipple floor_uRipple
+#define uStreak floor_uStreak
+#define uHot floor_uHot
+#define uMaterial floor_uMaterial
+#define uMaterialShape floor_uMaterialShape
+#define uPool floor_uPool
+#define uPoolZ floor_uPoolZ
+#define uColumn floor_uColumn
+#define uReflectionHue floor_uReflectionHue
+#define uBound floor_uBound
+#define uSpecMode floor_uSpecMode
+#define uForward floor_uForward
+#define uFloorGiveLook floor_uFloorGiveLook
+#define uFieldOrigin floor_uFieldOrigin
+#define uFieldSide floor_uFieldSide
+#define uGradeStops floor_uGradeStops
+#define uGrade floor_uGrade
+#define uBodySpan floor_uBodySpan
+#define uBodyShape floor_uBodyShape
+#define uMist floor_uMist
+#define uMistShape floor_uMistShape
+#define uFogView floor_uFogView
+#define uFogLens floor_uFogLens
+#define uFogRange floor_uFogRange
+#define uReflectionLook floor_uReflectionLook
+#define uReflectionContact floor_uReflectionContact
 #include "waveform_floor_vertex.glsl"

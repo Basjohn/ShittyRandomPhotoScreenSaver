@@ -1,3 +1,37 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_ribbon_body
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_ribbon_body for the ribbon pass, its block's members named for it (the arithmetic the body's)
+#define uFloorGive ribbon_uFloorGive
+#define uSurface ribbon_uSurface
+#define uSweepAxis ribbon_uSweepAxis
+#define uFloorContact ribbon_uFloorContact
+#define uFloorGiveFrame ribbon_uFloorGiveFrame
+#define uMvp ribbon_uMvp
+#define uViewport ribbon_uViewport
+#define uRim ribbon_uRim
+#define uEye ribbon_uEye
+#define uDrawCounts ribbon_uDrawCounts
+#define uDrawBases ribbon_uDrawBases
+#define uContinuationBefore ribbon_uContinuationBefore
+#define uContinuationAfter ribbon_uContinuationAfter
+#define uDiagnostic ribbon_uDiagnostic
+#define uViewZ ribbon_uViewZ
+#define uStrands ribbon_uStrands
+#define uBody ribbon_uBody
+#define uFill ribbon_uFill
+#define uGlint ribbon_uGlint
+#define uTone ribbon_uTone
+#define uAge ribbon_uAge
+#define uMistOrigin ribbon_uMistOrigin
+#define uGlow ribbon_uGlow
+#define uLattice ribbon_uLattice
+#define uLatticeTone ribbon_uLatticeTone
+#define uGradeStops ribbon_uGradeStops
+#define uGrade ribbon_uGrade
+#define uMist ribbon_uMist
+#define uMistShape ribbon_uMistShape
+#define uFogView ribbon_uFogView
+#define uFogLens ribbon_uFogLens
+#define uFogRange ribbon_uFogRange
+#define uPulseRim ribbon_uPulseRim
+#define uPulseRimShape ribbon_uPulseRimShape
 #include "waveform_ribbon_body.glsl"

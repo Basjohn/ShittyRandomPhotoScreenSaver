@@ -1,3 +1,6 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_fog_integrate
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_fog_integrate for the integrate pass, its block's members named for it (the arithmetic the body's)
+#define uFogInvView integrate_uFogInvView
+#define uFogLens integrate_uFogLens
+#define uFogRange integrate_uFogRange
 #include "waveform_fog_integrate.glsl"

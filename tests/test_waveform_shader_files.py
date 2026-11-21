@@ -1,6 +1,6 @@
 """Waveform Ribbon's shader files are the Python renderer's texts (N5.4; ``rendering.gl_programs.waveform_shader_files``),
-and each variant renames only its members: it compiles, and every member sits at the base text's offset (the Python
-renderer packs by those)."""
+and each pass file renames only its block's members: it compiles, and every member sits at the Python text's offset
+(the Python renderer packs by those)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -43,15 +43,15 @@ def test_every_file_is_its_python_text(monkeypatch):
     assert tool.differences() == []
     names = set(files.waveform_shader_files())
     assert {name for program in PROGRAMS for name in program} <= names
-    # The base variant composes back to the Python renderer's own text (its comment line aside).
+    # Every pass file composes back to the Python renderer's own text once its member names are put back.
     from widgets.spotify_visualizer.shaders import compose_shader_source
 
-    for wrapper, body, variant in files.PASS_FILES:
-        if variant:
-            continue
-        composed = compose_shader_source(_folder() / wrapper).split("\n")
-        assert composed[1].startswith("// Waveform Ribbon"), wrapper
-        assert "\n".join([composed[0], *composed[2:]]) == files._bodies()[body], wrapper
+    for wrapper, body, pass_id in files.PASS_FILES:
+        lines = compose_shader_source(_folder() / wrapper).split("\n")
+        defines = [line for line in lines if line.startswith("#define ") and f" {pass_id}_" in line]
+        assert len(defines) == len(files.block_members(files._bodies()[body])), wrapper
+        kept = [line for line in lines if line not in defines and not line.startswith("// Waveform Ribbon")]
+        assert "\n".join(kept) == files._bodies()[body], wrapper
     # Negative control: a text that moved is reported.
     original = files._bodies
 
@@ -63,11 +63,21 @@ def test_every_file_is_its_python_text(monkeypatch):
     assert tool.differences() == ["waveform_floor_fragment.glsl"]
 
 
+def test_every_pass_names_each_member_once_across_the_program():
+    from rendering.gl_programs.waveform_shader_files import member_name, pass_members
+
+    names = [member_name(pass_id, member) for pass_id, members in pass_members().items() for member in members]
+    assert len(names) == len(set(names))
+    # Negative control: without the prefix the passes' members collide (the reason for the pass files).
+    bare = [member for members in pass_members().values() for member in members]
+    assert len(bare) > len(set(bare))
+
+
 def _offsets(program: int) -> dict[str, int]:
     """Every block member's byte offset in ``program`` by its name."""
-    from OpenGL import GL as gl
-
     import ctypes
+
+    from OpenGL import GL as gl
 
     count = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORMS))
     found = {}
@@ -84,37 +94,38 @@ def _offsets(program: int) -> dict[str, int]:
 
 
 @pytest.mark.qt
-def test_every_pass_program_compiles_and_its_renames_keep_the_offsets(qt_app):
+def test_every_pass_program_compiles_and_keeps_the_python_texts_offsets(qt_app):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
 
     disable_per_call_gl_error_checking()
-    from rendering.gl_programs.waveform_shader_files import VARIANTS
+    from rendering.gl_programs.waveform_shader_files import PASS_FILES, _bodies
     from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
     from tools.labs.render_target import OffscreenRenderTarget
     from widgets.spotify_visualizer.shaders import compose_shader_source
 
+    passes = {name: (body, pass_id) for name, body, pass_id in PASS_FILES}
+    bodies = _bodies()
     target = OffscreenRenderTarget(16, 16)
-    offsets = {}
+
+    def compiled(texts, label):
+        return (compile_program(*texts, label=label) if len(texts) == 2
+                else compile_compute_program(texts[0], label=label))
+    checked = 0
     try:
         with target.current():
             for program_files in PROGRAMS:
-                texts = [compose_shader_source(_folder() / name) for name in program_files]
-                program = (compile_program(*texts, label=program_files[0]) if len(texts) == 2
-                           else compile_compute_program(texts[0], label=program_files[0]))
-                offsets[program_files] = _offsets(program)
+                pass_id = passes[program_files[0]][1]
+                program = compiled([compose_shader_source(_folder() / name) for name in program_files], program_files[0])
+                python = compiled([bodies[passes[name][0]] for name in program_files], f"python {program_files[0]}")
+                files, texts = _offsets(program), _offsets(python)
                 delete_program(program)
+                delete_program(python)
+                prefix = f"{pass_id}_"
+                own = {name[len(prefix):]: offset for name, offset in files.items() if name.startswith(prefix)}
+                conventions = {name: offset for name, offset in files.items() if not name.startswith(prefix)}
+                assert own and {**own, **conventions} == texts, program_files
+                assert not set(conventions) & set(own), program_files
+                checked += 1
     finally:
         target.close()
-    inverse = {variant: {new: old for old, new in renames.items()} for variant, renames in VARIANTS.items()}
-    pairs = {("waveform_ribbon_mirror.vert", "waveform_ribbon_light_mirror.frag"):
-             ("waveform_ribbon.vert", "waveform_ribbon_light.frag")}
-    for program_files in PROGRAMS:
-        stem = program_files[0].rsplit(".", 1)[0]
-        variant = next((v for v in ("_mirror", "_prepass") if stem.endswith(v)), "")
-        if not variant:
-            continue
-        base = pairs.get(program_files) or tuple(name.replace(variant, "") for name in program_files)
-        renamed = {inverse[variant].get(name, name): offset for name, offset in offsets[program_files].items()}
-        assert renamed == offsets[base], program_files
-        assert any(name in inverse[variant] for name in offsets[program_files]), program_files
-    assert offsets[("waveform_ribbon.vert", "waveform_ribbon_light.frag")]
+    assert checked == len(PROGRAMS)

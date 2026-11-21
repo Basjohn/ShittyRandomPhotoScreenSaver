@@ -1,3 +1,8 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_field
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_field for the field pass, its block's members named for it (the arithmetic the body's)
+#define uFieldOrigin field_uFieldOrigin
+#define uFieldSide field_uFieldSide
+#define uGradeStops field_uGradeStops
+#define uGrade field_uGrade
+#define uFieldSpan field_uFieldSpan
 #include "waveform_field.glsl"

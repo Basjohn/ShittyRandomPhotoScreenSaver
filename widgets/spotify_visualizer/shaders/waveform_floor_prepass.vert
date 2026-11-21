@@ -1,5 +1,41 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_floor_vertex, the prepass variant (its members renamed, the arithmetic the body's)
-#define uSpecMode uPrepassSpecMode
-#define uViewport uPrepassViewport
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_floor_vertex for the floor_prepass pass, its block's members named for it (the arithmetic the body's)
+#define uFloorGive floor_prepass_uFloorGive
+#define uMvp floor_prepass_uMvp
+#define uFloorInverseMvp floor_prepass_uFloorInverseMvp
+#define uEye floor_prepass_uEye
+#define uFlat floor_prepass_uFlat
+#define uFogLit floor_prepass_uFogLit
+#define uViewport floor_prepass_uViewport
+#define uBackdrop floor_prepass_uBackdrop
+#define uAmbient floor_prepass_uAmbient
+#define uFloorTint floor_prepass_uFloorTint
+#define uFloor floor_prepass_uFloor
+#define uFloorTone floor_prepass_uFloorTone
+#define uRipple floor_prepass_uRipple
+#define uStreak floor_prepass_uStreak
+#define uHot floor_prepass_uHot
+#define uMaterial floor_prepass_uMaterial
+#define uMaterialShape floor_prepass_uMaterialShape
+#define uPool floor_prepass_uPool
+#define uPoolZ floor_prepass_uPoolZ
+#define uColumn floor_prepass_uColumn
+#define uReflectionHue floor_prepass_uReflectionHue
+#define uBound floor_prepass_uBound
+#define uSpecMode floor_prepass_uSpecMode
+#define uForward floor_prepass_uForward
+#define uFloorGiveLook floor_prepass_uFloorGiveLook
+#define uFieldOrigin floor_prepass_uFieldOrigin
+#define uFieldSide floor_prepass_uFieldSide
+#define uGradeStops floor_prepass_uGradeStops
+#define uGrade floor_prepass_uGrade
+#define uBodySpan floor_prepass_uBodySpan
+#define uBodyShape floor_prepass_uBodyShape
+#define uMist floor_prepass_uMist
+#define uMistShape floor_prepass_uMistShape
+#define uFogView floor_prepass_uFogView
+#define uFogLens floor_prepass_uFogLens
+#define uFogRange floor_prepass_uFogRange
+#define uReflectionLook floor_prepass_uReflectionLook
+#define uReflectionContact floor_prepass_uReflectionContact
 #include "waveform_floor_vertex.glsl"

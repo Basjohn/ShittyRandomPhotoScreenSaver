@@ -1,11 +1,37 @@
 #version 460 core
-// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_ribbon_vertex, the mirror variant (its members renamed, the arithmetic the body's)
-#define uMvp uMirrorMvp
-#define uEye uMirrorEye
-#define uViewZ uMirrorViewZ
-#define uViewport uMirrorViewport
-#define uFogView uMirrorFogView
-#define uFogRange uMirrorFogRange
-#define uFogInvView uMirrorFogInvView
-#define uSkyReflection uMirrorSkyReflection
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_ribbon_vertex for the ribbon_mirror pass, its block's members named for it (the arithmetic the body's)
+#define uFloorGive ribbon_mirror_uFloorGive
+#define uSurface ribbon_mirror_uSurface
+#define uSweepAxis ribbon_mirror_uSweepAxis
+#define uFloorContact ribbon_mirror_uFloorContact
+#define uFloorGiveFrame ribbon_mirror_uFloorGiveFrame
+#define uMvp ribbon_mirror_uMvp
+#define uViewport ribbon_mirror_uViewport
+#define uRim ribbon_mirror_uRim
+#define uEye ribbon_mirror_uEye
+#define uDrawCounts ribbon_mirror_uDrawCounts
+#define uDrawBases ribbon_mirror_uDrawBases
+#define uContinuationBefore ribbon_mirror_uContinuationBefore
+#define uContinuationAfter ribbon_mirror_uContinuationAfter
+#define uDiagnostic ribbon_mirror_uDiagnostic
+#define uViewZ ribbon_mirror_uViewZ
+#define uStrands ribbon_mirror_uStrands
+#define uBody ribbon_mirror_uBody
+#define uFill ribbon_mirror_uFill
+#define uGlint ribbon_mirror_uGlint
+#define uTone ribbon_mirror_uTone
+#define uAge ribbon_mirror_uAge
+#define uMistOrigin ribbon_mirror_uMistOrigin
+#define uGlow ribbon_mirror_uGlow
+#define uLattice ribbon_mirror_uLattice
+#define uLatticeTone ribbon_mirror_uLatticeTone
+#define uGradeStops ribbon_mirror_uGradeStops
+#define uGrade ribbon_mirror_uGrade
+#define uMist ribbon_mirror_uMist
+#define uMistShape ribbon_mirror_uMistShape
+#define uFogView ribbon_mirror_uFogView
+#define uFogLens ribbon_mirror_uFogLens
+#define uFogRange ribbon_mirror_uFogRange
+#define uPulseRim ribbon_mirror_uPulseRim
+#define uPulseRimShape ribbon_mirror_uPulseRimShape
 #include "waveform_ribbon_vertex.glsl"
