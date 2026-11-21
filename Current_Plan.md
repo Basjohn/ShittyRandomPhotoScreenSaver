@@ -1475,6 +1475,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 
 **NF. The flip (P3.5): Vulkan the default, OpenGL selectable**
 
+- [ ] One row-order convention again (lead, 22 Nov): N5.4 draws Waveform in Python's row order through the composite's
+  `scene_rows: "up"` so its 4x edges match Python exactly; every other program draws top row first. Once the Python
+  renderers are retired (N5.2h and the modes' flip), return Waveform to the core's row order, delete `scene_rows` and
+  `u_scene_rows_up`, and re-baseline Waveform native-only (rule (b) and its reaction check); a test that no program
+  declares another row order.
 - [ ] N5.8 The Studio's preview host and window, and the release-media and capture tools, render through the
   same core; no Python OpenGL node is left in any Qt Quick surface of the process.
 - [ ] The translucent-window question settled from N0.6 (the Studio's window: see-through if Vulkan can, else an
