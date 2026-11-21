@@ -74,9 +74,6 @@ _RIBBON_SURFACE_GLSL = FLOOR_GIVE_GLSL + """
 struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; vec4 tint; };  // tint: colour and its share
 uniform vec2 uSurface;     // camber in half-widths; transverse subdivision count
 uniform vec3 uSweepAxis;   // zero: transported width; otherwise fixed cross-section plane
-// The draw's first vertex (N5.4): a culled draw starts at a vertex that moves every frame, and the native core's draw
-// is a count from vertex 0 (D15 point 6), so the start is a block member added here and every draw begins at 0.
-uniform int uVertexBase;
 vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
     if(u==0.0 || all(equal(b,c))) return b;
     if(u==1.0) return c;
@@ -216,7 +213,7 @@ void main() {
     int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int divisions=clamp(int(paths[owner].meta.y),1,8);
     int crossDiv=max(int(uSurface.y),1);
-    int vertexId=gl_VertexID+uVertexBase;
+    int vertexId=gl_VertexID;
     int interval=vertexId/(6*crossDiv), corner=vertexId%6;
     int acrossStrip=(vertexId/6)%crossDiv;
     int segment=interval/divisions;
@@ -325,7 +322,15 @@ void main() {
 from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 
 _CONTINUATION_VERTEX = """
-uniform vec4 uContinuation; // packet-local min/max x, subdivisions, endpoint side (-1/0/+1)
+// One draw (N5.4): the culled body, then the before and the after extension, as consecutive vertex ranges (the native
+// core's draw is a count from vertex 0, D15 point 6; one pass where three draws were). Each part's vertex count and its
+// first vertex in the culled strip, and each extension's packet-local min/max x, subdivisions and side (-1, +1).
+uniform ivec4 uDrawCounts;
+uniform ivec4 uDrawBases;
+uniform vec4 uContinuationBefore;
+uniform vec4 uContinuationAfter;
+int drawnVertex;
+vec4 drawnContinuation;  // the body's 0: no continuation
 void continuationMain(int owner,int crossDiv);
 bool continuationAnchored(int owner);
 int continuationAnchorKnot(int owner,bool before);
@@ -340,16 +345,16 @@ vec3 continuedSurface(int owner,float x,float across) {
 }
 void continuationMain(int owner,int crossDiv) {
     int last=int(paths[owner].meta.x)-1;
-    bool before=uContinuation.w<0.0;
+    bool before=drawnContinuation.w<0.0;
     float edgeX=continuationAnchor(owner,before);
-    float limit=before?uContinuation.x:uContinuation.y;
+    float limit=before?drawnContinuation.x:drawnContinuation.y;
     if((before && limit>=edgeX) || (!before && limit<=edgeX))return;
-    int vertexId=gl_VertexID+uVertexBase;
+    int vertexId=drawnVertex;
     int interval=vertexId/(6*crossDiv),corner=vertexId%6;
     int strip=(vertexId/6)%crossDiv;
     bool next=corner==1 || corner>=4,highAcross=corner==2 || corner==3 || corner==5;
     float across=float(strip+(highAcross?1:0))/float(crossDiv);
-    float t=float(interval+(next?1:0))/uContinuation.z;
+    float t=float(interval+(next?1:0))/drawnContinuation.z;
     // Cluster stations at the C2 join without moving any world-space point.
     float x=mix(edgeX,limit,t*t);
     vec4 f=continuationField(owner,x);
@@ -380,9 +385,17 @@ _ANCHORED_STRIP = """
         u0=mix(low,high,u0);u1=mix(low,high,u1);u=mix(low,high,u);
     }
 """
-RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {',1)
+_DRAWN_PART = """
+    int drawn=gl_VertexID;
+    int part=drawn<uDrawCounts.x?0:(drawn<uDrawCounts.x+uDrawCounts.y?1:2);
+    drawnVertex=drawn-(part==0?0:(part==1?uDrawCounts.x:uDrawCounts.x+uDrawCounts.y))+uDrawBases[part];
+    drawnContinuation=part==0?vec4(0.0):(part==1?uContinuationBefore:uContinuationAfter);
+"""
+RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {'+_DRAWN_PART,1)
+    .replace('    int vertexId=gl_VertexID;\n    int interval=vertexId/(6*crossDiv), corner=vertexId%6;',
+             '    int vertexId=drawnVertex;\n    int interval=vertexId/(6*crossDiv), corner=vertexId%6;',1)
     .replace('if(segment>=count-1) return;',
-             'if(uContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
+             'if(drawnContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
     .replace('    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',_ANCHORED_STRIP+'    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',1)
     +CONTINUATION_GLSL+_CONTINUATION_MAIN)
 
@@ -460,6 +473,7 @@ void main() {
 # it and with the knot's age), wobbles gently, tapers to a free tip and carries droplet beads. Every term is a smooth
 # function of (stray coordinate, knot age), so no setting can kink one. The knot's sparkle gates how many live.
 RIBBON_STRAY_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+uniform int uVertexBase;  // the draw's first vertex (N5.4)
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
@@ -513,7 +527,7 @@ void main() {
     ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
     ringCount=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int perKnot=max(int(uStray.x),1);
-    int vertexId=gl_VertexID+uVertexBase;
+    int vertexId=gl_VertexID+uVertexBase;   // the draw counts from vertex 0 (N5.4), its first vertex a member
     int stray=vertexId/(6*STRAY_SEGMENTS), corner=vertexId%6, segment=(vertexId/6)%STRAY_SEGMENTS;
     int index=stray/perKnot, slot=stray%perKnot;
     gl_Position=vec4(2.0,2.0,2.0,1.0); vWorld=vec3(0.0); vAlong=0.0; vAcross=0.0; vBright=0.0; vSeed=0.0;

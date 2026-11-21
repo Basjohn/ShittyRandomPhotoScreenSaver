@@ -123,11 +123,14 @@ class FogVolume:
         self._integrate_program=compile_compute_program(FOG_INTEGRATE_COMPUTE,label=f'{self.label} integrate')
         return False
 
-    def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None, focus_depth=0.,
+    def update(self, inject_program: int, *, view, lens, depth_range, grid, inject_block, focus_depth=0.,
                restore: bool = True) -> None:
         """Evaluate and integrate the medium for one camera. ``view``: world->view (4x4, numpy row-major);
-        ``lens``: Perspective (tangent x, y); ``depth_range``: positive (near, far) view depth. ``restore=False``: the
-        caller owns the program and image units for its frame (nothing read back; units left unbound)."""
+        ``lens``: Perspective (tangent x, y); ``depth_range``: positive (near, far) view depth. ``inject_block``:
+        ``(the volume's values) -> context`` binding the inject program's one block with the volume's values
+        (``uFogInvView``, ``uFogLens``, ``uFogRange``) beside its medium's, around the dispatch (the program is
+        current). ``restore=False``: the caller owns the program and image units for its frame (nothing read back;
+        units left unbound)."""
         self._check_context(admit=True)
         grid = self._admit_grid(grid)
         view = np.asarray(view, float)
@@ -151,15 +154,14 @@ class FogVolume:
         try:
             # std140 mat4 is column-major: the inverse view's columns (as glUniformMatrix4fv with transpose did).
             inverse = tuple(np.linalg.inv(view).astype(np.float32).flatten(order='F'))
-            block = FOG_VOLUME_BLOCK.pack({"uFogInvView": inverse, "uFogLens": lens4, "uFogRange": range4})
-            with self._blocks.bound(block):
-                gl.glUseProgram(inject_program)
-                if medium is not None:
-                    medium(inject_program)
-                with bound_image(2, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
-                        bound_image(3, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True, restore=restore):
-                    dispatch(tuple(-(-n//4) for n in grid),
-                             gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+            values = {"uFogInvView": inverse, "uFogLens": lens4, "uFogRange": range4}
+            gl.glUseProgram(inject_program)
+            with inject_block(values), \
+                    bound_image(2, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
+                    bound_image(3, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True, restore=restore):
+                dispatch(tuple(-(-n//4) for n in grid),
+                         gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+            with self._blocks.bound(FOG_VOLUME_BLOCK.pack(values)):
                 gl.glUseProgram(self._integrate_program)
                 with bound_image(0, self._inject, gl.GL_READ_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
                         bound_image(1, self._integrated, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True,

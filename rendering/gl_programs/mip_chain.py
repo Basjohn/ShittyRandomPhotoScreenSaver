@@ -20,8 +20,10 @@ for a self-mipped scene target's attachments a sampler reads with mips (``native
 """
 from __future__ import annotations
 
-_MIP_BOX = """#version 440
-// The mip chain's box (N5.4: ABI 33, the self-mipped targets; ABI 35, the item textures; rendering/gl_programs/
+# The template starts after its version line, so the shader-source scan (``tools/vulkan_shader_readiness.py``) bakes the
+# two texts and never the template itself.
+_MIP_BOX_VERSION = "#version 440\n"
+_MIP_BOX = """// The mip chain's box (N5.4: ABI 33, the self-mipped targets; ABI 35, the item textures; rendering/gl_programs/
 // mip_chain.py holds the same texts, a test holds them equal): one level from the one above it, each destination texel
 // the exact area average of the source texels it covers (an even side: two taps of 1/2; an odd side 2d + 1: three taps
 // of (d - i), d and (i + 1) over 2d + 1; a side of 1: one tap), separable, summed outer taps first so the result is the
@@ -73,7 +75,7 @@ void main()
 %(store)s}
 """
 _STORE = "    imageStore(u_dest, dst, sum);\n"
-MIP_BOX_COMP = _MIP_BOX % {"format": "rgba16f", "store": _STORE}
+MIP_BOX_COMP = _MIP_BOX_VERSION + _MIP_BOX % {"format": "rgba16f", "store": _STORE}
 
 #: The RGBA8 text sums integers: each loaded texel is taken back to its 8-bit value 0..255 (``unorm8``) and the level
 #: rounded once to the nearest of them before its store. Why (measured 21 Nov on the ABI 35 builds, the chain scene):
@@ -98,7 +100,7 @@ _STORE_RGBA8 = ("    // The level in 8-bit units, rounded once to the nearest va
 
 
 def _rgba8_text() -> str:
-    text = _MIP_BOX % {"format": "rgba8", "store": _STORE_RGBA8}
+    text = _MIP_BOX_VERSION + _MIP_BOX % {"format": "rgba8", "store": _STORE_RGBA8}
     for tap in ("ax.x", "ax.z", "ax.y"):
         old = f"imageLoad(u_source, ivec2({tap}, y))"
         assert text.count(old) == 1, old

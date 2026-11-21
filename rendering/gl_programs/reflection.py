@@ -35,10 +35,14 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
 # (the ribbon light and spark passes do) reflect crisply near the plane and spread with height, as on a wet floor.
 # The footprint's anisotropy is the shader's own taps (``rendering.gl_programs.anisotropic``, N5.4: the reflection target
 # carries no hardware anisotropy, as the native core's sampler has none), included here once for every receiver.
-PLANAR_REFLECTION_GLSL = ANISOTROPIC_GLSL + """
+# The receiver's declarations alone: Waveform's floor reads the target with its own column taps, not the receiver's
+# function below, whose out-array helper a native shader may not carry (checklist 7).
+PLANAR_REFLECTION_UNIFORMS = ANISOTROPIC_GLSL + """
 uniform sampler2D uReflection;
 uniform vec4 uReflectionLook;   // streak half-length (uv), min/max optical mip, Gaussian sigma (receiver pixels)
 uniform vec4 uReflectionContact; // plane height (world), spread (uv per world unit of height; 0 off), along/across, probe mip
+"""
+PLANAR_REFLECTION_GLSL = PLANAR_REFLECTION_UNIFORMS + """
 // A discrete nine-tap Gaussian folded into five bilinear taps (offsets in texels of the sampled level), weights sum 1.
 void reflectionGaussian(float sigma, out float offsets[5], out float weights[5]) {
     float s=max(sigma,0.05);

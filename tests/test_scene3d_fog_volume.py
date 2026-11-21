@@ -1,6 +1,7 @@
 """S3D-7 fog volume and detail march: exact Perspective slab integration, world anchoring, the steady
 (never eroded) share, the ground stop and ownership (offscreen)."""
 import math
+from contextlib import nullcontext
 
 import numpy as np
 import pytest
@@ -52,11 +53,17 @@ def gl_context(qt_app):
 def update(parts, *, eye=(0., 0., 0.), sphere=(0., 0., 0., 0.), steady=0.):
     program = parts['program']
 
-    def medium(program):
+    def inject_block(fog):
+        # The raw program's loose uniforms: the medium's and the volume's (the inject head's, N5.4).
         gl.glUniform4f(gl.glGetUniformLocation(program, 'uSphere'), *sphere)
         gl.glUniform1f(gl.glGetUniformLocation(program, 'uSteady'), steady)
+        gl.glUniformMatrix4fv(gl.glGetUniformLocation(program, 'uFogInvView'), 1, gl.GL_FALSE,
+                              np.asarray(fog['uFogInvView'], np.float32))
+        gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogLens'), *fog['uFogLens'])
+        gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogRange'), *fog['uFogRange'])
+        return nullcontext()
     parts['volume'].update(program, view=view_at(eye), lens=(.5, .5),
-                           depth_range=DEPTHS, grid=GRID, medium=medium)
+                           depth_range=DEPTHS, grid=GRID, inject_block=inject_block)
 
 
 def integrated(volume):

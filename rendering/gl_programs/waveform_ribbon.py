@@ -1,7 +1,7 @@
 """Waveform infinite wet-floor material; no scene lifetime or simulation."""
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
-from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
+from rendering.gl_programs.reflection import PLANAR_REFLECTION_UNIFORMS
 from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
 from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
 
@@ -91,7 +91,7 @@ uniform vec3 uForward;
 uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
-""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
 const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
 // The maps' and the reflection's anisotropy (N5.4: the shader's taps, rendering/gl_programs/anisotropic.py, in both
 // renderers; the samplers at 1x, as the native core's are): the maps' former hardware 8x, the reflection's 16x.

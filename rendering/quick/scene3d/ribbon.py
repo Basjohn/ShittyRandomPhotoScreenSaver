@@ -371,26 +371,30 @@ class RibbonPrimitive:
             values['uSweepAxis'] = axis
             _apply_floor_give(values, floor_give, origin+np.asarray(mist_frame, float))
             if shading == 'light':rim_bound = _apply_pulse_rim(values, pulse_rim)
-            if continuation is not None:values['uContinuation'] = (0.,0.,0.,0.)
             body,span,extensions=(ranges if ranges is not None else
                 ((0,packet.vertices*cross_divisions),None,()))
-            values['uVertexBase'] = int(body[0])     # every draw counts from vertex 0 (N5.4)
+            drawn=body[1]
+            if continuation is not None:
+                # One draw (N5.4): the culled body, then each extension, as consecutive vertex ranges.
+                counts,bases,parts=[body[1],0,0],[body[0],0,0],{-1.:(0.,0.,0.,0.),1.:(0.,0.,0.,0.)}
+                for side,divisions,first,count in extensions:
+                    part=1 if side<0 else 2
+                    counts[part],bases[part]=count,first
+                    parts[side]=(*span,float(divisions),side)
+                values['uDrawCounts']=(*(int(v) for v in counts),0)
+                values['uDrawBases']=(*(int(v) for v in bases),0)
+                values['uContinuationBefore'],values['uContinuationAfter']=parts[-1.],parts[1.]
+                drawn=sum(counts)
             if shaded is None:
                 values['uDiagnostic'] = diagnostic
                 values['uFloorContact'] = _floor_contact(floor,origin+np.asarray(mist_frame,float))
             else:
                 values.update(shaded)
-            with self._packet_bound(packet), self.resources.pass_blocks.bound(pack_block(RIBBON_BLOCK, values)) as rebind:
+            with self._packet_bound(packet), self.resources.pass_blocks.bound(pack_block(RIBBON_BLOCK, values)):
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
                 try:
-                    if body[1]:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,body[1],packet.instances)
-                    if ranges is not None:
-                        for side,divisions,first,count in extensions:
-                            values['uContinuation'] = (*span,float(divisions),side)
-                            values['uVertexBase'] = int(first)
-                            rebind(pack_block(RIBBON_BLOCK, values))
-                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,count,packet.instances)
+                    if drawn:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,drawn,packet.instances)
                 finally:
                     if timing_query is not None:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)

@@ -354,9 +354,11 @@ class WaveformScene:
         # its unit for the dispatch.
         values=self.fog_resources.values('fog medium')
         self._fog_values(values)
-        with self.fog_resources.pass_blocks.bound(pack_block(MEDIUM_BLOCK,values)):
-            volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,grid=grid,
-                          focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]),**OWNED)
+        # One block: the medium's values and the volume's camera (a native compute entry has one block of its own).
+        volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,grid=grid,
+                      inject_block=lambda fog:self.fog_resources.pass_blocks.bound(pack_block(MEDIUM_BLOCK,
+                                                                                              {**values,**fog})),
+                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]),**OWNED)
 
     def _field_values(self,values):
         """The world body field's values (``WORLD_FIELD_GLSL``) into a program's pass block values; its texture bound
