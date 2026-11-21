@@ -209,7 +209,8 @@ def test_no_visualizer_pixel_lands_outside_the_cards_inner_edge(host, mode, mate
         loader = scene._visualizer_loader
         card_rect = (loader.x(), loader.y(), loader.width(), loader.height())   # where the scene put the card
         reading = contract.read_contract(drawn, white, hidden, card_rect=card_rect, presentation=card, dpr=dpr,
-                                         border_alpha=CARD["border_color"][3])
+                                         border_alpha=CARD["border_color"][3],
+                                         soft_edge=contract.SOFT_EDGE if material != "normal" else 0.0)
         escapes[name] = reading.escapes
         lit[name] = reading.lit
         if carded:
@@ -409,3 +410,47 @@ def test_hide_borders_holds_a_renderers_overflow_to_the_display_rect(host, mode,
     assert decisions == {False}, f"{mode}'s overflow was not held on every frame: {decisions}"
     assert control == {True}, f"the control did not take the unclipped path: {control}"
     assert outside == 0, f"{mode}'s overflow drew {outside} pixels past the display rect"
+
+
+def _synthetic_soft_edge_card(*, overlap: bool = False):
+    """A 60 x 60 frame (card (10, 10, 40, 40), a 5 px border): hidden read, then the white content read. The hidden read
+    has the shader edge's soft pixel on the first ring inside the frame (under the option's limit), the content fills
+    the inner square exactly; ``overlap`` also lets it reach a pixel under the frame's body."""
+    import numpy
+    from types import SimpleNamespace
+
+    alpha = CARD["border_color"][3]
+    hidden = numpy.zeros((60, 60, 4), numpy.uint8)
+    hidden[..., 3] = 255
+    frame = numpy.zeros((60, 60), bool)
+    frame[10:50, 10:50] = True
+    frame[15:45, 15:45] = False
+    hidden[frame, 1] = alpha
+    soft = numpy.zeros((60, 60), bool)
+    soft[15:45, 15:45] = True
+    soft[16:44, 16:44] = False
+    hidden[soft, 1] = int(alpha * contract.SOFT_EDGE * 0.8)
+    white = hidden.copy()
+    white[15:45, 15:45, :3] = 255
+    if overlap:
+        white[30, 12, :3] = 255
+    presentation = SimpleNamespace(
+        shell_policy=VisualizerShellPolicy.CARD, border_width=5.0, content_rect=(15.0, 15.0, 30.0, 30.0),
+        shell_style={"corner_radius": 0.0, "inner_corner_radius": 0.0, "content_inset": 0.0})
+    return hidden, white, presentation, alpha
+
+
+def test_soft_edge_reading_accepts_the_shader_edges_first_pixel_and_still_rejects_content_in_the_frame():
+    hidden, white, presentation, alpha = _synthetic_soft_edge_card()
+
+    def read(soft_edge, drawn_white):
+        return contract.read_contract(drawn_white, drawn_white, hidden, card_rect=(10.0, 10.0, 40.0, 40.0),
+                                      presentation=presentation, dpr=1.0, border_alpha=alpha, soft_edge=soft_edge)
+
+    # The control: without the option the soft pixel is frame, and the content over it reads as content under the frame.
+    assert read(0.0, white).under_frame > 0
+    assert read(contract.SOFT_EDGE, white).under_frame == 0
+    assert read(contract.SOFT_EDGE, white).gaps == {"left": 0, "right": 0, "top": 0, "bottom": 0}
+    # The option never admits content over the frame's body.
+    _, overlapping, _, _ = _synthetic_soft_edge_card(overlap=True)
+    assert read(contract.SOFT_EDGE, overlapping).under_frame > 0

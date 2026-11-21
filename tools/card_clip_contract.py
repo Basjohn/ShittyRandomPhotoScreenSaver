@@ -22,6 +22,12 @@ Against the hidden read:
 * the white content touches the frame on all four sides: no card surface shows between the frame's last pixel and the
   content (no seam).
 
+A material border (Glass, Acrylic...) draws its inner edge with a shader's one-device-pixel smoothstep ramp, which leaves
+up to ``SOFT_EDGE`` of the border on the first pixel inside an edge that lies exactly on a pixel boundary (the border
+is snapped to whole device pixels, so every scale has it). ``read_contract(..., soft_edge=SOFT_EDGE)`` reads a
+pixel the frame covers by no more than that fraction of its body as content, not frame; the default (0) is the strict reading Normal's
+Qt-drawn frame meets.
+
 Each within ``TOLERANCE`` levels per channel, the run-to-run floor. The frame is recognised by its colour in the hidden
 read: a half-transparent green border (``border_alpha``) over a surface that is neither green.
 """
@@ -34,6 +40,11 @@ from typing import Any, Sequence
 TOLERANCE = 2              # 8-bit levels per channel
 OUTSIDE_PX = 0.71          # a pixel whose centre lies this far out has no footprint inside the inner edge
 CORNER_BLEND = 0.5         # the most frame coverage a corner pixel with content under it may have (the arc's own AA)
+# The first pixel inside a shader-drawn border edge on a pixel boundary: its centre lies half a pixel in, so the
+# one-pixel ramp smoothstep(-1, 1, d) leaves s = 1 - smoothstep(-1, 1, 0.5) = 0.156 of the border there, and a square
+# inner corner, which two edges meet, 1 - (1 - s)^2 = 0.288; 0.3 is that and the run-to-run floor. A fraction of the
+# frame's own body coverage.
+SOFT_EDGE = 0.3
 OFF_GRID = 0.3             # logical offset of the card's origin: its edges fall inside device pixels at every DPR
 # The card the contract is read on (test-owned chrome, handed to the canonical resolver as the display owner does): a
 # non-default width and a half-transparent border, so content drawn under the border band would show through it and
@@ -84,9 +95,17 @@ def frame_coverage(hidden, border_alpha: float):
     return (rgb[..., 1] - numpy.maximum(rgb[..., 0], rgb[..., 2])) / float(border_alpha)
 
 
-def frame_pixels(hidden, border_alpha: float):
-    """Pixels the card frame covers at all."""
-    return frame_coverage(hidden, border_alpha) * border_alpha > TOLERANCE
+def frame_pixels(hidden, border_alpha: float, soft_edge: float = 0.0):
+    """Pixels the card frame covers at all. ``soft_edge``: a pixel it covers by no more than that fraction of its own
+    body (the median coverage of the frame's pixels: a material border reads far below the half-transparent colour
+    over a flat surface) is not one."""
+    import numpy
+
+    coverage = frame_coverage(hidden, border_alpha)
+    covered = coverage * border_alpha > TOLERANCE
+    if soft_edge > 0.0 and covered.any():
+        covered &= coverage > soft_edge * float(numpy.median(coverage[covered]))
+    return covered
 
 
 def corner_zones(card_rect, corner_radius, shape, dpr):
@@ -152,7 +171,7 @@ class ContractReading:
 
 
 def read_contract(drawn, white, hidden, *, card_rect: Sequence[float], presentation: Any, dpr: float,
-                  border_alpha: float) -> ContractReading:
+                  border_alpha: float, soft_edge: float = 0.0) -> ContractReading:
     """The contract's reading of one card (the module docstring has the rules)."""
     from core.settings.visualizer_mode_registry import VisualizerShellPolicy
 
@@ -162,7 +181,7 @@ def read_contract(drawn, white, hidden, *, card_rect: Sequence[float], presentat
     lit = int((drawn_changed & ~outside).sum())
     under_frame = gaps = None
     if presentation.shell_policy is VisualizerShellPolicy.CARD:
-        frame = frame_pixels(hidden, border_alpha)
+        frame = frame_pixels(hidden, border_alpha, soft_edge)
         corners = corner_zones(tuple(card_rect), float(presentation.shell_style["corner_radius"]), frame.shape, dpr)
         # Straight edges: no content under any frame pixel. Corners: only under the arc's own blend.
         forbidden = (frame & ~corners) | (corners & (frame_coverage(hidden, border_alpha) > CORNER_BLEND))
@@ -173,6 +192,6 @@ def read_contract(drawn, white, hidden, *, card_rect: Sequence[float], presentat
     return ContractReading(escapes, lit, under_frame, gaps)
 
 
-__all__ = ["CONTRACT_CARD", "CORNER_BLEND", "ContractReading", "OFF_GRID", "OUTSIDE_PX", "TOLERANCE", "changed",
+__all__ = ["CONTRACT_CARD", "CORNER_BLEND", "ContractReading", "OFF_GRID", "OUTSIDE_PX", "SOFT_EDGE", "TOLERANCE", "changed",
            "corner_zones", "frame_coverage", "frame_pixels", "inner_path", "outside_inner_edge", "read_contract",
            "surface_gaps"]
