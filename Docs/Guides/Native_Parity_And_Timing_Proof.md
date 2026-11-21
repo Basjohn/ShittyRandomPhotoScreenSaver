@@ -90,6 +90,13 @@ per half. A run that judged fewer than expected is a failed proof, not a pass: B
 5,503 inputs because the replay switched modes at 4.2 s. **A bound is measured on the acceptance material**, never on
 the smoke clip: Bubble's scatter bound, measured as 34 on the 5.5 s clip, reached 45 on the long takes.
 
+**After acceptance, proofs are regression guards, not confetti** (operator, 21 Nov). A change to the shared core
+(C++, the route, the packet ABI) re-proves only the modes it is likely to touch: name them, with the reason, before
+the run. A mode the change cannot reach is not re-run. An all-mode run happens only after major work (a whole port, a
+3D mode) or a change with a likely knock-on effect on every mode (a shared pass, target or blend change), never after
+every C++ change. Parity is not re-measured on accepted modes; a guard checks they did not move (native before
+against native after, hashes, `--accepted`).
+
 **Gates in general.** Gates run unattended in the background, with references and native runs in separate processes
 and several takes at once. A full gate runs at acceptance and once per batch of optimisations, never once per
 candidate.

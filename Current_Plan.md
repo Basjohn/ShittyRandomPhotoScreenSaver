@@ -75,25 +75,24 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   C++ build per batch; fresh agents instead of resuming ones with huge contexts.
 - [ ] Two built, unmerged C++ branches both at ABI 31 (renumber the second merged to 32, rebuild main after each):
   - `worktree-agent-a8797a6d7c59d45af` (audit 11's fixes for N3.6, built 87f8c4974): run `device_loss_check.py` all
-    rounds and `make_controls.py` controls, then merge.
+    rounds and `make_controls.py` controls (sent to the same agent, 21 Nov ~12:10), then merge.
+  - Reference-cache key (line above plus audit 9 M1 and M2): agent ae692e0bed28707c6 (Sonnet Medium).
   - `worktree-agent-aea35d28be699535f` (the card quad, built 55433ebff; agent stopped by the lead): Spline Curve 23
     failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
-    failures on three takes. Still to run before merge: the content harnesses on both APIs, Spectrum hash identity,
-    Bubble variant a on one take. Smallest path: run those, merge if clean; otherwise park it.
+    failures on three takes. Still to run before merge (regression guards only, the generic modes it touches):
+    the content harnesses on both APIs and Bubble variant a on one take; Spectrum's own item is not touched, so no
+    Spectrum run. Merge if clean; otherwise park it.
 - [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
   it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
   (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
   not to a slot; the player-window gap is a tool note. Cost round passed (b8c6c3528). Left: registration (playbook
   checklist 18), then the lead's layer T (unattended live runs), then its docs.
-- Operator, 21 Nov (to write into the proof guide section 7 and handbook 7a at the reset): after a mode's parity is
-  accepted its proofs are regression guards, not confetti. A C++ change re-proves only the modes it is likely to
-  touch; an all-mode run only after major work (a whole port, a 3D mode) or a change with a likely knock-on effect.
 - [ ] Bug, big (operator 21 Nov): clicking into the application gives a slight black flicker; it repeats on clicking
-  out and back in, about every second try (seen while logging). Root-cause box first, fresh Medium agent at the reset.
+  out and back in, about every second try (seen while logging). Agent a892f0de61cd0838f (Opus Medium).
 - [ ] Bug (operator 21 Nov): Achievement Pulse's extra surface controls were wired to the card. They belong to the
   pulse ring and, separately, the ring's inner circle; the card itself behaves like any normal card with materials.
-  The pulse circle must also draw when borderless is on (it is a special object, not a border). Fresh Sonnet or Medium
-  agent at the reset.
+  The pulse circle must also draw when borderless is on (it is a special object, not a border). Agent
+  a1a0de469911351fc (Sonnet Medium).
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).

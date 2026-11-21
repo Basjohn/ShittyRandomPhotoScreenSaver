@@ -195,6 +195,10 @@ defaults, the installer script) are committed and pushed at once, silently.
   that agent by `SendMessage`; it compacts itself at 70 %. Unrelated work gets a fresh agent with a short brief
   (section 3), never a resumed one carrying another item's context. Interim "waiting" notices need no reply;
   follow-ups go only when they change what the agent does.
+- **Proofs after acceptance are regression guards.** A core change re-proves only the modes it is likely to touch;
+  all modes only after major work or a likely knock-on (`Native_Parity_And_Timing_Proof.md` section 3 owns the rule).
+- **Unattended runs need no quota.** A headless check, a cost round or a live run that only needs its results read
+  later starts as soon as the machine allows, not when a slot or a usage window frees.
 - **The lead's own context.** The lead's turns cost the most. No check-in turns that only restate status; batch
   merges, plan edits and pushes into as few turns as the work allows.
 - **Proof economy.** Cached Python references are keyed on what draws them (shaders, renderer, settings), never on
