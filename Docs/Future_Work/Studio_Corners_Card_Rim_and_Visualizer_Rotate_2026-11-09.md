@@ -38,19 +38,9 @@ The extra 2.5 px (Glass 3 px), plus its soft step, produces the deliberately des
 
 **Exit:** uninterrupted material surface to the inside edge of the card border, without changed widget sizing, content alignment, transparency or animation cost. Update `Card_Surface_Materials.md` §3.3 to retire the old 2.5/3 px inner-panel requirement **in the same checkpoint**.
 
-## UI-3. Rotate glyph on Visualizer hover, not Edit-only
+## UI-3. Rotate glyph on Visualizer hover
 
-**Operator report:** mode orientation/Rotate works in Studio and in Edit, but the normal hovered Visualizer card does not offer its rotate glyph.
-
-**Verified owner:** `rendering/quick/qml/VisualizerPresentation.qml` defines `visualizerHoverGlyphLoader` and constructs the common `WidgetHoverEditGlyphs` with `canRotate: false` (lines ~686–708). `CustomLayoutOverlay.qml` separately offers `rotateContentControl` in Edit. `ui/studio/controller.py` has its own preview rotate control. `engine/display_manager.py::_route_hover_edit_glyph` already supports action `rotate`, validates `content_rotation_capable`, resolves the real CUSTOM session and calls `model.rotateContent(row)`. This is an admission/presentation gap, not a missing rotation engine.
-
-- [ ] Offer a **visible hover Rotate Widget Content glyph** on the ordinary Visualizer card in the existing Interaction/Ctrl and allowed-gesture flow, when the mode's `content_rotation_capable` says yes (Sphere remains ineligible). Do not hardcode `canRotate: true` for unsupported modes; project from existing capability/owner.
-- [ ] The glyph belongs on the *existing* lower-right Visualizer glyph row with the preset, Reset Camera and expand controls, preserving spacing/fit and a singular rotate action. Do not introduce duplicate overlapping hover/Edit glyphs or disturb Reset Camera/preset availability. The existing common hover glyph module may be reused only with correct placement/admission for the Visualizer's bespoke row.
-- [ ] Route action through the existing `DisplayManager`/CUSTOM `rotateContent` authority. Preserve saved per-mode orientation, undo/Save/Cancel and source generation. A hover click may enter the established Edit transaction as the existing hover actions do; it must not mutate stored layout from a second, unaudited action path.
-- [ ] **Expanded Visualizer:** current ordinary hover Loader is explicitly disabled when `expandedDisplay`. Offer a matching capability-driven hover rotation path on expanded-capable modes only through the existing **Fullscreen Edit** owner, not by resurrecting the ordinary CUSTOM owner while display takeover is active. Test expanded semantics separately; do not silently claim ordinary hover solves expanded hover.
-- [ ] Regression proof: ordinary 2D framed and 3D framed modes, rotate twice/4×, currently active preset/custom, size/orientation round trip, unsupported Sphere, Fullscreen Edit versus ordinary Edit, hover/leave/double-click/admission, inactive widget, small-card glyph fit, no second route/mode switch, and interaction with expansion/camera reset. No polling/timers or additional GL work.
-
-**Exit:** the actual hovered Visualizer offers rotation in both its ordinary and, where applicable, expanded presentation; only eligible modes act, and Edit/Studio behaviour stays intact. Update `Visualizer_Reference.md` and Expanded Visualizer plan affordance notes once the live look passes.
+Built (1D.7) and proven 21 Nov (`tests/test_visualizer_hover_rotate_modes.py`); nothing open.
 
 ## Source/code change discipline
 
