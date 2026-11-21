@@ -172,10 +172,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (lead, 21 Nov; Sonnet agent a3126f102728843ef): `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`
-  failed once in a combined focused run (with `test_visualizer_card_clip_contract.py` and the native-route files) while
-  other agents ran heavy replays; it passed alone and in the same pairing on the merged and the pre-merge tree. Likely
-  timing-dependent under load: find what it waits on and make it wait on its completion edge, not on time.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
