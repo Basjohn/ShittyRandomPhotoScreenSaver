@@ -1,6 +1,7 @@
 #include "vulkan_context.h"
 
 #include "job_service.h"
+#include "pipeline_cache.h"
 
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
@@ -825,6 +826,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     out->m_physicalDevice = quint64(reinterpret_cast<quintptr>(physDev));
     out->m_family = family;
     out->m_queues = queueCount;
+    out->m_deviceFault = extensions.contains(QByteArrayLiteral("VK_EXT_device_fault")) && fault.deviceFault == VK_TRUE;
     out->m_name = QString::fromUtf8(props.deviceName);
     if (queueCount >= 2) {
         // The job service (N3.8): an object now; its thread and its QRhi at the first job.
@@ -835,6 +837,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
         jobDevice.family = family;
         jobDevice.queueIndex = 1;
         jobDevice.debugMarkers = inst->validationLoaded;
+        // N3.6 (pipeline_cache.h): the core's file beside Qt Quick's, checked against this device as Qt checks its own.
+        jobDevice.cacheIdentity.backend = QStringLiteral("vulkan");
+        jobDevice.cacheIdentity.driverVersion = props.driverVersion;
+        jobDevice.cacheIdentity.vendorId = props.vendorID;
+        jobDevice.cacheIdentity.deviceId = props.deviceID;
+        jobDevice.cacheIdentity.cacheUuid = QByteArray(reinterpret_cast<const char *>(props.pipelineCacheUUID),
+                                                       VK_UUID_SIZE);
+        jobDevice.cacheFile = pipelineCacheFile(pipelineCacheDirectory(), jobDevice.cacheIdentity.backend);
         out->m_jobs = JobService::create(createRhiUploadBackend(jobDevice), out->m_device,
                                          QStringLiteral("device %1").arg(out->m_device));
     }
@@ -864,6 +874,87 @@ void VulkanDevice::applyTo(QQuickWindow *window) const
         int(m_family), 0));
 }
 
+void VulkanDevice::giveDeviceTo(QQuickWindow *window) const
+{
+    if (!window || !m_device)
+        return;
+    window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(
+        reinterpret_cast<VkPhysicalDevice>(quintptr(m_physicalDevice)), reinterpret_cast<VkDevice>(quintptr(m_device)),
+        int(m_family), 0));
+}
+
+QJsonObject VulkanDevice::faultReport() const
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("vk_device"), QString::number(m_device));
+    if (!m_device || !g_instance) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("no device"));
+        return o;
+    }
+    if (!m_deviceFault) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("VK_EXT_device_fault (or its deviceFault feature) is not "
+                                                       "enabled on this device"));
+        return o;
+    }
+    const VkDevice device = reinterpret_cast<VkDevice>(quintptr(m_device));
+    auto getDeviceProcAddr = g_instance->loader.get<PFN_vkGetDeviceProcAddr>(g_instance->instance,
+                                                                            "vkGetDeviceProcAddr");
+    auto getFault = getDeviceProcAddr ? reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(
+                                            getDeviceProcAddr(device, "vkGetDeviceFaultInfoEXT"))
+                                      : nullptr;
+    if (!getFault) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("vkGetDeviceFaultInfoEXT did not resolve"));
+        return o;
+    }
+    VkDeviceFaultCountsEXT counts = {};
+    counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+    VkResult result = getFault(device, &counts, nullptr);
+    o.insert(QStringLiteral("queried"), true);
+    o.insert(QStringLiteral("counts_result"), int(result));
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+        return o;
+    QList<VkDeviceFaultAddressInfoEXT> addresses;
+    addresses.resize(qsizetype(counts.addressInfoCount));
+    QList<VkDeviceFaultVendorInfoEXT> vendors;
+    vendors.resize(qsizetype(counts.vendorInfoCount));
+    counts.vendorBinarySize = 0; // the vendor's binary crash dump is not read (its format is the vendor's own)
+    VkDeviceFaultInfoEXT info = {};
+    info.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT;
+    info.pAddressInfos = addresses.isEmpty() ? nullptr : addresses.data();
+    info.pVendorInfos = vendors.isEmpty() ? nullptr : vendors.data();
+    info.pVendorBinaryData = nullptr;
+    result = getFault(device, &counts, &info);
+    o.insert(QStringLiteral("info_result"), int(result));
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+        return o;
+    o.insert(QStringLiteral("description"), QString::fromUtf8(info.description));
+    QJsonArray addressList;
+    for (uint32_t i = 0; i < counts.addressInfoCount && i < uint32_t(addresses.size()); ++i) {
+        QJsonObject a;
+        a.insert(QStringLiteral("type"), int(addresses[qsizetype(i)].addressType));
+        a.insert(QStringLiteral("address"),
+                 QStringLiteral("0x%1").arg(qulonglong(addresses[qsizetype(i)].reportedAddress), 0, 16));
+        a.insert(QStringLiteral("precision"), double(addresses[qsizetype(i)].addressPrecision));
+        addressList.append(a);
+    }
+    o.insert(QStringLiteral("addresses"), addressList);
+    QJsonArray vendorList;
+    for (uint32_t i = 0; i < counts.vendorInfoCount && i < uint32_t(vendors.size()); ++i) {
+        QJsonObject v;
+        v.insert(QStringLiteral("description"), QString::fromUtf8(vendors[qsizetype(i)].description));
+        v.insert(QStringLiteral("code"), QStringLiteral("0x%1").arg(qulonglong(vendors[qsizetype(i)].vendorFaultCode),
+                                                                  0, 16));
+        v.insert(QStringLiteral("data"), QStringLiteral("0x%1").arg(qulonglong(vendors[qsizetype(i)].vendorFaultData),
+                                                                  0, 16));
+        vendorList.append(v);
+    }
+    o.insert(QStringLiteral("vendor_faults"), vendorList);
+    return o;
+}
+
 QJsonObject vulkanDeviceFacts(quint64 device)
 {
     QMutexLocker lock(&g_factsMutex);
@@ -878,6 +969,112 @@ void setDeviceWithoutIndependentBlend(bool without)
 bool deviceWithoutIndependentBlend()
 {
     return g_withoutIndependentBlend.loadAcquire() != 0;
+}
+
+namespace {
+
+struct RawVulkanEntry
+{
+    RawVulkanObject object;
+    qint64 retiredAtEdge = 0;
+};
+
+QMutex g_rawMutex;
+QList<RawVulkanEntry> g_raw; // under g_rawMutex
+QAtomicInt g_rawPending { 0 };
+QAtomicInteger<qint64> g_rawDeferred { 0 };
+QAtomicInteger<qint64> g_rawReleasedAtEdges { 0 };
+QAtomicInteger<qint64> g_rawReleasedAtIdle { 0 };
+
+void destroyRaw(const RawVulkanObject &object)
+{
+    if (!object.functions || !object.device || !object.handle)
+        return;
+    const VkDevice device = reinterpret_cast<VkDevice>(quintptr(object.device));
+    switch (object.kind) {
+    case RawVulkanKind::QueryPool:
+        object.functions->vkDestroyQueryPool(device, reinterpret_cast<VkQueryPool>(quintptr(object.handle)), nullptr);
+        break;
+    }
+}
+
+// Under g_rawMutex: the device's entries `due` says may go, taken out of the queue.
+template <typename Due>
+QList<RawVulkanObject> takeRaw(quint64 device, Due due)
+{
+    QList<RawVulkanObject> taken;
+    for (qsizetype i = 0; i < g_raw.size();) {
+        if (g_raw.at(i).object.device == device && due(g_raw.at(i))) {
+            taken.append(g_raw.at(i).object);
+            g_raw.removeAt(i);
+        } else {
+            ++i;
+        }
+    }
+    g_rawPending.storeRelease(int(g_raw.size()));
+    return taken;
+}
+
+} // namespace
+
+void deferRawVulkanDestroy(const RawVulkanObject &object, qint64 retiredAtEdge)
+{
+    if (!object.handle)
+        return;
+    QMutexLocker lock(&g_rawMutex);
+    RawVulkanEntry entry;
+    entry.object = object;
+    entry.retiredAtEdge = retiredAtEdge;
+    g_raw.append(entry);
+    g_rawPending.storeRelease(int(g_raw.size()));
+    g_rawDeferred.fetchAndAddRelaxed(1);
+}
+
+int releaseRawVulkan(quint64 device, qint64 edge, int framesInFlight)
+{
+    if (!device || g_rawPending.loadAcquire() == 0)
+        return 0;
+    QList<RawVulkanObject> taken;
+    {
+        QMutexLocker lock(&g_rawMutex);
+        taken = takeRaw(device, [edge, framesInFlight](const RawVulkanEntry &entry) {
+            return edge >= entry.retiredAtEdge + qint64(framesInFlight);
+        });
+    }
+    for (const RawVulkanObject &object : taken)
+        destroyRaw(object); // their last frames completed: no wait
+    g_rawReleasedAtEdges.fetchAndAddRelaxed(taken.size());
+    return int(taken.size());
+}
+
+int releaseAllRawVulkan(quint64 device)
+{
+    if (!device || g_rawPending.loadAcquire() == 0)
+        return 0;
+    QList<RawVulkanObject> taken;
+    {
+        QMutexLocker lock(&g_rawMutex);
+        taken = takeRaw(device, [](const RawVulkanEntry &) { return true; });
+    }
+    for (const RawVulkanObject &object : taken)
+        destroyRaw(object); // the device's queues are idle
+    g_rawReleasedAtIdle.fetchAndAddRelaxed(taken.size());
+    return int(taken.size());
+}
+
+bool rawVulkanPending()
+{
+    return g_rawPending.loadAcquire() != 0;
+}
+
+QJsonObject rawVulkanCountsJson()
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("raw_vulkan_deferred"), double(g_rawDeferred.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_released_at_edges"), double(g_rawReleasedAtEdges.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_released_at_idle"), double(g_rawReleasedAtIdle.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_pending"), g_rawPending.loadAcquire());
+    return o;
 }
 
 QStringList VulkanDevice::destroy()
@@ -905,6 +1102,10 @@ QStringList VulkanDevice::destroy()
         const VkResult idle = waitIdle ? waitIdle(device) : VK_ERROR_INITIALIZATION_FAILED;
         steps << (QStringLiteral("vkDeviceWaitIdle: ")
                   + (idle == VK_SUCCESS ? QStringLiteral("VK_SUCCESS") : vkResultName(idle)));
+        // N3.6: raw objects still deferred (their window rendered no later edge) go now, the device idle.
+        const int raw = releaseAllRawVulkan(m_device);
+        if (raw)
+            steps << QStringLiteral("raw Vulkan objects destroyed at idle: %1").arg(raw);
         if (destroyDevice) {
             destroyDevice(device, nullptr);
             steps << QStringLiteral("vkDestroyDevice");

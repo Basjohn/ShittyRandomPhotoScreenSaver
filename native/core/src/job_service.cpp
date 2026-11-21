@@ -1,5 +1,6 @@
 // The async job service (D9, N3.8): job_service.h has the contract.
 #include "job_service.h"
+#include "rhi_owned.h"
 
 #include "mode_content.h" // TextureImage, rgba8TextureBytes
 
@@ -594,6 +595,12 @@ QJsonObject JobService::stop()
     o.insert(QStringLiteral("destroyed"), double(m_destroyed));
     o.insert(QStringLiteral("wakeups"), double(m_wakeups));
     o.insert(QStringLiteral("images_left"), int(m_images.size()));
+    // N3.6: what the job QRhi loaded and saved of the core's pipeline cache file (absent while it never existed).
+    const QJsonObject backend = m_backend->stateJson();
+    if (backend.contains(QStringLiteral("pipeline_cache_load")))
+        o.insert(QStringLiteral("pipeline_cache_load"), backend.value(QStringLiteral("pipeline_cache_load")));
+    if (backend.contains(QStringLiteral("pipeline_cache_save")))
+        o.insert(QStringLiteral("pipeline_cache_save"), backend.value(QStringLiteral("pipeline_cache_save")));
     m_stopRecord = o;
     return o;
 }
@@ -690,7 +697,8 @@ public:
         handles.gfxQueueFamilyIdx = m_device.family;
         handles.gfxQueueIdx = m_device.queueIndex;
         handles.vmemAllocator = nullptr; // its own allocator: Qt's has no mutex (facts C1)
-        QRhi::Flags flags;
+        // N3.6: the pipeline cache's data is kept (QRhi::pipelineCacheData is empty without the flag) for the core's file.
+        QRhi::Flags flags = QRhi::EnablePipelineCacheDataSave;
         if (m_device.debugMarkers)
             flags |= QRhi::EnableDebugMarkers;
         QElapsedTimer timer;
@@ -710,6 +718,17 @@ public:
         facts.insert(QStringLiteral("queue_family"), qint64(m_device.family));
         facts.insert(QStringLiteral("queue_index"), qint64(m_device.queueIndex));
         facts.insert(QStringLiteral("debug_markers"), m_device.debugMarkers);
+        if (ours && !m_device.cacheFile.isEmpty()) {
+            // N3.6: the core's file, before the QRhi builds any pipeline. A file of another device, driver, Qt or core
+            // is refused silently (the report says why) and the QRhi starts empty: a recompile, never an error.
+            QJsonObject cache;
+            const QByteArray blob = loadPipelineCache(m_device.cacheFile, m_device.cacheIdentity, &cache)
+                                        .value(kPipelineCacheJobQrhi);
+            if (!blob.isEmpty())
+                m_rhi->setPipelineCacheData(blob);
+            cache.insert(QStringLiteral("qrhi_blob_loaded_bytes"), double(blob.size()));
+            facts.insert(QStringLiteral("pipeline_cache_load"), cache);
+        }
         setFacts(facts);
         if (!ours) {
             m_rhi.reset();
@@ -728,7 +747,7 @@ public:
         }
         const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                                   : QRhiTexture::Flags();
-        std::unique_ptr<QRhiTexture> texture(m_rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
+        RhiOwned<QRhiTexture> texture(m_rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
         texture->setName(QByteArrayLiteral("srpss core job texture ") + job.name);
         if (!texture->create()) {
             *error = QStringLiteral("%1 could not be created at %2 x %3 on the job queue")
@@ -801,11 +820,30 @@ public:
         for (auto it = m_textures.begin(); it != m_textures.end(); ++it)
             delete it.value();
         m_textures.clear();
+        QJsonObject cache;
         if (m_rhi) {
             m_rhi->finish();
+            // N3.6: the orderly teardown saves the core's file (Qt saves its own the same way, in destroyRhi); never after
+            // a device loss. An empty blob (the QRhi built no pipeline) writes nothing.
+            if (deviceLost()) {
+                cache.insert(QStringLiteral("save"), QStringLiteral("skipped: the device was lost"));
+            } else if (!m_device.cacheFile.isEmpty()) {
+                const QByteArray blob = m_rhi->pipelineCacheData();
+                if (blob.isEmpty()) {
+                    cache.insert(QStringLiteral("save"), QStringLiteral("nothing to save: the job QRhi built no "
+                                                                        "pipeline"));
+                } else {
+                    PipelineCacheSections sections;
+                    sections.insert(kPipelineCacheJobQrhi, blob);
+                    savePipelineCache(m_device.cacheFile, m_device.cacheIdentity, sections, &cache);
+                    cache.insert(QStringLiteral("qrhi_blob_bytes"), double(blob.size()));
+                }
+            }
             m_rhi.reset(); // QRhiVulkan::destroy: its own queue idle, its pools and allocator; never the device
         }
         QMutexLocker lock(&m_factsMutex);
+        if (!cache.isEmpty())
+            m_facts.insert(QStringLiteral("pipeline_cache_save"), cache);
         m_tornDown = true;
     }
 

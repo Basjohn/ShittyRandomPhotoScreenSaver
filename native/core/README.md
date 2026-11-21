@@ -102,11 +102,26 @@ build selection; current host and composite proof lives here.
     window has been resized since (round 2, L1 and M3; the route waits on the window's `afterSynchronizing`).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick; since N3.8 the
     device's second queue of Qt's graphics family and its job service, stopped first by the device's destruction.
+    N3.6, the device loss: Qt's recovery re-adopts the device it was given, so the host's `sceneGraphInvalidated` slot
+    (the render thread, the lost QRhi still alive) logs the lost device's `VK_EXT_device_fault` detail once, makes a new
+    device and gives it to the window (`giveDeviceTo`, `setGraphicsDevice`) before Qt's next QRhi; the lost one is
+    destroyed once Qt's QRhi on it is gone (a window: its next `sceneGraphInitialized`; the hidden host: in its own lost
+    path, `HiddenHost::State::recover`, which also rebuilds Qt's QRhi through `QQuickRenderControlPrivate::resetRhi`).
+    Every core object is made again by its owner (the items' nodes and their streams' last records, textures and
+    meshes through the lost edges). The proof: `python/device_loss_check.py` through the harness-only forced loss.
   - `job_service.*` (N3.8, D9 "As built (N3.8)"): the async job service, one per Vulkan device: a thread and a QRhi on
     the job queue made at the first job, parked on a wait condition at rest; upload jobs that own their pixels; the
     ticket latch (published by compare-and-set, then a queued frame request to the item); cancellation; outputs released
     by the job thread once Qt's frames that sampled them completed (`surfaces.*`' window retire list, stamped with frame
     edges); teardown abandoning the job in flight. A scripted backend runs it GPU-free (`job_service_self_test`).
+  - `pipeline_cache.*` (N3.6): the core's own pipeline cache file, `<CacheLocation>/qtpipelinecache-<abi>/srpss_core_<backend>`
+    beside Qt Quick's `qqpc_<backend>` (pipelines built on Qt Quick's QRhi are in Qt's file and need nothing here): the
+    job thread's QRhi (created with `EnablePipelineCacheDataSave`) loads it at its creation and saves it at its orderly
+    teardown, never after a loss; Qt's header checks (the core's ABI, the backend, driver version, vendor, device,
+    pipeline cache UUID) plus the payload's size and MD5, a mismatch a silent recompile; written through `QSaveFile`
+    (a temporary file renamed over the old), the last writer winning. Today the job QRhi builds no pipeline, so nothing
+    is written; a raw `VkPipelineCache` gets its own section when the first raw pipeline exists.
+    `pipeline_cache_self_test` is its GPU-free proof (`tests/test_native_core_pipeline_cache.py`).
   - `item_notifier.*` (N3.8): how the render and job threads reach an item on the GUI thread (a queued `update()`, the
     owner's lost-texture edge) without ever touching a deleted item.
   - `backdrop.*` (N5.7b, D7 points 2 to 6 "As built (N5.7b)"): the card-material backdrop pyramid, level for level the
@@ -150,6 +165,13 @@ build selection; current host and composite proof lives here.
     owned pipeline, sampler and binding wrappers, including failed partial builds until retirement; textures/storage
     have their separate counts. The transparency targets and
     the mipped layer live in `scene_targets.*`, the steps in `mode_content.*`'s record.
+  - `rhi_owned.h` (N3.6, release timing): every QRhi resource the core holds is a `RhiOwned<T>`, retired by
+    `deleteLater()` at once (deleted at the end of the current frame inside one, now outside); the native objects are
+    QRhi's deferred releases (two frames on Vulkan, one on OpenGL: accepted). The frame driver calls `QRhi::finish()`
+    only at an edge no frame follows (its window's scene graph invalidated: a window retired, the saver's exit, a lost
+    path), outside any frame and never on a lost device. A raw Vulkan object (the GPU timer's query pool) retired inside
+    a frame goes to its device's deferred queue (`vulkan_context.h`), destroyed at the window's edge `FramesInFlight`
+    later or at the device's idle; never a wait inside a frame.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.

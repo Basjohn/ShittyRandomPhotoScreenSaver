@@ -132,6 +132,16 @@ public:
     // Harness only: invalidate Qt's actual scene graph on the render thread, with the driver still connected.
     // Terminal for rendering; close remains required and idempotent.
     bool invalidateSceneGraph(QString *error);
+    // N3.6, harness only (no environment flag): the next frame takes the lost path a lost device takes (the scene graph
+    // invalidated, Qt's QRhi destroyed, a new device given to the window from the invalidation's slot, the lost one
+    // destroyed, Qt's QRhi made again, every core object made again by its owner); a QRhi that reports its device
+    // lost takes the same path by itself. `swapDevice` false (Vulkan): the rebuild keeps the device, the control of
+    // the slot's setGraphicsDevice. The host's state lists each loss (device_losses).
+    bool forceDeviceLoss(bool swapDevice, QString *error);
+    // N3.6, harness only: a detach whose release waits for the next frame edge (inside that frame), as a window host's
+    // does, instead of the hidden host's release outside any frame now: the in-frame release path (the GPU timer's
+    // pool to the device's deferred queue, never a wait inside the frame) on a host the harness drives.
+    bool detachAtFrameEdge(QString *error);
     // Detaches, invalidates Qt's scene graph on the render thread, deletes the render control (Qt's QRhi) and the window,
     // then destroys the device (Vulkan). Call with the GIL released. Idempotent.
     QJsonObject close();

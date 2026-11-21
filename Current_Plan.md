@@ -78,13 +78,20 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): N3.6, then Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
+- [ ] High (Opus High, core-critical C++): N3.6 is merged (ABI 30); audit 11's fixes (agent a8797a6d7c59d45af), then
+  Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
   layer L go to a Medium. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
-- [ ] Medium (Opus Medium): the 60 s reruns under the fast proof (Spline Curve, Spectrum, Bubble variant b), then
-  the Oscilloscope's 60 s takes and layer L; the lead runs layer T.
-- [ ] Second Medium (Opus Medium): step 3 continues: the hero reject is merged (-40 % OpenGL, -52 % Vulkan at 4K);
-  next the wake loop's byte-identical bound, now the largest stage.
+- [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
+  layer L; the lead runs layer T.
+- [ ] Second Medium (Opus Medium agent aea35d28be699535f): Spline Curve's two steady classes are root-caused (21 Nov):
+  the core draws generic modes with one oversized triangle, Python with the card's quad, so each pixel's interpolated
+  position differs by up to 1e-4 px and boundary pixels tip a level (the shader text and composite ruled out by
+  emulation matching the real module bit for bit). Lead decision: fix at the source, the card's quad in
+  `mode_content.cpp` (an ABI bump), the triangle kept as a harness-only control; then re-prove every generic mode
+  under the split. Step 3's offline work is
+  done: the hero and wake rejects halve the bubble pass at 4K (5.10 to 2.43 ms OpenGL, 4.61 to 1.75 ms Vulkan); the
+  lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   and hygiene (item 6).
@@ -170,10 +177,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Leftover worktree folders (lead, 21 Nov; branches merged and deleted, evidence copied to main):
-  `.claude/worktrees/agent-a6257c36aeee45f10` (empty, held open) and `.claude/worktrees/agent-a40f1b6d7aec65276`
-  (about 4,000 files; git's remove failed on long paths). Delete both once nothing holds them, with a long-path-capable
-  delete, after checking no reparse point inside. Then make `agent_handover.py --retire` handle long paths.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -544,7 +547,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a quiet
     GPU, record load/clocks before and after, and review median margins plus the D5.3 tail watch. The available-GPU
     proof validates the harness, not quiet-GPU performance admission.
-- [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
+- [ ] N3.6 Lifetime (Opus High agent ab5da4c3c451f82c5, 21 Nov; built ABI 30 at e21923f1c, all three boxes pass on
+  the build, branch head ebfe0944a; checkpoint audit by Opus High agent af5a9a2f30c88158c before merge): lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
   audit rerun on it. On a lost device the Vulkan backend's `VK_EXT_device_fault` detail (vendor fault codes and
@@ -568,6 +572,32 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     at that edge, outside any frame; never mid-frame, which blanked Vulkan presentation in d1_run on 14 Nov.
     Raw Vulkan objects go to a deferred-delete queue keyed to their frame slot's fence, drained at device idle on
     teardown.
+  Checkpoint audit 11 (21 Nov, `Docs/Future_Work/Checkpoint_Audits_Nov21.md`; N3.6 merged at ABI 30, b056a212c; M1-M3,
+  L1-L4 with Opus High agent a8797a6d7c59d45af):
+  - [ ] M1: a harness-only real loss: Qt's own QRhi must report `isDeviceLost()`. For example, the hidden host's
+    device-function table answers `vkQueueSubmit` with `VK_ERROR_DEVICE_LOST` once, with no environment flag. Then rerun
+    the rebuild round with `qrhi_lost` true and `faultReport` present. Or the lead records the window record's loss slots
+    (Qt's threaded loop) as accepted unproven.
+  - [ ] M2: a failed `vkCreateDevice` in `replaceDevice` is retried (for example, at the record's next frame edge or
+    expose while `device_swapped` is false) instead of leaving the window black. Proof: M1's injection plus a forced
+    create failure.
+  - [ ] M3: the rebuild round also crosses a loss with a mode program that has storage, a scene target, bloom and
+    meshes, with Spectrum, and with the background layer and a backdrop. Each frame after the loss equals the frame
+    before it.
+  - [ ] L1: `rhi_owned.h` states that a wrapper is retired before its QRhi, always: `deleteLater` on a never-created
+    wrapper after its QRhi went is a use-after-free in Qt 6.12. `device_loss_check.py` proves that no core wrapper is
+    live after `sceneGraphInvalidated`.
+  - [ ] L2: a lost device's destruction tells its job service that the device was lost before `stop()`, so the job
+    teardown never saves a lost device's cache (today it trusts the job thread's own observation).
+  - [ ] L3: a failed cache-file commit is a reported skip, not red in `pipeline_cache_by_rule`, and the plan's "last
+    writer wins" says "some writer wins". Run the real-blob round trip when the job QRhi's first pipeline, or the first
+    raw `VkPipelineCache`, exists.
+  - [ ] L4: `device_loss_check.py`'s release docstring drops the ABI 29 control it never ran; the OpenGL
+    `no_wait_inside_the_frame` check is dropped or marked informational.
+  - [ ] L5: at each Qt upgrade, recheck `QQuickRenderControlPrivate::resetRhi` against Qt source: its signature, and
+    that `initialize()` reassigns `QQuickWindowPrivate::rhi`.
+  - [ ] L6: the parent box's lazy creation, mode-switch release, pre-built and gradually warmed pipelines, and P2
+    working-set/GPU-memory rerun are still open. They are not on the audited branch.
 - [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the composite) and the
   Expanded Visualizer's display-size targets at 4K (the M6 budget).
 - [ ] N3.9 A display move keeps a mode's GPU-held history (1C.2, plan 01 M3c "Display moves retarget the live
@@ -1204,8 +1234,341 @@ the feature (D3D11 is not stated).
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
+  - Reading (reference; Sonnet agent ac4e1a1c9d1ad93c4, 21 Nov, merged), as Waveform's and Extruded Bubble's readings: the
+    record per frame and per Settings or card change, stream size rules, every pass with its targets and formats, how
+    it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
+    boxes (one C++ box each, with what its proof must show) and which of theirs it shares. File:line for every claim.
+    Neon Lake's persisted id is `shockwave_grid`.
+    Reading (Sonnet, 21 Nov, no code touched; sizes measured with a probe over the real mesh builders). `ng.py` is
+    `rendering/quick/visualizer/implementations/shockwave_grid.py`; `basin.py` is `rendering/gl_programs/neon_lake_basin_program.py`;
+    `target.py` and `shafts.py` are in `rendering/quick/scene3d/`; `mc.h` is `native/core/src/mode_content.h`; `D15` etc. are in
+    `Native_Core_P3_Decisions.md`. Neon Lake has no compute, no storage image, no reflection target (its water reflection is the
+    basin mesh drawn again mirrored, `ng.py:609-621`, `basin.py:507-511,694-706`), no depth texture, no HDR, no OIT.
+    - Per frame from the logical frame (`ShockwaveGridFrame`, `widgets/spotify_visualizer/render_state.py:405-430`, on Spectrum's
+      payload): the bars (at most 64, scaled by 0.55 at upload, `ng.py:388-389`, `rendering/quick/visualizer/implementations/spectrum.py:127-155`),
+      peaks, the onset ring (age, x, z, strength; at most 48, `rendering/gl_programs/shockwave_grid_program.py:27`), the five terrain lane
+      drives, their phase and the Growth and Indents drives, the animation time, the content fade. The Settings parameters ride
+      frozen in the same frame.
+    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box): the newest 16 live events as records
+      (`ng.py:390`, `shockwave_grid_program.py:23,191-196`), the mid-band mean (`ng.py:392-394`), the beat pulse (`:397-398`), the music
+      drive (`:402`, `shockwave_grid_program.py:148-174`), the camera with its terrain-floor eye (`ng.py:200-209`, `basin.py:89-113`: it
+      reads the terrain's cells round the eye, so the worker needs the terrain it already holds as a parameter), the Sun or
+      Moon placement at infinity and its orbit (`ng.py:303-333`), the beat-star cells (up to 24 vec4, tested against the terrain
+      and the body, `:438-452`, `rendering/gl_programs/neon_celestial.py:115`), the shaft light (`:718-727`), the halo light (`:730-735`),
+      the cloud and nebula time terms (`:325-332`), the scroll, the idle swell and the wave terms (`:272-274,466`), the
+      reaction-off flag when nothing drives the land (`:282-285`). The record is a few hundred bytes (events 16 x 16 B, 64 bars):
+      no slot pressure.
+    - Per Settings or card change only: the tier's samples, glow and mesh cells (`ng.py:94-104`; High 4 samples and 192 cells
+      clamped to 180 x 120, Balanced 2 and 128, below single-sampled, `rendering/gl_programs/scene3d.py:81-92`,
+      `shockwave_grid_program.py:29,54-58`), which stages exist (marks `ng.py:677`, sky `:710`, rays `:738`, glow), the three programs'
+      blocks (about 100 uniforms: 5,488 B basin, 4,576 B skyline, 5,232 B sky; arrays `uBars` float[64] `basin.py:172`, the reaction
+      lanes, bias and bands float[160], [32], [5] `rendering/gl_programs/neon_terrain_reaction.py:165-169`, the baked shaper
+      tables `ng.py:681-699`), the terrain's adoption (`:167-176`), the mark diameter in pixels from the item's matrix
+      (`basin_pixel_scale`, `ng.py:608`, `basin.py:36-44`: a card-derived value).
+    - Meshes and textures (no per-frame bytes): the basin is non-indexed triangles of vec2 (`neon_lake_basin_mesh.py:97-154`), 385,320
+      vertices = 3.08 MB at 180 x 120, 168,264 = 1.35 MB at 90 x 60, 78,864 = 0.63 MB at 40 x 27, keyed by the tier, the origin's
+      reach and the painted tiles (`ng.py:136-154,664-669`); the marks are its unique vertices, 51,939 = 415 KB at 180 x 120, ten
+      percent more with Wire Display's vertices (`ng.py:98-103`); the sky is a one-cell grid (`:242`). The terrain is a float32
+      heightfield of at most 257 x 257 (`rendering/gl_programs/heightfield.py:16`): the stored cells RGBA32F (R height, G bank
+      distance, B and A unwritten: 1.06 MB, `rendering/quick/scene3d/heightfield.py:59-62`; N1.7: QRhi has no RG32F) and, for a grown
+      grid only, the overlay R32F (264 KB, `ng.py:132,182-185`), each uploaded once per data and released when the overlay goes
+      (`heightfield.py:45-49`). The events are one std430 storage block at binding 3 (`ng.py:51,516`).
+    - Passes of a frame in order (`ng.py:413-593`; one scene target, overlay, multisampled): 1 sky background (`:520-529`,
+      depth test off, mask off); 2 depth-only prepass of the basin mesh, only with a Sun or a sky (`:531-540`, depth less, write on,
+      blend ZERO, ONE_MINUS_SRC_ALPHA on colour and on emission, `:743-764`, to subtract the covered sky); 3 the mirrored basin,
+      lines only, and 4 the mirrored marks, only with Reflection above 0 and the eye above the water (`:544,609-621`, depth always
+      after a prepass, write off); 5 the surface (`:622-630`, depth less-or-equal, write on) and 6 the marks as `GL_POINTS`
+      (`:631-633,640-645`); 7 the skyline, the basin mesh again with a displaced vertex stage (`:549-567`, `basin.py:1077-1190`, less-or-equal,
+      write off); 8 the Sun or Moon body (`:568-577`, skyPass 2, `gl_FragDepth` 0.999999, `basin.py:1335`); 9 the shaft source (`:578-593`,
+      skyPass 3, only while the body is in front of the camera, `gl_FragDepth` 1.0, `basin.py:1222`, written alone into attachment 2:
+      `target.py:595-614`). On leaving the scope (`target.py:937-1013`): the shafts, a half-allocation downsample resolving the samples
+      and two 16-tap radial gathers (`shafts.py:116-153`, three draws on two R16F targets), the emission's bloom chain
+      (`target.py:966-968`, strength 1.4 x Glow, `ng.py:413`), and one composite of the scene with glow and shafts added
+      (`target.py:228-277,1057-1104`). 14 entries (9 draws, 3 shafts, bloom, composite) against `kMaxModePasses` 16 (`mc.h:192`),
+      3 scene targets (the scene and two shaft levels) of `kMaxSceneTargets` 4 (`scene_targets.h:69`), 1 storage buffer, 3 meshes of 8
+      (`mesh_buffers.h:54`), at most 2 samplers a pass of 8 (`basin.py:1350`, `mc.h:277`): every limit fits, no limits box.
+    - Attachments and formats: the scene's colour is RGBA8 (no HDR, `target.py:1202`); the emission RGBA16F only with Glow above 0
+      (`:1207-1208`); the shaft source R16F only with rays admitted (`:1209-1210`), all multisampled at the tier's count; depth a D24
+      renderbuffer, never sampled (`:1213-1220`), where the core's target depth is D32F (`scene_targets.h:9,102`). The fragments
+      write `FragColor`, `Emission` at 1 and the sky also `ShaftSource` at 2 unconditionally (`basin.py:546,1158,1201-1202`); Python's
+      shafts attachment is slot 2 even without emission, slot 1 draw-buffer NONE (`target.py:1222-1229`), and the core refuses an
+      output past the target's attachments or an attachment left unwritten (`mode_content.cpp:664-683`, from Extruded Bubble's reading):
+      fragment variants by attachment set (a `#define`, one file for both renderers, `mc.h:3-4`). Blends are Quick's inherited
+      premultiplied over on colour, additive ONE, ONE on the emission (`target.py:585-588`) and off on the shafts (`:606`): with Glow
+      above 0 every pass writes attachments of differing state, so the program needs the core's per-attachment blending
+      (`mc.h:86-90`, device-gated: refused and Python's to log where it is not real).
+    - Turning: the frame is oriented before anything (`ng.py:222,375`, `rendering/quick/scene3d/frame.py:38-66`), the scene draws unturned at the
+      oriented size and only the composite and the bloom's first samples are oriented (`target.py:937-941,980-1000`); the core refuses
+      a turned bloom or composite unless the scene is in the window's frame (`mc.h:150-155,445-447`, ABI 29), so Neon Lake is the
+      turned-card anchoring box's fourth consumer (after the Oscilloscope, Waveform, Extruded Bubble). Suspected Python defect, not
+      run: under a quarter turn `end` replaces `frame` by the physical output frame (`target.py:940-941`) before `_apply_shafts`
+      maps the light's item point through its matrix (`:1042-1055`), while the shaft source was drawn in the oriented scene frame, so
+      the rays' centre may be taken in the wrong frame for quarters 1 to 3. Reproduce: rays on, content quarter 1, compare the
+      rays' centre with the Sun's drawn position; settle in Python before the port.
+    - Clear: all constants. One `glClear` of every attachment to 0 (overlay: transparent, `target.py:918-926`) and depth 1; the
+      emission and shafts attachments clear with it. No port decision is open. With the content fade at 0 or an empty content
+      rect Python draws nothing at all (`ng.py:382-385`).
+    - Found while reading, shapes the port:
+      - The terrain is read with a hardware-filtered `textureLod` on RGBA32F (`rendering/gl_programs/heightfield_glsl.py:4-12`,
+        `basin.py:260`) and its G channel's filtered value is compared to a threshold (`:411,443,596,848`), while the plan's N4.e
+        decision reads the heightfield with `texelFetch` so that 32-bit float filtering is never required (plan N4.e, research
+        section 16). R16F cannot hold the authored float32 heights. The shared shader either does a four-tap bilinear from
+        `texelFetch` in both renderers (Python's pixels move by the hardware's quantised weights; rule (a) of D12) or the device
+        proves linear RGBA32F (Waveform's box on 32-bit float filtering, for a mode texture instead of an image).
+      - The basin deliberately keeps loose uniforms: on its pass block the Glass surfaces drew a few pixels one 8-bit level apart on
+        OpenGL in 19 to 215 of 549 recorded frames (`basin.py:1365-1368`, the 14 Nov identity record), left "to its port". The
+        port has no loose form, so that difference must be found and removed first, in Python, with the block form shown
+        byte-identical on the Glass frames.
+      - `uPass`, `uMarks`, `uDepthOnly`, `uSkyPass` are uniforms the renderer flips between draws of one program
+        (`basin.py:233-235,1207`; `ng.py:525-592`). One rule fills each member from exactly one source (`mc.h:55-65`) and there is no
+        per-pass constant, so each becomes a compile-time variant (a `#define`): about eight bakes of the large basin fragment,
+        each with its own 5.5 KB block copy and pipeline, built a step at a time. Python's frames must stay byte-identical across
+        the shader change.
+      - The marks are `GL_POINTS` with `gl_PointSize` and `gl_PointCoord` (`basin.py:507-519,707-716`); the core refuses points
+        (`mc.h:102`). Instanced quads on the primitive N5.1 builds (D15; the plan's N4 topology rule), the corner supplying the
+        coverage, from the mesh's instance stream; one shader for both renderers.
+      - The basin writes its clip depth by hand in GL's range after the matrix (`basin.py:193-202`), and the sky's `gl_FragDepth`
+        constants 0.999999 and 1.0 assume GL's window depth; QRhi's correction covers x and y and a zero-to-one z on Vulkan
+        (`native/core/src/conventions.h` rule 1; Waveform's floor maps `0.5 * (z / w + 1)`, `rendering/gl_programs/waveform_ribbon.py:55`).
+        The body is depth-tested at 0.999999 against far land near the horizon, where D24 (Python) and D32F (core) quantise
+        differently: the horizon frames are the proof.
+      - Both renderers skip work per frame that the core records every time: everything at fade 0, the mirrored passes while the
+        eye is at or below the water (`ng.py:544`: it moves with the orbit and the terrain floor; the shader would otherwise draw
+        reflections from below, so this is parity, not only cost), and the shaft chain while the body is behind the camera
+        (`:721-722`; a zero source gives zero rays, cost only). The record u32 that skips an entry is Extruded Bubble's box below.
+      - A mesh change (tier, painted tiles, origin reach) uploads up to 3.1 MB in the record that first draws it
+        (`mesh_buffers.h:4-11`), where Python warms it over not-ready steps (`ng.py:229-231,236-239`): the old mesh kept drawn until the
+        new is resident is Extruded Bubble's geometry box's rule.
+      - Shaft targets are half the allocation (`shafts.py:155-161`, the 64 px bucket of the item), so they need the exact explicit size
+        Waveform's first box answers; the allocation's slack carries Python's own content under ABI 28's anchoring (`scene_targets.h:12-17`).
+      - Already in the plan: N4.k's merged shafts owner (Extruded Bubble's port, then Neon Lake) decides whether the shafts keep
+        the source attachment, the two gathers and a composite term, or become ordinary additive passes.
+  - [ ] C++: a 32-bit float mode texture for the heightfield (N4.e's primitive). Mode textures are RGBA8 pixels from the GUI
+    thread (`mc.h:35-37,488-500`, `setTexture` `:578`; Waveform's half-float box adds RGBA16F with mips, this is RGBA32F and R32F,
+    no mips, one `format` member serving both). Needed: a declared format on a texture (RGBA32F, R32F), float bytes uploaded once
+    per data and replaced in place at the same size (another size recreates), both stages reading it by name (`PassSampler.stages`,
+    `mc.h:296`), `texelFetch` and `textureLod` at the base level, byte counts in `modeTextureCounts` (1.06 MB and 0.26 MB at
+    257 x 257), the overlay removed when the grid is not grown, and the job-service route (`mc.h:46-53`) or its in-frame fallback
+    for float bytes. Proof, both backends, sizes 2 to 257 including odd: every texel of both channels read back equal to Python's
+    float32 bits (row order as Python's: the RGBA8 form is top-first); a vertex-stage `texelFetch` and `textureLod` of it
+    (QRhi has no feature flag for vertex sampling, N4.e) reproducing Python's displaced surface; a replacement at the same and at
+    another size mid-run without a pipeline rebuild; nothing uploaded at rest; zero textures after teardown; if the filtered
+    read stays, Python's bilinear against the core's on the water classification and the bank-distance threshold, inside rule (a)
+    of D12 (else the four-tap form in both renderers, same bound). Negative controls: R16F storage (heights and the water
+    classification leave the bound), a flipped row order, the overlay left bound after the grid shrinks.
+  - [ ] C++: the composite with light shafts, unless N4.k's merged owner draws its rays as ordinary additive passes. Core
+    composites are overlay, overlay_glow and opaque_glow (`mc.h:147-155`, `native/core/shaders/composite_overlay_glow.frag:57-85`) and
+    nothing under `native/core` mentions shafts. Python adds the half-size shaft texture, times the rays' colour and times the
+    scene's coverage ("never the empty card around it"), into the glow before the dither test, bound in the glow's place when
+    Glow is 0 (`target.py:259-277,1057-1104`). Needed: a composite input naming a shaft level (`"<target>.<attachment>"`, read
+    at the glow's uv) and a three-component colour the record fills (the shafts' colour times strength, per frame), over both
+    forms with and without bloom. Proof, both backends, every sample count: the composite against Python's
+    `scene_overlay_shafts(_samples)` frame for frame, with bloom on, bloom off (the shafts alone), rays off and each tier; the
+    dither where shafts alone clear its floor; a quarter turn (the fourth consumer of the anchoring box). Negative controls: the
+    coverage factor left out (rays over the empty card), the dither keyed on bloom only, the glow read at the content size
+    instead of the allocation's.
+  - Shared with Waveform's and Extruded Bubble's boxes (not repeated): the turned-card anchoring box (fourth consumer); the exact-size
+    explicit target (Waveform's first box: the two shaft levels, no mips); the record u32 that skips an entry (Extruded Bubble's
+    box: fade 0, the mirrored passes while the eye is under the water, the shaft chain, with a proof frame at each; if the lead
+    drops that box for Extruded Bubble these three cases argue to keep it); the geometry residency rule for a mesh swap
+    (Extruded Bubble's geometry box, only its old-key-kept half); per-attachment blending (N3.4's gate); the fragment-variant rule
+    for outputs; instanced quads (N5.1); the merged shafts owner (N4.k); Waveform's 32-bit float filtering box, only if the
+    filtered terrain read stays. Not needed here: the pass, target and storage limits (all within the ABI 29 values), anisotropy,
+    the half-float texture, the scene probe, the drift and geometry arena, the readback check, defocus, bloom off per record
+    (Glow is a setting: a program change), the backdrop clear (every clear is a constant).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
+  - Reading (reference; Sonnet agent a32125875bef33af0, 21 Nov, merged), one reading per mode as the Waveform,
+    Extruded Bubble and Neon Lake readings: the record, meshes and streams, every pass with its targets and formats, how
+    each turns, the clear; then what each port needs that the ABI 29 core lacks beyond the earlier boxes (one C++ box
+    each, with its proof) and which earlier boxes they share. File:line for every claim; any suspected Python defect is
+    reported, not fixed. Sphere's persisted id is `sphere`.
+    Reading (Sonnet agent a32125875bef33af0, 21 Nov, no code touched; sizes measured with a probe over the real mesh builders
+    and block layouts). `es.py` is `rendering/quick/visualizer/implementations/extruded_spectrum.py`; `esp.py` is
+    `rendering/gl_programs/extruded_spectrum_program.py`; `sv.py` is `.../implementations/sphere_voxel.py`; `svg.py` is
+    `.../implementations/sphere_voxel_geometry.py`; `s3d.py` is `rendering/gl_programs/scene3d.py`; `env.py`, `target.py`,
+    `frame.py` are in `rendering/quick/scene3d/`; `mc.h` is `native/core/src/mode_content.h`; `D12` etc. are in
+    `Native_Core_P3_Decisions.md`. Both modes are one overlay `SceneTarget` (multisampled RGBA8 colour, a D24 renderbuffer
+    depth, `target.py:1205,1217-1223`), a frameless card that may overflow it (`core/settings/visualizer_mode_registry.py:349-355,
+    302-310,328,369`), drawn instanced from one small unit-cube mesh, and composited by the overlay composite with no bloom,
+    no emission, no shafts, no compute, no reflection target, no OIT, no HDR, no depth texture. Neither uses `PhotoEnvironment`
+    (ten transitions): N4.j for them is `BackdropEnvironment` only (`es.py:37,89`, `sv.py:26,730`).
+    - **Extruded Spectrum, per frame** from the logical frame (`ExtrudedSpectrumFrame`, `widgets/spotify_visualizer/render_state.py:392-401`,
+      Spectrum's payload and frame runtime unchanged): the bars (at most 64, `rendering/gl_programs/spectrum_options.py:13`),
+      the peaks, the bar count and the animation time (`es.py:202-205,215-218`). The renderer turns the bars into the upload
+      form per frame (`x 0.55`, `rendering/quick/visualizer/implementations/spectrum.py:127-148`) and the hue phase
+      `animation_time x 0.15 x drift mod 1` (`es.py:75-77`, rate `esp.py:77`): for the worker to publish (D5.5, the N0.4 box), in
+      the form Python packs (a double product rounded once to float32; a shader multiply would differ by an ulp). The bar
+      record is 3 floats a bar, 768 B at 64 (`es.py:66-72`); no native schema exists yet for this mode (Spectrum's, Oscilloscope's,
+      Bubble's and Spline Curve's do: `core/visualizer_engine/`), and the schema may carry f32 arrays or f64 fields filling a
+      block's float arrays (`program_blocks.h:19`). The Settings parameters ride frozen in the same frame, with the wallpaper
+      put in at the main side (`widgets/spotify_visualizer/backdrop.py:74-147`: 0.6 MB, so the record leaves it out).
+    - **Extruded Spectrum, per Settings, card or view change only** (the view's Turn and Tilt are Settings, edited by drag):
+      Spectrum's layout (`es.py:120-128`), depth, tilt, turn (`:133-136`), the fit `extruded_fit` (`:139-144`, `esp.py:133-149`),
+      the painter's draw order of the translucent passes (`es.py:237-239`, `esp.py:115-123`: a permutation of up to 64 bars from
+      the eye's x, so it is Settings-and-card data, not music), the multisampling (`es.py:54-63`: 4 at High, doubled to 8 by
+      Smooth Edges, 2 and 4 at Balanced, 0 below, `s3d.py:81-88,115-127`), the colours, gloss, edge width in pixels, floor span
+      (`es.py:214-226,265-277`), which passes exist (`:337-353`), the reach and so the target's frame (`:147-166`, `esp.py:152-175`;
+      `frame.py:155-169` grows it in quarters of the item's height, never past the window), and the wallpaper maps (`es.py:279-291`).
+      The pass block is 288 B (probed).
+    - **Meshes**: the box is 36 vertices of position and normal, 864 B (`s3d.py:620-621`), drawn instanced once per bar,
+      at most 64; the bars come from the record, never a second mesh.
+    - **Passes of a frame in order** (`es.py:254-353`; one scene target, overlay, multisampled; every gate below is Settings,
+      so each is a program variant, not a per-record choice): (1) the cast shadow (`es.py:301-335`, pass 4, MAX blend
+      union) is never admitted: `EXTRUDED_CAST_SHADOW_AVAILABLE = False` (`core/settings/visualizer_mode_registry.py:15-17`, R-128;
+      its settings are marked unavailable, `core/settings/visualizer_mode_settings.py:1390-1395`), so N4.l's Extruded half
+      draws nothing in production; (2) the bars, pass 0, when the fill is opaque (`es.py:337-340`: depth test and write on) or,
+      with a translucent fill or visible edges, pass 3 (`:341-348`: no depth, far-to-near by the records; the vertex stage moves
+      the box faces turned away off the clip volume, `esp.py:344-349`); (3) the floor reflection, pass 2 (`es.py:350-351`, the
+      row mirrored under the floor, discarded below the field, `esp.py:315-318,430-435`); (4) the ghost columns, pass 1
+      (`es.py:352-353`, `esp.py:303-310,429`). Passes 1 to 3 are alpha blends with the depth mask off; one rule gives
+      `uPass` no home in a block (`mc.h:55-65`), so each becomes a `#define` variant of one shader file (three or four bakes, each
+      with its own 288 B block). On leaving the scope one overlay composite at the content fade (`target.py:980-1003,294-300`,
+      `es.py:254`): up to 4 entries of `kMaxModePasses` 16 (`mc.h:192`), 1 scene target of 4 (`scene_targets.h:69`), 1 mesh of 8,
+      at most 1 stream of 8 (`mesh_buffers.h:54-55`), 2 samplers of 8 (`mc.h:277`; `uBackdrop`, `uBackdropPrevious`,
+      `esp.py:362,365,446-448`): every limit fits, no limits box. The blend of every pass is the core's `alpha` preset
+      (colour SrcAlpha, OneMinusSrcAlpha; alpha One, OneMinusSrcAlpha: `mode_content.cpp:781-787`), the state the Python host leaves (`rendering/quick/visualizer/render_host.py:303-310`).
+    - **Wallpaper (Mirror Faces)**: the two-slot `BackdropEnvironment` (`env.py:210-335`): an RGBA8 copy, longer side 512
+      (`s3d.py:157`, `backdrop.py:27-31`), rows bottom first (`backdrop.py:20,46`), a full mip chain, linear mipmap filter,
+      clamped (`env.py:287-299`); the new wallpaper goes into the other slot and the reflection crossfades over the bringing
+      transition's duration or 2 s on the logical clock (`env.py:226,252-278`), the first one fading in from no reflection by
+      `mirror x blend` (`es.py:243-252`); Mirror off holds nothing (`es.py:251-252`). The shader reads both with `textureLod` at the
+      mirrored uv (`esp.py:416-426`). Native: two mode textures with mips already exist (`mc.h:35-44`, a same-size image replaces in
+      place, another size recreates it; GPU mips). Gaps that are Python: the owner uploads on the edge it already has
+      (`widgets/spotify_visualizer/quick_display_visualizer_owner.py:516-546`) instead of the frame carrying the pixels; the blend
+      is per frame, so the worker publishes `mirror x blend` and the slot weights from the logical clock and the owner's
+      (identity, duration) edge; a program whose texture is missing is not drawn (`mc.h:70-71`), so a 1 x 1 placeholder stays in both
+      slots until the first wallpaper; the uv maps the fragment through `fragPixel(uTargetSize)` and `uBackdropMap`
+      (`esp.py:363-364,418`), the allocation and the window's GL pixel, where the core's fragment row is top-first on every backend
+      (`conventions.cpp:44`) and `u_target_px` is the content (`mode_content.cpp:230`): the shader maps the target pixel to the
+      window's through `u_window_from_target_x/y` (`mode_content.cpp:228-229`) and the backdrop's row order once, in the one shared
+      file, with Python's frames unchanged. Gaps that are C++: the crossfade's start (the owner's edge precedes the texture
+      commit, `mc.h:46-53`), and the mip chain per backend: see the boxes.
+    - **Turning**: the frame is oriented before anything (`es.py:172,195`, `frame.py:38-66`), the scene draws unturned at the oriented
+      size, the reach stays in the oriented frame and clips to the physical window (`Docs/Reference/Scene3D_Resources.md:12`), and
+      only the composite is turned (`target.py:937-941,980-1003`). The core refuses a turned composite unless the scene is in the
+      window's frame (`mc.h:150-155,461-465`, ABI 29), so Extruded Spectrum is the turned-card anchoring box's fifth consumer
+      (Oscilloscope, Waveform, Extruded Bubble, Neon Lake before it), and the only one that also overflows: its composite
+      rect is the reach rect (`rendering/native/composite.py:12-14,115-136`; only `native/core/python/composite_check.py:472-473`
+      passes an `overflow_rect` today), so that box's proof includes a turned, overflowing card.
+    - **Clear**: all constants. One clear of colour to transparent and depth to 1 at the scope's start (`target.py:918-926`).
+      With the content fade at 0, or no bars, Python draws nothing (`es.py:203,207`).
+    - **Found while reading, shapes the port**:
+      - The hand-written clip depth is OpenGL's range: `clip.z = clamp(-screen.z / 6, -1, 1) x w` (`esp.py:284`). The view depth
+        spans both signs (the row turns up to 180 degrees about its centre, `esp.py:56-57,252-260`), so on Vulkan, whose clip
+        range is 0 to w, everything nearer than the pivot is clipped. The one shared shader maps it as Waveform's floor does
+        (`rendering/gl_programs/waveform_ribbon.py:55`, `0.5 x (z / w + 1)`); Python's frames must stay byte-identical across
+        the change (the order is monotone; only D24's quantisation moves). The proof frames are the extreme turns and tilts.
+      - The target is the reach: up to the whole window, at 8 samples with Smooth Edges at High (8 x (RGBA8 + D32F) = 64 B a pixel,
+        about 530 MB at 3840 x 2160 before the resolve; arithmetic, not measured): `SceneTargetCounts` at the largest reach goes
+        in the port's record, and the sample clamp to the device (`kMaxSceneSamples` 8, `scene_targets.h:72`) is a proof size.
+      - The composite's rect is Python's `item_pixel_rect` of the reach frame (`frame.py:92-136`) and the core's is a whole-device-pixel
+        rect (`composite.py:115-136`); the card's `scene_item` carries Python's (ABI 28), and the two must agree at every reach step.
+      - Scene opacity reaches Extruded Spectrum only as the content fade (`es.py:254`), which the core's composite reads as `u_fade`
+        (`native/core/shaders/composite_overlay.frag:16,39`); `render_contract.scene_faded_snapshot` folds it in on both paths
+        (`rendering/quick/visualizer/render_contract.py:70-86`), so nothing is added.
+    - **Sphere, per frame** from the logical frame (`SphereFrame`, `render_state.py:473-` and the cohort at `:438-469`): the size
+      pulse, the rotation phase, the tracer drive and phase, the eight section drives, the incoming drive, density, two sections
+      and blend, and up to four particle cohorts (progress, strength, density, velocity accent, vocal bounce, section, lane,
+      outtake) (`sv.py:813-864,779-811`); every value packed as Python packs it (clamps at `:910-916`, `:793-800`). Per frame in the
+      renderer today, so for the worker to publish: the rainbow phase `fmod(logical time x speed, 1)` (`sv.py:959`), the shadow's
+      offset `-light x radius x (0.34 + 0.55 x pulse) x distance` and alpha `colour alpha x (0.28 + min(0.16, 1.6 x pulse)) x
+      opacity` (`:1079-1087`), whether any admitted cohort is an outtake (`:967`), and the fade `scene_fade x content_fade` (`:955`;
+      see the defect below). 278 instances is what the shell builder makes (`svg.py:14-19,63-95`, probed): radius 5, thickness
+      0.75, 5,560 B of centre, seed and polarity, one cube of 36 vertices (864 B, `svg.py:32-44`), 10,008 vertices a draw.
+    - **Sphere, per Settings or card change only**: the geometry `(centre, radius = 0.215 x min(content))` (`sv.py:48,79-85`), the
+      reach and so the target's frame (`:93-109,751-756`), the multisampling (`:121-123`: 4, 2, then 1 where the tier has none),
+      Mirror Cubes' strength (`:112-118`), the light vector (`:873-879`), colours, gloss, edge weight, depth shading, toon,
+      rainbow flags, spin mode, perspective, view pose, voxel variation, projection (`:813-866,940-966`), which layers exist (the
+      shadow and its softness layer, `:1073-1088,1134-1145`), and the wallpaper as above (`:929-939`). The block is 1,024 B
+      (probed; `:126-181`), one block for hero and shadow, patched per layer (`:1115-1121`).
+    - **Passes of a frame in order** (`sv.py:976-1034`; one scene target, overlay 1.0, multisampled, depth LESS and write on):
+      (1) with Soft Shadow above 0, the soft layer, the same vertex stage with the cubes grown by `1 + 0.12 x softness`, a flat
+      fragment of the shadow colour, alpha x `0.32 x softness`, projected with the offset and scale of the shadow
+      (`:1134-1141`; shader `:691-704`), then a depth clear (`:1142`); (2) the shadow's core silhouette, the same program at cube
+      scale 1 (`:1144`); depth is used only as a mask so overlapping faces do not stack alpha (`:1062-1069`); (3) a depth clear
+      before the hero (`:989-990`) so the shadow cannot occlude it; (4) the hero, the cubes lit and edged, culled back with the
+      front face from the matrix's handedness and the backend (`:1002-1018`, `:62-65`, `rendering/gl_programs/conventions.py`
+      `front_face_clockwise`); (5) with outtake cohorts, a second draw of each of the three layers with `uRenderPass = 1`, depth
+      write off (`:1020-1032,1107,1128-1132`); then the overlay composite at fade 1.0 (`:976`) with the fade applied per
+      fragment (`:684-687`). Up to 6 draws, 2 depth clears and the composite: 9 entries of `kMaxModePasses` 16, 1 scene target,
+      1 mesh with its instance stream of 8 (`mesh_buffers.h:54`), no stream or storage (every value fills a block member
+      from the record or the settings: `mc.h:55-65`), 2 samplers: every limit fits. `uRenderPass`, `uVoxelScale`, `uProjectionOffset`,
+      `uProjectionScale`, `uLayerAlpha`, `uShadowColor` change between draws of one program (`:1115-1121,1025`) and the rule has no
+      per-pass constant: one `#define` variant a draw, a block member name per variant (about six bakes of the vertex and
+      fragment sources, `:184-704`; warm-up one build a step). All draws are `Alpha` blends.
+    - **Sphere, how it turns**: it does not turn the content. Sphere is not content-rotation capable
+      (`registry:302-310`, against Extruded Spectrum's `:354`), never orients its frame (no call in `sv.py`), and its turn and tilt
+      are a view pose in the vertex stage (`:837,509`, `s3d.py:1266-1286`). The turned-card box does not touch it.
+    - **Sphere, clear**: constants (colour transparent, depth 1, `target.py:918-926`) plus the two mid-frame depth clears above.
+      With the fade at 0 Python still records every pass (alpha 0, `:684-687`); no early return but a zero target.
+    - **Found while reading, shapes the port (Sphere)**:
+      - The core clears a scene target's depth only with the target's clearing draw at its first run of a record
+        (`mc.h:96-97`, `mode_content.cpp:5999`): nothing clears depth mid-frame. Sphere's silhouette mask depends on it twice
+        (`sv.py:989-990,1142`). A data-only substitute exists: a full-target pass with colour writes off, depth test Always, write
+        on and `gl_FragDepth = 1.0` (`mc.h:91-92`), at a full-target fragment cost twice a frame; the box below decides.
+      - The overlay composite always multiplies by the card's content fade (`composite_overlay.frag:39`, `u_fade` a core member,
+        `mode_content.cpp:223`), where Sphere composites at 1.0 and fades each fragment before blending (`sv.py:976,684-687`);
+        fading after the blend instead is not the same pixels where fragments overlap (the shell's translucent fills and the
+        shadow layers). The shader's own fade member (`uFade`) is a record or settings member, not the core's `u_fade`.
+      - Culling and the front-face selector (`mc.h:107-108`, `mode_content.cpp:5360-5372`) are built (N3.2) and used by no ported
+        mode yet: Sphere is the first consumer, so the proof includes each backend's winding and the negative control of the
+        flipped one.
+      - The depth is the Scene3D projection's own: `sceneProjectAt` writes `clip.z = sceneClipDepth(w)` after the matrix
+        (`s3d.py:224-239`), about 0.93 to 0.96 over the shell: inside both backends' ranges, the compare monotone; D24 against D32F
+        only moves ties between faces of one cube, the same class as Neon Lake's horizon note.
+      - The wallpaper maps as Extruded Spectrum's (`sv.py:661,962-963`, `uTargetSize` `:1044-1045`).
+    - **Suspected Python defect (Sphere), not run**: the scene fade may be applied twice. The node and the native route fold the
+      authored scene opacity into the content fade (`rendering/quick/visualizer/node.py:264`,
+      `rendering/quick/visualizer/native_route.py:626-657`, `render_contract.py:70-86`; the root's `sceneOpacity` is
+      `presentation.scene_fade x reveal`, `scene_controller.py:2741`, `VisualizerPresentation.qml:256`), and Sphere then multiplies
+      `presentation.scene_fade x presentation.content_fade` again (`sv.py:955`; the snapshot's `scene_fade` is untouched by the
+      fold). At a scene fade of 0.5 the shader receives 0.25. Extruded Spectrum and every other renderer use the content fade
+      alone, and `tests/test_qtquick_visualizer_fade_authority.py` names "test_visualizer_scene_fade_once" (`:77`) which
+      does not exist in `tests/`. The term arrived with the voxel rework (49086dbf4), before the fold (d67d6aac3). Reproduce: take
+      a Sphere snapshot whose presentation has `scene_fade = 0.5` and `content_fade = 1.0`, pass it through `scene_faded_snapshot(
+      snapshot, 0.5)`, and read `values["uFade"]` at `sv.py:955` (0.25, where one application gives 0.5); then a hidden render at
+      scene fade 0.5 against an Extruded Spectrum frame at the same fade shows Sphere's alpha squared. Settle in Python (one term,
+      with the fade-in curve judged on the activation reveal) before the port, since the native route would copy it.
+  - [ ] C++: a depth-only clear of a scene target between passes (Sphere's silhouette mask, two a frame with Soft Shadow, one
+    without it, none with the shadow off). The core's only depth clear is the target's first-run clearing draw (`mc.h:96-97`).
+    Needed: a pass entry that clears a named target's depth (the far value, the whole content viewport and every sample) with colour
+    untouched, recorded in place between runs of draws on that target. If the lead prefers data only, the full-target
+    frag-depth pass above is the alternative and its cost the proof. Proof, both backends, every sample count: Sphere's frames
+    with the clears taken against Python's `glClear` frames (shadow on with and without Soft Shadow; the hero not occluded by
+    shadow depth), the clear leaving colour and the other target alone, GPU time of the entry at 4K against the frag-depth
+    pass. Negative controls: the clear left out (the hero loses the pixels the shadow's depth covers), the clear writing colour.
+  - [ ] C++: the overlay composite at a declared fade. The composite step's fade is the card's `u_fade` only
+    (`composite_overlay.frag:16,39`; `mc.h:147-155`). Needed: a composite option whose fade is a constant 1 (or a named member the
+    record or settings fill), valid for the overlay and glow forms, leaving every existing program's frames unchanged. Proof, both
+    backends, every sample count: Sphere's overlay composite at 1.0 against Python's `overlay=1.0` frames with the per-fragment fade
+    at 1, 0.5 and 0 (a content fade that does not reach the composite), and an existing overlay program (Oscilloscope or Neon
+    Lake) hash-identical before and after. Negative control: the card's `u_fade` at the composite and the shader fade both applied
+    (the half-fade frames leave the bound).
+  - [ ] C++: a mode texture's commit as something the record can read. The wallpaper crossfade starts when the new image is what the
+    slot draws (Python: at its first `textures` call, `env.py:260-271`); here the owner's edge precedes the texture's commit,
+    which is one record later in place on OpenGL and a job's completion on Vulkan (`mc.h:46-53`), and the state keeps only
+    counts (`TextureReport`, `mc.h:514-530`). Needed: each texture's committed generation as a core member of the pass block
+    (or an edge to the owner, as a lost texture is, `item_notifier.h`), so the worker's blend begins at the commit and the shader
+    never mixes toward a slot still holding an older image. Proof, both backends: a wallpaper change at a known record, the blend's
+    first frame and the weights across the change against `BackdropEnvironment.textures` frame for frame with the job route
+    forced slow (the in_frame control) and not; mip levels 0 to 4 read back against `glGenerateTextureMipmap` for even sizes
+    and for the odd sizes real wallpapers give (QRhi's Vulkan blit differs on odd levels, D17 G), the reflection inside rule (a)
+    of D12 on the frames that read them (lod 0.4 to 3.6, `esp.py:420`; 1.8 to 3.6, `sv.py:664`). Negative controls: the blend
+    started at the owner's edge (a few percent of a stale reflection in the first frames), the mips of the Vulkan blit on an odd
+    size without the bound. If the measured commit lag is a frame or less on both routes the lead may judge this immaterial and
+    drop the box; the evidence is the proof's first row.
+  - Shared with the earlier boxes (not repeated): the turned-card anchoring box (Extruded Spectrum only, fifth consumer, with its
+    overflow rect in the proof); the record u32 that skips an entry (Extruded Bubble's box, for Sphere's three outtake overlay
+    draws, which otherwise run every frame with every fragment discarded, `sv.py:537,1020-1032`: cost only, so if the lead drops
+    that box Sphere pays and records it); the fragment and vertex `#define` variant rule (Extruded Bubble's and Neon Lake's); N3.6's
+    warm-up for the variants. The wallpaper environment, the silhouette pass and the depth are N4.j's and N4.l's whole content:
+    N4.j is two mode textures plus the Python plumbing above and the commit box; N4.l's Extruded half is dead code
+    (R-128) and its Sphere half is ordinary passes of one program (the depth clear above), not a shared primitive, so N4.l as
+    written (one primitive for both) is not needed by either mode. Not needed here: the pass, target, stream and storage limits
+    (every one within the ABI 29 values), per-attachment blending, anisotropy, half-float or 32-bit float textures, the exact-size
+    or mipped target, the scene probe, drift and geometry arena, readback check, defocus, bloom or HDR, shafts, the backdrop
+    clear (every clear is a constant), instanced quads (the cube is a mesh).
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking).
   Rerun 21 Nov after the scene-fade fix (R-242) on all four 60 s takes, both variants, display placement: full
   replays with the Python references drawn and cached (`D:\Temp\Scratch\SRPSS\fast_proof\references\`), every
@@ -1255,6 +1618,10 @@ the feature (D3D11 is not stated).
     really skips the ambient target's draws.
   - [ ] Byte-identical candidates first. Anything that cannot hold byte identity goes to the operator as tier 2.
   - [ ] Optimise only a measured offender. If no material cost is found, close the item without redesigning Bubble.
+  - Built (Opus Medium agent abbcd68ea9219da70, 21 Nov): the wake loop's per-bubble reject (c8d1ea916), hash-identical
+    on all four 60 s takes on both APIs, -22 % OpenGL and -21 % Vulkan for the expanded 4K bubble pass. The ghost loop
+    has no candidate that pays after it (5ba190a5f keeps the three in `bubble_cost_matrix.py`). The pass's largest
+    stages are now the wake (0.90 ms OpenGL, 0.66 Vulkan) and, on Vulkan, the ghost (0.66).
   - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
@@ -1541,8 +1908,9 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
 
-- [~] The theme list's and the popup's scrollbars (native black/white bars in off-screen captures): 1B.14's Settings
-  and Studio box.
+- [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
+  1B.14's Settings and Studio box. Side defect: the other Settings tabs' QScrollArea bars are unthemed by the same
+  cause (no QScrollBar rule in `ui/settings_theme.py`); give them the same owner. The Studio's QML bars are 1B.14's.
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (contract: plan 01 M3c)
 

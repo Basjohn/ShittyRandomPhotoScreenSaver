@@ -174,6 +174,7 @@
 #include "scene_targets.h"
 #include "stream_source.h"
 #include "surfaces.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
@@ -737,7 +738,7 @@ private:
     {
         QByteArray name;                     // empty: a free slot
         quint64 generation = 0;              // the image the front holds
-        std::unique_ptr<QRhiTexture> texture; // the front: Qt's own texture, or its import of a job's output
+        RhiOwned<QRhiTexture> texture; // the front: Qt's own texture, or its import of a job's output
         qint64 bytes = 0;
         std::shared_ptr<JobService> frontService; // an imported front: its output's service and id
         quint64 frontOutput = 0;
@@ -825,8 +826,8 @@ private:
                        const QSharedPointer<TextureImage> &image, quint64 generation);
     // A published job output imported into Qt's QRhi (null on failure, recorded), then made the front (audit N38 L5:
     // the item's commit imports every output before any front switches).
-    std::unique_ptr<QRhiTexture> importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
-    void adoptImport(GpuTexture &gpu, std::unique_ptr<QRhiTexture> imported, const UploadJob &job);
+    RhiOwned<QRhiTexture> importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
+    void adoptImport(GpuTexture &gpu, RhiOwned<QRhiTexture> imported, const UploadJob &job);
     // Every texture the drawn program samples has a front.
     bool texturesReady() const;
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).

@@ -503,7 +503,10 @@ the root `QListWidget` rule in `ui/settings_theme.py`; the frame is painted seam
 with the list's own font (the style's), set no font and synthesise no face; distinctions are semantic (a short ALL
 CAPS tag in `control.list.selected_accent`, as Sources' `JMIT POOL` rows), never a slant. Painted row glyphs (the
 theme star, Sources' status marks) share one stroke width (`theme_list.LIST_GLYPH_STROKE`). Bar:
-`tests/test_settings_list_style_real_dialog.py`. Active Just Make It Work pools are rows in Sources' list (heading
+`tests/test_settings_list_style_real_dialog.py`. The lists' vertical bar is the theme's, from the same owner
+(`shared_styles._settings_scrollbar_qss`: input-surface track, list-accent handle, no arrow buttons); the filter's
+suggestion popup (`COMBOBOX_POPUP_VIEW_STYLE`) takes the same bar. Without it Qt paints the platform style's native bar
+(black and white under Fusion/offscreen, the system's own scheme under Windows 11), which ignores the theme. Active Just Make It Work pools are rows in Sources' list (heading
 "Pools and Custom Feeds"), an arrow glyph and the `JMIT POOL` tag, with a right-aligned validity mark read from stored
 health (no network, no timer); the style is 12 pt Jost on 32 px rows. Evidence (12 Nov, Sources above Themes at 2x on
 three themes): `.artifacts/evidence/settings/rss_pools/20261111_restyle/`.

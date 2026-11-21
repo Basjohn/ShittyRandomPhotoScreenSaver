@@ -937,6 +937,9 @@ class SceneTarget:
     def end(self, frame: SceneFrame, resources, bloom: float = 0.0) -> None:
         # Only a turned Visualizer scene pays for its output frame; transitions and unturned scenes read one attribute.
         rotation = getattr(frame, "scene_output_rotation", 0)
+        # The scene (and so the shaft source) was drawn in the oriented frame; the light's item point is in that
+        # frame's coordinates, so the shafts pass reads it, while the composites place the result in the output frame.
+        scene_frame = frame
         if rotation:
             frame = scene_output_frame(frame)
         x, y, width, height = self._rect
@@ -966,7 +969,7 @@ class SceneTarget:
                 if emitting:
                     emitted = self._resolve_emission(frame, resources) if multisampled else self._names["emission"]
                     glow = self._bloom.apply(emitted, (allocated_width, allocated_height), resources, frame.quad_vao)
-                shafts = self._apply_shafts(frame, resources, light) if light is not None else 0
+                shafts = self._apply_shafts(scene_frame, resources, light) if light is not None else 0
                 self._restore_inherited(frame)
                 self._composite_overlay_bloom(frame, resources, glow or shafts, bloom if emitting else 0.0,
                                               shafts, light)
