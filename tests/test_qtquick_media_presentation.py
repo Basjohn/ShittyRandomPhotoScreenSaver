@@ -3,6 +3,7 @@
 from __future__ import annotations
 from tests._invisible_windows import keep_off_screen  # real but never on screen
 
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -2436,3 +2437,73 @@ def test_compact_media_essential_rows_survive_flip_and_transient_capability_loss
         window.deleteLater()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+def _media_text_runs(item):
+    """(object name, effective point size on screen, opacity) of each Media text run, by the block's own scale."""
+    metadata = item.findChild(QQuickItem, "mediaMetadata")
+    assert metadata is not None
+    scale = float(metadata.scale())
+    runs = {}
+    for name in ("mediaTitle", "mediaArtist", "mediaAlbum", "mediaPlaybackState"):
+        run = item.findChild(QQuickItem, name)
+        assert run is not None, name
+        runs[name] = (
+            run.property("font").pointSizeF() * scale,
+            float(run.opacity()),
+            run,
+        )
+    return runs, float(runs["mediaPlaybackState"][2].property("minimumPointSize"))
+
+
+def _settle(qt_app, milliseconds=450) -> None:
+    deadline = time.monotonic() + milliseconds / 1000.0
+    while time.monotonic() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
+
+
+def _media_runs_at_height(qt_app, height: float, generation: int):
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=generation, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, _ = _model(factory.media_artwork_provider, runtime, font_size=40)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 700.0, height),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, info=_info(title="A Very Long Track Name For Layout Proof")))
+        assert model.set_content_extent(700.0, height)
+        _settle(qt_app)
+        runs, floor = _media_text_runs(item)
+        scale = float(item.findChild(QQuickItem, "mediaMetadata").scale())
+        return {name: (size, opacity) for name, (size, opacity, _) in runs.items()}, floor, scale
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_short_card_fades_low_priority_lines_instead_of_shrinking_below_minimum(qt_app) -> None:
+    """A card too short for its text keeps every visible line at or above the canonical minimum size."""
+    roomy, _floor, roomy_scale = _media_runs_at_height(qt_app, 900.0, 103)
+    # Roomy: nothing is hidden and the block is not shrunk.
+    assert all(opacity > 0.5 for _, opacity in roomy.values()), roomy
+    assert roomy_scale == pytest.approx(1.0)
+
+    short, floor, _scale = _media_runs_at_height(qt_app, 230.0, 104)
+    shown = {name: size for name, (size, opacity) in short.items() if opacity > 0.01}
+    assert "mediaTitle" in shown and "mediaArtist" in shown
+    assert len(shown) < len(short), "a short card must fade its lowest-priority lines"
+    assert all(size >= floor - 0.01 for size in shown.values()), (shown, floor)
