@@ -171,11 +171,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Suspected defect in the shipped Python Neon Lake (found by Neon Lake's source reading, 21 Nov; Sonnet agent a608eaa385e625524
-  ): under a content quarter turn, `target.py:940-941` replaces `frame` with the physical output frame before
-  `_apply_shafts` maps the light's item point through its matrix (`:1042-1055`), while the shaft source was drawn in the
-  oriented scene frame, so the rays' centre may sit away from the Sun at quarters 1-3. Reproduce first (offscreen, rays
-  on, quarter 0 as control): the rays' centre against the Sun's drawn position. Fix in Python at the owner if real.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
