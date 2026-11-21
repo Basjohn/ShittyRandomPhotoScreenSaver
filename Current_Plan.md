@@ -694,9 +694,45 @@ the feature (D3D11 is not stated).
   ABI 29: a composite step may declare `"scene_frame": "window"` (both Oscilloscope programs do), so a turned card
   keeps Python's physical scene target; proven at quarters 0-3 on both APIs, unturned frames hash-identical to ABI 28
   (`20261121_n51_turned_abi29_band/`). Rule (b)'s mask is the union of both peers' mask classes (`peer_mask`).
-  - [ ] Layer P, the three 60 s takes (distinct regimes) under the split: full-take native-only runs judged against the
-    cached Python references on both APIs, variants as Bubble's, halves reported apart, cold start; the Choice offers
-    by coverage windows on the same takes. Rule (b) Vulkan against OpenGL over the same takes.
+  - [ ] Rule (a) for the Choice offers by coverage windows (the five offers' own windows merged per take, 921-1,045
+    inputs drawn a run; ABI 29 for human_heavy1, ABI 30 for the other two): 14 of 15 runs pass (max level 2; scatter
+    worst 3-4 for the display and graticule offers, 18-31 for the audio block sizes; ties worst 3-6). One frame fails:
+    nightsolong `oscilloscope_audio_block_size=0` input 1388, two diagonally touching 2-level pixels on the mask in
+    the beam's edge (Python (167, 97, 45) and (161, 88, 46), native green 2 lower), one on a content edge (3x3 range
+    80), the other at range 24, so it is neither isolated nor on an edge. Not judged a class here: the lead decides
+    (rule (a)'s ties bound is 10 at 3 levels; the edge contrast is 32). Evidence
+    `n5_1_oscilloscope/20261121_owner_offers_<take>/`, windows `20261121_offer_windows/`.
+  - [ ] Layer P's rule (b) over the three 60 s takes (lead decision; rule (a) passes every frame of the six full runs,
+    variants a and b: max level 2, 3 once on nightsolong a; scatter worst 2-6 and ties worst 3-5 a frame in either
+    half; cold start 0-100 clean). Every frame of each take's delivery stream
+    drawn on both APIs (`native_stream_player.py`, ABI 29 module a4e59ccb, 5,313 frames compared a run) fails
+    `VULKAN_RULE_B` (3 ties at 2 levels, no scatter, measured on the 5.5 s replay's 126 sampled frames). Failed frames
+    (first half / second half), worst pixels past their allowance in a frame, worst level:
+    - human_heavy1: a 298 (297 / 1), 22, 5; b 13 (13 / 0), 3, 3.
+    - ragdoll: a 303 (299 / 4), 23, 6; b 5 (5 / 0), 5, 4.
+    - nightsolong: a 414 (410 / 4), 39, 4; b 338 (338 / 0), 4, 4.
+    Every such pixel (9,143 over the six runs) is on the mask (lit or translucent): no scatter. 95 % sit on a content
+    edge and 98 % are isolated. Most fall in the first 6 s of variant a (inputs 2-600), where the glow is widest. Two
+    shapes: (A) a pixel in the beam's saturated core or its glow-only fringe (alpha 0) whose one unsaturated channel
+    is 2-6 levels apart; the fringe ones are the composite's dither over float16 bloom values. (B) one fixed pixel held
+    for hundreds of frames while the afterglow or the graticule stays: human_heavy1 a (370, 251), the graticule at
+    alpha 121, Vulkan's blue 4 under OpenGL's over inputs 280-517; nightsolong b (264, 208), glow only, 76 against 72
+    over 229-563. No bound is widened here. The guide's rule is that a bound is measured on the acceptance material,
+    as Bubble's was. The lead decides from these figures, or orders a root cause first (B is one value, constant
+    across hundreds of frames). Evidence: `n5_1_oscilloscope/20261121_rule_b_60s_<take>_<a|b>/`
+    (`classify_rule_b.json`: every past pixel by level, mask, alpha, edge, isolation; crop sheets
+    `rule_b_failing_crops_gl_vk_diff_x32_x8.png`), figures `20261121_layer_p_summary/summary.json`.
+  - [ ] Rule (b) for the Choice offers, not run: the stream player's windows do not reproduce its continuous frames
+    for the Oscilloscope. Skipping input 0 alone (window [300, 310], warm-up 299) changes every later frame, and
+    warm-ups of 30, 300 and 1,000 inputs never converge (57,000 pixels more than 2 levels apart, max 255). The player's
+    full runs are deterministic (the 5.5 s stream twice: identical). The owner replay's windows pass rule (a) against
+    Python, so the product route's windows look sound. The player, or core state tied to publish history, is suspect.
+    `coverage_windows.WARMUP_INPUTS["oscilloscope"]` is 0 on that reasoning, unproved against the player. Reproduce:
+    `native_stream_player.py --deliveries D:/Temp/Scratch/SRPSS/fast_proof/deliveries/oscilloscope_human_heavy1_a
+    --apis opengl --windows <one window [300, 310], warmup_inputs 299> --against
+    n5_1_oscilloscope/20261121_rule_b_60s_human_heavy1_a/native_stream_player.json` (evidence
+    `20261121_warmup_probe_*`, `20261121_windows_against_full_human_heavy1_a/`). Until it is understood, offers take
+    full-take player runs (the offers' delivery streams are kept in `D:\Temp\Scratch\SRPSS\fast_proof\deliveries\`).
   - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
     with `tools/quick_frame_cadence.py` on native paths.
   - [ ] Layer C cost on a quiet machine (lead): `python native/core/python/oscilloscope_check.py --module-dir
