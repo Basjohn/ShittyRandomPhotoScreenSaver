@@ -76,9 +76,22 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   stay frozen. Agent a652d2d5a77e690ff fixes H1, M1-M4 and L2 on its branch (it merges the audit branch first), then
   the lead builds ABI 28 on GitHub, merges, and runs the quiet cost round and layer T. Retire the audit worktree only
   after the Oscilloscope branch is on main (its branch contains it; never -s ours it before).
-- [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
-  identical counts before the HUD fix; order-dependent bubble-normal failures too). Sonnet agent a62cc0db13acbcc4d (21 Nov): root cause first. The protected clip commits rule
-  applies: root cause first, never retune production to satisfy the oracle.
+- [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` fail at 100 % and 125 % (14 per run,
+  7 modes x 2 scales, "content under the frame" at line 291; glass 150 % and every Normal case pass; the bubble-normal
+  order-dependent failures did not reproduce in two full-file runs). Root cause (Sonnet a62cc0db13acbcc4d, 21 Nov): the
+  glass border is a separate `MaterialSurface` layer (`VisualizerPresentation.qml` 410-436) whose shader
+  (`surface_material.frag` 237) takes the logical `borderWidth` unsnapped, while the content clip rounds the inset to
+  whole device pixels: at 125 % the border (6.25 px) overlaps the first content pixel by 0.25 px (8 levels of tint,
+  white 177 not 255); at 150 % (7.5 px against an 8 px inset) a 0.5 px seam shows card surface between border and
+  content. At 100 % only the shader's soft edge leaves about 3 levels of tint on the first content pixel.
+  Lead decision: production fix, not a looser oracle. The protected clip commits are not touched.
+  - [ ] One owner for the device-pixel border snap, `floor(w * dpr + 0.5) / dpr` (as `inner_path` in
+    `tools/card_clip_contract.py`), used by both the glass border and the content clip inset; check every
+    `MaterialSurface` border consumer takes it, not the Visualizer card alone.
+  - [ ] Zoom-check the border at 100 / 125 / 150 % on real wallpapers: no seam, no overlap, no visible width jump.
+  - [ ] Then the 100 % soft-edge tail only: a soft-edge option in `tools/card_clip_contract.py` with a synthetic
+    control run without the option (it must fail there).
+  - [ ] The card-clip file passes whole at every scale; Normal unchanged.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
