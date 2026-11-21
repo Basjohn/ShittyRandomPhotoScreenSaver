@@ -65,42 +65,135 @@ def display_wide_world(card: tuple[float, float], display: tuple[float, float]) 
     return tuple(float(v) for v in drawn_presentations(card, display)[1].viewport_extent)
 
 
-def candidate_world_resolver(exponent: float):
+#: A raised hero capacity for a candidate whose live population passes the renderer's 110 (tool only): a multiple
+#: of 32 so the big-class words stay whole (two uvec4 words of 32 heroes each per 128).
+CANDIDATE_CAPACITY = 256
+
+
+def candidate_world_resolver(exponent: float, density: str):
     """A CANDIDATE capacity zoom (tool only, never product): ``resolve_bubble_world`` with the zoom
-    ``(needed / capacity) ** exponent`` instead of its square root (0.5 is production: density by area; a larger
-    exponent zooms further, so fewer, larger heroes). Everything else is the production resolver's arithmetic."""
+    ``(needed / capacity) ** exponent`` instead of its square root (0.5 is production). ``density``: ``"count"``
+    keeps the production world's live count (so a smaller zoom spaces fewer-than-area heroes out), ``"area"`` keeps
+    density by area (so a smaller zoom needs more heroes), ``"mid"`` takes the population halfway between the two.
+    A world the production resolver does not zoom is returned unchanged."""
     from widgets.spotify_visualizer import bubble_viewport_profile as profile
+
+    if density not in ("count", "area", "mid"):
+        raise ValueError("density is 'count', 'area' or 'mid'")
+    production = profile.resolve_bubble_world
 
     def resolve(viewport_extent, *, authored_population, baseline_viewport_size=(
             profile.CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)):
-        world = profile.resolve_bubble_world(viewport_extent, authored_population=authored_population,
-                                             baseline_viewport_size=baseline_viewport_size)
+        world = production(viewport_extent, authored_population=authored_population,
+                           baseline_viewport_size=baseline_viewport_size)
         if world.world_scale == 1.0:
             return world
         baseline_w, baseline_h = (float(v) for v in baseline_viewport_size)
         cards_w, cards_h = world.width / baseline_w, world.height / baseline_h
         zoom = (world.world_scale ** 2) ** float(exponent)       # (needed / capacity) ** exponent
         domain_w, domain_h = cards_w / zoom, cards_h / zoom
+        population = {"count": world.population_scale, "area": domain_w * domain_h,
+                      "mid": 0.5 * (world.population_scale + domain_w * domain_h)}[density]
         return profile.BubbleWorld(width=world.width, height=world.height, domain_w=domain_w, domain_h=domain_h,
-                                   world_scale=zoom, population_scale=domain_w * domain_h)
+                                   world_scale=zoom, population_scale=population)
 
     return resolve
 
 
-def observe(clip, card, *, preset: int, drawn_world=None, snapshots_at=(), snapshots=None, zoom_exponent=None):
+def raised_logical_capacity(stack, capacity: int) -> None:
+    """Tool-only: the simulation, population scaling and big-class words hold ``capacity`` heroes."""
+    from widgets.spotify_visualizer import bubble_hero_occlusion as occlusion
+    from widgets.spotify_visualizer import bubble_simulation, bubble_viewport_profile as profile
+
+    words = capacity // 32
+
+    def pack(bubbles):
+        result = [0] * words
+        for index, bubble in enumerate(bubbles):
+            if index >= capacity:
+                raise ValueError("Bubble candidate class map exceeds its raised capacity")
+            if bool(bubble.is_big):
+                result[index >> 5] |= 1 << (index & 31)
+        return tuple(result)
+
+    def admit(bits, bubble_count):
+        bits = tuple(bits)
+        if len(bits) != words or not 0 <= int(bubble_count) <= capacity:
+            raise ValueError("Bubble candidate class words do not match its raised capacity")
+        return bits
+
+    from widgets.spotify_visualizer import bubble_ambient_geometry as ambient
+
+    select = ambient.select_ambient_occluders
+
+    def occluders(bubbles, positions):
+        # The frame holds at most 110 ambient occluder circles: the first 110 visible heroes mask the ambience.
+        return select(bubbles, positions)[:110 * 4]
+
+    stack.enter_context(patch.object(ambient, "select_ambient_occluders", occluders))
+    stack.enter_context(patch.object(bubble_simulation, "MAX_BUBBLES", capacity))
+    stack.enter_context(patch.object(profile, "BUBBLE_RENDER_CAPACITY", capacity))
+    stack.enter_context(patch.object(occlusion, "pack_big_class_bits", pack))
+    stack.enter_context(patch.object(occlusion, "admit_big_class_bits", admit))
+
+
+def raised_render_capacity(stack, capacity: int) -> None:
+    """Tool-only: the Python Bubble renderer and its shader hold ``capacity`` heroes (arrays sized, the class words
+    split into two uvec4 members). Enter before the render host makes its Bubble renderer."""
+    from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl
+    from rendering.quick.visualizer.implementations import bubble as renderer
+    from rendering.quick.visualizer.render_contract import quick_visualizer_vertex_source
+    from widgets.spotify_visualizer.shaders import load_fragment_shader
+
+    if capacity != 256:
+        raise ValueError("the raised render capacity is drawn with exactly 256 heroes (two class uvec4s)")
+    source = load_fragment_shader("bubble")
+    replacements = (("uvec4 u_big_class_bits;", "uvec4 u_big_class_bits;\n    uvec4 u_big_class_bits2;"),
+                    ("u_bubbles_pos[110]", "u_bubbles_pos[256]"), ("u_bubbles_extra[110]", "u_bubbles_extra[256]"),
+                    ("u_bubbles_trail[330]", "u_bubbles_trail[768]"),
+                    ("min(u_bubble_count, 110)", "min(u_bubble_count, 256)"),
+                    ("(u_big_class_bits[i >> 5] & (1u << uint(i & 31)))",
+                     "((((i >> 5) < 4) ? u_big_class_bits[i >> 5] : u_big_class_bits2[(i >> 5) - 4])"
+                     " & (1u << uint(i & 31)))"))
+    for old, new in replacements:
+        if source.count(old) != 1:
+            raise RuntimeError(f"bubble.frag no longer has exactly one {old!r}: the candidate shader is stale")
+        source = source.replace(old, new)
+    declaration = block_declaration(source, "BubbleDraw")
+    frame_scalars = renderer.bubble_frame_scalars
+
+    def scalars(mode_state, payload):
+        values = frame_scalars(mode_state, payload)
+        bits = tuple(values["u_big_class_bits"]) + (0,) * 8
+        values["u_big_class_bits"], values["u_big_class_bits2"] = bits[:4], bits[4:8]
+        return values
+
+    for name, value in (("_MAX_BUBBLES", capacity), ("_BUBBLE_POS_SIZE", capacity * 4),
+                        ("_BUBBLE_EXTRA_SIZE", capacity * 4), ("_BUBBLE_TRAIL_SIZE", capacity * 9),
+                        ("BUBBLE_VERTEX_SOURCE", quick_visualizer_vertex_source(declaration)),
+                        ("BUBBLE_BLOCK", block_layout_from_glsl(declaration)),
+                        ("load_fragment_shader", lambda _name: source), ("bubble_frame_scalars", scalars)):
+        stack.enter_context(patch.object(renderer, name, value))
+
+
+def observe(clip, card, *, preset: int, drawn_world=None, snapshots_at=(), snapshots=None, candidate=None):
     """One record per published Bubble snapshot: shape-invariance samples plus nominal radii for breathing.
     ``snapshots``: a dict that receives the published Quick snapshots of the frames in ``snapshots_at``.
-    ``zoom_exponent``: replay with ``candidate_world_resolver(zoom_exponent)`` (a candidate, never product)."""
+    ``candidate``: (exponent, density) replays with ``candidate_world_resolver`` (never product); an ``"area"``
+    candidate holds ``CANDIDATE_CAPACITY`` heroes."""
     from contextlib import ExitStack
 
     from widgets.spotify_visualizer import bubble_simulation
     from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
     from . import driver
 
-    if zoom_exponent is not None:
+    if candidate is not None:
+        exponent, density = candidate
         with ExitStack() as stack:
             stack.enter_context(patch.object(bubble_simulation, "resolve_bubble_world",
-                                             candidate_world_resolver(zoom_exponent)))
+                                             candidate_world_resolver(exponent, density)))
+            if density != "count":
+                raised_logical_capacity(stack, CANDIDATE_CAPACITY)
             return observe(clip, card, preset=preset, drawn_world=drawn_world, snapshots_at=snapshots_at,
                            snapshots=snapshots)
 
@@ -132,7 +225,8 @@ def observe(clip, card, *, preset: int, drawn_world=None, snapshots_at=(), snaps
         if drawn_world is not None:
             controller.set_drawn_world_extent(drawn_world)   # the owner's display-wide commit edge
         model = controller.settings_model
-        resolved.update(stream=model.bubble_stream_direction, drift=model.bubble_drift_direction)
+        resolved.update(stream=model.bubble_stream_direction, drift=model.bubble_drift_direction,
+                        big=int(model.bubble_big_count), small=int(model.bubble_small_count))
 
     with patch.object(BubbleSimulation, "snapshot", recorder), patch.object(driver, "_configure", configured):
         result = driver.replay_clip(clip, "bubble", preset=preset, viewport_extent=card, snapshots_at=snapshots_at)
@@ -242,7 +336,8 @@ def drawn_radii(snapshots, frames, times, presentation, frame_dir: Path | None =
             whole = draw(snapshot, state)
             if frame_dir is not None:
                 Image.fromarray(whole).convert("RGB").save(frame_dir / f"frame_{index:05d}.png")
-            empty = replace(state, positions=(), extras=(), trails=(), bubble_count=0, big_class_bits=(0, 0, 0, 0),
+            words = len(state.big_class_bits)       # 4, or more on a raised-capacity candidate
+            empty = replace(state, positions=(), extras=(), trails=(), bubble_count=0, big_class_bits=(0,) * words,
                             ambient_points=(), ambient_occluders=())
             background = draw(snapshot, empty).astype(np.int16)
             for i, ((track, _x, _y, radius, _a, *_rest), (_t, ratio, large, mature)) in enumerate(
@@ -250,7 +345,8 @@ def drawn_radii(snapshots, frames, times, presentation, frame_dir: Path | None =
                 if not (large and mature) or ratio <= 0.0:
                     continue
                 alone = replace(empty, positions=state.positions[4 * i:4 * i + 4],
-                                extras=state.extras[4 * i:4 * i + 4], bubble_count=1, big_class_bits=(1, 0, 0, 0))
+                                extras=state.extras[4 * i:4 * i + 4], bubble_count=1,
+                                big_class_bits=(1,) + (0,) * (words - 1))
                 changed = np.abs(draw(snapshot, alone).astype(np.int16) - background).max(axis=2) > 24
                 ys, xs = np.nonzero(changed)
                 if not len(xs):
@@ -298,15 +394,19 @@ def drawn_frames(snapshots, presentation, *, width: int):
     return images
 
 
-def moment_sheet(output: Path, sampled, stamps, moments, names, exponent) -> None:
-    """One column per moment (the nearest drawn frame): each run's kept frame stacked at one width."""
+def moment_sheet(output: Path, sampled, stamps, moments, names, labels, clearest=None) -> None:
+    """One column per moment (the nearest drawn frame): each run's kept frame stacked at one width. ``clearest``:
+    that run's frames at the moments are also kept alone at full size (``moment_<run>_<t>s.png``)."""
+    import shutil
+
     from PIL import Image
 
-    labels = {"card": "card", "display_wide": "fullscreen now (area zoom, exponent 0.5)",
-              "candidate": f"fullscreen candidate (exponent {exponent})"}
     width, columns = 1280, []
     for moment in moments:
         index = min(sampled, key=lambda i: abs(stamps[i] - moment))
+        if clearest is not None:
+            shutil.copyfile(output / f"frames_{clearest}" / f"frame_{index:05d}.png",
+                            output / f"moment_{clearest}_{stamps[index]:.1f}s.png")
         tiles = []
         for name in names:
             image = Image.open(output / f"frames_{name}" / f"frame_{index:05d}.png").convert("RGB")
@@ -379,7 +479,7 @@ def plot(path: Path, music, curves: dict, ratios: dict, title: str, drawn: dict 
 
     width, panel, pad = 1600, 220, 60
     colours = {"card": (80, 170, 255), "display_wide": (255, 170, 60), "before": (230, 70, 70),
-               "candidate": (120, 220, 120)}
+               "candidate_A": (120, 220, 120), "candidate_B": (200, 120, 230), "candidate_C": (240, 240, 120)}
     panels = 4 if drawn else 3
     image = Image.new("RGB", (width, pad + panels * (panel + pad)), (18, 20, 24))
     draw = ImageDraw.Draw(image)
@@ -431,17 +531,24 @@ def main() -> None:
                              "measure the big heroes' drawn radii in device pixels (0: logical frames only)")
     parser.add_argument("--card-scale", type=float, default=1.0, help="the card's uniform visual scale (drawn only)")
     parser.add_argument("--dpr", type=float, default=1.0, help="the display's device pixel ratio (drawn only)")
-    parser.add_argument("--candidate-exponent", type=float, default=None,
-                        help="also replay display-wide with a CANDIDATE capacity zoom (needed/capacity)**P "
-                             "(production: 0.5); a tool-only comparison, never product")
+    parser.add_argument("--candidates", default="",
+                        help="NAME:P:DENSITY,... also replay display-wide with CANDIDATE capacity zooms "
+                             "(needed/capacity)**P (production 0.5), DENSITY count|area|mid (candidate_world_resolver); "
+                             "tool-only comparisons, never product")
     parser.add_argument("--moments", default="", help="seconds of the take, comma-separated: a sheet of the card, "
-                                                      "display-wide and the candidate at each (needs --render-fps)")
+                                                      "display-wide and each candidate at each (needs --render-fps)")
     parser.add_argument("--motion", default="", help="START,SECONDS: an animated WebP of display-wide beside the "
-                                                     "candidate over that span of the take")
+                                                     "candidates over that span of the take")
     parser.add_argument("--motion-fps", type=float, default=24.0)
+    parser.add_argument("--clearest", default="", help="a candidate whose moments and motion are also kept alone at "
+                                                       "full size")
     args = parser.parse_args()
-    if args.motion and args.candidate_exponent is None:
-        parser.error("--motion compares display-wide with the candidate: give --candidate-exponent")
+    candidates = {}
+    for item in filter(None, args.candidates.split(",")):
+        name, exponent, density = item.split(":")
+        candidates[f"candidate_{name}"] = (float(exponent), density)
+    if args.motion and not candidates:
+        parser.error("--motion compares display-wide with candidates: give --candidates")
     if args.render_fps > 0.0 or args.motion:
         from PySide6.QtGui import QGuiApplication
         QCoreApplication.instance() or QGuiApplication([])
@@ -467,20 +574,32 @@ def main() -> None:
     if args.motion:
         start, span = (float(v) for v in args.motion.split(","))
         motion = every(start, start + span, args.motion_fps)
-    card_snaps, wide_snaps, cand_snaps = {}, {}, {}
-    card_frames, times, resolved = observe(clip, card, preset=args.preset, snapshots_at=sampled, snapshots=card_snaps)
+    snaps = {"card": {}, "display_wide": {}}
+    card_frames, times, resolved = observe(clip, card, preset=args.preset, snapshots_at=sampled,
+                                           snapshots=snaps["card"])
     wide_frames, wide_times, _ = observe(clip, card, preset=args.preset, drawn_world=wide,
-                                         snapshots_at=sorted({*sampled, *motion}), snapshots=wide_snaps)
+                                         snapshots_at=sorted({*sampled, *motion}), snapshots=snaps["display_wide"])
     if wide_times != times:
         raise RuntimeError("the two replays published different frame times")
     runs = {"card": (card_frames, card), "display_wide": (wide_frames, wide), "before": (card_frames, wide)}
-    if args.candidate_exponent is not None:
+    for name, candidate in candidates.items():
+        snaps[name] = {}
         cand_frames, cand_times, _ = observe(clip, card, preset=args.preset, drawn_world=wide,
-                                             snapshots_at=sorted({*sampled, *motion}), snapshots=cand_snaps,
-                                             zoom_exponent=args.candidate_exponent)
+                                             snapshots_at=sorted({*sampled, *motion}), snapshots=snaps[name],
+                                             candidate=candidate)
         if cand_times != times:
-            raise RuntimeError("the candidate replay published different frame times")
-        runs["candidate"] = (cand_frames, wide)
+            raise RuntimeError("a candidate replay published different frame times")
+        runs[name] = (cand_frames, wide)
+
+    def drawing(name):
+        """The candidate's raised capacity while it is drawn (an ExitStack; empty for production runs)."""
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        if name in candidates and candidates[name][1] != "count":
+            raised_logical_capacity(stack, CANDIDATE_CAPACITY)
+            raised_render_capacity(stack, CANDIDATE_CAPACITY)
+        return stack
     report = {"clip": str(args.clip), "seconds": args.seconds, "preset": args.preset, "card": card,
               "display": display, "display_wide_world": wide, "stream": resolved.get("stream"),
               "drift": resolved.get("drift"), "runs": {}}
@@ -494,9 +613,9 @@ def main() -> None:
         report["runs"][name] = stats
         curves[name] = speed_series(frames, times, extent)
     base = report["runs"]["card"]
-    report["candidate_exponent"] = args.candidate_exponent
-    for name in ("display_wide", "before", "candidate"):
-        if name not in report["runs"]:
+    report["candidates"] = {name: {"exponent": c[0], "density": c[1]} for name, c in candidates.items()}
+    for name in report["runs"]:
+        if name == "card":
             continue
         row = report["runs"][name]
         report["runs"][name]["relative_to_card"] = {
@@ -506,37 +625,77 @@ def main() -> None:
             if base[key] and math.isfinite(base[key]) and math.isfinite(row[key])}
     drawn_series = {}
     if sampled:
-        drawn_runs = [("card", card_snaps, card_frames, ordinary_drawn),
-                      ("display_wide", wide_snaps, wide_frames, wide_drawn)]
-        if "candidate" in runs:
-            drawn_runs.append(("candidate", cand_snaps, runs["candidate"][0], wide_drawn))
-        for name, snaps, frames, presentation in drawn_runs:
+        drawn_runs = [("card", card_frames, ordinary_drawn), ("display_wide", wide_frames, wide_drawn)]
+        drawn_runs += [(name, runs[name][0], wide_drawn) for name in candidates]
+        for name, frames, presentation in drawn_runs:
             frame_dir = args.output / f"frames_{name}"
             frame_dir.mkdir()
-            rows = drawn_radii({i: snaps[i] for i in sampled}, frames, times, presentation, frame_dir)
+            with drawing(name):
+                rows = drawn_radii({i: snaps[name][i] for i in sampled}, frames, times, presentation, frame_dir)
             report["runs"][name]["drawn"] = drawn_summary(rows)
             (args.output / f"drawn_{name}.json").write_text(json.dumps(rows) + "\n", encoding="utf-8")
             per_t: dict[float, list] = {}
             for row in rows:
                 per_t.setdefault(row["t"], []).append(row["drawn_px"] / row["nominal_px"])
             drawn_series[name] = [(t, median(v)) for t, v in sorted(per_t.items())]
+        from widgets.spotify_visualizer import bubble_viewport_profile as profile
+        from widgets.spotify_visualizer.bubble_viewport_profile import resolve_bubble_world, scale_bubble_population
+
+        authored = (resolved["big"], resolved["small"])
+
+        def targets(world):
+            # scale_bubble_population's rounding without its 110 cap (the raised candidates hold up to 256).
+            with patch.object(profile, "BUBBLE_RENDER_CAPACITY", CANDIDATE_CAPACITY):
+                big, small = scale_bubble_population(*authored, world.population_scale)
+            return {"big": big, "small": small, "live": big + small}
+
+        report["live_targets"] = {"card": targets(resolve_bubble_world(card, authored_population=sum(authored))),
+                                  "display_wide": targets(resolve_bubble_world(wide,
+                                                                               authored_population=sum(authored)))}
+        meaning = {"count": "today's count", "area": "today's density", "mid": "count halfway"}
+        labels = {"card": "card",
+                  "display_wide": f"fullscreen now: zoom {runs['display_wide'][0][-1]['world_scale']:.2f}, "
+                                  f"{report['live_targets']['display_wide']['live']} heroes"}
+        for name, (exponent, density) in candidates.items():
+            world = candidate_world_resolver(exponent, density)(wide, authored_population=sum(authored))
+            report["live_targets"][name] = targets(world)   # area/mid: before any capacity cap (raised to 256 here)
+            labels[name] = (f"{name.removeprefix('candidate_')}: zoom {world.world_scale:.2f}, "
+                            f"{report['live_targets'][name]['live']} heroes ({meaning[density]})")
+        report["labels"] = labels
         if args.moments:
             moment_sheet(args.output, sampled, stamps, [float(v) for v in args.moments.split(",")],
-                         [name for name, *_rest in drawn_runs], args.candidate_exponent)
+                         [name for name, *_rest in drawn_runs], labels,
+                         clearest=f"candidate_{args.clearest}" if args.clearest else None)
     if motion:
         from PIL import Image
 
         width = 800
-        left =drawn_frames({i: wide_snaps[i] for i in motion}, wide_drawn, width=width)
-        right = drawn_frames({i: cand_snaps[i] for i in motion}, wide_drawn, width=width)
+        names = ["display_wide", *candidates]
+        panes = {}
+        for name in names:
+            with drawing(name):
+                panes[name] = drawn_frames({i: snaps[name][i] for i in motion}, wide_drawn, width=width)
+        columns = 2
+        rows_n = math.ceil(len(names) / columns)
         pictures = []
-        for a, b in zip(left, right):
-            frame = Image.new("RGB", (2 * width + 8, a.height), (0, 0, 0))
-            frame.paste(_labelled(a, "fullscreen now (area zoom, exponent 0.5)"), (0, 0))
-            frame.paste(_labelled(b, f"candidate (exponent {args.candidate_exponent:g})"), (width + 8, 0))
+        for frame_index in range(len(motion)):
+            height = panes[names[0]][frame_index].height
+            frame = Image.new("RGB", (columns * width + 8 * (columns - 1), rows_n * height + 8 * (rows_n - 1)),
+                              (0, 0, 0))
+            for slot, name in enumerate(names):
+                frame.paste(_labelled(panes[name][frame_index], labels[name]),
+                            ((slot % columns) * (width + 8), (slot // columns) * (height + 8)))
             pictures.append(frame)
-        pictures[0].save(args.output / "motion_current_vs_candidate.webp", save_all=True, append_images=pictures[1:],
-                         duration=round(1000 / args.motion_fps), loop=0, quality=80, method=4)
+        pictures[0].save(args.output / "motion_current_vs_candidates.webp", save_all=True,
+                         append_images=pictures[1:], duration=round(1000 / args.motion_fps), loop=0, quality=75,
+                         method=4)
+        if args.clearest:
+            name = f"candidate_{args.clearest}"
+            with drawing(name):
+                alone = drawn_frames({i: snaps[name][i] for i in motion}, wide_drawn, width=1280)
+            alone = [_labelled(image, labels[name]) for image in alone]
+            alone[0].save(args.output / f"motion_{name}.webp", save_all=True, append_images=alone[1:],
+                          duration=round(1000 / args.motion_fps), loop=0, quality=80, method=4)
     (args.output / "report.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     music = music_envelope(clip)
     plot(args.output / "response.png", music, curves, ratios,
