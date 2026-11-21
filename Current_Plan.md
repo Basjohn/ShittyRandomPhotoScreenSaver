@@ -1490,24 +1490,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   - Built at stop point 1 (ABI 37, not compiled; GPU-free tests `tests/test_native_motion_trails_core.py`): compute
     trigger "draw" (a still's only compute), target format r8, masked attachments unwritten, `<member>@<pass>` settings,
     `"viewport": "allocation"`, rgba32f item textures (no mips), 16 attributes a mesh layout (16 inputs a pass, as before).
-  - [ ] The Python conversions above, with stills before and after of the five users.
-  - [ ] `NativeScenePasses` for the four (passes, meshes, the motion table, scoped values, the frame helpers), the packs
-    baked, `transition_route_check.py` N52D variants (each default; single-sampled with motion, trails, both and neither),
-    rule (a) and rule (b) bounds measured, `--cost` at 1440p and 4K on both backends, one native Vulkan hitch session each,
-    registration last.
-  - [ ] Rule (a) and rule (b) bounds for N52D (the lead's decision; agent's measurement, route check three_r1 and bs_r3,
-    ABI 37 module). Every failing frame is pixels past one level along moving piece edges: a piece's edge within float
-    error of a pixel centre covers it in one renderer and not the other (the translated packs round the vertex maths
-    differently), a whole edge row of a small piece at once (Pixel Accretion's tiles: 1 x 4-6 px strips, horizontal only
-    where the tiles travel vertically), and the gather smears each such flip along the motion (sparse isolated streaks;
-    side-by-side `20261121_three_r1/pa_motion_065_native_python_diff.png`). Measured worst pixels past one level a frame,
-    rule (a) (OpenGL native against Python, 1x): Block Spins 11 (gather, 0.65), Crumble 22, Glass Shatter 46, Pixel
-    Accretion plain 173, trails 69, both 355, motion 5,522 (tile size 4, travel 1.0); everything else within
-    N52C_RULE_A. Rule (b) (Vulkan against OpenGL native): Block Spins PASS under N52C_RULE_B (4x included: QRhi's average
-    resolve, no core mean needed); the other three up to 546 (Glass Shatter both) past one level. Options for the lead: a
-    piece-edge flip class (pixels past one level on a moving edge of either frame, a count per frame per transition),
-    judging motion and trail frames by the gather-free forms' rule only, or narrowing the variants' extremes.
-  - [ ] Registration of the four on the core (lead), after the bounds and the hitch session.
+  - [ ] Merge (lead): the branch of agent-a52b367bbd9c11f5c (ABI 37, built; no core change since). Two bound calls are
+    the lead's to confirm at the merge: the gather-free forms take the piece-edge class with their own counts (N52C admits
+    none of their few driver flips: rule a Crumble 1 tie and Glass Shatter 3 against the core-frame Python, rule b the 4x
+    defaults up to 16), and N5.2c's Depth Card Cascade with options is judged by it in rule (b) (one frame of 4 card-edge
+    flips, two touching, after N5.2c's stages took `native_clip_depth`).
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
