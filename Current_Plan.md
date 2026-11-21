@@ -1718,25 +1718,9 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] **Gmail's faint runs on a light Mica card sit under 4.5:1 now that Gmail takes the shared panel.** Measured with
-  `tools/surface_material_capture.py --card-set lists --legibility` (Polished Chrome, Usu_Underwater_Lab): sender,
-  date and menu runs 4.14 to 4.45 (they were 5.1 or more with Gmail's own ink); every other material and the dark
-  theme are unchanged. The run solver keeps a run that reads at the 4.5 floor over the poles byte for byte, and the
-  composed Mica pixels land below it. Fix in the shared solver or Mica's light recipe, never a Gmail exception.
-  Media still supplies its own playback-state ink (`MediaPresentation.qml:7`) and so still differs from Feeds and
-  Reddit (glass 0.80 against 0.88 on Default Dark): decide whether Media's too goes to the shared path.
-- [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). (Sonnet agent a2cf4bc7f83cfea91, 21 Nov.) The operator checked that every theme
-  stays legible at -0.35.
-  - [ ] Root cause first: where the baseline is defined (the canonical default and the Style Override offset), and
-    what the legibility guard does at that value. The guard must not raise opacity back: tell it the new base is
-    intended (a theme-authored floor, not a new exception).
-  - [ ] Persisted values: follow `Docs/Architecture/Persisted_Input_Compatibility.md`. A stored user offset keeps its
-    visual result (stored + 0.35), and an unset value takes the new base. Test both. Never pin the default's number in
-    a test; derive it from the canonical default.
-- [ ] **Style Overrides: a "Borderless" button.** (Sonnet agent a491af36afbc01b8e, 20 Nov.) It goes below "Reset Colours To Theme", on the same row as Card Border
-  Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
-  invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
-  it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
+- [ ] **Media's own playback-state ink** (`MediaPresentation.qml:7`) still differs from Feeds and Reddit (glass 0.80
+  against 0.88 on Default Dark): decide whether Media too takes the shared legibility path. (The Gmail light-Mica
+  shortfall filed beside it was the capture tool measuring the authored colour instead of the drawn ink, fixed 21 Nov.)
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
   live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 
