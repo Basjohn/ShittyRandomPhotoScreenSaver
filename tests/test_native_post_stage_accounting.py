@@ -92,3 +92,29 @@ def test_native_stage_fault_controls_are_bounded_integers_and_boolean_controls_k
         core.module.stage_control("fail_allocation", 0)
         core.module.stage_control("fail_build", 0)
         core.module.stage_control("skip_stage_release", False)
+
+
+def test_an_environment_holds_its_mipped_texture_and_four_build_objects():
+    expected = check._environment_expected((512, 288))
+    levels = [(512, 288), (256, 144), (128, 72), (64, 36), (32, 18), (16, 9), (8, 4), (4, 2), (2, 1), (1, 1)]
+    assert expected["stage_bytes"] == sum(w * h * 4 for w, h in levels) and expected["stage_textures"] == 1
+    assert expected["stage_environments"] == 1 and expected["stage_pipelines"] == check.ENVIRONMENT_PIPELINES
+    zero = dict.fromkeys(check.ACCOUNTING_KEYS, 0)
+    assert check.stage_accounting_verdict(expected, zero, expected)["pass"]
+    # Control: an environment left behind after its release is caught (its count is an accounting key).
+    assert not check.stage_accounting_verdict({**zero, "stage_environments": 1}, zero, zero)["pass"]
+
+
+def test_the_environments_creates_and_bind_take_the_stages_fault_count():
+    """N5.2c audit: the environment's texture, chain bindings and target go through the sync's counted create (one count
+    continued from the record's sync), and a held texture is never resized in place (a size is part of its spec)."""
+    source = (ROOT / "native" / "core" / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    environments = source[source.index("bool PostStages::syncEnvironments("):
+                          source.index("bool PostStages::environmentBindings(")]
+    assert environments.count("createAllocation(e.texture.get())") == 1
+    assert environments.count("createAllocation(e.target.get())") == 1
+    assert "!allocationAllowed() || !m_environmentChains.bind(" in environments
+    assert "->create()" not in environments and "setPixelSize" not in environments
+    sync = source[source.index("bool PostStages::sync("):]
+    assert "m_allocationAttempt = 0;" in sync[:sync.index("\n}\n")]
+    assert len(check.ENVIRONMENT_ATTEMPTS) == 3

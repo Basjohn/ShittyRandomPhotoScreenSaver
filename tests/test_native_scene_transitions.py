@@ -279,6 +279,20 @@ def test_a_multisampled_scene_is_judged_by_rule_b_only_and_its_single_sampled_fo
             assert twin, variant
 
 
+def test_the_environment_copy_count_is_read_or_refused_never_defaulted():
+    from types import SimpleNamespace
+
+    trc = _trc()
+    live = lambda value: SimpleNamespace(composite_live=lambda: value)
+    assert trc._environment_copies(live({"stage_environment_copies": 3, "stage_textures": 0})) == 3
+    assert trc._environment_copies(live({"stage_environment_copies": 0})) == 0
+    # Controls: a module without the count (or a broken one) is refused, never read as "no copy drawn".
+    for broken in ({}, {"stage_environment_copies": None}, {"stage_environment_copies": -1},
+                   {"stage_environment_copies": True}, {"stage_environment_copies": "2"}, None):
+        with pytest.raises(RuntimeError, match="environment copy count"):
+            trc._environment_copies(live(broken))
+
+
 def test_blinds_slats_are_checked_a_hair_either_side_of_their_degenerate_half_turn():
     trc = _trc()
     for variant in trc.SLAT_VARIANTS:

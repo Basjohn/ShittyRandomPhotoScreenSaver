@@ -348,8 +348,9 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
 #: mode storage and its compute kernel, a scene target with depth, a mesh, a bloom step and the composite (owners:
 #: ModeStorage and compute, SceneTargets, ModeMeshes, PostStages); "spectrum": the native Spectrum (SpectrumContent);
 #: "background": the background layer with a backdrop pyramid and material cards over it (BackdropPyramid, the
-#: layer's own lost edge).
-SCENES = ("program", "spectrum", "background")
+#: layer's own lost edge); "transition" (N5.2c audit): a Cube Turn run on the background layer, its box mesh told lost
+#: once a loss (``mesh:<name>``) and sent again by the layer, with a control that has no listener and stays waiting.
+SCENES =("program", "spectrum", "background", "transition")
 MIX_CODE = 239                 # outside the product's mode table and every harness scene's code
 SCENE_SETTLE_FRAMES = 6        # frames after the re-send: the commit, the pyramid's rebuild, Spectrum's record
 SPECTRUM_RECORD_INDEX = 45     # the captured Spectrum frame (its bars up)
@@ -630,6 +631,80 @@ def scene_background(core, engine, app, api: str, photo_paths, tiles: list) -> d
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
 
 
+def _transition_scene(core, engine, photo_paths):
+    """A Cube Turn run (single-sampled, its box a mesh of the run) held at half way on the background layer."""
+    import background_layer_check as blc
+    import transition_route_check as trc
+
+    photos = [blc.processed(Path(path), "fill", blc.DISPLAY) for path in photo_paths[:2]]
+    host = blc._host(core, blc.WINDOW, 1.0)
+    scene = blc.Scene(core, engine, host, 1.0, blc.DISPLAY, kind="layer")
+    clock = trc.Clock()
+    scene.layer._clock_ns = clock
+    run = trc.production_run("cube_turn_options", [image for image, _rows in photos], 1)
+    scene.present(photos[0][0])
+    scene.settle()
+    clock.at(run, PROGRESS)
+    scene.layer.transition(run)
+    scene.settle()
+    scene.frames(2)
+    return host, scene
+
+
+def scene_transition(core, engine, app, api: str, photo_paths, tiles: list) -> dict:
+    """N5.2c (audit): a content made again mid-run tells the run's owner, once a loss, the one mesh it has nothing to
+    upload from (``mesh:<name>`` on the lost edge); the background layer sends it again and the frame after the resend is
+    the frame before. Control: with no ``on_meshes_lost`` listener the content stays waiting for the mesh."""
+    facts: dict = {}
+    host, scene = _transition_scene(core, engine, photo_paths)
+    try:
+        layer = scene.layer
+        told: list = []
+
+        def listener(names) -> None:
+            told.append(list(names))
+            layer._meshes_lost(names)              # the layer's own handler: the scene's meshes sent again
+
+        layer.mode.on_meshes_lost(listener)
+        read = lambda: scene.display_rows(scene.read())                                   # noqa: E731
+        checks, facts = cross_losses(host, app, read=read, resend=lambda: None,   # the layer's own lost edges
+                                     settle=lambda: (scene.settle(), scene.frames(SCENE_SETTLE_FRAMES)),
+                                     vulkan=api == "vulkan", tiles=tiles)
+        meshes = sorted(layer._meshes)
+        facts.update(meshes_told=told, run_meshes=meshes, layer_resent=layer.resent)
+        checks["one_mesh_lost_edge_each_loss"] = len(told) == LOSSES and all(sorted(n) == meshes for n in told)
+        checks["the_run_has_exactly_one_mesh"] = len(meshes) == 1
+        checks["run_still_drawn"] = layer.state().get("run") is not None
+    finally:
+        scene.close(app)
+        facts["host_close"] = _close_host(app, host)
+    # Control: the same loss with no listener: nothing sends the mesh, the content waits for it (named), undrawn.
+    host, scene = _transition_scene(core, engine, photo_paths)
+    try:
+        scene.layer.mode.on_meshes_lost(None)
+        before = scene.display_rows(scene.read())
+        host.force_device_loss(swap_device=True)
+        for _ in range(LOST_EDGE_FRAMES):
+            app.processEvents()
+            host.frames(1)
+        scene.settle()
+        after = scene.display_rows(scene.read())
+        reason = str(scene.mode_state().get("last_reason") or "")
+        facts["control"] = {"last_reason": reason}
+        checks["control_without_a_listener_waits_for_the_mesh"] = reason.startswith("lost: mesh(es)")
+        checks["control_without_a_listener_is_not_drawn_again"] = not _fsc().compare(after, before)["equal"]
+    finally:
+        scene.close(app)
+        facts["control_host_close"] = _close_host(app, host)
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _close_host(app, host) -> dict:
+    import background_layer_check as blc
+
+    return blc._close_host(app, host)
+
+
 def round_scenes(core, engine, app, api: str, out: Path, folder: Path, photo_paths, scenes) -> dict:
     """M3: each scene of ``scenes`` across LOSSES forced losses, each frame after a loss equal to the frame before."""
     results: dict = {}
@@ -640,6 +715,8 @@ def round_scenes(core, engine, app, api: str, out: Path, folder: Path, photo_pat
                 results[name] = scene_program(core, engine, app, api, folder, tiles)
             elif name == "spectrum":
                 results[name] = scene_spectrum(core, engine, app, api, out, tiles)
+            elif name == "transition":
+                results[name] = scene_transition(core, engine, app, api, photo_paths, tiles)
             else:
                 results[name] = scene_background(core, engine, app, api, photo_paths, tiles)
         except Exception:

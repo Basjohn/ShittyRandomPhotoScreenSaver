@@ -174,17 +174,20 @@ def cut_windows(events) -> dict[int, dict]:
     (the run's end, before the destination's handover), and it is incomplete without the end record."""
     first_begin, last_begin, last_ready = {}, {}, {}
     native_first, native_last, native_end = {}, {}, {}
-    for ts, event, _screen, _revision, aux in events:
+    screens = {}
+    for ts, event, screen, _revision, aux in events:
         if aux <= 0:
             continue
         if event == BACKGROUND_RENDER_BEGIN:
             first_begin.setdefault(aux, ts)
             last_begin[aux] = ts
+            screens.setdefault(aux, screen)
         elif event == BACKGROUND_RENDER_READY:
             last_ready[aux] = ts
         elif event == NATIVE_TRANSITION_TICK:
             native_first.setdefault(aux, ts)
             native_last[aux] = ts
+            screens.setdefault(aux, screen)
         elif event == NATIVE_TRANSITION_END:
             native_end[aux] = ts
     windows = {}
@@ -192,6 +195,7 @@ def cut_windows(events) -> dict[int, dict]:
         end = native_end.get(run_id)
         complete = end is not None and end >= native_last[run_id]
         windows[run_id] = {"begin_ns": begin, "end_ns": end if complete else None, "complete": complete, "native": True,
+                           "screen": screens[run_id],
                            "reason": None if complete else ("no end record (NATIVE_TRANSITION_END) after the run's last "
                                                             "tick: the trace or the process ended inside the run")}
     for run_id, begin in first_begin.items():
@@ -200,6 +204,7 @@ def cut_windows(events) -> dict[int, dict]:
         end = last_ready.get(run_id)
         complete = end is not None and end >= last_begin[run_id]
         windows[run_id] = {"begin_ns": begin, "end_ns": end if complete else None, "complete": complete,
+                           "screen": screens[run_id],
                            "reason": None if complete else ("no end record (BACKGROUND_RENDER_READY) after the last "
                                                             "begin record: the trace or the process ended inside the run")}
     return windows
@@ -213,11 +218,17 @@ def _stats(values):
             "p90": round(ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))], 2)}
 
 
-def run_gaps(events, begin_ns: int, end_ns: int, *, limit_ms: float = GAP_LIMIT_MS) -> dict:
-    """The run's hitch figures: the render thread's frame gaps inside ``[begin_ns, end_ns]`` (``QUICK_AFTER_RENDERING``
-    spacing), the first measured from the window's opening (``first_frame_ms``), with their median, p90, max, the count
-    over ``limit_ms`` and the verdict (``pass``: none over it; a run with no frame fails)."""
-    frames = [ts for ts, event, *_ in events if event == QUICK_AFTER_RENDERING and begin_ns <= ts <= end_ns]
+def _screen_frames(events, event_id: int, begin_ns: int, end_ns: int, screen: int) -> list[int]:
+    """The timestamps of ``event_id`` records of ``screen``'s window inside ``[begin_ns, end_ns]`` (each display's window
+    renders on its own thread, so another screen's frames say nothing of this run's)."""
+    return [ts for ts, event, s, *_ in events if event == event_id and s == screen and begin_ns <= ts <= end_ns]
+
+
+def run_gaps(events, begin_ns: int, end_ns: int, *, screen: int, limit_ms: float = GAP_LIMIT_MS) -> dict:
+    """The run's hitch figures: ``screen``'s render-thread frame gaps inside ``[begin_ns, end_ns]``
+    (``QUICK_AFTER_RENDERING`` spacing), the first measured from the window's opening (``first_frame_ms``), with their
+    median, p90, max, the count over ``limit_ms`` and the verdict (``pass``: none over it; a run with no frame fails)."""
+    frames = _screen_frames(events, QUICK_AFTER_RENDERING, begin_ns, end_ns, screen)
     if not frames:
         return {"gap_ms": None, "first_frame_ms": None, "gaps_over_limit": None, "gap_limit_ms": limit_ms,
                 "hitch_verdict": "fail: no frame was rendered inside the run"}
@@ -231,15 +242,16 @@ def run_gaps(events, begin_ns: int, end_ns: int, *, limit_ms: float = GAP_LIMIT_
             "hitch_verdict": "pass" if not over else f"fail: {len(over)} gap(s) over {limit_ms:g} ms ({over[:5]})"}
 
 
-def window_figures(events, begin_ns: int, end_ns: int, *, samples=None, process_summary=None) -> dict:
-    """The window's figures, named as ``tools/preflip_pack.extract_figures`` stores them: fps, render time (Quick's
-    render phase), frame time (the gap between rendered frames, stored as the swap gap) median and p90, late frames, hitches and the saver's CPU in the window."""
-    swaps = [ts for ts, event, *_ in events if event == QUICK_AFTER_RENDERING and begin_ns <= ts <= end_ns]
+def window_figures(events, begin_ns: int, end_ns: int, *, screen: int, samples=None, process_summary=None) -> dict:
+    """The window's figures on ``screen`` (the run's display), named as ``tools/preflip_pack.extract_figures`` stores
+    them: fps, render time (Quick's render phase), frame time (the gap between rendered frames, stored as the swap gap)
+    median and p90, late frames, hitches and the saver's CPU in the window."""
+    swaps = _screen_frames(events, QUICK_AFTER_RENDERING, begin_ns, end_ns, screen)
     gaps = [(b - a) / 1e6 for a, b in zip(swaps, swaps[1:])]
     span = (swaps[-1] - swaps[0]) / 1e9 if len(swaps) > 1 else 0.0
     render, opened = [], None
-    for ts, event, *_ in events:
-        if not begin_ns <= ts <= end_ns:
+    for ts, event, event_screen, *_ in events:
+        if event_screen != screen or not begin_ns <= ts <= end_ns:
             continue
         if event == QUICK_BEFORE_RENDERING:
             opened = ts
@@ -255,7 +267,7 @@ def window_figures(events, begin_ns: int, end_ns: int, *, samples=None, process_
         "steady_late_pct": round(100.0 * late / len(gaps), 1) if gaps else None,
         "hitches_per_min": round(60.0 * hitches / span, 2) if span > 0 else None,
         "process": None,
-        **run_gaps(events, begin_ns, end_ns),
+        **run_gaps(events, begin_ns, end_ns, screen=screen),
     }
     if samples and process_summary is not None:
         figures["process"] = process_summary(samples, (begin_ns, end_ns), fps)
@@ -299,9 +311,9 @@ def analyse_session(events, state: dict | None, planned: list[str], *, samples=N
                 row.update(status="failed", reason=f"run {run['run_id']} came before the previous planned transition's "
                                                    f"run {last_run_id}: the session ran out of order")
             else:
-                row.update(window_figures(events, window["begin_ns"], window["end_ns"], samples=samples,
-                                          process_summary=process_summary))
-                row["begin_ns"], row["end_ns"] = window["begin_ns"], window["end_ns"]
+                row.update(window_figures(events, window["begin_ns"], window["end_ns"], screen=window["screen"],
+                                          samples=samples, process_summary=process_summary))
+                row["begin_ns"], row["end_ns"], row["screen"] = window["begin_ns"], window["end_ns"], window["screen"]
             last_run_id = max(last_run_id, run["run_id"])
         if row["status"] != "ok":
             failures.append(f"{name}: {row['reason']}")

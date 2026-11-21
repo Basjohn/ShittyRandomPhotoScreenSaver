@@ -707,6 +707,11 @@ int PostStages::allocationObjects(const Environment &e)
     return (e.texture ? 1 : 0) + (e.target ? 1 : 0) + (e.pass ? 1 : 0) + e.chain.bindings; // ABI 36: the chain's
 }
 
+QString PostStages::allocationFault() const
+{
+    return m_allocationInjected ? QStringLiteral(" [harness fail_allocation=%1]").arg(m_failAllocation) : QString();
+}
+
 bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs, const QList<QRhiTexture *> &photos,
                                   QString *error)
 {
@@ -740,6 +745,8 @@ bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs
         }
         if (e.texture && e.size == spec.size)
             continue;
+        // A spec's size is part of the spec (EnvironmentSpec::operator==): another size is another spec, whose old
+        // objects went above, so a held texture here is one whose create failed (retried below at the same size).
         const QByteArray label = QByteArrayLiteral("srpss core environment ") + spec.name;
         if (!e.texture) {
             // Python's copy: RGBA8, a full mip chain (max(size).bit_length() levels); ABI 36: its levels the box
@@ -752,26 +759,25 @@ bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs
             count(1, 0, 0, 0);                // the owned wrapper survives a failed create until release
             g_environments.fetchAndAddRelaxed(1);
             g_objectsCreated.fetchAndAddRelaxed(1);
-        } else {
-            e.texture->setPixelSize(spec.size); // the same object at the new size (bindings follow)
         }
         const qint64 oldBytes = e.bytes;
-        const bool ready = e.texture->create();
+        const bool ready = createAllocation(e.texture.get());
         e.size = ready ? spec.size : QSize();
         e.bytes = ready ? mippedRgba8Bytes(spec.size) : 0;
         count(0, e.bytes - oldBytes, 0, 0);
         e.drawn = false;                      // a new texture holds no copy
         e.blockWritten = false;               // its uStep follows the size
         if (!ready) {
-            *error = QStringLiteral("environment step '%1': its texture could not be created at %2 x %3")
-                         .arg(QString::fromLatin1(spec.name)).arg(spec.size.width()).arg(spec.size.height());
+            *error = QStringLiteral("environment step '%1': its texture could not be created at %2 x %3%4")
+                         .arg(QString::fromLatin1(spec.name)).arg(spec.size.width()).arg(spec.size.height())
+                         .arg(allocationFault());
             return false;
         }
         // ABI 36: the chain's bindings over this texture (made again with it; the old ones released first by bind).
-        QString chainError;
-        if (!m_environmentChains.bind(rhi, e.texture.get(), spec.size, &e.chain, &chainError)) {
-            *error = QStringLiteral("environment step '%1': its mip chain could not be made: %2")
-                         .arg(QString::fromLatin1(spec.name), chainError);
+        QString chainError = QStringLiteral("refused");
+        if (!allocationAllowed() || !m_environmentChains.bind(rhi, e.texture.get(), spec.size, &e.chain, &chainError)) {
+            *error = QStringLiteral("environment step '%1': its mip chain could not be made: %2%3")
+                         .arg(QString::fromLatin1(spec.name), chainError, allocationFault());
             e.chain.release();
             return false;
         }
@@ -784,9 +790,9 @@ bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs
             e.target->setRenderPassDescriptor(e.pass.get());
             g_objectsCreated.fetchAndAddRelaxed(2);
         }
-        if (!e.target->create()) {
-            *error = QStringLiteral("environment step '%1': its render target could not be created")
-                         .arg(QString::fromLatin1(spec.name));
+        if (!createAllocation(e.target.get())) {
+            *error = QStringLiteral("environment step '%1': its render target could not be created%2")
+                         .arg(QString::fromLatin1(spec.name), allocationFault());
             return false;
         }
         ++m_objectGeneration;
@@ -854,21 +860,12 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
 {
     // Harness fault injection follows the actual create-failure branches. At rest no create is attempted; with the
     // control off the attempt counter never advances. Destroy also makes a resize fault retire its previous storage.
-    const int failAllocation = g_stageAllocationFailure.loadAcquire();
-    int allocationAttempt = 0;
-    bool injected = false;
-    const auto create = [&](auto *resource) {
-        if (failAllocation && ++allocationAttempt == failAllocation) {
-            resource->destroy();
-            injected = true;
-            return false;
-        }
-        return resource->create();
-    };
-    const auto noteFault = [&]() {
-        if (injected)
-            *error += QStringLiteral(" [harness fail_allocation=%1]").arg(failAllocation);
-    };
+    // N5.2c audit: the count is the stages' own, continued by syncEnvironments after this sync in the same record.
+    m_failAllocation = g_stageAllocationFailure.loadAcquire();
+    m_allocationAttempt = 0;
+    m_allocationInjected = false;
+    const auto create = [this](auto *resource) { return createAllocation(resource); };
+    const auto noteFault = [&]() { *error += allocationFault(); };
     if (m_rhi && m_rhi != rhi)
         release();                            // another QRhi: every object again (a node made again)
     m_rhi = rhi;
