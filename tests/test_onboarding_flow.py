@@ -157,8 +157,6 @@ def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, sett
         assert page.group.button(1).isChecked()
         assert not page.group.button(0).isEnabled()
         assert "Media Center" in page.group.button(0).toolTip()
-        page.demonstrate()
-        assert "secure link handoff" in page.demo.text().lower()
     finally:
         page.deleteLater()
 
@@ -168,9 +166,93 @@ def test_interaction_changes_only_interaction_setting(qapp, settings):
     settings.writes.clear()
     page.group.button(1).click()
     assert settings.writes == ["input.interaction_mode"]
-    page.demonstrate()
-    assert settings.writes == ["input.interaction_mode"]
     page.deleteLater()
+
+
+def _borderless_stored(settings) -> bool:
+    from core.settings.default_contract import resolve_widgets_borderless
+    return resolve_widgets_borderless(settings.get("widgets"))
+
+
+def test_interaction_page_has_no_practice_story_and_offers_two_borderless_stills(qapp, settings):
+    from ui.onboarding.basic_pages import BorderlessStill
+    page = InteractionPage(settings)
+    try:
+        assert not hasattr(page, "card") and not hasattr(page, "demonstrate")
+        assert set(page.stills) == {False, True}
+        assert all(isinstance(still, BorderlessStill) for still in page.stills.values())
+        assert {page.borderless_group.id(b) for b in page.borderless_group.buttons()} == {0, 1}
+    finally:
+        page.deleteLater()
+
+
+def test_borderless_choice_writes_the_one_setting_only_to_the_draft_and_finish_saves(qapp, settings):
+    """The choice goes through the real wizard's draft to the key Style Overrides writes; only Finish saves."""
+    from core.settings.default_contract import WIDGETS_BORDERLESS_KEY
+    from ui.onboarding.wizard import GuidedSetupPanel
+    settings.set("sources.folders", ["C:/Pictures"])
+    settings.writes.clear()
+    wizard = GuidedSetupPanel(settings)
+    try:
+        wizard.show_page("interaction")
+        page = wizard.pages["interaction"][0]
+        assert not _borderless_stored(wizard.settings)
+        page.borderless_group.button(1).click()
+        assert _borderless_stored(wizard.settings)
+        assert page.stills[True]._selected and not page.stills[False]._selected
+        assert wizard.settings._entries == [(WIDGETS_BORDERLESS_KEY, True)]
+        assert settings.writes == [] and not _borderless_stored(settings)
+        wizard.finish()
+        assert _borderless_stored(settings)
+        assert settings.writes == [WIDGETS_BORDERLESS_KEY]
+    finally:
+        wizard.deleteLater()
+
+
+def test_clicking_a_still_chooses_it_and_a_stored_choice_is_shown_on_entry(qapp, settings):
+    settings.set("widgets.global.borderless", True)
+    settings.writes.clear()
+    page = InteractionPage(settings)
+    try:
+        assert settings.writes == []  # entry shows the stored choice and writes nothing
+        assert page.borderless_group.button(1).isChecked() and page.stills[True]._selected
+        page.stills[False].clicked.emit()
+        assert page.borderless_group.button(0).isChecked() and page.stills[False]._selected
+        assert not _borderless_stored(settings) and settings.writes == ["widgets.global.borderless"]
+    finally:
+        page.deleteLater()
+
+
+def test_cancelling_guided_setup_discards_the_borderless_choice(qapp, settings, monkeypatch):
+    from ui.onboarding.wizard import GuidedSetupPanel
+    from ui.styled_popup import StyledPopup
+    monkeypatch.setattr(StyledPopup, "exec", lambda popup: setattr(popup, "_result_value", "discard"))
+    settings.writes.clear()
+    wizard = GuidedSetupPanel(settings)
+    finished = []
+    wizard.finished.connect(finished.append)
+    try:
+        wizard.show_page("interaction")
+        wizard.pages["interaction"][0].borderless_group.button(1).click()
+        assert wizard.has_unsaved_changes()
+        wizard.skip.click()
+        assert finished == [False]
+        assert settings.writes == [] and not _borderless_stored(settings)
+    finally:
+        wizard.deleteLater()
+
+
+def test_borderless_choice_is_independent_of_the_media_center_interaction_rule(qapp, settings, monkeypatch):
+    import core.mc
+    monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
+    page = InteractionPage(settings)
+    try:
+        assert all(button.isEnabled() for button in page.borderless_group.buttons())
+        page.borderless_group.button(1).click()
+        assert _borderless_stored(settings)
+        assert page.group.button(1).isChecked() and not page.group.button(0).isEnabled()
+    finally:
+        page.deleteLater()
 
 
 def test_display_selection_keeps_one_connected_screen_and_hydration_is_read_only(qapp, settings, monkeypatch):

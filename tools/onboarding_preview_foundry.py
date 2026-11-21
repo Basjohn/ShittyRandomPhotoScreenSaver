@@ -801,7 +801,9 @@ def _preview_weather(scene: _HiddenQuickScene, art: Path):
     return presentation
 
 
-def _preview_media(scene: _HiddenQuickScene, art: Path):
+def _preview_media(scene: _HiddenQuickScene, art: Path, *, borderless: bool | None = None):
+    """The Media card. ``borderless`` None is the family preview; True/False renders the card the way the
+    family binder draws it with Style Overrides' Borderless latch set or clear (``widgets.global.borderless``)."""
     from PySide6.QtGui import QImage
     from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
     from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -812,7 +814,15 @@ def _preview_media(scene: _HiddenQuickScene, art: Path):
     from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot
 
     widgets = _preview_widgets(media={"spotify_volume_enabled": True, "mute_button_enabled": True})
-    config = MediaPresentationConfig.from_widgets_mapping(widgets)
+    if borderless is not None:
+        from core.settings.default_contract import WIDGETS_BORDERLESS_KEY, resolve_card_border_width_px
+        from rendering.quick.widgets.theme_projection import with_borderless
+
+        widgets.setdefault("global", {})[WIDGETS_BORDERLESS_KEY.rsplit(".", 1)[1]] = bool(borderless)
+        config = with_borderless(MediaPresentationConfig.from_widgets_mapping(widgets), widgets)
+        border_width = resolve_card_border_width_px(widgets)
+    else:
+        config = MediaPresentationConfig.from_widgets_mapping(widgets)
 
     class VolumeLease(_Lease):
         def current_snapshot(self):
@@ -823,7 +833,8 @@ def _preview_media(scene: _HiddenQuickScene, art: Path):
         def current_snapshot(self):
             return SystemMuteRuntimeSnapshot(revision=1, available=True, muted=False, source="preview")
 
-    model = MediaPresentationModel(config, MediaPresentationStyle.project(config, _preview_shadows()),
+    style_arguments = {} if borderless is None else {"border_width": border_width}
+    model = MediaPresentationModel(config, MediaPresentationStyle.project(config, _preview_shadows(), **style_arguments),
         scene.factory.media_artwork_provider, _Lease(), volume_runtime_service=VolumeLease(),
         system_mute_runtime_service=MuteLease(), parent=scene.owner)
     presentation = RetainedMediaPresentation(host=scene.host, model=model,
@@ -1358,6 +1369,83 @@ def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, o
         save_png_stable(onboarding_sheet_previews._with_shadow(framed), output / f"visualizer_{mode}.png")
 
 
+# Guided Setup's Borderless choice: the Media card without and with Style Overrides' Borderless latch, the two
+# stills identical in size, theme and wallpaper so only the border differs. ``borderless_off.png`` and
+# ``borderless_on.png`` are listed in the manifest under ``borderless`` by state.
+BORDERLESS_STATES: Final = (("off", False), ("on", True))
+GENERATED_PATTERNS: Final = ("widget_*.png", "transition_*.png", "visualizer_*.png", "borderless_*.png")
+_BORDERLESS_MARGIN: Final = 22
+
+
+def _borderless_photo() -> tuple[bool, Path | None]:
+    """(recorded, path): the wallpaper recorded for the Borderless stills (``borderless_preview.photo`` in the
+    preview runs file) and the file when it exists on this machine."""
+    path = _read_preview_runs_file().get("borderless_preview", {}).get("photo")
+    if not path:
+        return False, None
+    return True, (Path(str(path)) if Path(str(path)).is_file() else None)
+
+
+def _read_preview_runs_file(source: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
+    path = Path(source) / PREVIEW_RUNS_FILE
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def _capture_card_region(scene: "_HiddenQuickScene", item, *, margin: int):
+    """The card's exact rectangle plus ``margin`` logical pixels, untrimmed, so two cards of one size align."""
+
+    from PySide6.QtCore import QRectF
+
+    try:
+        scene.settle(minimum_ms=1100, until=lambda: not _unsettled_images(item))
+    except RuntimeError as error:
+        raise RuntimeError(f"{error}: {_unsettled_images(item)}") from None
+    frame = scene.read()
+    rect = item.mapRectToScene(QRectF(0.0, 0.0, item.width(), item.height()))
+    k, pad = scene.dpr, round(margin * scene.dpr)
+    left, top = round(rect.left() * k) - pad, round(rect.top() * k) - pad
+    return frame.crop((left, top, round(rect.right() * k) + pad, round(rect.bottom() * k) + pad))
+
+
+def _build_borderless_previews(scene: "_HiddenQuickScene", art: Path, output: Path, *,
+                               photo: Path | None = None) -> list[dict[str, object]]:
+    from PIL import Image, ImageOps
+
+    if photo is None:
+        recorded, photo = _borderless_photo()
+        if recorded and photo is None:
+            print("onboarding preview: the Borderless wallpaper is not on this machine; keeping the committed stills")
+            for state, _flag in BORDERLESS_STATES:
+                name = f"borderless_{state}.png"
+                if not (output / name).is_file() and (DEFAULT_OUTPUT / name).is_file():
+                    shutil.copy2(DEFAULT_OUTPUT / name, output / name)
+            return []
+    captures = []
+    for state, flag in BORDERLESS_STATES:
+        built = _preview_media(scene, art, borderless=flag)
+        captures.append((state, _capture_card_region(scene, built.item, margin=_BORDERLESS_MARGIN)))
+        built.retire()
+    size = captures[0][1].size
+    if any(image.size != size for _state, image in captures):
+        raise RuntimeError("the Borderless stills must be the same size")
+    if photo is not None:
+        with Image.open(photo) as source:
+            backdrop = ImageOps.fit(source.convert("RGB"), size, Image.Resampling.LANCZOS).convert("RGBA")
+    else:
+        backdrop = Image.new("RGBA", size)
+        for row in range(size[1]):
+            shade = int(36 + 60 * row / max(1, size[1] - 1))
+            backdrop.paste((shade, shade + 6, shade + 22, 255), (0, row, size[0], row + 1))
+    rows = []
+    for state, image in captures:
+        still = backdrop.copy()
+        still.alpha_composite(image)
+        name = f"borderless_{state}.png"
+        width, height = _frame_preview(still.convert("RGB"), output / name)
+        rows.append({"state": state, "path": name, "size": [width, height]})
+    return rows
+
+
 def _build_widget_previews(output: Path, scratch: Path, *,
                            families: list[str] | None = None,
                            visualizer_modes: tuple[str, ...] | None = None,
@@ -1384,6 +1472,8 @@ def _build_widget_previews(output: Path, scratch: Path, *,
             rows.append({"family_id": family_id, "path": name, "size": [width, height]})
         if not families or "visualizers" in families:
             _build_rendered_visualizer_previews(scene, art, output, photo=photo, modes=visualizer_modes)
+        if not families or "borderless" in families:
+            _build_borderless_previews(scene, art, output, photo=photo)
     finally:
         scene.close()
     return rows
@@ -1810,6 +1900,18 @@ def _manifest_payload(output: Path) -> dict[str, object]:
             if image.format != "PNG":
                 raise RuntimeError(f"onboarding preview is not a valid PNG: {name}")
             visualizer_modes.append({"mode_id": mode.mode_id, "path": name, "size": [image.width, image.height]})
+    borderless = []
+    for state, _flag in BORDERLESS_STATES:
+        name = f"borderless_{state}.png"
+        path = output / name
+        if not path.is_file():
+            raise RuntimeError(f"onboarding preview is missing {name}")
+        with Image.open(path) as image:
+            if image.format != "PNG":
+                raise RuntimeError(f"onboarding preview is not a valid PNG: {name}")
+            borderless.append({"state": state, "path": name, "size": [image.width, image.height]})
+    if len({tuple(row["size"]) for row in borderless}) != 1:
+        raise RuntimeError("the Borderless stills must be the same size")
     total = sum(path.stat().st_size for path in _generated_assets(output))
     if total > _ASSET_BUDGET_BYTES:
         raise RuntimeError(f"onboarding preview assets exceed {_ASSET_BUDGET_BYTES // (1024 * 1024)} MB ({total} bytes)")
@@ -1819,6 +1921,7 @@ def _manifest_payload(output: Path) -> dict[str, object]:
         "widgets": widgets,
         "transitions": transitions,
         "visualizer_modes": visualizer_modes,
+        "borderless": borderless,
         "generation": {
             "widgets": "hidden Windows-QPA QQuickRenderControl worker",
             "gl": "hidden Windows-QPA QOffscreenSurface worker",
@@ -1828,7 +1931,7 @@ def _manifest_payload(output: Path) -> dict[str, object]:
 
 
 def _generated_assets(output: Path) -> list[Path]:
-    return sorted(path for pattern in ("widget_*.png", "transition_*.png", "visualizer_*.png") for path in output.glob(pattern))
+    return sorted(path for pattern in GENERATED_PATTERNS for path in output.glob(pattern))
 
 
 def _write_manifest(output: Path) -> dict[str, object]:
@@ -1861,7 +1964,8 @@ def build(output: Path) -> dict[str, object]:
         output.mkdir(parents=True, exist_ok=True)
         staged_names = {staged.name for staged in staging.iterdir() if staged.is_file()}
         # Retire generated files the new set no longer contains (e.g. a format change).
-        for stale in (*output.glob("widget_*"), *output.glob("transition_*"), *output.glob("visualizer_*")):
+        for stale in (*output.glob("widget_*"), *output.glob("transition_*"), *output.glob("visualizer_*"),
+                      *output.glob("borderless_*")):
             if stale.is_file() and stale.name not in staged_names:
                 stale.unlink()
         for name in staged_names:

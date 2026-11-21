@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/srpss">
+    <file alias="onboarding/borderless_off.png" compression-algorithm="none">../assets/onboarding/source/borderless_off.png</file>
+    <file alias="onboarding/borderless_on.png" compression-algorithm="none">../assets/onboarding/source/borderless_on.png</file>
     <file alias="onboarding/context_menu_edit.png" compression-algorithm="none">../assets/onboarding/source/context_menu_edit.png</file>
     <file alias="onboarding/manifest.json">../assets/onboarding/source/manifest.json</file>
     <file alias="onboarding/SRPSSWitch.png" compression-algorithm="none">../assets/onboarding/source/SRPSSWitch.png</file>

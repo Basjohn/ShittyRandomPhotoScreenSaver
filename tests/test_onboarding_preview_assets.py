@@ -9,6 +9,7 @@ import sys
 
 from core.settings.widget_family_catalog import get_widget_family_catalog
 from rendering.quick.transitions.implementation_registry import iter_quick_transition_implementations
+from tools.onboarding_preview_foundry import GENERATED_PATTERNS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +51,12 @@ def test_onboarding_preview_assets_match_declared_formats_and_dimensions() -> No
         # Strips are unlabelled frames side by side; Settings paints the labels.
         frame_width, frame_height = row["frame_size"]
         assert row["size"] == [frame_width * len(row["progress"]), frame_height]
-    generated = [*ASSETS.glob("widget_*.png"), *ASSETS.glob("transition_*.png"), *ASSETS.glob("visualizer_*.png")]
+    states = {row["state"]: row for row in manifest["borderless"]}
+    assert set(states) == {"off", "on"} and states["off"]["size"] == states["on"]["size"]
+    for row in states.values():
+        with Image.open(ASSETS / row["path"]) as image:
+            assert image.format == "PNG" and list(image.size) == row["size"]
+    generated = [path for pattern in GENERATED_PATTERNS for path in ASSETS.glob(pattern)]
     total = sum(path.stat().st_size for path in generated)
     assert total <= 32 * 1024 * 1024
     assert manifest["total_bytes"] == total
