@@ -385,33 +385,48 @@ def test_rule_b_admits_three_isolated_edge_flips_a_frame():
 
 # -------------------------------------------------------------------------------- N5.2d (N4.i): motion blur and trails
 
-#: A vertex stage's own clip depth written after the matrix (not the shared camera's ``sceneClipDepth``, whose depth is
-#: positive at every authored distance): Block Spins' ``projected.z``, Crumble's ``q.z``, Glass Shatter's and Pixel
-#: Accretion's ``gl_Position.z``.
-_OWN_DEPTH = re.compile(r"\b\w+\.z\s*=(?!=|\s*(?:sceneClipDepth|uMatrix\[2\]\[2\]))")
+#: A vertex stage's own clip depth written after the matrix: Block Spins' ``projected.z``, Crumble's ``q.z``, Glass
+#: Shatter's and Pixel Accretion's ``gl_Position.z``, and the shared camera's ``sceneProject*`` (``clip.z =
+#: sceneClipDepth(w)``: OpenGL's -w..w, negative closer than twice the near plane), read in the code main runs.
+_OWN_DEPTH = re.compile(r"\b\w+\.z\s*=(?!=|\s*(?:sceneClipDepth|uMatrix\[2\]\[2\]))|\bsceneProject\w*\s*\(")
+
+
+def _main_code(vertex_source: str) -> str:
+    """The code main runs: main, or (a motion variant) the renamed body it calls (``sceneVertexMain``)."""
+    text = _COMMENT.sub("", vertex_source)
+    start = text.find("void sceneVertexMain(")
+    return text[start if start >= 0 else text.rfind("void main("):]
 
 
 def _writes_own_depth(vertex_source: str) -> bool:
-    return bool(_OWN_DEPTH.search(_COMMENT.sub("", vertex_source)))
+    return bool(_OWN_DEPTH.search(_main_code(vertex_source)))
 
 
 def test_a_stage_writing_its_own_clip_depth_puts_it_through_the_matrix():
     """Found 21 Nov on the ABI 37 build: Vulkan's clip depth is 0..w, so a depth written after ``uMatrix`` (OpenGL's
     -w..w) lost every fragment in front of the slab's middle (half of each face gone, rule b 255 levels). Every such
-    native stage ends with ``NATIVE_CLIP_DEPTH_LINE`` (the matrix's z row: OpenGL's (0, 0, 1, 0) leaves it exact)."""
+    native stage ends with ``NATIVE_CLIP_DEPTH_LINE`` (the matrix's z row: OpenGL's (0, 0, 1, 0) leaves it exact),
+    N5.2c's scenes through the shared camera included (the lead, 21 Nov); a stage whose depth is the matrix's own
+    (Jigsaw's shadow, the item quads) has none, which would correct it twice."""
     from rendering.gl_programs.blockspin_program import BLOCK_SPIN_QUICK_VERTEX_SOURCE
     from rendering.quick.transitions.native_scene import NATIVE_CLIP_DEPTH_LINE, native_clip_depth
     from tools import regen_qrc
 
-    writers = []
+    writers, others = [], []
     for cls in regen_qrc._native_scene_classes():
         for scene_pass in cls.native_scene_passes():
-            if scene_pass.core_triangle or not _writes_own_depth(scene_pass.vertex_source):
+            if scene_pass.core_triangle:
                 continue
-            writers.append(f"{cls.transition_id}_{scene_pass.name}")
             body = scene_pass.vertex_source.rstrip()
-            assert body.endswith(NATIVE_CLIP_DEPTH_LINE + "}"), f"{cls.transition_id} {scene_pass.name}"
-    assert {name.split("_")[0] for name in writers} >= {"block", "crumble", "glass", "pixel"}
+            if _writes_own_depth(scene_pass.vertex_source):
+                writers.append(cls.transition_id)
+                assert body.endswith(NATIVE_CLIP_DEPTH_LINE + "}"), f"{cls.transition_id} {scene_pass.name}"
+            else:
+                others.append(scene_pass.name)
+                assert NATIVE_CLIP_DEPTH_LINE not in body, f"{cls.transition_id} {scene_pass.name}"
+    assert set(writers) == {"block_spins", "crumble", "glass_shatter", "pixel_accretion", "blinds", "cube_turn",
+                            "depth_cascade", "jigsaw"}
+    assert "shadow" in others and "underlay" in others
     # Controls: the Python renderer's own text is a writer without the line; the line is put once, at main's end.
     assert _writes_own_depth(BLOCK_SPIN_QUICK_VERTEX_SOURCE) and NATIVE_CLIP_DEPTH_LINE not in BLOCK_SPIN_QUICK_VERTEX_SOURCE
     with pytest.raises(ValueError):
@@ -472,3 +487,63 @@ def test_the_motion_table_and_the_tile_count_are_the_python_renderers():
                if p.mesh == "microquad")
     # Control: the logical size's grid is another count (the device pixels are what Python's viewport holds).
     assert pixel_accretion_grid(int(LOGICAL[0]), int(LOGICAL[1]), tile)[:2] != (columns, rows)
+
+
+def _piece_scene():
+    """Old picture dark, new picture light, one mid-grey piece in flight (rows 40-79, columns 60-139)."""
+    import numpy as np
+
+    old = np.zeros((160, 240, 4), np.uint8)
+    old[..., :3], old[..., 3] = 30, 255
+    new = old.copy()
+    new[..., :3] = 220
+    frame = old.copy()
+    frame[40:80, 60:140, :3] = 128
+    return old, new, frame
+
+
+def test_the_piece_edge_class_admits_edge_rows_and_their_streaks_and_fails_planted_defects():
+    """The lead's N5.2d rule (21 Nov): flips past one level only on a moving piece edge or its gather streak along the
+    motion, at most the variant's count, no compact group past N52C_SCATTER_GROUP. Controls: a shifted piece, a patch,
+    a colour shift and a streak across the motion all fail."""
+    import numpy as np
+
+    trc = _trc()
+    old, new, reference = _piece_scene()
+    velocity = (np.zeros((160, 240), np.float32), np.full((160, 240), 12.0, np.float32))   # moving down, 12 px
+
+    def judged(candidate, flips=40, moved=velocity):
+        allowed = trc.piece_edges(candidate, reference, [old, new], moved, trc.N52D_LONGEST)
+        return trc.judge_piece_edges(candidate, reference, flips, allowed)
+
+    edge_row = reference.copy()
+    edge_row[80, 70:76, :3] = 128                       # the piece's bottom edge row covered one row further
+    assert judged(edge_row)["pass"]
+    streak = reference.copy()
+    streak[81:93, 100, :3] = 90                         # a flip smeared down the piece's motion
+    assert judged(streak)["pass"]
+    assert not judged(streak, moved=None)["pass"]       # control: without motion there is no streak
+    assert not judged(edge_row, flips=5)["pass"]        # control: past the variant's count
+    across = reference.copy()
+    across[100, 100:115, :3] = 90                       # a streak across the motion, away from the piece
+    assert not judged(across)["pass"]
+    shifted = old.copy()
+    shifted[44:84, 64:144, :3] = 128                    # the piece drawn 4 px off
+    assert not judged(shifted, flips=10_000)["pass"]
+    patch = reference.copy()
+    patch[50:58, 80:88, :3] = 160                       # a patch inside the piece
+    assert not judged(patch, flips=10_000)["pass"]
+    tinted = reference.copy()
+    tinted[40:80, 60:140, 0] = 150                      # a colour shift of the whole piece
+    assert not judged(tinted, flips=10_000)["pass"]
+
+
+def test_the_n52d_bounds_cover_the_motion_and_trail_forms_and_the_gather_free_forms_keep_n52cs():
+    trc = _trc()
+    single = {v for v, o in trc.N52D_VARIANTS.items() if o.get("samples") == 0}
+    assert set(trc.N52D_EDGE_FLIPS_A) == {v for v in single if not trc.n52d_gather_free(v)}
+    assert set(trc.N52D_EDGE_FLIPS_B) == {v for v in trc.N52D_VARIANTS if not trc.n52d_gather_free(v)} | {
+        "depth_cascade_options"}                              # N5.2c's one, after native_clip_depth
+    # Control: a gather-free form is judged by N52C's rule (a) against the core-frame reference, never the class.
+    assert trc.n52d_gather_free("crumble_plain") and "crumble_plain" not in trc.N52D_EDGE_FLIPS_A
+    assert not trc.n52d_gather_free("crumble_both")

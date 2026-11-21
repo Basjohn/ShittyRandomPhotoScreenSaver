@@ -25,7 +25,7 @@ from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM,
 from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
                                                warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+from ..native_scene import (native_clip_depth, NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
                             item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -37,9 +37,9 @@ _CARD_INSTANCE_INPUTS = (("aRect", 4), ("aCard", 4))
 _SHADOW_BLEND = (("add", "src_alpha", "one_minus_src_alpha"), ("add", "zero", "one"))
 _SCENE_PASSES = (
     item_quad_pass("underlay", UNDERLAY_PROGRAM[1], UNDERLAY_PROGRAM[2], (("uImage", "new"),)),
-    NativeScenePass("shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE, mesh="cards",
+    NativeScenePass("shadows", native_clip_depth(CASCADE_SHADOW_VERTEX_SOURCE), CASCADE_SHADOW_FRAGMENT_SOURCE, mesh="cards",
                     instances="mesh", blend=_SHADOW_BLEND),
-    NativeScenePass("cards", CASCADE_VERTEX_SOURCE, CASCADE_FRAGMENT_SOURCE, mesh="cards", instances="mesh",
+    NativeScenePass("cards", native_clip_depth(CASCADE_VERTEX_SOURCE), CASCADE_FRAGMENT_SOURCE, mesh="cards", instances="mesh",
                     samplers=(("uOldTex", "old"), ("uEnvironment", "environment")), depth=True),
 )
 

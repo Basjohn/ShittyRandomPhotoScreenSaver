@@ -191,7 +191,9 @@ SLAT_VARIANTS = ("blinds", "blinds_slats", "blinds_slats_few")
 #: within float error of the edge differently (Vulkan's clip space is OpenGL's with z halved and y flipped, so the edge
 #: equations differ in their last bits): Cube Turn's slanted silhouette (up to 233 levels: the box against the
 #: backdrop), a Jigsaw piece's outline, and Depth Card Cascade's card edges (options: 3 a frame at x 249-253, one card's
-#: left edge, its fwidth ramp).
+#: left edge, its fwidth ramp). N5.2d (22 Nov): with N5.2c's stages given ``native_clip_depth`` one frame of Depth Card
+#: Cascade with options holds 4 such flips, two of them touching on one card's edge (n52c_depth_r1, both dprs); that
+#: variant's rule (b) is the piece-edge flip class (``N52D_EDGE_FLIPS_B``: a card is a moving piece), for the lead.
 N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
                            tie_pixels=TIE_PIXELS, flip_pixels=3)
 #: N5.2d (with N4.i): the 3D transitions whose scenes also draw motion blur (the velocity, its tile max, the gather) and
@@ -240,6 +242,37 @@ N52D_VARIANTS = {
     "block_spins_both_4x": {"motion_blur": True, "motion_trails": True, "samples": 4, "request_direction": "left",
                             "edge_glass": "Both"},
 }
+#: N5.2d's rule (the lead, 21 Nov; ``Native_Parity_And_Timing_Proof.md`` section 3's N5.2d notes): the piece-edge flip
+#: class. A small piece's edge that lies within a rasteriser's sub-pixel snap of a pixel centre covers it in one frame
+#: and not the other: the core draws its targets top row first (F1), so its edges snap mirrored from Python's (proved:
+#: Python drawn upside down differs from itself by exactly the native frame's flips, and the native frame equals Python
+#: drawn in the core's frame), and Vulkan's and OpenGL's rasterisers snap differently (rule b). A whole edge row of a
+#: piece flips at once, and the motion blur's gather smears each flip along the piece's motion. Admitted per transition
+#: and variant: at most N52D_EDGE_FLIPS_A (rule a) or N52D_EDGE_FLIPS_B (rule b) pixels past one level a frame (1.5 times
+#: the measured worst, three_r1 and bs_r3, both dprs, ceiling), every one on a moving piece edge of the reference or on its
+#: gather streak along that piece's motion (the native velocity), no compact group (one holding a full 3 x 3 block) of
+#: more than N52C_SCATTER_GROUP pixels, and the one-level scatter as N52C_RULE_A's. The gather-free forms (motion blur
+#: and trails off) stay within N52C's bounds: rule (a) against Python drawn in the core's frame (``core_frame``), rule (b)
+#: N52C_RULE_B. A shifted piece, a patch or a colour shift is a compact group or off every edge, and fails
+#: (``tests/test_native_scene_transitions.py``'s controls).
+N52D_EDGE_FLIPS_A = {
+    "block_spins_motion": 17, "block_spins_trails": 0, "block_spins_both": 14,
+    "crumble_motion": 32, "crumble_trails": 5, "crumble_both": 33,
+    "glass_shatter_motion": 69, "glass_shatter_trails": 6, "glass_shatter_both": 35,
+    "pixel_accretion_motion": 8283, "pixel_accretion_trails": 104, "pixel_accretion_both": 533,
+}
+N52D_EDGE_FLIPS_B = {
+    "block_spins_motion": 0, "block_spins_trails": 0, "block_spins_both": 0, "block_spins_both_4x": 0,
+    "crumble_motion": 191, "crumble_trails": 2, "crumble_both": 114, "crumble_both_4x": 54,
+    "glass_shatter_motion": 24, "glass_shatter_trails": 6, "glass_shatter_both": 819, "glass_shatter_both_4x": 177,
+    "pixel_accretion_motion": 318, "pixel_accretion_trails": 0, "pixel_accretion_both": 33,
+    "pixel_accretion_both_4x": 108,
+    "depth_cascade_options": 6,      # N5.2c's, after native_clip_depth (N52C_RULE_B's note): measured 4
+}
+#: A moving piece: a pixel of the reference more than PIECE_LEVEL from the same run's reference at the progress either
+#: side (a card showing the photograph itself moves too), grown by PIECE_GROW pixels so a piece's own edge is inside it.
+PIECE_LEVEL = 8
+PIECE_GROW = 2
 SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS
 SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS}
 TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
@@ -271,10 +304,12 @@ def variant_transition(variant: str) -> str:
     raise ValueError(f"no transition draws the variant {variant!r}")
 
 
-def product_capture(width: int, height: int, old, new, dpr: float):
+def product_capture(width: int, height: int, old, new, dpr: float, *, core_frame: bool = False):
     """The production GL host (``TransitionCapture``) drawing the product's frame at ``dpr``: the item's logical size
     is the target's device pixels over ``dpr`` (its ``uItemSize``), its own pixels the target's (``item_pixels``), as
-    the runtime's render frame gives them on a window of that ratio."""
+    the runtime's render frame gives them on a window of that ratio. N5.2d: ``core_frame`` draws it upside down (the
+    frame matrix's y negated: the core's top-row-first frame, F1), so the frame read back is flipped by the caller
+    (``references``); only for a scene drawn straight into the frame (no SceneTarget: its gather reads GL's rows)."""
     from tools.transition_contact_sheet import TransitionCapture
 
     class _ProductFrameCapture(TransitionCapture):
@@ -284,8 +319,9 @@ def product_capture(width: int, height: int, old, new, dpr: float):
             w, h = self.width, self.height
             lw, lh = w / dpr, h / dpr
             sample = run.sample(run.start_ns + round(progress * (run.end_ns - run.start_ns)))
-            return QuickTransitionRenderFrame(run, sample, (0, 0, w, h), (lw, lh),
-                                              (2 / lw, 0, 0, 0, 0, -2 / lh, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
+            matrix = ((2 / lw, 0, 0, 0, 0, 2 / lh, 0, 0, 0, 0, 1, 0, -1, -1, 0, 1) if core_frame
+                      else (2 / lw, 0, 0, 0, 0, -2 / lh, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1))
+            return QuickTransitionRenderFrame(run, sample, (0, 0, w, h), (lw, lh), matrix,
                                               self.vao, self.textures[0], self.textures[1], device_pixel_ratio=dpr)
 
     return _ProductFrameCapture(width, height, old, new)
@@ -319,25 +355,150 @@ def production_run(variant: str, images, run_id: int):
     return TransitionRun.start(run_id=run_id, request=request, start_ns=1_000_000_000)
 
 
-def references(variants, photos, dpr: float) -> dict:
+def references(variants, photos, dpr: float, *, core_frame: bool = False) -> dict:
     """The Python renderer's frames (the production GL host) of each variant's run at each progress, at the display's
-    pixels, in the product's frame at ``dpr`` (``product_capture``)."""
+    pixels, in the product's frame at ``dpr`` (``product_capture``); ``core_frame``: drawn in the core's frame and read
+    back the right way up (N5.2d's gather-free forms)."""
     import numpy as np
     from PIL import Image
 
     pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
     width, height = blc.DISPLAY
-    capture = product_capture(width, height, *pictures, dpr)
+    capture = product_capture(width, height, *pictures, dpr, core_frame=core_frame)
     out = {}
     try:
         for index, variant in enumerate(variants):
             run = production_run(variant, [image for image, _rows in photos], index + 1)
             for progress in variant_progress(variant):
                 image, _ms = capture.render(run, progress)
-                out[(variant, progress)] = np.asarray(image, dtype=np.uint8).copy()
+                rows = np.asarray(image, dtype=np.uint8)
+                out[(variant, progress)] = (rows[::-1] if core_frame else rows).copy()
     finally:
         capture.close()
     return out
+
+
+def n52d_gather_free(variant: str) -> bool:
+    """An N5.2d variant drawn with neither motion blur nor trails (its production defaults leave both off)."""
+    overrides = N52D_VARIANTS.get(variant.split("@", 1)[0])
+    return overrides is not None and not overrides.get("motion_blur") and not overrides.get("motion_trails")
+
+
+def _grow(flags, steps: int):
+    import numpy as np
+
+    out = np.asarray(flags, bool).copy()
+    for _ in range(int(steps)):
+        padded = np.pad(out, 1)
+        out = out | padded[:-2, 1:-1] | padded[2:, 1:-1] | padded[1:-1, :-2] | padded[1:-1, 2:]
+        out = out | padded[:-2, :-2] | padded[:-2, 2:] | padded[2:, :-2] | padded[2:, 2:]
+    return out
+
+
+def piece_edges(native, reference, neighbours, velocity=None, longest: float = 0.0):
+    """Where N5.2d's piece-edge flips may lie: a content edge of the reference on one of its moving pieces (where it
+    differs from a ``neighbours`` frame, the same run's reference at the progress either side, by PIECE_LEVEL, grown
+    PIECE_GROW), grown a pixel, and, with ``velocity`` ((2, h, w) pixels a frame in the display's frame, the native
+    scene's), each such edge pixel's gather streak: the pixels along its 3 x 3 neighbourhood's longest motion either way,
+    at most ``longest`` (2K, the gather's bound) long, grown a pixel. ``native`` is not read (a defect drawn in it makes
+    edges of its own)."""
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
+
+    def off(frame, picture):
+        return np.abs(frame[..., :3].astype(np.int16) - picture[..., :3].astype(np.int16)).max(axis=2) > PIECE_LEVEL
+
+    pieces = np.zeros(reference.shape[:2], bool)
+    for neighbour in neighbours:
+        pieces |= off(reference, neighbour)
+    edges = pt.content_edges(reference[..., :3], PIECE_LEVEL) & _grow(pieces, PIECE_GROW)
+    allowed = _grow(edges, 1)
+    if velocity is None:
+        return allowed
+    vx, vy = (np.asarray(v, np.float32) for v in velocity)
+    h, w = vx.shape
+    magnitude = np.hypot(vx, vy)
+    pick = np.zeros((h, w), np.int64)
+    best = np.full((h, w), -1.0, np.float32)
+    flat = np.arange(h * w).reshape(h, w)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            shifted = np.roll(np.roll(magnitude, dy, axis=0), dx, axis=1)
+            index = np.roll(np.roll(flat, dy, axis=0), dx, axis=1)
+            better = shifted > best
+            best = np.where(better, shifted, best)
+            pick = np.where(better, index, pick)
+    ys, xs = np.nonzero(edges)
+    chosen = pick[ys, xs]
+    mx, my = vx.reshape(-1)[chosen], vy.reshape(-1)[chosen]
+    length = np.hypot(mx, my)
+    scale = np.where((length > longest) & (longest > 0), longest / np.maximum(length, 1e-6), 1.0)
+    mx, my = mx * scale, my * scale
+    streak = np.zeros((h, w), bool)
+    steps = int(np.ceil(float(np.hypot(mx, my).max(initial=0.0)))) + 1
+    for t in np.linspace(-1.0, 1.0, 2 * steps + 1):
+        sy = np.clip(np.rint(ys + t * my).astype(np.int64), 0, h - 1)
+        sx = np.clip(np.rint(xs + t * mx).astype(np.int64), 0, w - 1)
+        streak[sy, sx] = True
+    return allowed | _grow(streak, 1)
+
+
+def compact_groups(flags, limit: int) -> list[int]:
+    """The sizes of the 8-connected groups of ``flags`` holding a full 3 x 3 block (a patch, not a line or a streak)
+    larger than ``limit``."""
+    import numpy as np
+
+    flags = np.asarray(flags, bool)
+    padded = np.pad(flags, 1)
+    core = np.ones(flags.shape, bool)
+    for dy in (0, 1, 2):
+        for dx in (0, 1, 2):
+            core &= padded[dy:dy + flags.shape[0], dx:dx + flags.shape[1]]
+    seen = np.zeros(flags.shape, bool)
+    sizes = []
+    h, w = flags.shape
+    for y, x in zip(*np.nonzero(core)):
+        if seen[y, x]:
+            continue
+        stack, size = [(y, x)], 0
+        seen[y, x] = True
+        while stack:
+            cy, cx = stack.pop()
+            size += 1
+            for ny in (cy - 1, cy, cy + 1):
+                for nx in (cx - 1, cx, cx + 1):
+                    if 0 <= ny < h and 0 <= nx < w and flags[ny, nx] and not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+        if size > limit:
+            sizes.append(size)
+    return sizes
+
+
+def judge_piece_edges(candidate, reference, flips: int, allowed) -> dict:
+    """N5.2d's piece-edge flip class for one frame: the one-level scatter as N52C_RULE_A's; at most ``flips`` pixels
+    past one level, every one in ``allowed`` (``piece_edges``); no compact group past N52C_SCATTER_GROUP."""
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
+
+    delta = np.abs(candidate[..., :3].astype(np.int16) - reference[..., :3].astype(np.int16)).max(axis=2)
+    past = delta > 1
+    scatter = pt.judge_delta(np.where(past, 0, delta), N52C_RULE_A)
+    reasons = list(scatter.get("reasons") or [])
+    count = int(past.sum())
+    stray = int((past & ~np.asarray(allowed, bool)).sum())
+    compact = compact_groups(past, N52C_SCATTER_GROUP)
+    if count > flips:
+        reasons.append(f"{count} pixels past one level (piece-edge flips admitted: {flips})")
+    if stray:
+        reasons.append(f"{stray} pixels past one level off every moving piece edge and gather streak")
+    if compact:
+        reasons.append(f"compact groups past one level of {compact} pixels (at most {N52C_SCATTER_GROUP})")
+    return {"pass": not reasons, "reasons": reasons, "past_one_level": count, "off_edges": stray, "flips": count,
+            "compact_groups": compact, "max_level": int(delta.max(initial=0)), "judged": True,
+            "rule": "N5.2d piece-edge flips"}
 
 
 def _mode_counts(scene) -> dict:
@@ -354,10 +515,14 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     checks: dict = {}
     facts: dict = {"variants": {}}
     frames: dict = {}
+    velocities: dict = {}
     tiles = []
     for dpr in DPRS:
         photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
         expected = {} if vulkan else references(variants, photos, dpr)
+        # N5.2d: the gather-free single-sampled forms are judged against Python drawn in the core's frame.
+        core_framed = [] if vulkan else [v for v in variants if n52d_gather_free(v) and VARIANTS[v].get("samples") == 0]
+        expected_core = references(core_framed, photos, dpr, core_frame=True) if core_framed else {}
         host = blc._host(core, blc.WINDOW, dpr)
         scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="layer")
         clock = Clock()
@@ -387,7 +552,10 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     scene.layer.tick()
                     scene.frames(1)
                     rows = scene.display_rows(scene.read())
-                    frames[f"dpr{dpr}_{variant}_{progress_key(progress)}"] = rows
+                    key = f"dpr{dpr}_{variant}_{progress_key(progress)}"
+                    frames[key] = rows
+                    if not vulkan and VARIANTS[variant].get("motion_blur") and variant in N52D_VARIANTS:
+                        velocities[key] = _native_velocity(scene)
                     if not vulkan:
                         reference = expected[(variant, progress)]
                         rule = _rule_a(variant, entry)
@@ -396,6 +564,18 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                         # N5.2c: a multisampled scene is judged by rule (b) only (rule a: its single-sampled form).
                         judged["tolerance"] = (pt.judge(rows[..., :3], reference[..., :3], rule) if rule is not None
                                                else {"pass": True, "judged": False, "reason": MULTISAMPLED_RULE_A})
+                        if rule is not None and variant in N52D_EDGE_FLIPS_A:
+                            at = progresses.index(progress)
+                            neighbours = [expected[(variant, q)] for q in progresses[max(0, at - 1):at + 2]
+                                          if q != progress]
+                            allowed = piece_edges(rows, reference, neighbours, velocities.get(key), N52D_LONGEST)
+                            judged["tolerance"] = judge_piece_edges(rows, reference, N52D_EDGE_FLIPS_A[variant],
+                                                                    allowed)
+                        elif rule is not None and (variant, progress) in expected_core:
+                            core_reference = expected_core[(variant, progress)]
+                            judged["against_python_frame"] = judged["tolerance"]
+                            judged["core_frame_over_tolerance"] = _over(rows, core_reference, VULKAN_TOLERANCE)
+                            judged["tolerance"] = pt.judge(rows[..., :3], core_reference[..., :3], N52C_RULE_A)
                 if not vulkan:
                     # Another progress's reference differs (the pair two thirds into the run's values).
                     here, there = progresses[-5], progresses[-4]
@@ -451,6 +631,10 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     if vulkan:
         checks.update(_route_on_vulkan(core, engine, app, frames, facts))
     np.savez_compressed(work / f"route_{api}.npz", **frames)
+    if velocities:
+        facts["velocity_not_read"] = sorted(k for k, v in velocities.items() if v is None)
+        np.savez_compressed(work / f"velocity_{api}.npz",
+                            **{k: np.stack(v) for k, v in velocities.items() if v is not None})
     if tiles:                                            # a selection without a sheet variant draws no sheet
         blc._sheet(out / f"transition_route_{api}.png", tiles)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
@@ -586,6 +770,44 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
     return checks
 
 
+#: The gather's bound in the display's pixels (2K of the display's allocation: ``motion_post_values``' uLongest).
+def _longest() -> float:
+    from rendering.quick.transitions.native_scene import motion_geometry
+
+    return 2.0 * motion_geometry(blc.DISPLAY).tile
+
+
+N52D_LONGEST = _longest()
+
+
+def _native_velocity(scene):
+    """The native scene's velocity of the frame just drawn (``scene.vx``, ``scene.vy``, read back), in the display's
+    frame: the target's content rows [H - h, H) top first are the display's rows (the core's frame, F1), and its y is
+    the display's down (Python's up negated, read back on the build)."""
+    import numpy as np
+
+    mode = scene.layer.mode
+    mode.read_targets()
+    mode.update()
+    scene.frames(3)
+    pixels = None
+    for _ in range(30):
+        pixels = mode.target_pixels()
+        if pixels:
+            break
+        scene.frames(1)
+    got = {}
+    for entry in pixels or []:
+        if entry["name"] in ("scene.vx", "scene.vy"):
+            width, height = entry["size"]
+            got[entry["name"]] = np.frombuffer(entry["data"], np.float16).reshape(height, width).astype(np.float32)
+    if len(got) != 2:
+        return None          # a frame showing a photograph (no scene): judged by the edges alone, the stricter
+    h, w = blc.DISPLAY[1], blc.DISPLAY[0]
+    vx, vy = got["scene.vx"], got["scene.vy"]
+    return vx[vx.shape[0] - h:, :w], vy[vy.shape[0] - h:, :w]
+
+
 def _over(a, b, level: int) -> int:
     """How many pixels of ``a`` differ from ``b`` by more than ``level`` in any channel."""
     import numpy as np
@@ -644,6 +866,15 @@ def _reads_environment(run) -> bool:
                 and renderer.native_scene(run, blc.DISPLAY).environment)
 
 
+def _neighbour_frames(frames, key: str) -> list:
+    """The same run's frames at the progress either side of ``key``'s (``<dpr>_<variant>_<progress>``)."""
+    stem, progress = key.rsplit("_", 1)
+    variant = stem.split("_", 1)[1]
+    keys = [f"{stem}_{progress_key(p)}" for p in variant_progress(variant)]
+    at = keys.index(key)
+    return [frames[k] for k in keys[max(0, at - 1):at + 2] if k != key and k in frames]
+
+
 def vulkan_against_opengl(work: Path) -> dict:
     import numpy as np
 
@@ -651,6 +882,8 @@ def vulkan_against_opengl(work: Path) -> dict:
     if not (vk_path.exists() and gl_path.exists()):
         return {"pass": False, "error": "both APIs' frames are needed"}
     vk, gl = np.load(vk_path), np.load(gl_path)
+    velocity_path = work / "velocity_opengl.npz"
+    velocity = np.load(velocity_path) if velocity_path.exists() else {}
     per_variant: dict = {}
     worst = 0
     judged: dict = {}
@@ -667,6 +900,12 @@ def vulkan_against_opengl(work: Path) -> dict:
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
                      N52C_RULE_B if drawn in SCENE_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
+        if drawn in N52D_EDGE_FLIPS_B:          # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
+            moved = velocity[key] if key in velocity else None
+            allowed = piece_edges(vk[key], gl[key], _neighbour_frames(gl, key), moved, N52D_LONGEST)
+            judged.setdefault(variant, []).append(judge_piece_edges(vk[key], gl[key], N52D_EDGE_FLIPS_B[drawn],
+                                                                    allowed))
+            continue
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
         per_variant[variant]["tolerance"] = pt.summarise(frames)

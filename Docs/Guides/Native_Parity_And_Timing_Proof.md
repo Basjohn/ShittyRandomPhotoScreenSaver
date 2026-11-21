@@ -94,6 +94,24 @@ L, response tools, timing parity) applies to it.
     level off at dpr 1.5).
   - Rule (b) admits the rasterisers' flips on geometry edges by name (`N52C_RULE_B`: at most 3 a frame, each isolated
     on an edge: Cube Turn's slanted silhouette, a Jigsaw piece's outline, a Cascade card's edge), as `BEAM_RULE_B`.
+  - The lead's N5.2d rule (21 Nov; the operator: a transition need not match Python 1:1, closer is better for the 3D
+    structure, so exactness past the guarded bounds is not chased): the piece-edge flip class, for the scenes of many
+    small moving pieces with motion blur or trails (`N52D_EDGE_FLIPS_A` and `_B`, per transition and variant, 1.5 times
+    the measured worst). Its cause is proved, not assumed: the core draws its targets top row first (F1), so a piece's
+    edge within a rasteriser's sub-pixel snap of a pixel centre covers it in one frame and not the other, a whole edge
+    row of a small piece at once; Python drawn upside down differs from itself by exactly the native frame's flips, and
+    the native frame equals Python drawn in the core's frame. Vulkan and OpenGL snap differently too (rule b). The
+    gather then smears each flip along the piece's motion. Guards: every pixel past one level lies on a moving piece edge
+    of the reference (an edge of 8 levels or more where the reference differs from its own frame a progress step either
+    side) or on its gather streak along the native velocity (at most 2K long), no compact group (one holding a
+    full 3 x 3 block) past `N52C_SCATTER_GROUP`, the one-level scatter as `N52C_RULE_A`'s. A shifted piece, a patch, a
+    colour shift or a streak across the motion fails (the harness tests' planted defects).
+  - The gather-free forms (motion blur and trails off) keep N52C's bounds: rule (a) against Python drawn in the core's
+    frame (`core_frame`; Python's own frame differs from it by the F1 flips alone), rule (b) `N52C_RULE_B`.
+  - A vertex stage that writes its own clip depth after `uMatrix` (and every `sceneProject*` stage) ends with
+    `native_clip_depth`'s line: Vulkan's clip depth is 0..w, OpenGL's -w..w (found on the ABI 37 build: half of every
+    slab clipped). N5.2c's stages took it too; Depth Card Cascade with options then holds one frame of 4 card-edge flips,
+    two touching, so its rule (b) is the piece-edge class (a card is a moving piece; `N52D_EDGE_FLIPS_B`, 6).
 - **Performance:** C per pass at 2560 x 1440 and 4K on both backends (`transition_route_check.py --cost`, Crossfade
   the control). A scene transition's C is per record, not per pass: the core's GPU timer times the layer's whole record
   of the run (its photo environment's copy and chain at the run's first record, the scene's passes, the composite), so
