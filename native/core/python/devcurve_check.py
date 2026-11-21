@@ -253,6 +253,11 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
     return records, samples
 
 
+#: The Python reference's window margin (device pixels; ``spectrum_check.python_references``): 0 draws it in a window
+#: the item's size. A mode whose renderer draws past its item into a SceneTarget sets it (the Oscilloscope).
+REFERENCE_MARGIN = 0
+
+
 def python_references(samples, dpr: float) -> list:
     """The Python renderer's own draw of each sampled frame at ``dpr`` into a transparent target the item's size
     (top-down RGBA): ``spectrum_check.python_references`` with the snapshot's presentation at that ratio."""
@@ -264,7 +269,7 @@ def python_references(samples, dpr: float) -> list:
     for index, snapshot, logical_size, quarters in samples:
         presentation = dataclasses.replace(snapshot.presentation, dpr=float(dpr))
         moved.append((index, dataclasses.replace(snapshot, presentation=presentation), logical_size, quarters))
-    return spectrum_check.python_references(moved)
+    return spectrum_check.python_references(moved, REFERENCE_MARGIN)
 
 
 # --------------------------------------------------------------------------------------------------------- block

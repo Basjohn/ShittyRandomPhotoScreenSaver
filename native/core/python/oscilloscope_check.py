@@ -522,7 +522,22 @@ def round_cost(core, engine, app, api: str, records: list, out: Path) -> dict:
 #: Python's sizes). The bloom's first downsample and the composite then pair and read pixels from the item's own pixel.
 OFFSET_PLACEMENTS = {"odd": (1, 1, 1, 1), "even": (2, 2, 2, 2), "odd_x_even_y": (1, 2, 1, 2),
                      "even_x_odd_y": (2, 1, 2, 1)}
-OFFSET_SAMPLES = 16                  # the first sampled frames of each dpr (the pixels round's references)
+OFFSET_PER_RUN = 3                   # each run's first sampled frames at each dpr (every display: audit 10, M1)
+#: The Python reference's window margin (device pixels, divisible by 1.5): the reference drawn as the product draws it,
+#: its SceneTarget's overrun past the item kept (audit 10, M1: an item-sized window cut it on every side).
+REFERENCE_MARGIN = 72
+
+
+def _per_run(records: list, references: list) -> list:
+    """Each run's first OFFSET_PER_RUN samples of ``references`` (the run is the record's key)."""
+    taken: dict = {}
+    chosen = []
+    for sample in references:
+        key = records[sample[0]]["key"]
+        if taken.get(key, 0) < OFFSET_PER_RUN:
+            taken[key] = taken.get(key, 0) + 1
+            chosen.append(sample)
+    return chosen
 
 
 def _offset_frames(core, engine, app, host, records: list, chosen: list, dpr: float, margins) -> list:
@@ -564,7 +579,7 @@ def round_offsets(core, engine, app, api: str, records: list, out: Path) -> dict
     try:
         for dpr in base.DPRS:
             host.set_device_pixel_ratio(float(dpr))
-            chosen = references[dpr][:OFFSET_SAMPLES]
+            chosen = _per_run(records, references[dpr])
             own = _offset_frames(core, engine, app, host, records, chosen, dpr, None)
             for name, margins in OFFSET_PLACEMENTS.items():
                 placed = _offset_frames(core, engine, app, host, records, chosen, dpr, margins)
@@ -617,7 +632,8 @@ base.use_mode(MODE_ID=MODE_ID, _schema=_schema, _passes=_passes,
               control_record=control_record, item_settings_change=item_settings_change, reference_mask=reference_mask,
               ITEM_RECORD_FIELD=ITEM_RECORD_FIELD, item_reshaped=item_reshaped, VULKAN_RULE_B=VULKAN_RULE_B,
               SCRIPT=Path(__file__).resolve(), EVIDENCE_TOPIC="n5_1_oscilloscope", DEFAULT_LABEL="n51_oscilloscope",
-              CONTROLS=CONTROLS, child=child, EXTRA_ROUNDS={"cost": round_cost, "offsets": round_offsets})
+              CONTROLS=CONTROLS, child=child, EXTRA_ROUNDS={"cost": round_cost, "offsets": round_offsets},
+              REFERENCE_MARGIN=REFERENCE_MARGIN)
 vulkan_against_opengl = base.vulkan_against_opengl
 api_verdict = base.api_verdict
 
