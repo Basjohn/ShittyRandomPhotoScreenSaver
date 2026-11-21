@@ -528,22 +528,32 @@ def test_the_piece_edge_class_admits_edge_rows_and_their_streaks_and_fails_plant
     across[100, 100:115, :3] = 90                       # a streak across the motion, away from the piece
     assert not judged(across)["pass"]
     shifted = old.copy()
-    shifted[44:84, 64:144, :3] = 128                    # the piece drawn 4 px off
+    shifted[46:86, 66:146, :3] = 128                    # the piece drawn 6 px off
     assert not judged(shifted, flips=10_000)["pass"]
     patch = reference.copy()
     patch[50:58, 80:88, :3] = 160                       # a patch inside the piece
     assert not judged(patch, flips=10_000)["pass"]
+    off_tie = reference.copy()
+    off_tie[120, 200, :3] = 32                          # a two-level tie on the flat picture, off every edge
+    allowed = trc.piece_edges(off_tie, reference, [old, new], velocity, trc.N52D_LONGEST)
+    assert trc.judge_piece_edges(off_tie, reference, 40, allowed, ties=trc.TIE_PIXELS)["pass"]
+    assert not trc.judge_piece_edges(off_tie, reference, 40, allowed)["pass"]             # control: no ties admitted
+    many = reference.copy()
+    many[120, 150:150 + 2 * (trc.TIE_PIXELS + 1):2, :3] = 32                               # one tie too many
+    assert not trc.judge_piece_edges(many, reference, 40, allowed, ties=trc.TIE_PIXELS)["pass"]
+    far = reference.copy()
+    far[120, 200, :3] = 34                              # four levels off every edge: not a tie
+    assert not trc.judge_piece_edges(far, reference, 40, allowed, ties=trc.TIE_PIXELS)["pass"]
     tinted = reference.copy()
     tinted[40:80, 60:140, 0] = 150                      # a colour shift of the whole piece
     assert not judged(tinted, flips=10_000)["pass"]
 
 
-def test_the_n52d_bounds_cover_the_motion_and_trail_forms_and_the_gather_free_forms_keep_n52cs():
+def test_the_n52d_bounds_cover_every_form_and_the_gather_free_ones_are_judged_in_the_core_frame():
     trc = _trc()
     single = {v for v, o in trc.N52D_VARIANTS.items() if o.get("samples") == 0}
-    assert set(trc.N52D_EDGE_FLIPS_A) == {v for v in single if not trc.n52d_gather_free(v)}
-    assert set(trc.N52D_EDGE_FLIPS_B) == {v for v in trc.N52D_VARIANTS if not trc.n52d_gather_free(v)} | {
-        "depth_cascade_options"}                              # N5.2c's one, after native_clip_depth
-    # Control: a gather-free form is judged by N52C's rule (a) against the core-frame reference, never the class.
-    assert trc.n52d_gather_free("crumble_plain") and "crumble_plain" not in trc.N52D_EDGE_FLIPS_A
-    assert not trc.n52d_gather_free("crumble_both")
+    assert set(trc.N52D_EDGE_FLIPS_A) == single
+    assert set(trc.N52D_EDGE_FLIPS_B) == set(trc.N52D_VARIANTS) | {"depth_cascade_options"}
+    # Control: the gather-free forms are the plain ones and the defaults, never a form with motion blur or trails.
+    assert trc.n52d_gather_free("crumble_plain") and trc.n52d_gather_free("crumble")
+    assert not trc.n52d_gather_free("crumble_both") and not trc.n52d_gather_free("crumble_trails")

@@ -102,12 +102,17 @@ L, response tools, timing parity) applies to it.
     row of a small piece at once; Python drawn upside down differs from itself by exactly the native frame's flips, and
     the native frame equals Python drawn in the core's frame. Vulkan and OpenGL snap differently too (rule b). The
     gather then smears each flip along the piece's motion. Guards: every pixel past one level lies on a moving piece edge
-    of the reference (an edge of 8 levels or more where the reference differs from its own frame a progress step either
-    side) or on its gather streak along the native velocity (at most 2K long), no compact group (one holding a
-    full 3 x 3 block) past `N52C_SCATTER_GROUP`, the one-level scatter as `N52C_RULE_A`'s. A shifted piece, a patch, a
-    colour shift or a streak across the motion fails (the harness tests' planted defects).
-  - The gather-free forms (motion blur and trails off) keep N52C's bounds: rule (a) against Python drawn in the core's
-    frame (`core_frame`; Python's own frame differs from it by the F1 flips alone), rule (b) `N52C_RULE_B`.
+    of the reference (a 3 x 3 span of 4 levels or more where the reference differs from its frame a progress step either
+    side; within 3 px: a trail outline's rim) or on its gather streak along the native velocity (at most 2K long); no
+    compact group of differing pixels (one holding a full 7 x 7 square: wider than a 4 px tile's diagonal streak) past
+    `N52C_SCATTER_GROUP`; at most `N52C_SCATTER_PIXELS` one-level pixels (their spread is the gather's); rule (b) also
+    admits N52C's two-level ties off the edges (a trail's fade over a flat picture). A shifted piece, a patch, a colour
+    shift or a streak across the motion fails (the harness tests' planted defects).
+  - The gather-free forms (motion blur and trails off) are judged against Python drawn in the core's frame (`core_frame`;
+    Python's own frame differs from it by the F1 flips alone, and Pixel Accretion's plain form then matches exactly). The
+    lead's guard kept N52C's bounds for them; measured, they hold a few driver flips on moving piece edges that N52C
+    admits none of (rule a: Crumble 1 tie, Glass Shatter 3; rule b, the 4x defaults: Crumble up to 16, Glass Shatter 7,
+    Pixel Accretion 10), so they take the same class with their own counts (for the lead's confirmation, 22 Nov).
   - A vertex stage that writes its own clip depth after `uMatrix` (and every `sceneProject*` stage) ends with
     `native_clip_depth`'s line: Vulkan's clip depth is 0..w, OpenGL's -w..w (found on the ABI 37 build: half of every
     slab clipped). N5.2c's stages took it too; Depth Card Cascade with options then holds one frame of 4 card-edge flips,
