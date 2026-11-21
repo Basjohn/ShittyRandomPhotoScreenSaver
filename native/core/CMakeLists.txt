@@ -103,6 +103,7 @@ set(_sources
     src/compute_passes.cpp
     src/post_stages.cpp
     src/job_service.cpp
+    src/pipeline_cache.cpp
     src/item_notifier.cpp
     src/program_blocks.cpp
     src/packet_reader.cpp

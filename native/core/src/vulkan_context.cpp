@@ -1,6 +1,7 @@
 #include "vulkan_context.h"
 
 #include "job_service.h"
+#include "pipeline_cache.h"
 
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
@@ -836,6 +837,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
         jobDevice.family = family;
         jobDevice.queueIndex = 1;
         jobDevice.debugMarkers = inst->validationLoaded;
+        // N3.6 (pipeline_cache.h): the core's file beside Qt Quick's, checked against this device as Qt checks its own.
+        jobDevice.cacheIdentity.backend = QStringLiteral("vulkan");
+        jobDevice.cacheIdentity.driverVersion = props.driverVersion;
+        jobDevice.cacheIdentity.vendorId = props.vendorID;
+        jobDevice.cacheIdentity.deviceId = props.deviceID;
+        jobDevice.cacheIdentity.cacheUuid = QByteArray(reinterpret_cast<const char *>(props.pipelineCacheUUID),
+                                                       VK_UUID_SIZE);
+        jobDevice.cacheFile = pipelineCacheFile(pipelineCacheDirectory(), jobDevice.cacheIdentity.backend);
         out->m_jobs = JobService::create(createRhiUploadBackend(jobDevice), out->m_device,
                                          QStringLiteral("device %1").arg(out->m_device));
     }

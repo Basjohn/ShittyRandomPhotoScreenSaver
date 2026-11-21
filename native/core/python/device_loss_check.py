@@ -262,6 +262,9 @@ def child(args) -> dict:
     tiles: list = []
     with tempfile.TemporaryDirectory(prefix="srpss_n36_") as scratch:
         folder = Path(scratch)
+        if vulkan:
+            # The job QRhi's pipeline cache file (N3.6) in the run's own directory, never the user's cache.
+            record["pipeline_cache_directory"] = core.pipeline_cache_directory(folder / "pipeline_cache")
         try:
             for name in rounds:
                 if vulkan:

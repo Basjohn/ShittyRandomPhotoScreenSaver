@@ -312,6 +312,19 @@ class NativeCore:
         """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
         return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
 
+    def pipeline_cache_self_test(self, directory: str | Path) -> dict:
+        """N3.6, GPU-free: the core's pipeline cache file (``pipeline_cache.h``) in ``directory``: the format's accept
+        and every refusal, the round trip, and two writer threads replacing the file while it is read."""
+        return json.loads(self.module.pipeline_cache_self_test(str(directory)))
+
+    def pipeline_cache_directory(self, directory: str | Path | None = None) -> str:
+        """N3.6: the directory of the core's pipeline cache file for devices made afterwards (Qt Quick's own,
+        ``<CacheLocation>/qtpipelinecache-<abi>``). A ``directory`` (harness only, so a run never touches the user's
+        cache) replaces it; ``""`` restores Qt's."""
+        if directory is None:
+            return str(self.module.pipeline_cache_directory())
+        return str(self.module.pipeline_cache_directory(str(directory)))
+
     #: The work a runtime destruction barrier waits for (audit N38 M3): only work in flight, which ends by itself (a job
     #: queued or running, a release queued to its job thread, a replaced output waiting for the frames that sampled it,
     #: which the window renders on its own since M2). What a live item holds (its textures, a job output shown as a front,

@@ -152,5 +152,7 @@
 // 30 (N3.6, lifetime: the device loss): host_force_device_lost (harness: the hidden host's next frame takes the lost
 // path, swap_device False its control); the host states' device_losses and lost_device_alive, the hidden host's
 // loss_forced_pending and vulkan_live_devices, the device facts' device_fault. A window host replaces a lost Vulkan
-// device itself (no call). Backward compatible for every earlier caller.
+// device itself (no call). Backward compatible for every earlier caller. Within 30 (N3.6's pipeline cache, the same
+// unbuilt round): pipeline_cache_self_test (GPU-free) and pipeline_cache_directory (the harness's directory of the
+// core's file); the job service's stop record's pipeline_cache_load and pipeline_cache_save.
 #define SRPSS_NATIVE_CORE_ABI 30

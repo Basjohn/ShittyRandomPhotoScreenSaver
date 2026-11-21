@@ -30,6 +30,7 @@
 #include "mode_content.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
+#include "pipeline_cache.h"
 #include "process_counters.h"
 #include "scene_targets.h"
 #include "spectrum.h"
@@ -1412,6 +1413,31 @@ PyObject *job_service_self_test(PyObject *, PyObject *args)
     result = srpss_core::jobServiceSelfTestJson(scriptJson);
     Py_END_ALLOW_THREADS
     return pyJson(result);
+}
+
+// ---------------------------------------------------------------- N3.6: the core's pipeline cache file
+
+PyObject *pipeline_cache_self_test(PyObject *, PyObject *args)
+{
+    const char *directory = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &directory))
+        return nullptr;
+    const QString dir = QString::fromUtf8(directory);
+    QByteArray result;
+    Py_BEGIN_ALLOW_THREADS // its two writer threads replace the file while it reads
+    result = srpss_core::pipelineCacheSelfTestJson(dir);
+    Py_END_ALLOW_THREADS
+    return pyJson(result);
+}
+
+PyObject *pipeline_cache_directory(PyObject *, PyObject *args)
+{
+    const char *directory = nullptr;
+    if (!PyArg_ParseTuple(args, "|z", &directory))
+        return nullptr;
+    if (directory)
+        srpss_core::setPipelineCacheDirectory(QString::fromUtf8(directory));
+    return pyStr(srpss_core::pipelineCacheDirectory());
 }
 
 PyObject *composite_mode_texture_remove(PyObject *, PyObject *args)
@@ -2958,6 +2984,13 @@ PyMethodDef methods[] = {
     { "job_service_self_test", job_service_self_test, METH_VARARGS,
       "(script_json) -> JSON str: N3.8's GPU-free test of the job service's thread, latch, cancellation and teardown "
       "under a scripted backend (tests/test_native_core_jobs.py)." },
+    { "pipeline_cache_self_test", pipeline_cache_self_test, METH_VARARGS,
+      "(directory) -> JSON str: N3.6's GPU-free test of the core's pipeline cache file (the format's accept and every "
+      "refusal, the round trip, two writers replacing it while it is read) in directory "
+      "(tests/test_native_core_pipeline_cache.py)." },
+    { "pipeline_cache_directory", pipeline_cache_directory, METH_VARARGS,
+      "(directory=None) -> str: the core's pipeline cache directory for devices made afterwards; a directory (harness "
+      "only) replaces it, an empty string restores Qt Quick's own (<CacheLocation>/qtpipelinecache-<abi>)." },
     { "mode_core_members", mode_core_members, METH_NOARGS,
       "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
     { "mode_core_values", mode_core_values, METH_VARARGS,

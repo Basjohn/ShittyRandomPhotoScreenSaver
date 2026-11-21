@@ -114,6 +114,14 @@ build selection; current host and composite proof lives here.
     ticket latch (published by compare-and-set, then a queued frame request to the item); cancellation; outputs released
     by the job thread once Qt's frames that sampled them completed (`surfaces.*`' window retire list, stamped with frame
     edges); teardown abandoning the job in flight. A scripted backend runs it GPU-free (`job_service_self_test`).
+  - `pipeline_cache.*` (N3.6): the core's own pipeline cache file, `<CacheLocation>/qtpipelinecache-<abi>/srpss_core_<backend>`
+    beside Qt Quick's `qqpc_<backend>` (pipelines built on Qt Quick's QRhi are in Qt's file and need nothing here): the
+    job thread's QRhi (created with `EnablePipelineCacheDataSave`) loads it at its creation and saves it at its orderly
+    teardown, never after a loss; Qt's header checks (the core's ABI, the backend, driver version, vendor, device,
+    pipeline cache UUID) plus the payload's size and MD5, a mismatch a silent recompile; written through `QSaveFile`
+    (a temporary file renamed over the old), the last writer winning. Today the job QRhi builds no pipeline, so nothing
+    is written; a raw `VkPipelineCache` gets its own section when the first raw pipeline exists.
+    `pipeline_cache_self_test` is its GPU-free proof (`tests/test_native_core_pipeline_cache.py`).
   - `item_notifier.*` (N3.8): how the render and job threads reach an item on the GUI thread (a queued `update()`, the
     owner's lost-texture edge) without ever touching a deleted item.
   - `backdrop.*` (N5.7b, D7 points 2 to 6 "As built (N5.7b)"): the card-material backdrop pyramid, level for level the
