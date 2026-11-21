@@ -891,6 +891,7 @@ private:
     ModeStreams m_streams;                   // N3.2: the streams and the block arena
     QByteArray m_arena;                      // N3.2: the arena's CPU copy, written whole per drawn record (choice D)
     QStringList m_meshesLost;                // N3.2: drawn meshes with nothing to upload from (a content made again)
+    QStringList m_meshesLostNoted;           // N5.2c: the names last told to the owner (the edge fires for a new one)
     // N3.2 audit 4's side defect: the waiting reason (textures uploading or lost, meshes lost), made at its edge only,
     // and what it was made for.
     bool m_waitingValid = false;

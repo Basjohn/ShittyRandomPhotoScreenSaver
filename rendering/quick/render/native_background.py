@@ -310,6 +310,7 @@ class NativeBackgroundLayer:
             mode.still(True)
             mode.program(background_layer_program())
             mode.on_textures_lost(self._textures_lost)
+            mode.on_meshes_lost(self._meshes_lost)                # N5.2c: a scene run's meshes after a remake
             self._mode = mode
         return self._mode
 
@@ -606,6 +607,27 @@ class NativeBackgroundLayer:
             self._mode.update()
         except Exception as exc:
             self._fail(f"the background layer could not send its photo again: {exc}", exc)
+
+    def _meshes_lost(self, names: list[str]) -> None:
+        """N5.2c (playbook checklist 13): a content made again mid-run has nothing to upload the scene's meshes from:
+        they are sent again from the run's scene and the run goes on (the photographs come back by ``_textures_lost``,
+        the photo environment is the core's own and is drawn again once its photograph is). Never raises."""
+        if self.closed or self._mode is None or self._scene is None:
+            return
+        held = {mesh.name: mesh for mesh in self._scene.meshes}
+        lost = [held[name] for name in names if name in held and name in self._meshes]
+        if not lost:
+            return
+        try:
+            for mesh in lost:
+                vertices, layout, instances, instance_layout = scene_mesh(mesh)
+                self._mode.mesh(mesh.name, vertices, layout, instances=instances, instance_layout=instance_layout)
+                self.resent += 1
+            self._mode.update()
+        except Exception as exc:
+            logger.error("[BACKGROUND][NATIVE] The transition's meshes could not be sent again; it ends as a cut",
+                         exc_info=exc)
+            self._end_run()
 
     # ---------------------------------------------------------------------------------------------------- the edges
 

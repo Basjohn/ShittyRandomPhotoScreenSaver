@@ -6880,6 +6880,19 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         quad = quad || pass.mesh == kBuiltinQuadMesh || pass.instanceFrom == kBuiltinQuadMesh;
     m_meshes.sync(rhi, updates, m_source->drawnMeshes(),
                   [this](const QByteArray &name) { return m_source->takeMeshImage(name); }, &m_meshesLost, quad);
+    // N5.2c (playbook checklist 13): a mesh this content has nothing to upload from (a content made again) is an edge to
+    // its owner, once per name newly lost ("mesh:<name>" on the one lost edge), so the owner sends it again and the
+    // drawing goes on; never a state the owner polls. Nothing is made at rest (both lists empty).
+    if (m_meshesLost != m_meshesLostNoted) {
+        QStringList newly;
+        for (const QString &name : m_meshesLost) {
+            if (!m_meshesLostNoted.contains(name))
+                newly.append(QStringLiteral("mesh:") + name);
+        }
+        m_meshesLostNoted = m_meshesLost;
+        if (!newly.isEmpty())
+            m_source->texturesLost(newly);
+    }
     // N3.3 (D16): the storage at this record, its allocation edge's kernels recorded now (before any pass).
     for (bool &dispatch : m_dispatch)
         dispatch = false;

@@ -126,6 +126,7 @@ class _Mode:
         self.calls = calls
         self.composite = _Composite(calls)
         self.lost = None
+        self.meshes_lost = None
 
     def still(self, still=True) -> None:
         self.calls.append(("still", still))
@@ -141,6 +142,9 @@ class _Mode:
 
     def on_textures_lost(self, callback) -> None:
         self.lost = callback
+
+    def on_meshes_lost(self, callback) -> None:
+        self.meshes_lost = callback
 
     def texture(self, name, pixels, size, **_kwargs) -> None:
         self.calls.append(("texture", name, tuple(size), len(pixels)))
@@ -399,6 +403,34 @@ def test_a_scene_run_shows_its_photographs_by_the_background_program_and_its_eff
     made.transition(None)
     assert ("remove_mesh", "box") in calls and ("remove_texture", nb.TEXTURE) in calls
     assert calls.index(("remove_mesh", "box")) > max(i for i, c in enumerate(calls) if c[0] == "program")
+
+
+def test_a_content_made_again_mid_run_gets_the_scenes_meshes_and_photographs_again(clocked_layer):
+    """N5.2c (playbook checklist 13): a content made again mid-run reports the scene's meshes and its photographs lost;
+    the layer sends each again from what it holds and the run goes on (its clock connected, its program kept), so the
+    scene never waits for the run's end. A name the run does not hold is ignored; after the run nothing is sent."""
+    from rendering.quick.render import native_background as nb
+
+    made, mode, calls, window, now = clocked_layer
+    source, destination = _image("a", value=40), _image("b", value=200)
+    made.present(source)
+    run = _run("depth_cascade", source, destination)
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) // 2
+    made.transition(run)
+    window.afterAnimating.slots[0]()
+    (sent,) = [c for c in calls if c[0] == "mesh"]
+    del calls[:]
+    mode.meshes_lost(["cards", "other"])                     # the content made again
+    mode.lost([nb.TEXTURE, nb.NEXT_TEXTURE])
+    again = [c for c in calls if c[0] == "mesh"]
+    assert again == [sent] and calls[-1] == ("update",)
+    assert sorted(c[1] for c in calls if c[0] == "texture") == sorted([nb.TEXTURE, nb.NEXT_TEXTURE])
+    assert made.state()["run"] == run.run_id and window.afterAnimating.slots == [made.tick]
+    assert not [c for c in calls if c[0] == "program"]       # the scene's program goes on
+    made.transition(None)
+    del calls[:]
+    mode.meshes_lost(["cards"])                              # after the run: nothing to send
+    assert not [c for c in calls if c[0] == "mesh"]
 
 
 def test_the_ported_transitions_are_exactly_those_the_core_draws():

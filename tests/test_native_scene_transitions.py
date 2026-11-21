@@ -164,6 +164,24 @@ def test_the_scene_packs_are_the_bakes_of_the_python_renderers_texts():
             assert sources[f"{cls.transition_id}_{scene_pass.name}.frag"] == scene_pass.fragment_source
 
 
+def test_the_lost_edge_splits_meshes_from_textures_and_state():
+    """Checklist 13: the core's one lost edge carries textures' names, "state:<resource>" and (N5.2c) "mesh:<name>";
+    each owner callback gets only its own (a mesh name reaching the texture callback is the control: the old split)."""
+    from types import SimpleNamespace
+
+    from rendering.native.mode import NativeMode
+
+    listened = []
+    module = SimpleNamespace(composite_mode_on_lost=lambda handle, callback: listened.append(callback))
+    mode = NativeMode(module, SimpleNamespace(_live=lambda: 1))
+    got: dict = {}
+    mode.on_textures_lost(lambda names: got.setdefault("textures", names))
+    mode.on_state_lost(lambda names: got.setdefault("state", names))
+    mode.on_meshes_lost(lambda names: got.setdefault("meshes", names))
+    listened[-1](["photo", "state:fog", "mesh:cards"])
+    assert got == {"textures": ["photo"], "state": ["fog"], "meshes": ["cards"]}
+
+
 def test_a_missing_value_is_an_unfilled_member():
     """Negative control of the first test's rule: the box's lift dropped is an unfilled member."""
     from rendering.native.mode import MODE_CORE_MEMBERS

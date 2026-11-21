@@ -173,8 +173,9 @@
 // core's steps, vUv passes and a card-less content are unchanged. stage_control's card_triangle (harness: the full
 // triangle again, its negative control). Every generic mode's native frames may change (regression guards on the branch's ABI 31 build: every generic
 // mode's harness on both APIs, Bubble variant a on one take).
-// 34 (N5.2c, reserved for it; 33 is another branch's): a program's environment step ({"name", "environment": an item
-// texture, "size": [w, h]}: N4.j's photo environment, post_stages.h; its copy "<step>.environment" read with mips), the
-// composite form "opaque" (no glow), composite_live's stage_environments and stage_environment_copies. Backward
-// compatible for every earlier program (no program declares either).
-#define SRPSS_NATIVE_CORE_ABI 34
+// 36 (N5.2c; 34 retired unused, 35 is Waveform's mip chain): a program's environment step ({"name", "environment": an
+// item texture, "size": [w, h]}: N4.j's photo environment, post_stages.h; its copy "<step>.environment" read with mips),
+// the composite form "opaque" (no glow), composite_live's stage_environments and stage_environment_copies, and the lost
+// edge's "mesh:<name>" (a mesh a content made again has nothing to upload from: the owner sends it again). Backward
+// compatible for every earlier program (no program declares either; an owner without a mesh listener ignores the name).
+#define SRPSS_NATIVE_CORE_ABI 36
