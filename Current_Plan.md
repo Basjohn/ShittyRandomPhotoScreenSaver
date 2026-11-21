@@ -1270,6 +1270,10 @@ the feature (D3D11 is not stated).
     really skips the ambient target's draws.
   - [ ] Byte-identical candidates first. Anything that cannot hold byte identity goes to the operator as tier 2.
   - [ ] Optimise only a measured offender. If no material cost is found, close the item without redesigning Bubble.
+  - Built (Opus Medium agent abbcd68ea9219da70, 21 Nov): the wake loop's per-bubble reject (c8d1ea916), hash-identical
+    on all four 60 s takes on both APIs, -22 % OpenGL and -21 % Vulkan for the expanded 4K bubble pass. The ghost loop
+    has no candidate that pays after it (5ba190a5f keeps the three in `bubble_cost_matrix.py`). The pass's largest
+    stages are now the wake (0.90 ms OpenGL, 0.66 Vulkan) and, on Vulkan, the ghost (0.66).
   - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
