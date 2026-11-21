@@ -4,6 +4,7 @@
     .venv/Scripts/python tools/agent_handover.py --commit        # also save uncommitted work as a handover commit
     .venv/Scripts/python tools/agent_handover.py --commit agent-a1b2c3   # only the named worktrees
     .venv/Scripts/python tools/agent_handover.py --retire agent-a1b2c3   # after the merge: keep evidence, remove
+    .venv/Scripts/python tools/agent_handover.py --retire agent-a1b2c3 --keep paths.txt   # keep only the listed paths
 
 An agent can stop at any moment (a usage limit, a crash), and an agent of an earlier session cannot be resumed. What
 it leaves is its branch, whatever it had not committed, and its progress journal
@@ -21,7 +22,9 @@ branch. Paths past Windows' 260 characters are copied and deleted through extend
 fails to copy is reported and stops the removal. The folder is deleted by this tool's own walk, which removes a
 junction or symlink as a link and never enters it; git's own ``worktree remove`` is not used, because it follows
 junctions and deletes their targets (measured 21 Nov 2026) and fails on long paths. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
-sheets were lost that way), so the handbook's merge steps use this instead. Trimming kept evidence to what the
+sheets were lost that way), so the handbook's merge steps use this instead. ``--keep <paths file>`` copies only
+the paths the file lists (one per line, relative to the worktree's ``.artifacts``, a file or a folder) plus the
+journal, and refuses before copying anything when a listed path is missing. Trimming kept evidence to what the
 report cites is done afterwards in this checkout, where nothing is lost by mistake.
 """
 from __future__ import annotations
@@ -185,32 +188,60 @@ def _copy_file(path: str, destination: str) -> None:
     shutil.copy2(path, destination)
 
 
-def copy_kept(root: Path, worktree: Path) -> tuple[int, int, list[str], list[str], list[str]]:
+def read_keep_list(paths_file: Path) -> list[str]:
+    """The paths a ``--keep`` file lists: one per line, relative to the worktree's ``.artifacts``; blank lines and
+    ``#`` comments are skipped. An absolute path or one that climbs out with ``..`` is refused (ValueError)."""
+    listed = []
+    for line in paths_file.read_text(encoding="utf-8").splitlines():
+        text = line.strip().replace("\\", "/")
+        if not text or text.startswith("#"):
+            continue
+        parts = [part for part in text.split("/") if part not in ("", ".")]
+        if os.path.isabs(text) or text.startswith("/") or ".." in parts or (len(text) > 1 and text[1] == ":"):
+            raise ValueError(f"not a path inside .artifacts: {line.strip()}")
+        if parts:
+            listed.append("/".join(parts))
+    return listed
+
+
+def missing_kept(worktree: Path, keep: list[str]) -> list[str]:
+    """The listed paths that do not exist under the worktree's ``.artifacts``."""
+    return [name for name in keep if not os.path.lexists(_long(str(worktree / ARTIFACTS_NAME / name)))]
+
+
+def copy_kept(root: Path, worktree: Path, keep: list[str] | None = None
+              ) -> tuple[int, int, list[str], list[str], list[str]]:
     """Copy the worktree's evidence, WebPs and handover files into ``root``'s artifacts; paths of any length.
-    Returns (copied, already present, differing, failed with the reason, links not entered). A file that exists
-    there is never overwritten."""
+    With ``keep`` (paths relative to ``.artifacts``) only those paths, each a file or a folder, are copied, plus
+    the handover journal. Returns (copied, already present, differing, failed with the reason, links not entered).
+    A file that exists there is never overwritten."""
     copied, kept, differing, failed, links = 0, 0, [], [], []
-    jobs = [(worktree / ARTIFACTS_NAME / name, root / ARTIFACTS_NAME / name, name != "handover") for name in KEPT_NAMES]
+    if keep is None:
+        jobs = [(worktree / ARTIFACTS_NAME / name, root / ARTIFACTS_NAME / name, name != "handover")
+                for name in KEPT_NAMES]
+    else:
+        jobs = [(worktree / ARTIFACTS_NAME / name, root / ARTIFACTS_NAME / name, True) for name in keep]
     jobs.append((worktree / JOURNAL.parent, root / JOURNAL.parent / "retired" / worktree.name, False))
     for source, target, compare in jobs:
-        if not os.path.isdir(_long(str(source))):
+        single = os.path.isfile(_long(str(source))) and not _is_link(_long(str(source)))
+        if not single and not os.path.isdir(_long(str(source))):
             continue
         try:
-            files = list(_walk_files(str(source)))
+            files = [(_long(str(source)), False)] if single else list(_walk_files(str(source)))
         except OSError as exc:
             failed.append(f"{source}: {exc}")
             continue
         for path, is_link in files:
-            relative = os.path.relpath(path, _long(str(source)))
+            relative = "" if single else os.path.relpath(path, _long(str(source)))
             if is_link:
                 links.append(f"{source.name}/{relative}")
                 continue
-            destination = _long(str(target / relative))
+            destination = _long(str(target / relative if relative else target))
             try:
                 if os.path.exists(destination):
                     kept += 1
                     if compare and not filecmp.cmp(path, destination, shallow=False):
-                        differing.append(str(target / relative))
+                        differing.append(str(target / relative if relative else target))
                     continue
                 _copy_file(path, destination)
                 copied += 1
@@ -219,7 +250,7 @@ def copy_kept(root: Path, worktree: Path) -> tuple[int, int, list[str], list[str
     return copied, kept, differing, failed, links
 
 
-def retire(worktree: Path) -> int:
+def retire(worktree: Path, keep: list[str] | None = None) -> int:
     """Copy a merged agent's evidence into this checkout, then remove its worktree and branch."""
     if not (worktree / ".git").exists():
         print(f"{worktree.name}: not a worktree")
@@ -240,7 +271,14 @@ def retire(worktree: Path) -> int:
     if running_from(worktree):
         print(f"{worktree.name}: REFUSED, a process is still running from it")
         return 1
-    copied, kept, differing, failed, links = copy_kept(ROOT, worktree)
+    if keep is not None:
+        missing = missing_kept(worktree, keep)
+        for name in missing[:20]:
+            print(f"   MISSING from --keep list: {name}")
+        if missing:
+            print(f"{worktree.name}: REFUSED, {len(missing)} listed path(s) do not exist; nothing was copied or deleted")
+            return 1
+    copied, kept, differing, failed, links = copy_kept(ROOT, worktree, keep)
     print(f"{worktree.name}: evidence, WebPs and handover files copied {copied} file(s), {kept} already present")
     for name in links[:20]:
         print(f"   LINK (not entered, its target stays where it is): {name}")
@@ -269,11 +307,22 @@ def main() -> int:
     parser.add_argument("--commit", action="store_true", help="save uncommitted work as a WIP (handover) commit")
     parser.add_argument("--retire", action="store_true",
                         help="after the merge: copy the named worktrees' evidence here, then remove them")
+    parser.add_argument("--keep", metavar="PATHS_FILE", type=Path,
+                        help="with --retire: copy only the evidence paths listed in this file (one per line, relative "
+                             "to the worktree's .artifacts); a listed path that is missing refuses the retire")
     args = parser.parse_args()
+    if args.keep and not args.retire:
+        parser.error("--keep is only for --retire")
     if args.retire:
         if not args.worktrees:
             parser.error("--retire needs the worktree names")
-        return max(retire(WORKTREES / name) for name in args.worktrees)
+        keep = None
+        if args.keep:
+            try:
+                keep = read_keep_list(args.keep)
+            except (OSError, ValueError) as exc:
+                parser.error(f"--keep: {exc}")
+        return max(retire(WORKTREES / name, keep) for name in args.worktrees)
     if not WORKTREES.is_dir():
         print("no agent worktrees")
         return 0
