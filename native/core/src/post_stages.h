@@ -27,6 +27,13 @@
 //   layer (choice G: admitted for this layer only, as Python's glGenerateTextureMipmap), the clip into a texture at the
 //   read level's size, the gather and the highlight sprites onto the scene (shaders/defocus_*). The read level is a
 //   member the mode fills (u_defocus_level); the read level's texture and the sprite count are the core's (choice I).
+// - The photo environment (N5.2c, N4.j's PhotoEnvironment: rendering/quick/scene3d/environment.py): a step
+//   {"name", "environment": <an item texture>, "size": [w, h]} draws the texture, box-filtered by the core's
+//   shaders/environment.frag (Python's _COPY_FRAGMENT: 16 bilinear taps a quarter copy texel apart), into an RGBA8
+//   texture of that size with a full mip chain, then QRhi's generateMips (Python's glGenerateTextureMipmap); a later
+//   sampler reads it as "<step>.environment", with mips. It is drawn only when the texture's front changed (a new image
+//   committed, a texture object made again) or its own texture was made again: once per photo, never per record.
+//   Python gives the size (environment_size, its one owner) in the declaration.
 //
 // Render thread only, but the counts and the harness controls (any thread).
 #pragma once
@@ -51,14 +58,17 @@ constexpr int kMaxBloomStages = 2;
 constexpr int kMaxDefocusStages = 2;
 constexpr int kMaxStageAllocationAttempts = 2 * (kMaxBloomStages * kBloomLevels + kMaxDefocusStages);
 constexpr int kMaxStageBuildAttempts = kMaxBloomStages * (2 * kBloomLevels + 3) + kMaxDefocusStages * 8;
+constexpr int kMaxEnvironmentStages = 2;   // N5.2c: a program's photo environments (Python's two roles)
+constexpr int kMaxEnvironmentSide = 4096;
 
 // A pass entry's stage (mode_content.h ModePass::stage); None for a mode's own pass.
-enum class StageKind { None = 0, TransparencyResolve = 1, Bloom = 2, Defocus = 3, Composite = 4 };
+enum class StageKind { None = 0, TransparencyResolve = 1, Bloom = 2, Defocus = 3, Composite = 4, Environment = 5 };
 QString stageKindName(StageKind kind);
 
-// The composite step's forms (D17 point 5): target.py's overlay, overlay with glow (and the HDR tone map), and opaque
-// with glow (the transitions' scenes).
-enum class CompositeForm { Overlay = 0, OverlayGlow = 1, OpaqueGlow = 2 };
+// The composite step's forms (D17 point 5): target.py's overlay, overlay with glow (and the HDR tone map), opaque
+// with glow, and (N5.2c) opaque without one (the 3D transitions' scenes without bloom: target.py's scene_composite and
+// scene_composite_samples, the multisampled scene read through its resolve, D5.6 row 7).
+enum class CompositeForm { Overlay = 0, OverlayGlow = 1, OpaqueGlow = 2, Opaque = 3 };
 bool parseCompositeForm(const QString &text, CompositeForm *out);
 QString compositeFormName(CompositeForm form);
 
@@ -69,10 +79,12 @@ enum class BloomShader { DownFirst = 0, Down = 1, Up = 2 };
 QShader bloomShader(BloomShader which);
 enum class DefocusShader { Clip = 0, Gather = 1, SpritesVertex = 2, SpritesFragment = 3 };
 QShader defocusShader(DefocusShader which);
+QShader environmentShader();               // N5.2c: shaders/environment.frag
 constexpr char kCompositeBlock[] = "SceneComposite";
 constexpr char kDefocusBlock[] = "SceneDefocus";
 constexpr char kDefocusLevelMember[] = "u_defocus_level";
 constexpr char kGlowAttachment[] = "glow";
+constexpr char kEnvironmentAttachment[] = "environment"; // N5.2c: "<step>.environment"
 
 // D17 point 3: whether the transparency stage is admitted on this device; `reason` names what is missing.
 struct TransparencyGate
@@ -162,6 +174,8 @@ struct StageCounts
     qint64 defocusFlushes = 0; // boundary-only external blocks (none with controls off or in query mode)
     qint64 defocusExternalPasses = 0; // controlled passes using the cached declaration/tracking flags
     qint64 defocusUntrackedPasses = 0;
+    int environments = 0;         // N5.2c: photo environments holding their texture
+    qint64 environmentCopies = 0; // N5.2c: copies drawn (once per photo)
 };
 StageCounts stageCounts();
 void countTransparencyResolve();
@@ -194,6 +208,18 @@ struct DefocusSpec
     bool operator==(const DefocusSpec &o) const
     {
         return pass == o.pass && near == o.near && onto == o.onto && level == o.level;
+    }
+};
+// N5.2c: a program's photo environment step.
+struct EnvironmentSpec
+{
+    int pass = -1;
+    QByteArray name;              // its texture is "<name>.environment"
+    QByteArray source;            // the item texture it copies
+    QSize size;                   // Python's environment_size
+    bool operator==(const EnvironmentSpec &o) const
+    {
+        return pass == o.pass && name == o.name && source == o.source && size == o.size;
     }
 };
 
@@ -243,6 +269,21 @@ public:
     bool hasDefocus(int pass) const { return defocusFor(pass) != nullptr; }
     QRhiCommandBuffer::BeginPassFlags defocusPassFlags() const { return m_defocusPassFlags; }
 
+    // N5.2c, render thread, after sync: each environment's texture and render target at its declared size (made only
+    // when a size or a spec changed), and the item texture each copies (`photos`, one per spec: its front, null while
+    // it has none). A new texture object or another photo object is a new objectGeneration (the bindings that sample
+    // one are made again). False with the reason.
+    bool syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs, const QList<QRhiTexture *> &photos,
+                          QString *error);
+    int environmentCount() const { return m_environmentCount; }
+    // The texture of the environment step `step` ("<step>.environment"); null when there is none.
+    QRhiTexture *environment(const QByteArray &step) const;
+    // Record (outside any pass): the environment step `pass`'s copy and its mips, only when its photo's front
+    // (`photoGeneration`, the item texture's image) or its own texture changed since it was last drawn; `pending` the
+    // record's uploads (the photo's among them), handed to its pass and nulled. Returns whether it drew.
+    bool recordEnvironment(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
+                           quint64 photoGeneration, QRhiResourceUpdateBatch **pending);
+
 private:
     struct Bloom
     {
@@ -283,6 +324,26 @@ private:
         RhiOwned<QRhiGraphicsPipeline> sprites;
         qint64 bytes = 0;
     };
+    // N5.2c: one photo environment (its texture and render target at the spec's size; its sampler, block, bindings and
+    // pipeline made at a build; what it last drew).
+    struct Environment
+    {
+        EnvironmentSpec spec;
+        QSize size;
+        RhiOwned<QRhiTexture> texture;
+        RhiOwned<QRhiRenderPassDescriptor> pass;
+        RhiOwned<QRhiTextureRenderTarget> target;
+        QRhiTexture *photo = nullptr;    // the item texture's front it copies (the item's, never owned here)
+        RhiOwned<QRhiBuffer> block;      // its uStep (Python's 0.25 / size), written once per size
+        RhiOwned<QRhiSampler> sampler;   // the photo's: linear, clamped, no mips (Python's lent texture)
+        RhiOwned<QRhiShaderResourceBindings> bindings;
+        RhiOwned<QRhiGraphicsPipeline> pipeline;
+        bool blockWritten = false;
+        bool drawn = false;              // the texture holds the copy of drawnPhoto's drawnGeneration
+        const QRhiTexture *drawnPhoto = nullptr;
+        quint64 drawnGeneration = 0;
+        qint64 bytes = 0;
+    };
 
     // The timeDefocusDraws control's GL queries (made at its first use on this QRhi, deleted with the stages).
     struct DrawTimer;
@@ -293,6 +354,10 @@ private:
     Defocus *defocusFor(int pass) const;
     bool bloomBindings(Bloom &b);
     bool defocusBindings(Defocus &d);
+    bool environmentBindings(Environment &e);
+    void releaseEnvironmentPipelines(Environment &e);
+    void releaseEnvironment(Environment &e);
+    static int allocationObjects(const Environment &e);
     void beginBuildAttempts(bool rebinding = false);
     void noteBuildFailure();
     template<typename Resource> bool createBuildResource(Resource *resource)
@@ -320,6 +385,8 @@ private:
     int m_bloomCount = 0;
     std::unique_ptr<Defocus> m_defocus[kMaxDefocusStages];
     int m_defocusCount = 0;
+    std::unique_ptr<Environment> m_environments[kMaxEnvironmentStages]; // N5.2c
+    int m_environmentCount = 0;
     QRhiBuffer *m_arena = nullptr;       // the content's block arena (the defocus bindings name it)
     quint32 m_conventionsBytes = 0;
     quint32 m_defocusBlockBytes = 0;

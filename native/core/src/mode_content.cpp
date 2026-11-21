@@ -2447,6 +2447,12 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         const qsizetype dot = texture.indexOf('.');
         return dot > 0 && texture.mid(dot + 1) == kGlowAttachment && bloomSteps.contains(texture.left(dot));
     };
+    // N5.2c: the environment steps so far (a later sampler reads "<step>.environment", with mips).
+    QList<QByteArray> environmentSteps;
+    const auto environmentOf = [&environmentSteps](const QByteArray &texture) {
+        const qsizetype dot = texture.indexOf('.');
+        return dot > 0 && texture.mid(dot + 1) == kEnvironmentAttachment && environmentSteps.contains(texture.left(dot));
+    };
     for (int i = 0; i < declared.size(); ++i) {
         QJsonObject o = declared.at(i).toObject();
         ModePass pass;
@@ -2468,15 +2474,17 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             const bool withGlow = o.contains(QStringLiteral("glow"));
             // ABI 29: the scene's frame, when declared ("window": Python's scene drawn through Quick's window, unturned).
             const bool withFrame = o.contains(QStringLiteral("scene_frame"));
-            if (!parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form)
+            bool parsed = parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form);
+            const bool glowForm = form == CompositeForm::OverlayGlow || form == CompositeForm::OpaqueGlow; // N5.2c
+            if (!parsed
                 || o.size() != 3 + (withGlow ? 1 : 0) + (withFrame ? 1 : 0) || !passName(pass.name)
                 || !fragmentPack.isEmpty() || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
-                || withGlow != (form != CompositeForm::Overlay) || (withGlow && !glowOf(glow.toString().toLatin1()))
+                || withGlow != glowForm || (withGlow && !glowOf(glow.toString().toLatin1()))
                 || (withFrame && o.value(QStringLiteral("scene_frame")) != QJsonValue(QStringLiteral("window")))) {
-                *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow or "
-                                        "opaque_glow, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom step>.glow\" "
-                                        "(the glow forms only, a bloom step before it), \"scene_frame\"?: \"window\"} with "
-                                        "an empty pack").arg(i);
+                *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow, "
+                                        "opaque_glow or opaque, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom "
+                                        "step>.glow\" (the glow forms only, a bloom step before it), \"scene_frame\"?: "
+                                        "\"window\"} with an empty pack").arg(i);
                 return false;
             }
             pass.sceneFrameWindow = withFrame;
@@ -2503,7 +2511,44 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             pass.stage = StageKind::Composite;
             pass.compositeForm = form;
         }
-        if (o.contains(QStringLiteral("transparency_resolve")) || o.contains(QStringLiteral("bloom"))
+        if (o.contains(QStringLiteral("environment"))) {
+            // N5.2c (N4.j): a photo environment step (post_stages.h) with an empty pack: an item texture (never a
+            // target's) copied into a mipped texture of the declared size, read later as "<step>.environment".
+            const QJsonValue source = o.value(QStringLiteral("environment"));
+            const QJsonValue size = o.value(QStringLiteral("size"));
+            const QByteArray texture = source.toString().toLatin1();
+            const QJsonArray sides = size.toArray();
+            const bool sized = size.isArray() && sides.size() == 2 && sides.at(0).isDouble() && sides.at(1).isDouble()
+                && sides.at(0).toDouble() == std::floor(sides.at(0).toDouble())
+                && sides.at(1).toDouble() == std::floor(sides.at(1).toDouble())
+                && sides.at(0).toDouble() >= 1.0 && sides.at(1).toDouble() >= 1.0
+                && sides.at(0).toDouble() <= double(kMaxEnvironmentSide)
+                && sides.at(1).toDouble() <= double(kMaxEnvironmentSide);
+            if (o.size() != 3 || !passName(pass.name) || !fragmentPack.isEmpty() || !source.isString()
+                || !passName(texture) || targetTextureName(texture) || !sized) {
+                *error = QStringLiteral("pass %1 is an environment step {\"name\", \"environment\": an item texture, "
+                                        "\"size\": [w, h] (1 to %2)} with an empty pack").arg(i).arg(kMaxEnvironmentSide);
+                return false;
+            }
+            if (targetIndex(QString::fromLatin1(pass.name)) >= 0 || bloomSteps.contains(pass.name)
+                || environmentSteps.contains(pass.name) || environmentSteps.size() >= kMaxEnvironmentStages) {
+                *error = QStringLiteral("environment step '%1': at most %2 environment steps, each named apart from every "
+                                        "target and step (its texture is \"%1.environment\")")
+                             .arg(QString::fromLatin1(pass.name)).arg(kMaxEnvironmentStages);
+                return false;
+            }
+            pass.stage = StageKind::Environment;
+            pass.target = -1;
+            pass.environmentSource = texture;
+            pass.environmentSize = QSize(int(sides.at(0).toDouble()), int(sides.at(1).toDouble()));
+            // Its photograph, as the program's other samplers name theirs: the program waits for it (sampledTextures).
+            PassSampler photo;
+            photo.name = QByteArrayLiteral("uPhoto");
+            photo.texture = texture;
+            photo.binding = 1;
+            pass.samplers.append(photo);
+            environmentSteps.append(pass.name);
+        } else if (o.contains(QStringLiteral("transparency_resolve")) || o.contains(QStringLiteral("bloom"))
             || o.contains(QStringLiteral("defocus"))) {
             // N3.4 (D17): a stage step with an empty pack (its shaders are the core's).
             if (!parseStageStep(o, i, fragmentPack, program, drawn, &bloomSteps, &defocusSteps, pass, error))
@@ -2598,6 +2643,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                     continue;
                 if (glowOf(s.texture))
                     continue;                 // N3.4: a bloom step's glow (the core's), made before this pass
+                if (environmentOf(s.texture))
+                    continue;                 // N5.2c: an environment step's copy (the core's, mipped), made before it
                 const int read = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
                 if (read >= 0 && program.targets.at(read).transparency()) {
                     *error = QStringLiteral("pass '%1': the sampler '%2' reads the transparency target '%3', which only "
@@ -2632,7 +2679,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
         }
         if (!pass.capture && !pass.compute && pass.stage != StageKind::TransparencyResolve
-            && pass.stage != StageKind::Bloom && pass.stage != StageKind::Defocus) {
+            && pass.stage != StageKind::Bloom && pass.stage != StageKind::Defocus
+            && pass.stage != StageKind::Environment) {
             pass.fragment = coreFragment.isValid() ? coreFragment : QShader::fromSerialized(fragmentPack); // N3.4
             if (!pass.fragment.isValid()) {
                 *error = QStringLiteral("pass '%1': the fragment pack does not load (a .qsb from tools/regen_qrc.py's "
@@ -2792,6 +2840,10 @@ QJsonObject ModeProgram::toJson() const
                      QString::fromLatin1(targets.at(pass.stageSource).colour.at(pass.stageAttachment).name));
         if (pass.stage == StageKind::Composite)
             p.insert(QStringLiteral("composite"), compositeFormName(pass.compositeForm));
+        if (pass.stage == StageKind::Environment) { // N5.2c
+            p.insert(QStringLiteral("environment"), QString::fromLatin1(pass.environmentSource));
+            p.insert(QStringLiteral("size"), QJsonArray { pass.environmentSize.width(), pass.environmentSize.height() });
+        }
         if (pass.sceneFrameWindow)
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("window")); // ABI 29
         p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
@@ -4945,6 +4997,10 @@ QRhiTexture *ModeContent::samplerTexture(const QByteArray &name) const
             if (QRhiTexture *glow = m_post.glow(name.left(dot)))
                 return glow;
         }
+        if (name.mid(dot + 1) == kEnvironmentAttachment) { // N5.2c: an environment step's mipped copy
+            if (QRhiTexture *environment = m_post.environment(name.left(dot)))
+                return environment;
+        }
         return m_targets.sampledTexture(name);
     }
     if (const ModeStorage::Image *image = m_storage.image(name))
@@ -6343,9 +6399,9 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
         ok = ok && created(p.pipeline->create());
     }
-    if (ok && withPasses && (!m_bloomSpecs.isEmpty() || !m_defocusSpecs.isEmpty())) {
+    if (ok && withPasses && (!m_bloomSpecs.isEmpty() || !m_defocusSpecs.isEmpty() || !m_environmentSpecs.isEmpty())) {
         // N3.4 (D17 points 4 and 6): the bloom chains' and the defocus steps' pipelines and bindings (the stages' own
-        // objects, counted by the stages: PostStages::live).
+        // objects, counted by the stages: PostStages::live); N5.2c: the environments' copies.
         quint32 defocusBlock = 0;
         for (const ModePass &pass : program.passes) {
             if (pass.stage == StageKind::Defocus)
@@ -6433,6 +6489,7 @@ bool ModeContent::syncStages(QRhi *rhi, QString *error)
         // The program's steps, derived once per program (nothing per record).
         m_bloomSpecs.clear();
         m_defocusSpecs.clear();
+        m_environmentSpecs.clear();
         m_stagesDeclared = false;
         for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
             const ModePass &pass = program.passes.at(i);
@@ -6456,15 +6513,30 @@ bool ModeContent::syncStages(QRhi *rhi, QString *error)
                 const BlockMember *radius = pass.block.member(QByteArrayLiteral("u_defocus_radius"));
                 m_defocusLevelOffset[i] = level ? level->offset : -1;
                 m_defocusRadiusOffset[i] = radius ? radius->offset : -1;
+            } else if (pass.stage == StageKind::Environment) { // N5.2c
+                EnvironmentSpec spec;
+                spec.pass = i;
+                spec.name = pass.name;
+                spec.source = pass.environmentSource;
+                spec.size = pass.environmentSize;
+                m_environmentSpecs.append(spec);
             }
         }
+        m_environmentPhotos.fill(nullptr, m_environmentSpecs.size()); // sized once per program, written in place
         m_specsProgram = program.generation;
     }
     for (DefocusSpec &spec : m_defocusSpecs)
         spec.level = defocusLevel(spec.pass); // in place: no list made per record
-    if (m_bloomSpecs.isEmpty() && m_defocusSpecs.isEmpty() && m_post.live() == 0)
+    if (m_bloomSpecs.isEmpty() && m_defocusSpecs.isEmpty() && m_environmentSpecs.isEmpty() && m_post.live() == 0)
         return true;                          // no stage declared, nothing held: no work
     if (!m_post.sync(rhi, m_bloomSpecs, m_defocusSpecs, m_targets, error))
+        return false;
+    // N5.2c: each environment at its size, over its photograph's front (the item's textures committed this record).
+    for (int n = 0; n < int(m_environmentSpecs.size()); ++n) {
+        const GpuTexture *photo = front(m_environmentSpecs.at(n).source);
+        m_environmentPhotos[n] = photo ? photo->texture.get() : nullptr;
+    }
+    if (!m_post.syncEnvironments(rhi, m_environmentSpecs, m_environmentPhotos, error))
         return false;
     if (m_post.objectGeneration() != m_postObjectsSeen) {
         m_postObjectsSeen = m_post.objectGeneration();
@@ -6677,6 +6749,14 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             cb->setVertexInput(0, 1, &cardInput);
             cb->draw(3);
             cb->endPass();
+            ++i;
+            continue;
+        }
+        if (pass.stage == StageKind::Environment) {
+            // N5.2c (N4.j): the photo's mipped copy, its own render pass outside any run, drawn only when the photo's
+            // front changed since it was last drawn (once per photo; the record's uploads stay pending otherwise).
+            const GpuTexture *photo = front(pass.environmentSource);
+            m_post.recordEnvironment(rhi, cb, i, ownInput, photo ? photo->generation : 0, &pending);
             ++i;
             continue;
         }

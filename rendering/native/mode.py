@@ -614,8 +614,11 @@ class CapturePass:
         return {"name": self.name, "capture": self.target}
 
 
-#: N3.4 (D17 point 5): the composite step's forms, and the alpha a transparency resolve writes.
-COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow")
+#: N3.4 (D17 point 5): the composite step's forms (N5.2c: ``opaque``, the 3D transitions' scenes without bloom), and the
+#: alpha a transparency resolve writes.
+COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow", "opaque")
+#: The forms that add a bloom step's glow.
+GLOW_FORMS = ("overlay_glow", "opaque_glow")
 RESOLVE_ALPHAS = ("coverage", "keep")
 #: N3.4: the bloom chain's levels (``post.py`` ``BLOOM_LEVELS``), and the most bloom and defocus steps a program takes.
 BLOOM_LEVELS = 4
@@ -681,8 +684,8 @@ class CompositeStep:
     def __post_init__(self) -> None:
         if self.form not in COMPOSITE_FORMS:
             raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
-        if (self.glow is None) != (self.form == "overlay"):
-            raise ValueError("the glow forms read a bloom step's glow; the overlay reads none")
+        if (self.glow is None) == (self.form in GLOW_FORMS):
+            raise ValueError("the glow forms read a bloom step's glow; the overlay and the opaque form read none")
         if self.scene_frame not in (None, "window"):
             raise ValueError(f"unknown scene frame {self.scene_frame!r} (the window's, \"window\", or none)")
 
@@ -711,7 +714,31 @@ class DefocusStep:
         return {"name": self.name, "defocus": self.layer, "onto": self.onto}
 
 
-_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep)
+#: N5.2c (N4.j): the most environment steps a program takes, and the most texels a side.
+MAX_ENVIRONMENT_STEPS = 2
+MAX_ENVIRONMENT_SIDE = 4096
+
+
+@dataclass(frozen=True)
+class EnvironmentStep:
+    """N5.2c (N4.j's ``PhotoEnvironment``, ``rendering/quick/scene3d/environment.py``): the item texture ``source``
+    box-filtered into an RGBA8 copy of ``size`` with a full mip chain (the core's ``shaders/environment.frag``, Python's
+    16-tap ``_COPY_FRAGMENT``; mips by ``generateMips``, Python's ``glGenerateTextureMipmap``), drawn once per photo; a
+    later sampler reads ``"<name>.environment"`` with mips. ``size`` is ``environment_size``'s (its one owner)."""
+
+    name: str
+    source: str
+    size: tuple[int, int]
+
+    def __post_init__(self) -> None:
+        if len(self.size) != 2 or not all(1 <= int(v) <= MAX_ENVIRONMENT_SIDE for v in self.size):
+            raise ValueError(f"an environment's size is (w, h), each 1 to {MAX_ENVIRONMENT_SIDE}")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "environment": self.source, "size": [int(self.size[0]), int(self.size[1])]}
+
+
+_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep, EnvironmentStep)
 
 
 def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
@@ -947,7 +974,8 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
 
 
 __all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "COMPUTE_RESOURCES", "CULL_MODES",
-           "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
+           "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "EnvironmentStep", "GLOW_FORMS",
+           "MAX_ENVIRONMENT_SIDE", "MAX_ENVIRONMENT_STEPS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
            "MAX_STORAGE_IMAGES", "STORAGE_ACCESS", "STORAGE_IMAGE_FORMATS", "StorageBuffer", "StorageImage",
            "MAX_BATCHES", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS", "MODE_CORE_MEMBERS",
            "MeshAttribute", "ModePass", "ModeStream", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassGeometry",

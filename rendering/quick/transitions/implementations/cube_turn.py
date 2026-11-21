@@ -20,9 +20,25 @@ from rendering.gl_programs.cube_turn_program import (
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
+                                               warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+                            item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
+
+#: N5.2c: the box's attributes by name (``SCENE3D_BOX_ATTRIBUTES``' order: position, outward normal).
+_BOX_INPUTS = (("aPosition", 3), ("aNormal", 3))
+_SCENE_PASSES = (
+    item_quad_pass("backdrop", CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE,
+                   (("uEnvironment", "environment"),)),
+    NativeScenePass("box", CUBE_TURN_VERTEX_SOURCE, CUBE_TURN_FRAGMENT_SOURCE, mesh="box",
+                    samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
+)
+
+
+def _progress(sample) -> float:
+    return max(0.0, min(1.0, float(sample.eased_progress)))
 
 
 def cube_turn_parameters(parameters: Mapping[str, object]) -> float:
@@ -33,7 +49,7 @@ def cube_turn_parameters(parameters: Mapping[str, object]) -> float:
     return float(gloss)
 
 
-class QuickCubeTurnRenderer:
+class QuickCubeTurnRenderer(NativeScenePasses):
     transition_id = "cube_turn"
 
     _BOX_SAMPLERS = ("uOldTex", "uNewTex")   # every other value is in the programs' pass blocks
@@ -47,11 +63,34 @@ class QuickCubeTurnRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources or self._target.has_resources or self._environment.has_resources
 
+    # ------------------------------------------------------------------------------- N5.2c: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        cube_turn_parameters(parameters)
+        box = NativeSceneMesh("box", pack_floats(SCENE3D_BOX_VERTICES), _BOX_INPUTS)
+        return NativeScene(_SCENE_PASSES, (box,), scene3d_request_samples(parameters), True)
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(_progress(sample))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float]) -> dict[str, object]:
+        """The box's values for the frame (the backdrop's are the core's: the matrix and the item size)."""
+        axis, sign = cube_turn_axis(str(run.request.direction))
+        gloss = cube_turn_parameters(run.request.parameter_dict())
+        angle, zoom = cube_turn_state(_progress(sample), sign)
+        return {"uAngle": angle, "uFinal": sign * 1.5707963267948966, "uAxis": axis, "uZoom": zoom, "uGloss": gloss,
+                "uLift": cube_turn_lift(angle)}
+
     def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        axis, sign = cube_turn_axis(str(frame.run.request.direction))
+        progress = _progress(frame.sample)
+        cube_turn_axis(str(frame.run.request.direction))
         parameters = frame.run.request.parameter_dict()
-        gloss = cube_turn_parameters(parameters)
+        cube_turn_parameters(parameters)
         try:
             if progress <= 0.0:
                 self._resources.draw_image(frame, frame.source_texture_id)
@@ -63,9 +102,9 @@ class QuickCubeTurnRenderer:
             environment = self._environment.texture(frame, self._resources)
             if samples:
                 with self._target.scope(frame, samples, self._resources):
-                    self._draw(frame, progress, axis, sign, gloss, environment)
+                    self._draw(frame, environment)
             else:
-                self._draw(frame, progress, axis, sign, gloss, environment)
+                self._draw(frame, environment)
         except Exception:
             self.release_resources()
             raise
@@ -96,8 +135,7 @@ class QuickCubeTurnRenderer:
         self._target.release()
         self._environment.release()
 
-    def _draw(self, frame, progress: float, axis: int, sign: float, gloss: float, environment: int) -> None:
-        angle, zoom = cube_turn_state(progress, sign)
+    def _draw(self, frame, environment: int) -> None:
         r = self._resources
         program = r.program("backdrop", CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE)
         uniforms = r.uniforms("backdrop", ())
@@ -117,12 +155,7 @@ class QuickCubeTurnRenderer:
         uniforms = r.uniforms("box", self._BOX_SAMPLERS)
         values = r.values("box")
         bind_frame(program, uniforms, frame, values)
-        values["uAngle"] = angle
-        values["uFinal"] = sign * 1.5707963267948966
-        values["uAxis"] = axis
-        values["uZoom"] = zoom
-        values["uGloss"] = gloss
-        values["uLift"] = cube_turn_lift(angle)
+        values.update(self.scene_values(frame.run, frame.sample, frame.logical_size))   # the one owner (N5.2c)
         vao, vertices = r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
         with r.pass_blocks.bound(pack_block(CUBE_TURN_BLOCK, values)):
             gl.glBindVertexArray(vao)

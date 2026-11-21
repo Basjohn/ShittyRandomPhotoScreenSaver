@@ -473,11 +473,45 @@ def transition_instanced_sources() -> dict[str, str]:
     return found
 
 
+def _native_scene_classes() -> list[type]:
+    """N5.2c: every ``NativeScenePasses`` renderer (the 3D transitions drawn as scenes), discovered in
+    ``rendering/quick/transitions/implementations``, never listed."""
+    import importlib
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from rendering.quick.transitions import implementations
+    from rendering.quick.transitions.native_scene import NativeScenePasses
+
+    found: list[type] = []
+    for path in sorted(Path(implementations.__file__).parent.glob("*.py")):
+        if "NativeScenePasses" not in path.read_text(encoding="utf-8"):
+            continue
+        module = importlib.import_module(f"{implementations.__name__}.{path.stem}")
+        for value in vars(module).values():
+            if (isinstance(value, type) and issubclass(value, NativeScenePasses)
+                    and value.__module__ == module.__name__):
+                found.append(value)
+    return found
+
+
+def transition_scene_sources() -> dict[str, str]:
+    """N5.2c: every scene pass a native 3D transition may draw (``NativeScenePasses.native_scene_passes``):
+    ``<id>_<pass>.vert`` and ``<id>_<pass>.frag`` -> the texts its Python renderer compiles."""
+    found: dict[str, str] = {}
+    for cls in _native_scene_classes():
+        for scene_pass in cls.native_scene_passes():
+            found[f"{cls.transition_id}_{scene_pass.name}.vert"] = scene_pass.vertex_source
+            found[f"{cls.transition_id}_{scene_pass.name}.frag"] = scene_pass.fragment_source
+    return found
+
+
 def transition_shader_sources() -> dict[str, str]:
-    """Every pack the native transitions draw, by its source's file name: each fragment (``<id>.frag``) and each
-    instanced pass's two stages."""
+    """Every pack the native transitions draw, by its source's file name: each fragment (``<id>.frag``), each
+    instanced pass's two stages and (N5.2c) each scene pass's two stages."""
     sources = {f"{transition_id}.frag": text for transition_id, text in transition_fragment_sources().items()}
     sources.update(transition_instanced_sources())
+    sources.update(transition_scene_sources())
     return sources
 
 

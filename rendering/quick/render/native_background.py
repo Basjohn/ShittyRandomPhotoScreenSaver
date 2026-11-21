@@ -25,7 +25,11 @@ keeps. On OpenGL nothing here is created: production keeps the Python presenter 
   ``afterAnimating`` while the run lasts (the frame Qt Quick is preparing, as the Python renderer samples the run at its
   render): nothing is connected and nothing is drawn again at rest. Beam's sparks (N5.2b's leftover) follow its
   fragment as instanced quads of their own vertex stage (``transition_program``'s ``instanced``), in the run's program
-  only while its Sparks switch is on. A transition with no pass on the core is drawn as
+  only while its Sparks switch is on. N5.2c: a 3D transition (``NativeScenePasses``: Blinds, Cube Turn, Depth Card
+  Cascade, Jigsaw) is drawn as its scene (``scene_program``: N4.j's photo environment, its passes and meshes into one
+  scene target, the opaque composite), its values the Python renderer's ``scene_values``; the frames its Python
+  renderer draws as one photograph exactly are the background's own program on that slot, switched only when what is
+  shown changes. A transition with no pass on the core is drawn as
   Crossfade. At the run's end the slots swap and the background's pass draws the destination (the run's last frame is
   the destination itself: no pop).
 
@@ -54,6 +58,10 @@ OLD_SAMPLER = "uOldTex"
 NEW_SAMPLER = "uNewTex"
 #: Drawn where a run's transition has no pass on the core (the backend's fallback, ``transition_registry``).
 FALLBACK_TRANSITION = "crossfade"
+#: N5.2c: a scene's target (its passes draw into it; the opaque composite lays it onto the layer) and its photo
+#: environment step (its mipped copy is "<step>.environment").
+SCENE_TARGET = "scene"
+SCENE_ENVIRONMENT = "environment"
 
 
 def _other_slot(slot: str) -> str:
@@ -100,20 +108,93 @@ def instanced_pack_paths(name: str) -> tuple[Path, Path]:
     return folder / f"{name}.vert.qsb", folder / f"{name}.frag.qsb"
 
 
+def scene_pack_paths(transition_id: str, pass_name: str) -> tuple[Path, Path]:
+    """N5.2c: a scene pass's vertex and fragment packs (``NativeScenePasses``), baked from its Python renderer's own
+    texts beside the transitions' fragment packs as ``<transition>_<pass>``."""
+    folder = transition_pack_path(transition_id).parent
+    stem = f"{transition_id}_{pass_name}"
+    return folder / f"{stem}.vert.qsb", folder / f"{stem}.frag.qsb"
+
+
 def native_transition_renderer(transition_id: str) -> Any:
     """The Python renderer whose values the core's passes read, when the core draws ``transition_id`` (a fragment
-    pass, ``NativeFragmentPass``, with its pack shipped, and the packs of every instanced pass it may draw); None
-    otherwise."""
+    pass, ``NativeFragmentPass``, with its pack shipped, and the packs of every instanced pass it may draw; N5.2c: a
+    scene, ``NativeScenePasses``, with the packs of every pass it may draw); None otherwise."""
     from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
     from rendering.quick.transitions.implementation_registry import resolve_quick_transition_renderer
+    from rendering.quick.transitions.native_scene import NativeScenePasses
 
-    if not transition_pack_path(transition_id).is_file():
-        return None
-    renderer = resolve_quick_transition_renderer(transition_id, enabled_transition_ids=frozenset({transition_id}))
-    if not isinstance(renderer, NativeFragmentPass):
+    try:
+        renderer = resolve_quick_transition_renderer(transition_id, enabled_transition_ids=frozenset({transition_id}))
+    except ValueError:
+        return None                                               # not a transition the product knows
+    if isinstance(renderer, NativeScenePasses):
+        shipped = all(path.is_file() for p in renderer.native_scene_passes()
+                      for path in scene_pack_paths(transition_id, p.name))
+        return renderer if shipped else None
+    if not transition_pack_path(transition_id).is_file() or not isinstance(renderer, NativeFragmentPass):
         return None
     shipped = all(path.is_file() for p in renderer.instanced_passes for path in instanced_pack_paths(p.name))
     return renderer if shipped else None
+
+
+def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_size: tuple[int, int]) -> tuple:
+    """N5.2c: the program of a run's scene (``NativeScene``): N4.j's photo environment of the new picture (when a pass
+    reads it), each pass into the scene target (colour RGBA8 cleared to opaque black and D32F depth, the run's
+    samples: the Python renderer's ``SceneTarget`` scope, or Quick's framebuffer, which a one-sample target copies
+    exactly), then the opaque composite onto the layer. Returns (passes, targets)."""
+    from rendering.native.mode import (BUILTIN_QUAD_MESH, BlendState, CompositeStep, EnvironmentStep, ModePass,
+                                       ModeTarget, PassGeometry, PassSampler, TargetAttachment)
+    from rendering.quick.scene3d.environment import environment_size
+    from rendering.quick.transitions.native_scene import QUAD_MESH
+
+    environment = f"{SCENE_ENVIRONMENT}.environment"
+    textures = {"old": old, "new": new, "environment": environment}
+    passes: list = []
+    if scene.environment:
+        passes.append(EnvironmentStep(SCENE_ENVIRONMENT, new, environment_size(destination_size)))
+    for p in scene.passes:
+        vertex, fragment = (path.read_bytes() for path in scene_pack_paths(renderer.transition_id, p.name))
+        samplers = tuple(PassSampler(name, textures[kind], "linear", "clamp",
+                                     "linear" if kind == "environment" else "none") for name, kind in p.samplers)
+        mesh = BUILTIN_QUAD_MESH if p.mesh == QUAD_MESH else p.mesh
+        geometry = PassGeometry(vertex, topology=p.topology, vertices=p.vertices, instances=p.instances, mesh=mesh,
+                                instance_from=mesh if p.instances == "mesh" else None)
+        blend = p.blend if isinstance(p.blend, str) else BlendState(tuple(p.blend[0]), tuple(p.blend[1]))
+        passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET,
+                               depth_test="less" if p.depth else None, depth_write=bool(p.depth), geometry=geometry))
+    passes.append(CompositeStep("scene_composite", "opaque", f"{SCENE_TARGET}.colour"))
+    target = ModeTarget(SCENE_TARGET, (TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 1.0)),), depth=True,
+                        samples=max(1, int(scene.samples)))
+    return passes, (target,)
+
+
+def scene_mesh(mesh: Any) -> tuple:
+    """N5.2c: a run's mesh (``NativeSceneMesh``) as ``NativeMode.mesh`` takes it: (vertices, layout, instances,
+    instance layout)."""
+    from rendering.native.mode import MeshAttribute, RecordLayout
+
+    def layout(attributes) -> Any:
+        if not attributes:
+            return None
+        found, offset = [], 0
+        for name, components in attributes:
+            found.append(MeshAttribute(name, int(components), offset))
+            offset += 4 * int(components)
+        return RecordLayout(offset, tuple(found))
+
+    return bytes(mesh.vertices), layout(mesh.attributes), (None if mesh.instances is None else bytes(mesh.instances)), \
+        layout(mesh.instance_attributes)
+
+
+def scene_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float]) -> dict:
+    """N5.2c: the scene program's settings for this frame: the renderer's own values (``scene_values``, its one owner)
+    less the core's members, an array given flat."""
+    from rendering.native.mode import MODE_CORE_MEMBERS
+    from rendering.quick.transitions.native_scene import flat_values
+
+    values = flat_values(renderer.scene_values(run, sample, logical_size))
+    return {name: _flat(value) for name, value in values.items() if name not in MODE_CORE_MEMBERS}
 
 
 def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None,
@@ -198,6 +279,11 @@ class NativeBackgroundLayer:
         self._clock_ns = clock_ns
         self._clock_window: Any = None
         self._fallback_logged = False
+        # N5.2c: a scene run's scene (``NativeScene``), what the layer shows of it (the program drawn: the effect, or
+        # one photograph by the background's own program) and the meshes it sent.
+        self._scene: Any = None
+        self._show: int | None = None
+        self._meshes: list[str] = []
         self.runs = 0                    # runs the core drew
         self.ticks = 0                   # frames of a run given their progress
         self._settings: dict | None = None
@@ -279,10 +365,13 @@ class NativeBackgroundLayer:
     def _start_run(self, run: Any) -> None:
         if self._run is not None:
             self._end_run()
+        from rendering.quick.transitions.native_scene import NativeScenePasses
+
         request = run.request
         renderer = native_transition_renderer(request.transition_id)
         transition_id = request.transition_id
-        instanced = () if renderer is None else renderer.native_instanced_passes(request.parameter_dict())
+        scene_run = isinstance(renderer, NativeScenePasses)          # N5.2c
+        instanced = () if renderer is None or scene_run else renderer.native_instanced_passes(request.parameter_dict())
         if renderer is None:
             if not self._fallback_logged:
                 logger.warning("[BACKGROUND][NATIVE] %s has no pass on the core; drawn as %s", transition_id,
@@ -299,11 +388,56 @@ class NativeBackgroundLayer:
         mode.texture(other, destination.rgba8, destination.pixel_size)
         self.sent += 1
         self._run, self._renderer, self._next_image = run, renderer, destination
-        mode.program(transition_program(transition_id, self._slot, other, instanced=instanced), self._frame_settings())
+        if scene_run:
+            self._start_scene(mode, run, renderer)
+        else:
+            mode.program(transition_program(transition_id, self._slot, other, instanced=instanced),
+                         self._frame_settings())
         self._settings = None                                     # the background's settings are given again at the end
         self.runs += 1
         self._connect_clock()
         mode.update()
+
+    def _logical(self) -> tuple[float, float]:
+        return float(self._item.width()), float(self._item.height())
+
+    def _start_scene(self, mode: Any, run: Any, renderer: Any) -> None:
+        """N5.2c: a scene run (``NativeScenePasses``): its meshes sent once, then its first frame. The layer draws the
+        old picture until the effect starts (the background's program on its slot, as it draws it now)."""
+        from rendering.quick.transitions.native_scene import SHOW_OLD
+
+        scene = renderer.native_scene(run, self._logical())
+        for mesh in scene.meshes:
+            vertices, layout, instances, instance_layout = scene_mesh(mesh)
+            mode.mesh(mesh.name, vertices, layout, instances=instances, instance_layout=instance_layout)
+            self._meshes.append(mesh.name)
+        self._scene = scene
+        self._show = SHOW_OLD
+        self._scene_frame()
+
+    def _scene_frame(self) -> None:
+        """N5.2c: this frame of a scene run: the effect's program with this frame's values (only its settings once it
+        is drawn), or one of the two photographs exactly by the background's own program (the frames the Python
+        renderer draws as the plain picture), switched only when what is shown changes."""
+        from rendering.quick.transitions.native_scene import SHOW_EFFECT, SHOW_OLD
+
+        run, renderer, mode = self._run, self._renderer, self._mode
+        sample = run.sample(self._clock_ns())
+        show = renderer.scene_show(run, sample)
+        logical = self._logical()
+        if show == SHOW_EFFECT:
+            settings = scene_settings(renderer, run, sample, logical)
+            if self._show != SHOW_EFFECT:
+                passes, targets = scene_program(renderer, self._scene, self._slot, _other_slot(self._slot),
+                                                self._next_image.pixel_size)
+                mode.program(passes, settings, targets=targets)
+            else:
+                mode.settings(settings)
+        elif show != self._show:
+            slot, image = ((self._slot, self._image) if show == SHOW_OLD
+                           else (_other_slot(self._slot), self._next_image))
+            mode.program(background_layer_program(texture=slot), background_layer_settings(image.pixel_size, logical))
+        self._show = show
 
     def _frame_settings(self) -> dict:
         sample = self._run.sample(self._clock_ns())
@@ -318,7 +452,10 @@ class NativeBackgroundLayer:
         if self.closed or self._run is None or self._mode is None:
             return
         try:
-            self._mode.settings(self._frame_settings())
+            if self._scene is not None:
+                self._scene_frame()                               # N5.2c
+            else:
+                self._mode.settings(self._frame_settings())
             self._mode.update()
             self.ticks += 1
         except Exception as exc:
@@ -330,6 +467,8 @@ class NativeBackgroundLayer:
         run, self._run = self._run, None
         self._disconnect_clock()
         self._renderer = None
+        meshes, self._meshes = self._meshes, []                   # N5.2c: a scene run's, removed once not drawn
+        self._scene = self._show = None
         if run is None or self._mode is None:
             self._next_image = None
             return
@@ -345,6 +484,8 @@ class NativeBackgroundLayer:
         self._settings = settings
         if destination is not None:
             self._mode.remove_texture(previous)                   # the source goes once the destination is drawn
+        for name in meshes:
+            self._mode.remove_mesh(name)                          # N5.2c: after the program that drew them went
         self._sync(force=True)
 
     def _connect_clock(self) -> None:
@@ -497,6 +638,8 @@ class NativeBackgroundLayer:
         self.closed = True
         self._disconnect_clock()
         self._run = self._renderer = self._next_image = None
+        self._scene = self._show = None                           # N5.2c: its meshes go with the mode
+        self._meshes = []
         for edge in self._edges.values():
             try:
                 edge.disarm()
@@ -539,4 +682,5 @@ __all__ = ["FALLBACK_TRANSITION", "NEW_SAMPLER", "NEXT_TEXTURE", "NativeBackgrou
            "SAMPLER", "TEXTURE", "attach_native_background", "background_card", "background_layer_pack_path",
            "background_layer_program",
            "background_layer_settings", "instanced_pack_paths", "native_background_wanted", "native_transition_renderer",
+           "SCENE_ENVIRONMENT", "SCENE_TARGET", "scene_mesh", "scene_pack_paths", "scene_program", "scene_settings",
            "transition_pack_path", "transition_program", "transition_settings"]

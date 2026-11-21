@@ -64,6 +64,8 @@ QAtomicInteger<qint64> g_fallbacks { 0 };
 QAtomicInteger<int> g_leftBehindObjects { 0 };
 QAtomicInteger<qint64> g_stageRecordsTimed { 0 };
 QAtomicInteger<qint64> g_stageRecordNs { 0 };
+QAtomicInteger<int> g_environments { 0 };           // N5.2c
+QAtomicInteger<qint64> g_environmentCopies { 0 };
 
 void setControl(QAtomicInteger<int> &control, bool on)
 {
@@ -71,8 +73,24 @@ void setControl(QAtomicInteger<int> &control, bool on)
     g_controlGeneration.fetchAndAddOrdered(1);
 }
 
-const char *const kStageNames[] = { "none", "transparency_resolve", "bloom", "defocus", "composite" };
-const char *const kFormNames[] = { "overlay", "overlay_glow", "opaque_glow" };
+const char *const kStageNames[] = { "none", "transparency_resolve", "bloom", "defocus", "composite", "environment" };
+const char *const kFormNames[] = { "overlay", "overlay_glow", "opaque_glow", "opaque" };
+constexpr int kFormCount = int(sizeof(kFormNames) / sizeof(kFormNames[0]));
+
+// Every level's bytes of an RGBA8 texture with a full mip chain (an environment's).
+qint64 mippedRgba8Bytes(const QSize &size)
+{
+    qint64 bytes = 0;
+    int w = size.width(), h = size.height();
+    while (w > 0 && h > 0) {
+        bytes += qint64(w) * qint64(h) * 4;
+        if (w == 1 && h == 1)
+            break;
+        w = qMax(1, w / 2);
+        h = qMax(1, h / 2);
+    }
+    return bytes;
+}
 
 qint64 levelBytes(const QSize &size, int bytesPerTexel)
 {
@@ -142,12 +160,12 @@ QRhiGraphicsPipeline::TargetBlend masked()
 
 QString stageKindName(StageKind kind)
 {
-    return QLatin1String(kStageNames[qBound(0, int(kind), 4)]);
+    return QLatin1String(kStageNames[qBound(0, int(kind), 5)]);
 }
 
 bool parseCompositeForm(const QString &text, CompositeForm *out)
 {
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < kFormCount; ++i) {
         if (text == QLatin1String(kFormNames[i])) {
             *out = CompositeForm(i);
             return true;
@@ -158,7 +176,7 @@ bool parseCompositeForm(const QString &text, CompositeForm *out)
 
 QString compositeFormName(CompositeForm form)
 {
-    return QLatin1String(kFormNames[qBound(0, int(form), 2)]);
+    return QLatin1String(kFormNames[qBound(0, int(form), kFormCount - 1)]);
 }
 
 QShader compositeShader(CompositeForm form)
@@ -170,8 +188,15 @@ QShader compositeShader(CompositeForm form)
         return shaderFrom(composite_overlay_glow_frag_qsb, composite_overlay_glow_frag_qsb_size);
     case CompositeForm::OpaqueGlow:
         return shaderFrom(composite_opaque_glow_frag_qsb, composite_opaque_glow_frag_qsb_size);
+    case CompositeForm::Opaque:
+        return shaderFrom(composite_opaque_frag_qsb, composite_opaque_frag_qsb_size);
     }
     return QShader();
+}
+
+QShader environmentShader()
+{
+    return shaderFrom(environment_frag_qsb, environment_frag_qsb_size);
 }
 
 QShader transparencyResolveShader(bool multisampled, bool firstSampleControl)
@@ -370,6 +395,8 @@ StageCounts stageCounts()
     c.defocusFlushes = g_defocusFlushes.loadRelaxed();
     c.defocusExternalPasses = g_defocusExternalPasses.loadRelaxed();
     c.defocusUntrackedPasses = g_defocusUntrackedPasses.loadRelaxed();
+    c.environments = g_environments.loadRelaxed();
+    c.environmentCopies = g_environmentCopies.loadRelaxed();
     return c;
 }
 
@@ -632,6 +659,186 @@ void PostStages::releaseDefocus(Defocus &d)
     d.belowSize = QSize();
     d.colour = nullptr;
     d.circle = nullptr;
+}
+
+// ------------------------------------------------------------------------------------------------- N5.2c environments
+
+QRhiTexture *PostStages::environment(const QByteArray &step) const
+{
+    for (int i = 0; i < m_environmentCount; ++i) {
+        if (m_environments[i] && m_environments[i]->spec.name == step && m_environments[i]->size.isValid())
+            return m_environments[i]->texture.get();
+    }
+    return nullptr;
+}
+
+void PostStages::releaseEnvironmentPipelines(Environment &e)
+{
+    const int objects = (e.pipeline ? 1 : 0) + (e.bindings ? 1 : 0) + (e.sampler ? 1 : 0) + (e.block ? 1 : 0);
+    e.pipeline.reset();
+    e.bindings.reset();
+    e.sampler.reset();
+    e.block.reset();
+    e.blockWritten = false;
+    countPipelineObjects(-objects);
+}
+
+void PostStages::releaseEnvironment(Environment &e)
+{
+    releaseEnvironmentPipelines(e);
+    e.target.reset();
+    e.pass.reset();
+    const bool held = e.texture != nullptr;
+    e.texture.reset();
+    count(held ? -1 : 0, -e.bytes, 0, 0);
+    if (held)
+        g_environments.fetchAndAddRelaxed(-1);
+    e.bytes = 0;
+    e.size = QSize();
+    e.photo = nullptr;
+    e.drawn = false;
+    e.drawnPhoto = nullptr;
+    e.drawnGeneration = 0;
+}
+
+int PostStages::allocationObjects(const Environment &e)
+{
+    return (e.texture ? 1 : 0) + (e.target ? 1 : 0) + (e.pass ? 1 : 0);
+}
+
+bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs, const QList<QRhiTexture *> &photos,
+                                  QString *error)
+{
+    if (m_rhi && m_rhi != rhi)
+        release();                            // another QRhi: every object again (a node made again)
+    m_rhi = rhi;
+    if (specs.size() > kMaxEnvironmentStages || photos.size() != specs.size()) {
+        *error = QStringLiteral("a program has at most %1 environment steps").arg(kMaxEnvironmentStages);
+        return false;
+    }
+    // Specs no longer declared (or another program): their objects go (the caller released the pipelines first).
+    for (int i = 0; i < kMaxEnvironmentStages; ++i) {
+        const bool kept = i < specs.size() && m_environments[i] && m_environments[i]->spec == specs.at(i);
+        if (!kept && m_environments[i]) {
+            releaseEnvironment(*m_environments[i]);
+            m_environments[i].reset();
+            ++m_objectGeneration;
+        }
+    }
+    m_environmentCount = int(specs.size());
+    for (int i = 0; i < m_environmentCount; ++i) {
+        const EnvironmentSpec &spec = specs.at(i);
+        if (!m_environments[i]) {
+            m_environments[i] = std::make_unique<Environment>();
+            m_environments[i]->spec = spec;
+        }
+        Environment &e = *m_environments[i];
+        if (photos.at(i) != e.photo) {
+            e.photo = photos.at(i);
+            ++m_objectGeneration;             // its bindings name another texture (drawn again: recordEnvironment)
+        }
+        if (e.texture && e.size == spec.size)
+            continue;
+        const QByteArray label = QByteArrayLiteral("srpss core environment ") + spec.name;
+        if (!e.texture) {
+            // Python's copy: RGBA8, a full mip chain (max(size).bit_length() levels), its mips generated on the GPU.
+            e.texture.reset(rhi->newTexture(QRhiTexture::RGBA8, spec.size, 1,
+                                            QRhiTexture::RenderTarget | QRhiTexture::MipMapped
+                                                | QRhiTexture::UsedWithGenerateMips
+                                                | QRhiTexture::UsedAsTransferSource));
+            e.texture->setName(label);
+            count(1, 0, 0, 0);                // the owned wrapper survives a failed create until release
+            g_environments.fetchAndAddRelaxed(1);
+            g_objectsCreated.fetchAndAddRelaxed(1);
+        } else {
+            e.texture->setPixelSize(spec.size); // the same object at the new size (bindings follow)
+        }
+        const qint64 oldBytes = e.bytes;
+        const bool ready = e.texture->create();
+        e.size = ready ? spec.size : QSize();
+        e.bytes = ready ? mippedRgba8Bytes(spec.size) : 0;
+        count(0, e.bytes - oldBytes, 0, 0);
+        e.drawn = false;                      // a new texture holds no copy
+        e.blockWritten = false;               // its uStep follows the size
+        if (!ready) {
+            *error = QStringLiteral("environment step '%1': its texture could not be created at %2 x %3")
+                         .arg(QString::fromLatin1(spec.name)).arg(spec.size.width()).arg(spec.size.height());
+            return false;
+        }
+        if (!e.target) {
+            // Every texel is written by the copy (no load, no preserve): level 0 is its render target.
+            e.target.reset(rhi->newTextureRenderTarget(
+                QRhiTextureRenderTargetDescription(QRhiColorAttachment(e.texture.get()))));
+            e.target->setName(label);
+            e.pass.reset(e.target->newCompatibleRenderPassDescriptor());
+            e.target->setRenderPassDescriptor(e.pass.get());
+            g_objectsCreated.fetchAndAddRelaxed(2);
+        }
+        if (!e.target->create()) {
+            *error = QStringLiteral("environment step '%1': its render target could not be created")
+                         .arg(QString::fromLatin1(spec.name));
+            return false;
+        }
+        ++m_objectGeneration;
+    }
+    return true;
+}
+
+bool PostStages::environmentBindings(Environment &e)
+{
+    if (!e.texture || !e.photo || !e.sampler || !e.block)
+        return false;
+    if (!e.bindings) {
+        e.bindings.reset(m_rhi->newShaderResourceBindings());
+        countPipelineObjects(1);
+        e.bindings->setName(QByteArrayLiteral("srpss core environment bindings ") + e.spec.name);
+    }
+    e.bindings->setBindings({ QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage,
+                                                                       e.block.get()),
+                              QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                                        e.photo, e.sampler.get()) });
+    return createBuildResource(e.bindings.get());
+}
+
+bool PostStages::recordEnvironment(QRhi *rhi, QRhiCommandBuffer *cb, int pass,
+                                   const QRhiCommandBuffer::VertexInput &triangle, quint64 photoGeneration,
+                                   QRhiResourceUpdateBatch **pending)
+{
+    Environment *e = nullptr;
+    for (int i = 0; i < m_environmentCount; ++i) {
+        if (m_environments[i] && m_environments[i]->spec.pass == pass)
+            e = m_environments[i].get();
+    }
+    if (!e || !e->pipeline || !e->bindings || !e->target || !e->photo || !e->size.isValid())
+        return false;
+    if (e->drawn && e->drawnPhoto == e->photo && e->drawnGeneration == photoGeneration)
+        return false;                         // once per photo: nothing is drawn again at a later record
+    QRhiResourceUpdateBatch *updates = *pending ? *pending : rhi->nextResourceUpdateBatch();
+    *pending = nullptr;                       // the record's uploads (the photo's among them) before the copy
+    if (!e->blockWritten) {
+        // Python's uStep (environment.py _copy): a quarter of one copy texel in uv, divided in double, packed as float.
+        const float step[4] = { float(0.25 / double(e->size.width())), float(0.25 / double(e->size.height())), 0.0f,
+                                0.0f };
+        updates->uploadStaticBuffer(e->block.get(), step);
+        e->blockWritten = true;
+    }
+    cb->beginPass(e->target.get(), QColor(0, 0, 0, 255), { 1.0f, 0 }, updates);
+    cb->setGraphicsPipeline(e->pipeline.get());
+    setViewportAndScissor(cb, QRect(QPoint(), e->size));
+    cb->setShaderResources(e->bindings.get());
+    cb->setVertexInput(0, 1, &triangle);
+    cb->draw(3);
+    cb->endPass();
+    // Python's glGenerateTextureMipmap on the owned copy only (the photograph itself never gets mip levels).
+    QRhiResourceUpdateBatch *mips = rhi->nextResourceUpdateBatch();
+    mips->generateMips(e->texture.get());
+    cb->resourceUpdate(mips);
+    countGeneratedMips(1);
+    e->drawn = true;
+    e->drawnPhoto = e->photo;
+    e->drawnGeneration = photoGeneration;
+    g_environmentCopies.fetchAndAddRelaxed(1);
+    return true;
 }
 
 bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<DefocusSpec> &defocus,
@@ -1054,6 +1261,55 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
                 *reason = QStringLiteral("defocus step %1: its pipelines could not be created").arg(d.spec.pass);
         }
     }
+    if (ok && m_environmentCount > 0) {
+        // N5.2c: each photo environment's copy over its own render pass (the core's triangle, its own uv).
+        const QShader copy = environmentShader();
+        if (!copy.isValid()) {
+            *reason = QStringLiteral("the environment shader does not load");
+            return finish(false);
+        }
+        for (int i = 0; ok && i < m_environmentCount; ++i) {
+            Environment &e = *m_environments[i];
+            const QByteArray label = QByteArrayLiteral("srpss core environment ") + e.spec.name;
+            if (!e.texture || !e.pass || !e.size.isValid()) {
+                ok = false;
+                *reason = QStringLiteral("environment step '%1': its texture is not allocated")
+                              .arg(QString::fromLatin1(e.spec.name));
+                break;
+            }
+            // Python's lent photograph: sampled linearly, clamped, never with mips (environment.py _copy).
+            e.sampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                            QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            countPipelineObjects(1);
+            e.sampler->setName(label + QByteArrayLiteral(" photo sampler"));
+            e.block.reset(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::UniformBuffer, 16));
+            countPipelineObjects(1);
+            e.block->setName(label + QByteArrayLiteral(" block"));
+            e.blockWritten = false;
+            ok = created(createBuildResource(e.sampler.get())) && created(createBuildResource(e.block.get()))
+                && environmentBindings(e);
+            if (!ok) {
+                *reason = QStringLiteral("environment step '%1': its sampler, block or bindings could not be created")
+                              .arg(QString::fromLatin1(e.spec.name));
+                break;
+            }
+            e.pipeline.reset(rhi->newGraphicsPipeline());
+            countPipelineObjects(1);
+            e.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
+            e.pipeline->setName(label + QByteArrayLiteral(" copy"));
+            e.pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
+            e.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, copy } });
+            e.pipeline->setVertexInputLayout(layout);
+            e.pipeline->setCullMode(QRhiGraphicsPipeline::None);
+            e.pipeline->setShaderResourceBindings(e.bindings.get());
+            e.pipeline->setRenderPassDescriptor(e.pass.get());
+            ok = created(createBuildResource(e.pipeline.get()));
+            if (!ok)
+                *reason = QStringLiteral("environment step '%1': its pipeline could not be created")
+                              .arg(QString::fromLatin1(e.spec.name));
+            e.drawn = false;                  // a new pipeline draws the copy again (a rebuilt content)
+        }
+    }
     return finish(ok);
 }
 
@@ -1069,6 +1325,11 @@ bool PostStages::rebind(const SceneTargets &targets)
         if (m_defocus[i] && m_defocus[i]->clipBindings && !defocusBindings(*m_defocus[i]))
             return false;
     }
+    for (int i = 0; i < m_environmentCount; ++i) {
+        // N5.2c: over its photo's current front and its own texture.
+        if (m_environments[i] && m_environments[i]->bindings && !environmentBindings(*m_environments[i]))
+            return false;
+    }
     return true;
 }
 
@@ -1081,6 +1342,10 @@ void PostStages::releasePipelines()
     for (int i = 0; i < kMaxDefocusStages; ++i) {
         if (m_defocus[i])
             releaseDefocusPipelines(*m_defocus[i]);
+    }
+    for (int i = 0; i < kMaxEnvironmentStages; ++i) {
+        if (m_environments[i])
+            releaseEnvironmentPipelines(*m_environments[i]);
     }
     m_arena = nullptr;
 }
@@ -1139,6 +1404,15 @@ void PostStages::release()
             }
         }
     }
+    // N5.2c: the environments are released either way (the skipped-release control holds the bloom and defocus objects
+    // its retirement proof was written for).
+    for (int i = 0; i < kMaxEnvironmentStages; ++i) {
+        if (m_environments[i]) {
+            releaseEnvironment(*m_environments[i]);
+            m_environments[i].reset();
+        }
+    }
+    m_environmentCount = 0;
     m_bloomCount = 0;
     m_defocusCount = 0;
     m_rhi = nullptr;
@@ -1171,6 +1445,10 @@ int PostStages::live() const
     for (int i = 0; i < kMaxDefocusStages; ++i) {
         if (m_defocus[i])
             objects += allocationObjects(*m_defocus[i]);
+    }
+    for (int i = 0; i < kMaxEnvironmentStages; ++i) {
+        if (m_environments[i])
+            objects += allocationObjects(*m_environments[i]);
     }
     return objects;
 }

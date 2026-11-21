@@ -2,7 +2,10 @@
 ``rendering/quick/render/native_background.py``), in hidden hosts only (never a window on a screen), widened by N5.2b to
 the five item-quad programs that are one fragment between two pictures (``N52B_VARIANTS``: Chromatic Shear, Liquid
 Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``) and to Beam, whose sparks follow its fragment as instanced
-quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover). The Python reference is the product's frame at the run's dpr
+quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover), and by N5.2c to the 3D transitions drawn as
+scenes (``N52C_VARIANTS``: Blinds in both styles, Cube Turn, Depth Card Cascade, Jigsaw; N4.j's photo environment, the
+scene target and the opaque composite; ``--topic n5_2c``), whose photo environment must be drawn exactly once a run
+(``environment_once_per_photo``). The Python reference is the product's frame at the run's dpr
 (``product_capture``: the item's logical size over the display's device pixels, as the runtime gives it).
 
 A photo change runs the configured transition natively over N5.7a's background layer: the transition's own product
@@ -92,7 +95,7 @@ BEAM_RULE_B = pt.Tolerance("Beam (fragment and sparks), Vulkan against OpenGL (r
 REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
-ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks")
+ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -122,8 +125,36 @@ BEAM_VARIANTS = {
                     "scorch": 0.0, "cure": 0.0},
     "beam_plain": {"request_direction": "up", "sparks": False, "glow": 0.0, "scorch": 1.0, "cure": 1.0},
 }
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",)
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS}
+#: N5.2c: the 3D transitions drawn as scenes (``NativeScenePasses``: a scene target, its passes and meshes, N4.j's photo
+#: environment, the opaque composite). Each at its production defaults (the tier's 4 samples), and with options at the
+#: other extremes, single-sampled (``samples`` 0: Python draws straight into Quick's framebuffer), the path rule (a)
+#: proves exact; Blinds in both styles.
+N52C_TRANSITIONS = ("blinds", "cube_turn", "depth_cascade", "jigsaw")
+N52C_VARIANTS = {
+    "cube_turn": {},
+    "cube_turn_options": {"request_direction": "up", "gloss": 1.0, "samples": 0},
+    # Blinds' production default is the flat style, whose request carries no slat values: 3D Slats as High draws them.
+    "blinds": {"style": "slats", "slats": 16, "gloss": 0.5, "samples": 4, "request_direction": "horizontal"},
+    "blinds_slats": {"style": "slats", "slats": 48, "gloss": 1.0, "request_direction": "vertical", "samples": 0},
+    "blinds_slats_few": {"style": "slats", "slats": 6, "gloss": 0.0, "request_direction": "horizontal", "samples": 0},
+    "blinds_flat": {"style": "flat", "feather": 0.5, "request_direction": "diagonal"},
+    "depth_cascade": {},
+    "depth_cascade_options": {"request_direction": "up", "cards": 14, "gloss": 1.0, "shadows": False, "seed": 7,
+                              "samples": 0},
+    "jigsaw": {},
+    "jigsaw_options": {"pieces": 150, "order": "unordered", "seed": 9, "detail": "Performance", "samples": 0},
+}
+#: N5.2c's rules, PROVISIONAL until the first build measures them (stop 2; a bound is a lead decision): rule (a) exact
+#: single-sampled (the core's one-sample target and opaque composite are a copy; a D24 against D32F depth tie, or an
+#: environment tap on a weight step, would show here first); multisampled, QRhi's average resolve against Python's
+#: shader average (D5.6 row 7, judged repeat-relative: D8 point 1) at the fragment pass's bound; rule (b) the fragment
+#: pass's.
+N52C_RULE_A_SAMPLES = pt.Tolerance("3D transition scene, multisampled, against its Python renderer (rule a, provisional)",
+                                   scatter_pixels=72, tie_pixels=TIE_PIXELS, flip_pixels=1)
+N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b, provisional)", scatter_pixels=2000,
+                           tie_pixels=TIE_PIXELS)
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + N52C_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **N52C_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
@@ -178,7 +209,7 @@ def production_run(variant: str, images, run_id: int):
     from tools.transition_contact_sheet import production_transition_spec
 
     transition_id = variant_transition(variant)
-    spec = production_transition_spec(fsc.renderer_class(transition_id).transition_id, DURATION_MS)
+    spec = production_transition_spec(transition_id, DURATION_MS)
     request = spec.build_request(runtime_generation=0, source_image=images[0], destination_image=images[1])
     overrides = VARIANTS[variant]
     if overrides:
@@ -235,6 +266,10 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 scene.present(photos[0][0])
                 scene.settle()
                 entry: dict = {}
+                # N5.2c: a scene's samples (rule a's form) and its photo environment's copies over the run.
+                entry["scene"] = variant_transition(variant) in N52C_TRANSITIONS
+                entry["samples"] = int(run.request.parameter_dict().get("samples", 0) or 0)
+                copies_before = _environment_copies(core)
                 clock.at(run, PROGRESS[0])
                 started = time.perf_counter()
                 scene.layer.transition(run)
@@ -253,12 +288,15 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                         reference = expected[(variant, progress)]
                         entry[f"{progress:.2f}"] = blc.compare(rows, reference)
                         entry[f"{progress:.2f}"]["over_tolerance"] = _over(rows, reference, VULKAN_TOLERANCE)
-                        entry[f"{progress:.2f}"]["tolerance"] = pt.judge(
-                            rows[..., :3], reference[..., :3],
-                            FRAGMENT_PASS_RULE_A if _is_fragment_pass(variant) else pt.EXACT)
+                        entry[f"{progress:.2f}"]["tolerance"] = pt.judge(rows[..., :3], reference[..., :3],
+                                                                         _rule_a(variant, entry))
                 if not vulkan:
                     entry["control_next_progress_differs"] = not blc.compare(
                         frames[f"dpr{dpr}_{variant}_{PROGRESS[4]:.2f}"], expected[(variant, PROGRESS[5])])["equal"]
+                # N5.2c: N4.j's copy drawn once over the run (a scene reading it), never for any other run.
+                reads = entry["scene"] and _reads_environment(run)
+                entry["environment_copies"] = _environment_copies(core) - copies_before
+                entry["environment_once_per_photo"] = entry["environment_copies"] == (1 if reads else 0)
                 # The run's end: the item ends the run, then hands over the destination (the runtime's order).
                 uploads = _mode_counts(scene)["uploads"]
                 scene.layer.transition(None)
@@ -285,16 +323,18 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
         # Exact for the seven; the shared tolerance for a NativeFragmentPass (FRAGMENT_PASS_RULE_A).
         checks["rule_a_equal_to_the_python_renderer"] = all(
             facts["variants"][k][f"{p:.2f}"]["tolerance"]["pass"]
-            and (_is_fragment_pass(k) or facts["variants"][k][f"{p:.2f}"]["equal"]) for k in keys for p in PROGRESS)
+            and (_is_fragment_pass(k) or _multisampled_scene(facts["variants"][k])
+                 or facts["variants"][k][f"{p:.2f}"]["equal"]) for k in keys for p in PROGRESS)
         facts["rule_a_tolerance"] = {
-            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound()],
+            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A_SAMPLES.bound()],
             **pt.summarise(facts["variants"][k][f"{p:.2f}"]["tolerance"] for k in keys for p in PROGRESS)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
                                                          for k in keys)
         worst = max(((k, p, facts["variants"][k][f"{p:.2f}"]) for k in keys for p in PROGRESS),
                     key=lambda e: e[2].get("max_level", 0))
         facts["rule_a_worst"] = {"variant": worst[0], "progress": worst[1], **worst[2]}
-    for name in ("end_is_the_destination", "end_uploads_nothing", "clock_disconnected", "nothing_at_rest"):
+    for name in ("end_is_the_destination", "end_uploads_nothing", "clock_disconnected", "nothing_at_rest",
+                 "environment_once_per_photo"):
         checks[name] = all(facts["variants"][k][name] for k in keys)
     if vulkan:
         checks.update(_route_on_vulkan(core, engine, app, frames, facts))
@@ -375,6 +415,31 @@ def _is_fragment_pass(variant: str) -> bool:
     return variant.split("@", 1)[0] in N52B_VARIANTS or variant.split("@", 1)[0] in BEAM_VARIANTS
 
 
+def _multisampled_scene(entry: dict) -> bool:
+    """N5.2c: a scene drawn with more than one sample (judged by its tolerance, never exact: D8 point 1)."""
+    return bool(entry.get("scene")) and int(entry.get("samples", 0)) > 1
+
+
+def _rule_a(variant: str, entry: dict):
+    if _multisampled_scene(entry):
+        return N52C_RULE_A_SAMPLES
+    return FRAGMENT_PASS_RULE_A if _is_fragment_pass(variant) else pt.EXACT
+
+
+def _environment_copies(core) -> int:
+    """N5.2c: the photo environments' copies drawn in the process so far (``composite_live``)."""
+    live = core.composite_live()
+    return int((live or {}).get("stage_environment_copies", 0)) if isinstance(live, dict) else 0
+
+
+def _reads_environment(run) -> bool:
+    from rendering.quick.render.native_background import native_transition_renderer
+
+    renderer = native_transition_renderer(run.request.transition_id)
+    return bool(renderer is not None and getattr(renderer, "native_scene", None)
+                and renderer.native_scene(run, blc.DISPLAY).environment)
+
+
 def vulkan_against_opengl(work: Path) -> dict:
     import numpy as np
 
@@ -396,13 +461,14 @@ def vulkan_against_opengl(work: Path) -> dict:
         worst = max(worst, result.get("max_level", 255))
         drawn = variant.split("_", 1)[1]
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
+                     N52C_RULE_B if drawn in N52C_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound()]}
 
 
 # --------------------------------------------------------------------------------------------------- the child

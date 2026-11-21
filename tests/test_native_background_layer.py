@@ -130,8 +130,14 @@ class _Mode:
     def still(self, still=True) -> None:
         self.calls.append(("still", still))
 
-    def program(self, passes, settings=None) -> None:
-        self.calls.append(("program", passes, settings))
+    def program(self, passes, settings=None, **declared) -> None:
+        self.calls.append(("program", passes, settings) + ((declared,) if declared else ()))
+
+    def mesh(self, name, vertices, layout, **instances) -> None:
+        self.calls.append(("mesh", name, len(vertices), layout, instances))
+
+    def remove_mesh(self, name) -> None:
+        self.calls.append(("remove_mesh", name))
 
     def on_textures_lost(self, callback) -> None:
         self.lost = callback
@@ -352,6 +358,49 @@ def test_a_transition_without_a_pass_on_the_core_is_drawn_as_crossfade(clocked_l
     assert program[1][0].name == nb.FALLBACK_TRANSITION
 
 
+def test_a_scene_run_shows_its_photographs_by_the_background_program_and_its_effect_as_its_scene(clocked_layer):
+    """N5.2c: a 3D transition (Cube Turn) sends its meshes once, keeps the old picture's program while the Python
+    renderer draws the old picture, draws its scene (the environment, its passes into the scene target, the opaque
+    composite) with the renderer's own values from the first moving frame, only its settings after that, the new
+    picture's program where the renderer draws the new picture, and at its end removes its meshes."""
+    from rendering.native.mode import MODE_CORE_MEMBERS, CompositeStep, EnvironmentStep, ModePass
+    from rendering.quick.render import native_background as nb
+
+    made, _mode, calls, window, now = clocked_layer
+    source, destination = _image("a", value=40), _image("b", value=200)
+    made.present(source)
+    run = _run("cube_turn", source, destination)
+    now["ns"] = run.start_ns
+    del calls[:]
+    made.transition(run)
+    assert [c[1] for c in calls if c[0] == "mesh"] == ["box"]
+    assert not [c for c in calls if c[0] == "program"]          # progress 0: the old picture's program stays
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) // 2
+    window.afterAnimating.slots[0]()
+    (program,) = [c for c in calls if c[0] == "program"]
+    passes, settings, declared = program[1], program[2], program[3]
+    assert isinstance(passes[0], EnvironmentStep) and passes[0].source == nb.NEXT_TEXTURE
+    assert [p.name for p in passes if isinstance(p, ModePass)] == ["backdrop", "box"]
+    assert isinstance(passes[-1], CompositeStep) and passes[-1].form == "opaque"
+    assert [t.name for t in declared["targets"]] == [nb.SCENE_TARGET]
+    renderer = nb.native_transition_renderer("cube_turn")
+    expected = renderer.scene_values(run, run.sample(now["ns"]), (8.0, 4.0))
+    assert settings == {k: v for k, v in expected.items() if k not in MODE_CORE_MEMBERS}
+    # The next frame gives its settings only (no new program).
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) * 3 // 5
+    window.afterAnimating.slots[0]()
+    assert calls[-2][0] == "settings" and len([c for c in calls if c[0] == "program"]) == 1
+    # The run's last instant: the new picture by the background's program on the other slot.
+    now["ns"] = run.end_ns
+    window.afterAnimating.slots[0]()
+    last = [c for c in calls if c[0] == "program"][-1]
+    assert last[1][0].name == nb.PASS_NAME and last[1][0].samplers[0].texture == nb.NEXT_TEXTURE
+    del calls[:]
+    made.transition(None)
+    assert ("remove_mesh", "box") in calls and ("remove_texture", nb.TEXTURE) in calls
+    assert calls.index(("remove_mesh", "box")) > max(i for i, c in enumerate(calls) if c[0] == "program")
+
+
 def test_the_ported_transitions_are_exactly_those_the_core_draws():
     """D10: a transition is offered on Vulkan (its ``renderer_backends``) only where the core draws it: a one-fragment
     pass whose pack is shipped and current (``tests/test_quick_shader_packs.py``)."""
@@ -361,9 +410,12 @@ def test_the_ported_transitions_are_exactly_those_the_core_draws():
 
     on_vulkan = {d.stable_id for d in iter_transition_descriptors() if "vulkan" in d.renderer_backends}
     drawn = {d.stable_id for d in iter_transition_descriptors() if native_transition_renderer(d.stable_id) is not None}
-    assert on_vulkan and on_vulkan == drawn
-    assert set(regen_qrc.transition_fragment_sources()) == drawn
-    assert all(transition_pack_path(tid) == regen_qrc.transition_pack_path(tid) for tid in drawn)
+    # N5.2c: a scene transition (``NativeScenePasses``) the core draws before it is offered on Vulkan (its registration
+    # follows its proof); every other drawn transition is offered, and nothing is offered that the core does not draw.
+    scenes = {cls.transition_id for cls in regen_qrc._native_scene_classes()}
+    assert on_vulkan and on_vulkan <= drawn and drawn - on_vulkan <= scenes
+    assert set(regen_qrc.transition_fragment_sources()) == drawn - scenes
+    assert all(transition_pack_path(tid) == regen_qrc.transition_pack_path(tid) for tid in drawn - scenes)
     # Negative control: a transition with no shipped pack is not drawn.
     assert native_transition_renderer("no_such_transition") is None
 
