@@ -51,7 +51,8 @@ This is the **short preflight**, not a second documentation authority. Use the f
     use owner scratch, never `tempfile.mkdtemp()`/`delete=False`/`gettempdir()` without guaranteed removal. Your
     ad-hoc scripts and stdout captures live in your own scratchpad subfolder; heavy output (renders, live checks,
     worktrees, profiles) goes to `.artifacts/scratch/<owner>/`, never `%TEMP%` or the scratchpad.
-  - Delete your own scratch, temporary worktrees and `tmp/` items before reporting.
+  - Delete your own throwaway scripts, temporary worktrees and `tmp/` items before reporting; a step's raw frames
+    and work folders stay until the lead approves the step (`Docs/Guardrails/Agent_Worktree_Rules.md`, Evidence).
   - Never touch the operator's recordings (`logs/visualizer_recordings`), `release/` or `.venv`.
   - Listing of the 7 Nov conversion: `.artifacts/evidence/architecture/frame_webps/20261107_conversion/frame_webps_20261107.md`.
 

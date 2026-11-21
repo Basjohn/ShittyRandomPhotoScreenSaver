@@ -30,7 +30,7 @@ that never started.
 - Standing product rules: fix at the owner, one contract and no exceptions; anything that appears or disappears fades (never vanishes); no teardown and rebuild where a live owner can be retargeted (a last resort); nothing costs per frame at rest; spec systems (`core/settings/visualizer_mode_settings.py`, `transition_settings.py`) are the single Settings owners; persisted ids are never renamed (Neon Lake is `shockwave_grid`, Spline Curve is `devcurve`); a changed stored shape loads old profiles through a bridge with a fixture (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 - A fixed bug that was long-lived, silent or costly gets its `Docs/Historical_Bugs/R-NNN_*.md` entry and its row in `Docs/Historical_Bugs.md` (the number is assigned by the lead: ask for one in your report as "R-NEW" and name the file `R-NEW_<title>.md`; three agents took the same "next free" number on 12 Nov 2026; the lead numbers it at merge).
 - Commit messages: one plain sentence saying what changed, ending with the line `Co-authored by an incoming existential crisis.` and no Claude/AI attribution anywhere. One commit per cause.
-- Date evidence folders and journal entries with today's date as your environment reports it. Delete your scratch files before you finish; keep only deliberate evidence.
+- Date evidence folders and journal entries with today's date as your environment reports it. Throwaway scripts and probe output go before you finish; a step's raw frames and work folders stay until the lead approves that step (see Evidence below).
 - Side defects you meet are never ignored: fix them if small and in your files, otherwise report them with path, line and the command that reproduces them.
 - Report: for each box of your plan item, "done" with the commit and the evidence path, or "not done" and why; then what you did not verify; then side defects. Be plain; the lead checks the report against the boxes and the diff, and renders are reviewed pixel by pixel.
 
@@ -77,8 +77,10 @@ what it marked done really is (run its tests), then start your own journal by co
   evidence junction's drive).
 - In your report, list evidence in two groups: **keep** (the few files the plan or a document cites: the
   open-first sheets, the tables, one showcase per effect) and **the rest**.
-- Before you report, delete raw frames, intermediate renders and anything that only you needed in order to make
-  the sheets. Stills stay PNG; a sequence that stands for motion is one animated WebP, never a folder of frames.
+- Keep a step's raw frames, intermediate renders and work folders until the lead approves that step: a rework
+  compares against them, and the lead may open the frame that failed. Only a run superseded by a newer run of the
+  same step goes earlier. Stills stay PNG; a kept sequence that stands for motion is one animated WebP, never a
+  folder of frames.
 - When the lead tells you a step is approved, the lead copies the keep group into the main checkout. If you
   continue after that, delete that step's evidence from your worktree except what your next step needs as a
   baseline, and say in your journal what you kept and why. When your work is merged the worktree is removed

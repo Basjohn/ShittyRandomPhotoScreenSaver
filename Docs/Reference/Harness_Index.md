@@ -800,7 +800,7 @@ python tools/visualizer_replay/owner_render_parity.py --native --module-dir rele
     [--runs spectrum spectrum:b ...] [--against <accepted json>] [--unprimed]
 ```
 
-The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
+The work folder beside its summary holds the captured frames and references; delete it once the lead approves the step. Tests:
 `tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
 baked from the product's file, the port's constants and block members against the Python renderer).
 
