@@ -851,16 +851,6 @@ the feature (D3D11 is not stated).
     reads a filter). Proof: both backends on this machine report the capability; a faked device without it refuses the
     program with its reason, or the images fall back to RGBA16F with the loss measured on the field (positions to
     80 world units). Negative control: the faked device.
-  - [ ] C++: bloom and HDR off for a record (the reading's first finding). Choice E fixed a stage by program only
-    (`Native_Core_P3_Decisions.md:2263-2266`); Waveform's strength reaches 0 mid-run and Python then changes its
-    composite (no HDR, no tone map). Either the core skips the stage per record at strength 0, or Python keeps HDR
-    at 0 (changes the oracle, and removes a pop at 0: "fade, never vanish"); the lead chooses. Proof: a recorded run
-    with the range's low at 0 matches Python through the crossing with no pop. Negative control: the program-only
-    switch, whose frame at 0 differs.
-    - Lead decision (21 Nov): Python keeps HDR and the tone map at strength 0 (bloom's contribution fades to 0, the
-      composite path never switches), which removes the pop (fade, never vanish) and needs no per-record C++ switch.
-      Not a C++ box any more: a Python change with its proof (a recorded crossing of 0 with no pop; control: the old
-      switch, which pops). Agent a0b1ebd0ddd73bb98 (Sonnet Medium).
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
