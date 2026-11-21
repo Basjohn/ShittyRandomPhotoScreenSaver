@@ -78,6 +78,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
   Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
   that path) before NF; evidence `tools/baselines/preflip/beam_*` and `crossfade_native_vulkan*`.
+- [ ] `--perf` overlay on Vulkan (operator, 21 Nov): the Visualizer's overlay shows no fps, rev or age when the saver
+  runs on Vulkan (`--vulkan`). Root-cause where the native path stops feeding the overlay's figures; fix at the owner
+  so both backends feed it the same way, with a test. Before NF.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
