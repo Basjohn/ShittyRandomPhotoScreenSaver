@@ -104,6 +104,14 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
+- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (operator, 21 Nov, after R-248 fixed the
+  speed): R-248's check matched breathing as displayed/nominal radius in logical frames, yet on screen fullscreen
+  breathes and reacts visibly less. Log: `logs/worker_visualizer.log` 21 Nov 20:19:17-20:21:24 fullscreen (world
+  1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
+  (the capacity zoom, a pixel or world-unit cap or floor on pulse/breath amplitude, size-class thresholds that move
+  with the zoom, the renderer's mapping), measured on drawn output not only logical ratios; fix at the owner so the
+  visible reaction is size-independent; test at two sizes with a control on the old code; reaction check on a recorded
+  take at card and fullscreen size with the take's envelope above.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
