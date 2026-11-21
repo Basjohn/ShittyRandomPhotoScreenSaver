@@ -92,8 +92,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): Waveform's five C++ boxes (N5.4) in one branch at ABI 33 (32 is the card
-  quad's), one GitHub build (agent a6688ad0cd2ae360a, Opus High). Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] High (Opus High): the Waveform port (N5.4) on the landed ABI 33 core. Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -812,58 +811,13 @@ the feature (D3D11 is not stated).
         the Python shader changes with it (one shader file for both renderers, `mode_content.h:3-4`).
       - Already in the plan: the quiet-GPU `stream_ring` recheck before a Waveform consumer (the N3.2 box "Awaiting
         Validation before a Waveform consumer"; D15's watch, `Native_Core_P3_Decisions.md:225`).
-  - [ ] C++: an exact-size, mipped, drawable target (the planar reflection and the floor's reduced pre-pass). The core's
-    mipped target is the defocus layer's: single-sampled, its mips made by that step, allocated in 64 px buckets, and a
-    sampler reads a target with no mips (`scene_targets.h:11-17,40-43,119-122`, `post_stages.h:26-27`,
-    `mode_content.h:98-99`; D17 G, H). Waveform draws ordinary passes (sky, light, strays, sparks; additive, depth
-    tested) into an RGBA16F target with a full chain at the exact capped size, then reads its levels trilinearly and
-    its 1x1 level as the scene mean (`waveform.py:432,466`, `reflection.py:59-74,111`,
-    `rendering/gl_programs/waveform_ribbon.py:125,218`). A bucketed allocation puts empty texels into every coarse level
-    and the mean, and a pass reading another target has no member for that target's content-to-allocation ratio. Its
-    shaders declare two outputs (`ribbon.py:800-801`) over a one-attachment target: say how the core treats that.
-    Proof, both backends, odd sizes: the chain's levels against Python's `glGenerateTextureMipmap` of the same pixels
-    (Vulkan's blit differs on odd levels, D17 G), the floor's reflection read and the mean level inside rule (a) of D12,
-    mode passes drawing into it, the pre-pass target alike. Negative control: the bucketed allocation (the mean and
-    the floor's level move).
-  - [ ] C++: sampler anisotropy. `PassSampler` carries filter, wrap and mip filter only (`mode_content.h:266-282`) and
-    nothing under `native/core` or the native docs mentions anisotropy. Python sets 16x on the reflection (capped by the
-    device, `reflection.py:62-65`) and 8x on the three floor maps (`waveform.py:111,135`), and the floor reads the
-    reflection with `textureGrad` footprints that rely on it (`Docs/Reference/Scene3D_Resources.md:187`). Whether
-    QRhi's sampler can carry it on either backend is not established (no Qt SDK on this machine to read); answer that
-    first. Proof: the floor and reflection frames natively and in Python, with the means chosen (a raw sampler setting,
-    or taps along the gradient in the shader in both renderers), inside rule (a) of D12 on grazing-view frames.
-    Negative control: the native read at 1x fails the bound on the same frames.
-    - Answered (agent a6688ad0cd2ae360a): QRhi's sampler carries no anisotropy on either backend (PySide6 6.12). Lead
-      decision (21 Nov): taps along the footprint's long axis in the shader, one text for both renderers
-      (`rendering/gl_programs/anisotropic.py`), not a raw sampler route beside QRhi. Python's Waveform floor moves
-      to the same taps at the port (a slight look change, judged on the port's showcase); before the build its taps
-      sit at 0.0115/0.0097 mean error from hardware 8-16x against 1x's 0.026/0.037 (evidence
-      `n5_4/20261121_n54_aniso_reference/`).
-  - Lead decisions (21 Nov, from the floor proof): every level chain a sampler reads is made by the core's box
-    kernel (`mip_box.comp`; Python runs the same text, `rendering/gl_programs/mip_chain.py`), never a driver's mip
-    generation, whose odd-size anchoring and filter differ by API: Python's reflection moves to it at the port, and the
-    item textures whose levels are read (Waveform's 1254 px maps) move to it too at the port. One chain owner, both
-    renderers. Python's look change is judged on the port's showcase.
-  - All five boxes built on branch `worktree-agent-a6688ad0cd2ae360a` at ABI 33 (d3721eff3, main merged in), GitHub
-    build running; then `scene_target_check.py --rounds wave_floor wave_limits wave_filter` on both APIs, then merge.
-  - [ ] C++: a mode texture in half float with GPU mips. Mode textures are RGBA8 only (`mode_content.h:35-37,472-493`);
-    the floor's slope map is RGBA16F with a full chain, baked once from the height map to save six fetches a pixel
-    (`waveform.py:96-114`). Proof: the map and its levels against Python's values at the levels the floor reads (its
-    mip bias, `rendering/gl_programs/waveform_ribbon.py:95-98`), both backends. Negative control: the slope baked into
-    RGBA8 (the relief shading and the reflection breakup leave the bound). If refused, the eight-fetch form goes into
-    both renderers.
-  - [ ] C++: the program's limits. `kMaxModePasses` 16 to at least 28 (the mesh mask holds 32 passes,
-    `mode_content.cpp:5040-5041`), storage images 8 to at least 9, targets stay 4 (the reading's counts). Proof: the
-    real Waveform program (every stage on, Floor Give on) admitted on both backends with its warm-up (pipeline builds
-    per step) counted and nothing at rest; one pass or one image past the new limits refused with its reason, as the
-    existing limit tests do.
-  - [ ] C++: linear filtering of 32-bit float images. The world field and floor give are RGBA32F images read with
-    linear samplers (`waveform_field.py:38-42`, `floor_give.py:20-26`); Vulkan does not guarantee linear filtering of
-    32-bit float formats, the core checks an image's format against the device's facts only when it is made
-    (`compute_passes.h:19-20`), and a linear sampler on it is not part of that check (nothing in `compute_passes.cpp`
-    reads a filter). Proof: both backends on this machine report the capability; a faked device without it refuses the
-    program with its reason, or the images fall back to RGBA16F with the loss measured on the field (positions to
-    80 world units). Negative control: the faked device.
+  - Core features landed (ABI 33, merged 21 Nov, proofs in the merge commit): exact-size drawable mipped targets,
+    shader anisotropic taps, RGBA16F item textures with GPU mips, 28 passes and 9 storage images, linear-filter facts.
+    Port decisions (lead, 21 Nov): the floor's anisotropy is the shared tap text (`rendering/gl_programs/anisotropic.py`)
+    in both renderers; every level chain a sampler reads is the core's box kernel (`mip_box.comp`, Python's
+    `rendering/gl_programs/mip_chain.py`), so Python's reflection and the read item textures (the 1254 px maps) move
+    to it at the port; the look change is judged on the port's showcase. Next: the port itself (records, streams,
+    passes and the proof), Opus High.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
