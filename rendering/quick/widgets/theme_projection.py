@@ -56,6 +56,19 @@ def hide_borders(config):
     return dataclasses.replace(config, **changes) if changes else config
 
 
+# The News/Feed story tile's fill: a faint wash of the body ink over the card's own surface.
+# Every ordinary widget tile (Feed, Games You Follow, System Stats, Friend Pulse, Abandonment
+# Issues) takes its fill from here and its hairline from the header border, never an opaque slab.
+TILE_WASH_ALPHA = 0.055
+
+
+def tile_wash(ink: RgbaTuple) -> RgbaTuple:
+    """The tile fill for body ink ``ink``: its colour at the shared wash alpha."""
+
+    r, g, b, _a = ink
+    return (r, g, b, round(255 * TILE_WASH_ALPHA))
+
+
 def with_borderless(config, widgets_config):
     """``config`` as Style Overrides' Borderless latch in ``widgets_config`` wants it drawn."""
 

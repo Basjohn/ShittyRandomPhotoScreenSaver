@@ -34,7 +34,7 @@ from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
 from widgets.steam_followed_layout import followed_news_layout
 from .host import OrdinaryWidgetPresentationHost, OverlayCardStyle, OverlayWidgetGeometry, RetainedOverlayWidget
 from .theme_projection import (
-    hide_borders, resolve_card_surface_colors, resolve_header_colors, resolve_primary_text_color,
+    hide_borders, tile_wash, resolve_card_surface_colors, resolve_header_colors, resolve_primary_text_color,
 )
 from .steam_common import (
     SteamSemanticPalette, SteamCardStyleProjection, project_steam_semantic_palette,
@@ -406,8 +406,7 @@ class GamesYouFollowPresentationModel(QObject):
     def tileColor(self) -> QColor:
         # The News/Feed story tile's treatment: a faint wash of the body ink, no tinted
         # semantic slab behind the stories (the card's own surface shows through).
-        r, g, b, _a = self._body_text
-        return QColor(r, g, b, round(255 * 0.055))
+        return QColor(*tile_wash(self._body_text))
 
     @Property(QColor, constant=True)
     def headerFillColor(self) -> QColor:

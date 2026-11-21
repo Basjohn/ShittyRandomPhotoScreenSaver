@@ -1114,3 +1114,74 @@ def test_semantic_header_flip_exchanges_abandonment_rails_without_mirroring_artw
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+
+
+@pytest.fixture(params=(False, True), ids=("bordered", "borderless"))
+def feed_treatment_item(request, qt_app, tmp_path):
+    """The real Abandonment QML on a model, with Borderless as the family binder projects it."""
+    from rendering.quick.widgets.theme_projection import hide_borders
+
+    config = hide_borders(_config()) if request.param else _config()
+    model = _model(config=config)
+    model.activate()
+    model.on_abandonment_presentation(_presentation(tmp_path / "tile-art.png"), animate=False)
+    engine, component, item = _create_qml_item(model)
+    qt_app.processEvents()
+    try:
+        yield model, item, request.param
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
+def test_abandonment_last_visit_is_the_feed_tile(feed_treatment_item) -> None:
+    """LAST VISIT: a faint ink wash, the header hairline (none under Borderless), no inner stroke."""
+    from PySide6.QtQml import QQmlProperty
+
+    model, item, borderless = feed_treatment_item
+    stamp = _find_visual_item(item, "abandonmentAgeStamp")
+    assert stamp is not None
+    fill, ink = stamp.property("color"), model.textColor
+    assert (fill.red(), fill.green(), fill.blue()) == (ink.red(), ink.green(), ink.blue())
+    assert fill.alphaF() < 0.15  # a wash: the card surface reads through
+    border = QQmlProperty(stamp, "border.color").read()
+    assert border == model.headerBorderColor
+    if borderless:
+        assert border.alpha() == 0
+    # one hairline only: no second (inner) stroked rectangle inside the tile
+    assert not [c for c in stamp.childItems()
+                if c.property("border") is not None and c.property("color") is not None
+                and QQmlProperty(c, "border.width").read() > 0]
+
+
+def test_abandonment_backlog_is_a_borderless_header_badge_with_centred_text(feed_treatment_item) -> None:
+    """BACKLOG: the header's semantic fill and text roles, no border, centred label."""
+    from PySide6.QtQml import QQmlProperty
+
+    model, item, _borderless = feed_treatment_item
+    badge = _find_visual_item(item, "abandonmentArchiveTab")
+    assert badge is not None
+    assert badge.property("color") == model.headerFillColor
+    assert float(QQmlProperty(badge, "border.width").read()) == 0.0
+    label = [c for c in badge.childItems() if c.property("text") is not None]
+    assert label
+    assert int(label[0].property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignHCenter.value)
+    assert label[0].property("color") == model.headerTextColor
+
+
+def test_abandonment_artwork_frame_is_achievement_pulses_frame(feed_treatment_item) -> None:
+    """Artwork: background, shadow and image in the frame rectangle (no padded shelf), an inset of
+    at least 2 px, and no diagonal stripe lines anywhere in the frame."""
+    _model_, item, _borderless = feed_treatment_item
+    frame = _find_visual_item(item, "abandonmentArtworkFrame")
+    shelf = _find_visual_item(item, "abandonmentArtworkShelfBackground")
+    assert frame is not None and shelf is not None
+    assert (shelf.x(), shelf.y(), shelf.width(), shelf.height()) == pytest.approx(
+        (frame.x(), frame.y(), frame.width(), frame.height()))
+    assert float(frame.property("imageInset")) >= 2.0
+    pending = [frame]
+    while pending:
+        node = pending.pop()
+        assert node.rotation() == 0.0
+        pending.extend(node.childItems())

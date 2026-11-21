@@ -181,6 +181,52 @@ def widget_builders():
     }
 
 
+def apply_borderless() -> None:
+    """Draw every captured card as Style Overrides' Borderless latch wants it: the latch in the
+    widgets mapping, each family config through ``with_borderless`` and the card shell without its
+    border width (what the family binder does in the product)."""
+
+    from tools import onboarding_preview_foundry as foundry
+    from rendering.quick.widgets import (abandonment_issues, achievement_pulse, feeds, friend_pulse,
+                                         system_stats)
+    from rendering.quick.widgets.theme_projection import with_borderless
+
+    original = foundry._preview_widgets
+
+    def borderless_widgets(**sections):
+        widgets = original(**sections)
+        widgets.setdefault("global", {})["borderless"] = True
+        return widgets
+
+    foundry._preview_widgets = borderless_widgets
+
+    def wrap_config(cls):
+        source = cls.from_widgets_mapping.__func__
+
+        def from_widgets_mapping(klass, widgets, *args, **kwargs):
+            return with_borderless(source(klass, widgets, *args, **kwargs), widgets)
+
+        cls.from_widgets_mapping = classmethod(from_widgets_mapping)
+
+    def wrap_style(cls):
+        source = cls.project.__func__
+
+        def project(klass, *args, **kwargs):
+            kwargs["border_width"] = 0.0
+            return source(klass, *args, **kwargs)
+
+        cls.project = classmethod(project)
+
+    for cls in (abandonment_issues.AbandonmentIssuesPresentationConfig,
+                achievement_pulse.AchievementPulsePresentationConfig, feeds.FeedPresentationConfig,
+                friend_pulse.FriendPulsePresentationConfig, system_stats.SystemStatsPresentationConfig):
+        wrap_config(cls)
+    for cls in (abandonment_issues.AbandonmentIssuesPresentationStyle,
+                achievement_pulse.AchievementPulsePresentationStyle, feeds.FeedPresentationStyle,
+                friend_pulse.FriendPulsePresentationStyle, system_stats.SystemStatsPresentationStyle):
+        wrap_style(cls)
+
+
 def _settle(material_scene, seconds: float = 1.4) -> None:
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -420,6 +466,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--theme", default=DEFAULT_THEME)
     parser.add_argument("--materials", nargs="+", default=["normal", "glass"])
     parser.add_argument("--visualizer-materials", nargs="+", default=["normal", "glass", "acrylic"])
+    parser.add_argument("--borderless", action="store_true",
+                        help="draw the widgets as Style Overrides' Borderless latch wants them")
     parser.add_argument("--only", nargs="+", help="widget names (or 'visualizer') to capture")
     parser.add_argument("--fill-variants", action="store_true",
                         help="also capture the Visualizer fill/material combination candidates")
@@ -441,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if os.environ.get("QT_QPA_PLATFORM", "").lower() not in ("", "windows"):
         raise SystemExit("needs the Windows QPA (hidden GL); nothing is ever shown")
+    if args.borderless:
+        apply_borderless()
     configure_quick_graphics(reason="card-surface-capture")
     app = QGuiApplication(["card-surface-capture"])
     del app

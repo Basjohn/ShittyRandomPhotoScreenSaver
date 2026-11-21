@@ -860,3 +860,44 @@ def test_system_stats_y_only_reflow_preserves_panel_size_and_corner_uniform_scal
         engine.deleteLater()
         model.retire()
         qt_app.processEvents()
+
+
+@pytest.mark.parametrize("borderless", (False, True))
+def test_system_stats_tiles_are_the_feed_tile_not_an_opaque_accent_slab(qt_app, borderless) -> None:
+    """Each stat tile is a faint wash of the body ink with the header's hairline (the Feed
+    tile treatment); under Borderless no stroke is drawn on it at all."""
+    from PySide6.QtQml import QQmlProperty
+    from rendering.quick.widgets.theme_projection import hide_borders
+
+    config = SystemStatsPresentationConfig.from_widgets_mapping({})
+    if borderless:
+        config = hide_borders(config)
+    style = SystemStatsPresentationStyle.project(config, dict(require_canonical_default("widgets.shadows")))
+    model = SystemStatsPresentationModel(config, style, runtime_generation=81)
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "SystemStatsPresentation.qml")))
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    try:
+        qt_app.processEvents()
+        names = ("systemStatsCpuPanel", "systemStatsRamPanel", "systemStatsUptimePanel", "systemStatsNetworkPanel")
+        ink = model.textColor
+        for name in names:
+            panel = item.findChild(QQuickItem, name)
+            assert panel is not None, name
+            fill = panel.property("color")
+            assert (fill.red(), fill.green(), fill.blue()) == (ink.red(), ink.green(), ink.blue()), name
+            assert fill.alphaF() < 0.15, name  # a wash: the card surface reads through
+            border = QQmlProperty(panel, "border.color").read()
+            assert border == model.headerBorderColor, name
+            if borderless:
+                assert border.alpha() == 0, name
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        model.retire()
+        qt_app.processEvents()
