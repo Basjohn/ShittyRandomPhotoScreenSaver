@@ -92,7 +92,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High): the Waveform port (N5.4) on the landed ABI 33 core. Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] High (Opus High): the Waveform port (N5.4) on the landed ABI 33 core (agent a6688ad0cd2ae360a; ABI 35 reserved). Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
