@@ -532,10 +532,26 @@ GENERIC_MODE_PROGRAM_VARIANTS: dict[str, tuple[Callable[[Any], Any], Callable[[A
 #: A generic mode with meshes and item textures of its own (N5.4, Waveform): mode id -> ``snapshot -> (key, sender)``;
 #: the sender puts them on the item when the key changes (and again when the core finds a texture lost).
 GENERIC_MODE_RESOURCES: dict[str, Callable[[Any], tuple[Any, Callable[[Any], None]]]] = {}
+#: A generic mode whose record is drawn from the card's own camera (N5.4, Waveform): mode id -> ``snapshot -> bool``,
+#: whether the frame may be published for the card it is drawn on; a frame that may not is held (the previous one
+#: stays drawn), never encoded.
+GENERIC_MODE_FRAME_GATES: dict[str, Callable[[Any], bool]] = {}
+
+
+def waveform_frame_ready(snapshot: Any) -> bool:
+    """Whether a Waveform frame's framed view (the camera its record is built from, ``core.framed_view``) is the
+    drawn card's (``framed_view.resolve_framed_view``): before the scene first sends its view, and on a resize
+    edge until the worker's frames catch up, it is not, and the frame is held (Item 2's design, D5.5)."""
+    from rendering.quick.visualizer.framed_view import resolve_framed_view
+
+    view = tuple(getattr(snapshot.logical.mode_state, "framed_view", ()) or ())
+    drawn = resolve_framed_view(snapshot.presentation)
+    return bool(view) and drawn is not None and view == tuple(drawn)
 #: Waveform's route entries (N5.4), registered only by the port's last step (playbook checklist 18) and, until then,
 #: process-locally by its harness (``native/core/python/waveform_check.py owner``): each table above's entry.
 WAVEFORM_ROUTE = {"settings": _waveform_settings, "variants": (waveform_variant, waveform_program),
-                  "target_sizes": _waveform_target_sizes, "resources": waveform_resources}
+                  "target_sizes": _waveform_target_sizes, "resources": waveform_resources,
+                  "frame_gate": waveform_frame_ready}
 
 
 def waveform_registered():
@@ -549,7 +565,7 @@ def waveform_registered():
     @contextlib.contextmanager
     def registered():
         names = ("GENERIC_MODE_SETTINGS", "NATIVE_MODE_IDS", "GENERIC_MODE_PROGRAM_VARIANTS",
-                 "GENERIC_MODE_TARGET_SIZES", "GENERIC_MODE_RESOURCES")
+                 "GENERIC_MODE_TARGET_SIZES", "GENERIC_MODE_RESOURCES", "GENERIC_MODE_FRAME_GATES")
         saved = {name: getattr(module, name) for name in names}
         mode = "waveform_ribbon"
         module.GENERIC_MODE_SETTINGS = {**saved["GENERIC_MODE_SETTINGS"], mode: WAVEFORM_ROUTE["settings"]}
@@ -558,6 +574,7 @@ def waveform_registered():
                                                 mode: WAVEFORM_ROUTE["variants"]}
         module.GENERIC_MODE_TARGET_SIZES = {**saved["GENERIC_MODE_TARGET_SIZES"], mode: WAVEFORM_ROUTE["target_sizes"]}
         module.GENERIC_MODE_RESOURCES = {**saved["GENERIC_MODE_RESOURCES"], mode: WAVEFORM_ROUTE["resources"]}
+        module.GENERIC_MODE_FRAME_GATES = {**saved["GENERIC_MODE_FRAME_GATES"], mode: WAVEFORM_ROUTE["frame_gate"]}
         try:
             yield
         finally:
@@ -997,7 +1014,8 @@ class NativeVisualizerRoute:
             if content.target_sizes(drawn, settings):
                 sent = True
                 sent_bits |= 4
-            if snapshot is not None:
+            gate = GENERIC_MODE_FRAME_GATES.get(identity.mode_id)
+            if snapshot is not None and (gate is None or gate(snapshot)):
                 logical = snapshot.logical
                 payload, payload_schema = content.encode(logical)
                 self._writer.publish(payload, payload_schema=payload_schema,
@@ -1192,6 +1210,10 @@ class _ModeContent:
 
     def load(self, mode_id: str) -> None:
         if self._pack is None or self._pack[0] != mode_id:
+            if mode_id in GENERIC_MODE_PROGRAM_VARIANTS:
+                # A variant program builds every pass from its own packs (Waveform has no single fragment).
+                self._pack = (mode_id, b"")
+                return
             from rendering.native.program_values import mode_fragment_pack
 
             self._pack = (mode_id, mode_fragment_pack(mode_id))

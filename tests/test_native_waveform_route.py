@@ -54,6 +54,46 @@ def test_one_program_holds_every_stage_with_nothing_unread():
     assert program_json(other["passes"], other["targets"], other["streams"], images=other["images"])[0] != declared
 
 
+def test_a_frame_is_published_only_for_its_drawn_cards_view(monkeypatch):
+    """Item 2's design (D5.5): the route publishes a Waveform frame only when its framed view is the drawn card's;
+    before the scene's first view and across a resize edge the frame is held."""
+    from rendering.quick.visualizer import framed_view
+    from rendering.quick.visualizer import native_route as route
+
+    snapshot = _snapshot()                                         # its framed view (1.5, 1.0, 1.0)
+    monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.5, 1.0, 1.0))
+    assert route.waveform_frame_ready(snapshot)
+    with route.waveform_registered():
+        assert route.GENERIC_MODE_FRAME_GATES["waveform_ribbon"] is route.waveform_frame_ready
+    assert "waveform_ribbon" not in route.GENERIC_MODE_FRAME_GATES
+    # Negative controls: another card's view, no view yet, and a card covering no pixel all hold the frame.
+    monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.6, 1.0, 1.0))
+    assert not route.waveform_frame_ready(snapshot)
+    monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: None)
+    assert not route.waveform_frame_ready(snapshot)
+    monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.5, 1.0, 1.0))
+    state = replace(snapshot.logical.mode_state, framed_view=())
+    assert not route.waveform_frame_ready(SimpleNamespace(logical=SimpleNamespace(mode_state=state),
+                                                          presentation=None))
+
+
+def test_a_variant_program_mode_loads_without_a_fragment_pack():
+    """Waveform builds every pass from its variant's packs: loading it reads no single fragment pack (it has none)."""
+    import pytest
+
+    from rendering.quick.visualizer import native_route as route
+
+    content = route._ModeContent.__new__(route._ModeContent)
+    content._pack = None
+    with route.waveform_registered():
+        content.load("waveform_ribbon")
+    assert content._pack == ("waveform_ribbon", b"")
+    # Negative control: unregistered, the mode is a single-fragment mode, and it has no such pack.
+    content._pack = None
+    with pytest.raises(KeyError):
+        content.load("waveform_ribbon")
+
+
 def test_the_scene_is_composited_in_opengl_rows():
     """ABI 38: Waveform's scene holds OpenGL's rows (drawn unflipped, Python's SceneTarget memory), so its composite
     declares "scene_rows": "up"; the step admits it on overlay_glow alone."""
