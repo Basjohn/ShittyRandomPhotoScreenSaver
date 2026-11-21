@@ -761,6 +761,21 @@ the feature (D3D11 is not stated).
     the window's viewport), or (b) Python's `SceneTarget` scissors its passes to its rect and the core scissors to
     `u_scene_item`. Then: owner rule (a) for every display (`--offers`, 5.5 s), the offsets round over every sampled
     frame, audit 10 L1's 64-multiple case rerun, and D12's bucket sentence corrected.
+    Lead chose (a); built as ABI 28 (eb3aabb30), run 21 Nov:
+    - Harness `n51_oscilloscope_abi28`: passes on both APIs. Rule (a) holds over 63 samples a ratio from all 7 runs
+      (Trace, Ring and Phase included), at most 2 levels, at most 4 ties. The offsets round's placements are
+      bit-identical to the item's own rect. `old_origin` failed at all 8 placements.
+    - `generic_mode_check` (M4 case): passes on both APIs.
+    - Owner `--offers` (`20261121_owner_offers_abi28/`): the Oscilloscope's shown inputs pass rule (a) in both halves
+      for Ring, Trace, Phase and audio block size 2.
+      - Every run but Phase fails on Bubble's frames after the switch (inputs 390 to 418), judged under the
+        Oscilloscope's tolerance (the owner tool's judging, its owner decides).
+      - Open: audio block sizes 0 and 3 exceed rule (a)'s tie count in the shown span (12 to 21 ties a frame at
+        2 levels, 52 + 28 and 42 + 28 frames); Graticule 0 fails one frame (167: 3 ties not isolated). Not the
+        overrun (placement-independent); cause not isolated.
+    - L1 rerun (`20261121_n51_audit10_edge_abi28/`): at 48/35 (a 576 x 384 item, whole buckets) rule (a) still fails
+      on OpenGL (13 to 14 ties, 2,260 masked one-level pixels a frame) and rule (b) one frame (2 ties not isolated);
+      32/35 passes rule (a). Cause not isolated; it was there at ABI 27 too.
   - [ ] Audit 10 M1: `oscilloscope_check.py`'s offsets round places only the first 16 samples (Ring and Phase), and its
     Python reference is drawn through a viewport the item's size (all overrun cut, unlike the product). Place every
     sampled frame; draw the reference as the product does or state it is not the edge's oracle; run the box's owner
