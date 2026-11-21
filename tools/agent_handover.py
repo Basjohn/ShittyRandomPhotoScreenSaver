@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -97,6 +99,66 @@ def report(worktree: Path, commit: bool) -> None:
     print(f"     {journal if journal.is_file() else '(none)'} and its evidence under {evidence} (both read only).")
 
 
+def _is_link(path: str) -> bool:
+    """A symlink or a Windows junction (a reparse point): removed as a link, never entered."""
+    if os.path.islink(path):
+        return True
+    is_junction = getattr(os.path, "isjunction", None)
+    return bool(is_junction and is_junction(path))
+
+
+def _long(path: str) -> str:
+    """The extended-length form Windows needs past 260 characters (a no-op elsewhere)."""
+    if sys.platform != "win32" or path.startswith("\\\\?\\"):
+        return path
+    path = os.path.abspath(path)
+    if path.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + path[2:]
+    return "\\\\?\\" + path
+
+
+def remove_tree(path: str) -> None:
+    """Delete a folder of any path length. A link (junction or symlink) inside is removed as a link; its target is
+    never entered or touched. Read-only files are made writable first."""
+    top = _long(path)
+    if _is_link(top):
+        os.rmdir(top) if os.path.isdir(top) else os.unlink(top)
+        return
+    with os.scandir(top) as entries:
+        children = list(entries)
+    for entry in children:
+        child = _long(entry.path)
+        if _is_link(child):
+            # a directory link (junction, or a symlink to a folder) goes with rmdir, a file link with unlink
+            try:
+                os.rmdir(child)
+            except OSError:
+                os.unlink(child)
+        elif entry.is_dir(follow_symlinks=False):
+            remove_tree(child)
+        else:
+            try:
+                os.unlink(child)
+            except PermissionError:
+                os.chmod(child, stat.S_IWRITE)
+                os.unlink(child)
+    os.rmdir(top)
+
+
+def remove_worktree(root: Path, worktree: Path) -> str:
+    """Remove a worktree; returns an error text, or "" when it is gone. The folder is deleted by ``remove_tree``
+    (any path length, links removed as links) and git then forgets the worktree. Git's own ``worktree remove`` is
+    not used: it fails on paths past 260 characters and was measured deleting a junction's target."""
+    subprocess.run(["git", "-C", str(root), "worktree", "unlock", str(worktree)], capture_output=True)
+    try:
+        if os.path.lexists(str(worktree)):
+            remove_tree(str(worktree))
+    except OSError as exc:
+        return f"delete failed: {exc}"
+    subprocess.run(["git", "-C", str(root), "worktree", "prune"], capture_output=True)
+    return "" if not os.path.lexists(str(worktree)) else "folder still present"
+
+
 def retire(worktree: Path) -> int:
     """Copy a merged agent's evidence into this checkout, then remove its worktree and branch."""
     if not (worktree / ".git").exists():
@@ -154,11 +216,9 @@ def retire(worktree: Path) -> int:
     if differing:
         print(f"{worktree.name}: REFUSED to remove, {len(differing)} evidence file(s) differ; resolve them first")
         return 1
-    subprocess.run(["git", "-C", str(ROOT), "worktree", "unlock", str(worktree)], capture_output=True)
-    done = subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(worktree)],
-                          capture_output=True, text=True)
-    if done.returncode:
-        print(f"{worktree.name}: worktree remove failed: {done.stderr.strip()}")
+    error = remove_worktree(ROOT, worktree)
+    if error:
+        print(f"{worktree.name}: worktree remove failed: {error}")
         return 1
     git(ROOT, "branch", "-D", branch)
     print(f"{worktree.name}: removed; branch {branch} deleted")
