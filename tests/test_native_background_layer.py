@@ -472,10 +472,9 @@ def test_the_ported_transitions_are_exactly_those_the_core_draws():
 
     on_vulkan = {d.stable_id for d in iter_transition_descriptors() if "vulkan" in d.renderer_backends}
     drawn = {d.stable_id for d in iter_transition_descriptors() if native_transition_renderer(d.stable_id) is not None}
-    # N5.2c: a scene transition (``NativeScenePasses``) the core draws before it is offered on Vulkan (its registration
-    # follows its proof); every other drawn transition is offered, and nothing is offered that the core does not draw.
+    # N5.2c: the scene transitions (``NativeScenePasses``) are drawn and offered too, their packs one per pass.
     scenes = {cls.transition_id for cls in regen_qrc._native_scene_classes()}
-    assert on_vulkan and on_vulkan <= drawn and drawn - on_vulkan <= scenes
+    assert on_vulkan and on_vulkan == drawn and scenes <= drawn
     assert set(regen_qrc.transition_fragment_sources()) == drawn - scenes
     assert all(transition_pack_path(tid) == regen_qrc.transition_pack_path(tid) for tid in drawn - scenes)
     # Negative control: a transition with no shipped pack is not drawn.
