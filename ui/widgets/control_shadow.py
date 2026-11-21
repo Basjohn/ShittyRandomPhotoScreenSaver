@@ -1087,15 +1087,8 @@ def _style_one_widget(
             reserve_layout=True,
         )
 
-    if isinstance(widget, QScrollBar):
-        if not attach_scrollbar_shadow_strip(widget, SCROLLBAR_SHADOW):
-            # Conservative fallback for a standalone QScrollBar. Settings tab
-            # scrollbars all use the sibling-strip path.
-            attach_control_shadow(
-                widget,
-                SCROLLBAR_SHADOW,
-                replace_existing=True,
-            )
+    # Scrollbars cast no shadow: the themed bar (``shared_styles._settings_scrollbar_qss``) is an inset capsule, and
+    # a rectangle cast from the widget's box would read as a stray line beside it.
 
     name = widget.objectName()
     if name in ("sidebar", "contentArea"):

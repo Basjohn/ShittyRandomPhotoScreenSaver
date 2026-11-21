@@ -73,8 +73,7 @@ class AccessibilityTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
-        shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
+        shared_styles.apply_scroll_area_style(scroll, "SLIDER_STYLE")
         
         # Create content widget
         content = QWidget()

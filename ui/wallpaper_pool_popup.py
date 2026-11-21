@@ -85,7 +85,7 @@ class WallpaperPoolPopup(StyledPopup):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        shared_styles.apply_scroll_area_style(scroll)
         scroll.viewport().setAutoFillBackground(False)
         scroll.setMinimumHeight(260)
         scroll.setWidget(self.pages)
