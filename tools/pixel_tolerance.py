@@ -347,16 +347,23 @@ def translucent_by_alpha(reference, *, additive: bool = False):
     return (alpha > 0) if additive else ((alpha > 0) & (alpha < 255))
 
 
-def translucent_by_backgrounds(first, second, second_background):
+def translucent_by_backgrounds(first, second, second_background, first_background):
     """The translucent pixels of a reference drawn twice, over its own background (``first``) and over the uniform
     colour ``second_background`` (``second``; RGB): the pixels the background shows through (they differ between the
-    two draws) that are not the bare second background (nothing drawn). Opaque content and bare background stay out."""
+    two draws) that are not bare. A pixel is bare (nothing drawn) only if it equals its own background in every draw
+    (lead's decision, 21 Nov): the second background in ``second`` and ``first_background`` in ``first`` (what the
+    first draw shows where nothing is drawn: an RGB colour, or a frame of ``first``'s shape). Content faded so far that
+    it rounds to the second background in one draw is still content where the other draw shows it (Spectrum's
+    switch fade: 13-22 over its card fill of 12, exactly magenta over the magenta second background). Opaque content
+    and bare background stay out."""
     import numpy as np
 
     a = np.asarray(first)[..., :3]
     b = np.asarray(second)[..., :3]
+    under = np.asarray(first_background)
+    under = under[..., :3] if under.ndim == a.ndim else under[:3]
     showing = (a != b).any(axis=2)
-    bare = (b == np.asarray(second_background, dtype=b.dtype)[:3]).all(axis=2)
+    bare = (b == np.asarray(second_background, dtype=b.dtype)[:3]).all(axis=2) & (a == under).all(axis=2)
     return showing & ~bare
 
 

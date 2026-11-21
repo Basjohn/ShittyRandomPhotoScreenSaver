@@ -247,6 +247,9 @@ class SceneMirror:
         #: The inputs drawn (None: every one): a windowed run (``coverage_windows``) skips the drawing of the rest, while
         #: the owner's simulation ticks every input (guide section 3: never restarted at a window).
         self.draw_inputs: set | None = None
+        #: A backdrop run's (``content_backdrop``) frames of the reference's own background, index-aligned with
+        #: ``frames``: each frame's region with the cleared rectangle as it stood before the clear (``under_frame``).
+        self.under = _SpilledFrames() if _UNDER_CAPTURE["active"] else None
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
@@ -324,18 +327,50 @@ class SceneMirror:
         raw = data if isinstance(data, (bytes, bytearray)) else numpy.asarray(data).tobytes()
         return numpy.flipud(numpy.frombuffer(raw, dtype=numpy.uint8).reshape(height, width, 4))
 
+    def under_frame(self, pixels, region: tuple[int, int, int, int], captures: list):
+        """The frame's region (``pixels``, top-down RGBA) with each rectangle a backdrop clear took
+        (``content_backdrop``'s captures, GL bottom-up in the scene's target) put back as it stood before the clear: what
+        the reference's own draw shows there where nothing is drawn. Outside the cleared rectangles both draws are the
+        same, so the frame's own pixels stand. The first capture of a frame wins (it is what the reference drew over); a
+        capture from a target other than the hidden texture fails, never maps wrong."""
+        import numpy
+
+        out = numpy.array(pixels, copy=True)
+        left, top, width, height = region
+        full_w, full_h = self.host.pixels
+        for capture in reversed(captures):
+            if tuple(capture["target"]) != (full_w, full_h):
+                raise RuntimeError(f"a backdrop clear in a target of {capture['target']}, the hidden texture is "
+                                   f"{(full_w, full_h)}: its rectangle cannot be placed")
+            c_left, c_bottom, c_width, c_height = capture["rect"]
+            c_top = full_h - c_bottom - c_height
+            rows = (max(top, c_top), min(top + height, c_top + c_height))
+            cols = (max(left, c_left), min(left + width, c_left + c_width))
+            if rows[0] >= rows[1] or cols[0] >= cols[1]:
+                continue
+            taken = numpy.flipud(capture["pixels"])
+            out[rows[0] - top:rows[1] - top, cols[0] - left:cols[1] - left] = \
+                taken[rows[0] - c_top:rows[1] - c_top, cols[0] - c_left:cols[1] - c_left]
+        return out
+
     def frame(self, index: int) -> dict:
         """Draw the hidden scene and record what it drew: the card's region, and the whole display when due."""
         if self.draw_inputs is not None and index not in self.draw_inputs:
             self.frames.append(((0,), b""))              # outside every window: nothing drawn, indices kept
+            if self.under is not None:
+                self.under.append(((0,), b""))
             self.modes.append(None)
             return {"region": None, "hash": None, "skipped": True}
         host = self.host
+        _UNDER_CAPTURE["captures"] = []
         host.render()
         if self._region is None:
             raise RuntimeError("the owner committed no presentation record before its first frame")
         region = self._region
         pixels = self._read(region)
+        if self.under is not None:
+            under = self.under_frame(pixels, region, _UNDER_CAPTURE["captures"])
+            self.under.append((under.shape, zlib.compress(under.tobytes(), 1)))
         raw = pixels.tobytes()
         record = {"region": list(region), "hash": hashlib.sha256(raw).hexdigest()}
         self.modes.append(self._drawing_mode())  # the mode whose frame this is: judged under its own bounds
@@ -476,11 +511,40 @@ def rule_a_verdict(frames, mode: str | None = None) -> dict:
             "edge_pixels_worst_frame": summary["ties_worst_frame"]}
 
 
+#: The backdrop run's capture (``content_backdrop``): while ``active``, each mode draw's cleared rectangle as it stood
+#: before the clear (what the reference's own draw shows there where nothing is drawn), for ``SceneMirror.frame``.
+_UNDER_CAPTURE: dict = {"active": False, "captures": []}
+
+
+def _read_bound_framebuffer(gl, left: int, bottom: int, width: int, height: int):
+    """Bottom-up RGBA of a rectangle of the framebuffer bound for drawing (GL coordinates); the read binding, pack
+    alignment and pack buffer restored."""
+    import numpy
+
+    draw_fbo = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
+    read_fbo = int(gl.glGetIntegerv(gl.GL_READ_FRAMEBUFFER_BINDING))
+    pack_buffer = int(gl.glGetIntegerv(gl.GL_PIXEL_PACK_BUFFER_BINDING))
+    alignment = int(gl.glGetIntegerv(gl.GL_PACK_ALIGNMENT))
+    gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, draw_fbo)
+    gl.glBindBuffer(gl.GL_PIXEL_PACK_BUFFER, 0)
+    gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
+    try:
+        data = gl.glReadPixels(left, bottom, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+    finally:
+        gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, alignment)
+        gl.glBindBuffer(gl.GL_PIXEL_PACK_BUFFER, pack_buffer)
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read_fbo)
+    raw = data if isinstance(data, (bytes, bytearray)) else numpy.asarray(data).tobytes()
+    return numpy.frombuffer(raw, dtype=numpy.uint8).reshape(height, width, 4)
+
+
 @contextlib.contextmanager
 def content_backdrop(colour: tuple[int, int, int] = MASK_BACKDROP):
     """For the block, the Python render host clears its viewport (inside any scissor already set) to ``colour`` before
-    each mode draw: the reference drawn over a second background (``rule_a_masks``). Nothing else about a draw changes;
-    the GL state it touches is restored."""
+    each mode draw: the reference drawn over a second background (``rule_a_masks``). Before each clear the rectangle is
+    read as it stands (``_UNDER_CAPTURE``): the reference's own background there, so a pixel is judged bare only where
+    it equals its background in both draws (``pixel_tolerance.translucent_by_backgrounds``). Nothing else about a draw
+    changes; the GL state it touches is restored."""
     from OpenGL import GL as gl
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
@@ -497,6 +561,10 @@ def content_backdrop(colour: tuple[int, int, int] = MASK_BACKDROP):
         right = min(x + w, box[0] + box[2]) if scissor else x + w
         top = min(y + h, box[1] + box[3]) if scissor else y + h
         if right > left and top > bottom:
+            if _UNDER_CAPTURE["active"]:
+                _UNDER_CAPTURE["captures"].append({
+                    "rect": (left, bottom, right - left, top - bottom), "target": (x + w, y + h),
+                    "pixels": _read_bound_framebuffer(gl, left, bottom, right - left, top - bottom)})
             gl.glEnable(gl.GL_SCISSOR_TEST)
             gl.glScissor(left, bottom, right - left, top - bottom)
             gl.glColorMask(True, True, True, True)
@@ -510,24 +578,30 @@ def content_backdrop(colour: tuple[int, int, int] = MASK_BACKDROP):
         return render(self, viewport=viewport, **kwargs)
 
     QuickVisualizerRenderHost.render = backdrop
+    _UNDER_CAPTURE["active"] = True
+    _UNDER_CAPTURE["captures"] = []
     try:
         yield
     finally:
         QuickVisualizerRenderHost.render = render
+        _UNDER_CAPTURE["active"] = False
+        _UNDER_CAPTURE["captures"] = []
 
 
 def rule_a_masks(python: dict, backdrop: dict) -> dict:
     """Per input, the pixels the Python renderer draws translucent: its run against the same run drawn over
-    ``MASK_BACKDROP`` (``content_backdrop``), ``pixel_tolerance.translucent_by_backgrounds``. An input whose two draws
-    have different regions has no mask (every pixel exact)."""
+    ``MASK_BACKDROP`` (``content_backdrop``), ``pixel_tolerance.translucent_by_backgrounds``, with the backdrop run's
+    ``under`` frames as the first draw's own background (a pixel is bare only where it equals its background in both
+    draws). An input whose two draws have different regions has no mask (every pixel exact)."""
     from tools import pixel_tolerance
 
+    under = backdrop["under"]
     masks = {}
     for index, (x, y) in enumerate(zip(python["pixels"], backdrop["pixels"])):
         if x["region"] != y["region"]:
             continue
         masks[index] = pixel_tolerance.translucent_by_backgrounds(_pixels(python, index), _pixels(backdrop, index),
-                                                                  MASK_BACKDROP)
+                                                                  MASK_BACKDROP, _pixels({"frames": under}, index))
     return masks
 
 
@@ -688,6 +762,8 @@ def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: in
     report["lit"] = mirror.lit
     report["modes"] = mirror.modes
     report["frames"] = mirror.frames
+    if mirror.under is not None:
+        report["under"] = mirror.under                     # a backdrop run's (``content_backdrop``)
     return report
 
 
