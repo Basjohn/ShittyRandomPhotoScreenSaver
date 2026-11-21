@@ -45,12 +45,14 @@ APIS = ("opengl", "vulkan")
 MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check"}
 CHILD_TIMEOUT_S = 7200
 #: The method proof's shader controls (guide section 7: the selected windows must catch a one-ulp shader change):
-#: mode -> name -> (shader file, the line, its replacement). ``ulp_gradient``: the linear gradient's 0.5 offset one
-#: float ulp up (0.5 -> 0.50000006), a change every background pixel's value carries.
+#: mode -> name -> (shader file, the line, its replacement). ``ulp_ring``: every bubble outline's coverage one float
+#: ulp up (x 1.00000012), a change each antialiased ring edge carries. A control must change pixels on the full run
+#: first: the background gradient's offset (0.5 -> 0.50000006) changed none of nightsolong's 5,313 frames (21 Nov),
+#: because the take's light and dark gradient colours are equal, so grad_t reaches no pixel.
 SHADER_CONTROLS = {
-    "bubble": {"ulp_gradient": ("bubble.frag",
-                                "        grad_t = dot(uv - center, grad_dir) + 0.5 + u_gradient.z;\n",
-                                "        grad_t = dot(uv - center, grad_dir) + 0.50000006 + u_gradient.z;\n")},
+    "bubble": {"ulp_ring": ("bubble.frag",
+                            "        ring_alpha *= balpha;\n",
+                            "        ring_alpha *= balpha * 1.00000012;\n")},
 }
 REPORT_NAME = "native_stream_player.json"
 #: The player's scene: the harness's item at its margin over a transparent root (the frame's alpha is the item's).
@@ -302,7 +304,7 @@ def main(argv=None) -> int:
                         help="a negative control: one of the mode harness's record controls (bubble_check's "
                              "position_nudged or big_class_bit) applied on the Vulkan child; rule (b) must FAIL")
     parser.add_argument("--shader-control", default=None,
-                        help="a shader control (SHADER_CONTROLS, e.g. ulp_gradient) drawn on every API's child: with "
+                        help="a shader control (SHADER_CONTROLS, e.g. ulp_ring) drawn on every API's child: with "
                              "--against a native-before run, the changed frames show it")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
