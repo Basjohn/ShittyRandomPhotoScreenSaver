@@ -187,14 +187,16 @@ defaults, the installer script) are committed and pushed at once, silently.
   interesting its root cause. A non-blocking residual on an accepted or low-priority mode never gets a slot, an agent
   or a build (21 Nov: chasing Spline Curve's residual cost a Medium slot, two builds and a core change re-proved on
   every mode). Weigh a fix's blast radius against its priority.
-- **Context-heavy agents.** An agent's every turn re-reads its whole context. Retire an agent at its stop point and
-  start a fresh one for the next item; never keep resuming one past about 300k tokens (the stop notice shows
-  `subagent_tokens`). Briefs stay short (section 3) so a fresh agent starts small. Interim "waiting" notices need no
-  reply; follow-ups go only when they change what the agent does.
-- **The lead's own context.** The lead's turns cost the most. Past about 400k tokens, keep the plan's resume box
-  current and ask the operator to run `/compact` (the lead cannot compact itself; the app only auto-compacts near
-  the limit); a fresh lead session is needed only if compaction is not available. No check-in turns that only
-  restate status; batch merges, plan edits and pushes into as few turns as the work allows.
+- **Auto-compaction at 70 %.** The operator's user settings set `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=70`, so the lead
+  and every agent compact themselves at 70 % of the window (operator, 21 Nov). Keep the plan's resume box current so
+  a compaction loses nothing.
+- **Related work continues; unrelated work starts fresh.** An agent's every turn re-reads its whole context. Next
+  work that builds on what an agent already holds (its branch, its findings, the proof of its own change) goes to
+  that agent by `SendMessage`; it compacts itself at 70 %. Unrelated work gets a fresh agent with a short brief
+  (section 3), never a resumed one carrying another item's context. Interim "waiting" notices need no reply;
+  follow-ups go only when they change what the agent does.
+- **The lead's own context.** The lead's turns cost the most. No check-in turns that only restate status; batch
+  merges, plan edits and pushes into as few turns as the work allows.
 - **Proof economy.** Cached Python references are keyed on what draws them (shaders, renderer, settings), never on
   judge or tool code, so tool merges never force redraws; one agent builds a reference per change and the others
   reuse it; changes run with `--accepted`, full sweeps only at acceptance; trim a proof to what the merge needs.
