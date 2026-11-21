@@ -149,6 +149,28 @@ def pass_members() -> dict[str, tuple[str, ...]]:
     return found
 
 
+#: The native schema's table of the pass files' members (``core/visualizer_engine/waveform_native_members.py``):
+#: written from ``pass_numbers`` so the schema needs no renderer import (the engine worker loads every runtime schema).
+MEMBERS_MODULE = "core/visualizer_engine/waveform_native_members.py"
+
+
+def members_module_text() -> str:
+    """The text of ``MEMBERS_MODULE``: every pass's block members and their numbers, in pass and block order."""
+    lines = ['"""Waveform Ribbon\'s pass members for its native schema (``core.visualizer_engine.waveform_native_schema``):',
+             "each pass file's block members (unprefixed) and how many numbers each takes, in pass and block order.",
+             "",
+             "Written by ``tools/waveform_shader_files.py --write`` from ``rendering.gl_programs.waveform_shader_files``",
+             '(``pass_numbers``); ``tests/test_waveform_shader_files.py`` holds it equal. Never edit by hand."""',
+             "",
+             "PASS_MEMBERS = ("]
+    for pass_id, members in pass_numbers().items():
+        lines.append(f"    ({pass_id!r}, (")
+        lines += [f"        ({member!r}, {numbers}),"for member, numbers in members.items()]
+        lines.append("    )),")
+    lines.append(")")
+    return "\n".join(lines) + "\n"
+
+
 def waveform_shader_files() -> dict[str, str]:
     """Every Waveform shader file's name and text: the bodies (``.glsl``) and the pass files."""
     bodies = _bodies()

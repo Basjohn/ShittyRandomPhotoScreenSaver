@@ -29,9 +29,15 @@ def differences() -> list[str]:
     hold these files with CRLF (``.gitattributes`` leaves them to ``text=auto``)."""
     from rendering.gl_programs.waveform_shader_files import waveform_shader_files
 
+    from rendering.gl_programs.waveform_shader_files import MEMBERS_MODULE, members_module_text
+
     folder = shader_folder()
-    return [name for name, text in waveform_shader_files().items()
-            if not (folder / name).is_file() or (folder / name).read_text(encoding="utf-8") != text]
+    stale = [name for name, text in waveform_shader_files().items()
+             if not (folder / name).is_file() or (folder / name).read_text(encoding="utf-8") != text]
+    table = ROOT / MEMBERS_MODULE
+    if not table.is_file() or table.read_text(encoding="utf-8") != members_module_text():
+        stale.append(MEMBERS_MODULE)
+    return stale
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,12 +47,14 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--write", action="store_true", help="write every file from its text")
     args = parser.parse_args(argv)
     if args.write:
-        from rendering.gl_programs.waveform_shader_files import waveform_shader_files
+        from rendering.gl_programs.waveform_shader_files import (MEMBERS_MODULE, members_module_text,
+                                                                 waveform_shader_files)
 
         folder = shader_folder()
         for name, text in waveform_shader_files().items():
             (folder / name).write_bytes(text.encode("utf-8"))
-        print(f"wrote {len(waveform_shader_files())} files to {folder}")
+        (ROOT / MEMBERS_MODULE).write_bytes(members_module_text().encode("utf-8"))
+        print(f"wrote {len(waveform_shader_files())} files to {folder} and {MEMBERS_MODULE}")
         return 0
     stale = differences()
     for name in stale:
