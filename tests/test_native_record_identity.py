@@ -55,12 +55,25 @@ def test_the_native_path_receives_what_the_python_renderer_uses(qt_app, mode):
     compared = halves["first"]["compared"] + halves["second"]["compared"] + halves["switch"]["compared"]
     assert coverage["record_frames"] == coverage["settings_frames"] == compared
     assert coverage["settings_names"]
+    assert coverage["settings_skipped"] == []           # every delivered setting compared (audit 9 L4)
     from tools.visualizer_replay.native_record_identity import MODES
 
     declared = MODES[mode]
     assert set(coverage["pass_frames"]) == set(declared.passes.values())
     assert set(coverage["stream_frames"]) == set(declared.streams)
     assert all(count > 0 for count in coverage["stream_bytes"].values())
+
+
+@needs_module
+@pytest.mark.parametrize("kind,level", [("setting", "settings"), ("block", "block")])
+def test_a_perturbed_setting_and_a_perturbed_block_member_are_caught_at_their_input(qt_app, kind, level):
+    # Audit 9 L4: the settings and block levels are standing controls, as the record level's are.
+    report = _run("bubble", controls=[(kind, AT)])
+    applied = report["controls_applied"][kind]
+    assert applied >= AT and not report["identical"]
+    assert [entry["input"] for entry in report["mismatches"]] == [applied]
+    assert report["mismatches"][0]["first"]["level"] == level
+    assert report["mismatches"][0]["first"]["native"] != report["mismatches"][0]["first"]["python"]
 
 
 @needs_module

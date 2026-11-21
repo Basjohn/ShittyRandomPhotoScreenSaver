@@ -58,6 +58,11 @@ four layers, scaled as in section 3.
   state, temporal buffers), stated per mode in section 5.
 - **Proof of coverage:** a coverage report showing that every record field's observed range is covered gates
   acceptance.
+- **Positional members are P's, not L's:** the members that place a draw in its window or target (the quad matrix,
+  fragPixel's target, Spectrum's window maps) are outside L. Rule (a)'s pixels prove them on OpenGL at the display and
+  overscan placements (and Spectrum's mapping control its maps); the stream player's rule (b) proves Vulkan at the
+  harness's one placement only, so a Vulkan-only error at a fractional product placement is covered by no layer
+  (checkpoint audit 9 L4).
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
 
