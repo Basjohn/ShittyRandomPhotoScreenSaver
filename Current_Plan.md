@@ -172,6 +172,10 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Side defect (lead, 21 Nov): `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`
+  failed once in a combined focused run (with `test_visualizer_card_clip_contract.py` and the native-route files) while
+  other agents ran heavy replays; it passed alone and in the same pairing on the merged and the pre-merge tree. Likely
+  timing-dependent under load: find what it waits on and make it wait on its completion edge, not on time.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -920,7 +924,9 @@ the feature (D3D11 is not stated).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking: the
-  scene-fade double-rounding fix, then a rerun as their control). Opus Medium agent a9931705e23b026a7 (21 Nov) on the scene-fade fix. Their landed parity was proved only on the 5.5 s Studio clip, which the owner
+  scene-fade double-rounding fix, then a rerun as their control). The scene-fade fix is merged (R-242, 21 Nov): Spline Curve's cold-start frames and Bubble variant b's
+  cold-reveal frames pass on the 5.5 s prefix; still to rerun on the 60 s takes under the split. Bubble's input 22 and
+  Spectrum's switch frames are disproved as this cause (their own boxes below). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
   replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
   - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
     support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
