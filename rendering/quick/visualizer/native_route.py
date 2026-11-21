@@ -710,8 +710,9 @@ class NativeVisualizerRoute:
         # The Python renderer's item lies in the content host (R-NEW): at the drawn card on the display, and wherever
         # the display lies in the window (an R-63 overscan above it).
         placement = {"host_origin": content_host_origin(presentation), "item_origin": self._host_window_origin()}
+        # ABI 28: the card carries Python's SceneTarget rect (scene_item; the generic item reads it, Spectrum's ignores it).
         card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
-                                     **placement)
+                                     scene_item=True, **placement)
         drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
                                       window_pixels=window_pixels, **placement)
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):

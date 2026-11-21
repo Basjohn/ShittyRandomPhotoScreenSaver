@@ -135,4 +135,10 @@
 // downsample starts from the item's own pixel in a surface-sized source; stage_control's bloom_at_target_origin (its
 // negative control). A new stream's first sync clears the old stream's frame whatever that read is (an admission-
 // rejected first frame left the previous mode's frame shown). Unchanged for an item that covers its target.
-#define SRPSS_NATIVE_CORE_ABI 27
+// 28 (checkpoint audit 10; the lead's decisions, 21 Nov): H1, a surface-sized scene target of a program with a composite
+// step takes Python's SceneTarget geometry (sceneAnchor: the item's pixel at its content's bottom left, the content the
+// 64-pixel bucket of the item's cover), so it holds the light past the item's right and top edges that Python's
+// allocation slack holds; the composite forms read the scene at the item's texel. M2, the card's optional "scene_item"
+// (Python's item_pixel_rect in the target's pixels) is the core's one source of the item's rect (u_scene_item; no
+// re-derivation). M3, a bloom or composite step under a turned card is refused (its anchoring is unturned only).
+#define SRPSS_NATIVE_CORE_ABI 28

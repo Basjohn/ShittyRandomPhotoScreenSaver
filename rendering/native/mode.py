@@ -106,7 +106,9 @@ MODE_CORE_MEMBERS = {
 }
 #: The card's keys (``ModeCard::fromJson``).
 MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade", "border_width", "window_from_target",
-                  "item_from_window")
+                  "item_from_window", "scene_item")
+#: The card's optional keys (ABI 28: ``scene_item``, Python's SceneTarget rect; without it the item covers its target).
+MODE_CARD_OPTIONAL_KEYS = ("scene_item",)
 
 
 def schema_table_entry(schema: Any) -> dict:
@@ -135,7 +137,8 @@ def mode_card(presentation: Any, geometry: Any, *, window_size: tuple[float, flo
     renderers' own arithmetic."""
     from rendering.native.spectrum import spectrum_presentation
 
-    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
+                                 scene_item=True)
     values = {key: card[key] for key in MODE_CARD_KEYS if key in card}
     values["border_width"] = float(getattr(presentation, "border_width", 0.0) or 0.0)
     return values
@@ -739,10 +742,10 @@ def _settings(values: Mapping[str, Any]) -> str:
 
 
 def _card(card: Mapping[str, Any]) -> str:
-    missing = [key for key in MODE_CARD_KEYS if key not in card]
+    missing = [key for key in MODE_CARD_KEYS if key not in card and key not in MODE_CARD_OPTIONAL_KEYS]
     if missing:
         raise ValueError(f"the mode's card misses {', '.join(missing)}")
-    return json.dumps({key: card[key] for key in MODE_CARD_KEYS})
+    return json.dumps({key: card[key] for key in MODE_CARD_KEYS if key in card})
 
 
 class NativeMode:

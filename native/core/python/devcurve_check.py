@@ -433,6 +433,9 @@ class Scene:
         card = spectrum_check._card_for_item(dict(entry["card"], dpr=float(dpr)))
         width, height = card["item_size"]
         rect = [0.0, 0.0, width, height]
+        # ABI 28: the item's rect in the target (the card's scene_item, Python's item_pixel_rect): the item's own rect
+        # here, at (left, top) with margins; the reference draws the item on whole pixels.
+        card["scene_item"] = [0.0, 0.0, *(float(v) for v in card["target_size"])]
         if margins is not None:
             from rendering.native.spectrum import compose_window_from_target
 
@@ -441,10 +444,12 @@ class Scene:
             left, top, right, bottom = (int(v) for v in margins)
             rows = (card["item_from_window"][:3], card["item_from_window"][3:])
             card = dict(card, window_from_target=compose_window_from_target(rows, (-left / dpr, -top / dpr), dpr),
-                        target_size=[card["target_size"][0] + left + right, card["target_size"][1] + top + bottom])
+                        target_size=[card["target_size"][0] + left + right, card["target_size"][1] + top + bottom],
+                        scene_item=[float(left), float(top), *card["scene_item"][2:]])
             rect = [-left / dpr, -top / dpr, width + (left + right) / dpr, height + (top + bottom) / dpr]
         self.mode.composite.set(rect=rect, coverage=None, quarters=int(card["quarters"]), visible=True)
-        shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target")})
+        shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target",
+                                                                   "scene_item")})
         self.mode.card(shown)
         program_item(self.mode, entry, dpr, not self.programmed)
         if not self.programmed:

@@ -1044,6 +1044,24 @@ fade input 360 (10 levels) was not a fade rule: at the switch to Bubble the gene
 frame at admission, the core kept the Oscilloscope's record, packed it under Bubble's schema (refused) and showed the
 Oscilloscope's last frame; ABI 27 clears the old stream's frame at a new stream's first sync whatever that read is (the
 Python render host draws nothing for that frame: its content fade is 0).
+*Checkpoint audit 10 and the lead's decisions (21 Nov), ABI 28.* ABI 27 anchored the grid's phase but not what the
+target holds past the item: Python's `SceneTarget` draws through the window's viewport with no scissor, so a pass's
+light past the item's right and top edges lands in its allocation's slack (the bucket of the item, less the item) and is
+bloomed back into the item, while the native target (the quad-aligned surface) held a pixel or two of it on every side.
+The Trace display (its beam runs past the item) failed owner rule (a) at 8 levels (H1). The parenthesis above was
+wrong: what moves the glow is that light, not the bucket. Option (a): a surface-sized scene target of a program with a
+composite step takes Python's own geometry (`sceneAnchor`): the item's pixel at its content's bottom left, the content
+the 64-pixel bucket of the item's cover, its passes drawn under a card moved into its pixels, and the composite forms
+read the scene at the item's texel. So it holds exactly the light Python's allocation holds. The allocation still
+follows D14's rule: Python's grows only, so after an item shrinks by two buckets or more the native allocation is
+smaller than Python's (recorded, not matched). The item's rect has one owner (M2): the card's `scene_item`, Python's
+`item_pixel_rect` of Qt's float32 item matrix mapped into the target (`rendering/native/spectrum.py item_target_rect`).
+The core no longer re-derives it, because its own 1e-3 snap disagreed near whole pixels. A bloom or composite step under
+a turned card is refused (M3): the native surface of a turned card is itself turned against Python's physical
+`SceneTarget`, so the Oscilloscope on a turned display is refused until its turned anchoring is built (the plan's box).
+`oscilloscope_check.py` now draws its Python reference in a window 72 pixels larger than the item on every side (an
+item-sized window had cut the overrun on every side) and places every display (M1). On ABI 27 it fails as it should:
+rule (a) on OpenGL at both ratios, and the offsets round at every placement (`20261121_n51_oscilloscope_m1_abi27/`).
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the

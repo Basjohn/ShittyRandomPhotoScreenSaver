@@ -8,11 +8,10 @@
 //
 // Python's texel is the item's own pixel (its SceneTarget starts there: item_pixel_rect), x from the item's left, rows
 // from its bottom; it discards outside the item and reads its glow at that texel's centre over the allocation (the glow
-// covers the allocation at half size, its first downsample pairing pixels from the item's: ABI 27, bloomTriangle). Here
-// the surface's pixel is read from the scene at the same physical place (the image's rows run top first: row H - h + the
-// surface's row), the item's place in the surface is u_scene_item (left, top, width, height), the glow's uv is Python's
-// texel centre over the allocation (mirrored to top-first rows) and the dither's key is Python's texel: the same hash at
-// the same place.
+// covers the allocation at half size). Here the item's place in the surface is u_scene_item (left, top, width, height);
+// the scene holds Python's own content (ABI 28, sceneAnchor: the item's pixel at the allocation's bottom left, the
+// allocation the bucket of the item), so the scene, the glow (its uv Python's texel centre over the allocation, mirrored
+// to the image's top-first rows) and the dither's key are all read at Python's texel: the same values at the same place.
 layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 FragColor;
 
@@ -59,7 +58,9 @@ void main()
     // Python's texel: x from the item's left, rows up from its bottom.
     ivec2 local = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
     if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, item.zw))) discard;
-    ivec2 texel = ivec2(pixel.x, allocation.y - content.y + pixel.y);
+    // ABI 28: the scene holds Python's SceneTarget content (sceneAnchor): the item's pixel at its allocation's bottom
+    // left, so the item's texel is read (Python's texelFetch(uScene, texel)): top-first rows here.
+    ivec2 texel = ivec2(local.x, allocation.y - 1 - local.y);
     vec4 scene = texelFetch(uScene, texel, 0);
     vec2 glowUv = vec2(float(local.x) + 0.5, float(allocation.y) - float(local.y) - 0.5) / vec2(allocation);
     vec3 glow = textureLod(uBloom, glowUv, 0.0).rgb * u_bloom_strength;

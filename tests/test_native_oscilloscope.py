@@ -173,6 +173,50 @@ def test_the_record_round_trips_and_carries_the_renderers_values():
 
 # ------------------------------------------------------------------------------------------------- the sources
 
+@pytest.mark.parametrize("fraction", (0.0, 0.0002, -0.0002, 0.0005, 0.0009, -0.0009, 0.25))
+def test_the_cards_scene_item_is_pythons_item_pixel_rect(fraction):
+    # Checkpoint audit 10, M2: one owner of the item's rect. The card's scene_item, mapped back to the window through
+    # the card's exact window_from_target, is the Python renderer's item_pixel_rect of its own float32 item matrix, also
+    # where an edge lies within 1e-3 of a whole device pixel (the core's own snap disagreed there at ABI 27).
+    from rendering.native.spectrum import _ortho_item_matrix
+    from rendering.quick.scene3d.frame import item_pixel_rect
+    from rendering.quick.visualizer.native_route import content_host_origin
+
+    dpr = 1.5
+    origin = ((46.0 + fraction) / dpr, (44.0 + fraction) / dpr)
+    presentation = _presentation(dpr, outer_origin=origin)
+    card = _card(presentation)
+    pixels = (int(round(WINDOW[0] * dpr)), int(round(WINDOW[1] * dpr)))
+    host = content_host_origin(presentation)
+    frame = SimpleNamespace(matrix_values=_ortho_item_matrix(WINDOW, host, single=True),
+                            logical_size=tuple(float(v) for v in card["item_size"]), viewport=(0, 0, *pixels))
+    expected = item_pixel_rect(frame)                                   # (left, bottom, width, height), window pixels
+    left, top, width, height = card["scene_item"]
+    a, b, c, d, e, f = card["window_from_target"]
+    corners = [(a * x + b * y + c, d * x + e * y + f) for x, y in ((left, top), (left + width, top + height))]
+    xs, ys = sorted(p[0] for p in corners), sorted(p[1] for p in corners)
+    assert (xs[0], ys[0], xs[1] - xs[0], ys[1] - ys[0]) == tuple(float(v) for v in expected)
+    assert all(v == int(v) for v in card["scene_item"]) and width >= 1 and height >= 1
+
+
+def test_a_record_drawing_segments_with_fewer_than_two_points_is_refused(monkeypatch):
+    # Checkpoint audit 10, L2: the beam divides by u_points - 1; the schema's checks are "at most" only.
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from core.visualizer_engine.native_schema import NativeSchemaError
+    from rendering.quick.visualizer.implementations import oscilloscope as implementation
+
+    logical = _logical(0)
+    real = implementation.oscilloscope_frame_values
+    schema_module.encode(logical)                                       # control: the frame as drawn is admitted
+    monkeypatch.setattr(implementation, "oscilloscope_frame_values", lambda frame: dict(real(frame), u_points=1))
+    with pytest.raises(NativeSchemaError, match="at least 2 points"):
+        schema_module.encode(logical)
+    # No segments, no division: one point a trace and nothing drawn is admitted.
+    monkeypatch.setattr(implementation, "oscilloscope_frame_values",
+                        lambda frame: dict(real(frame), u_points=1, osc_segments=0))
+    schema_module.encode(logical)
+
+
 def test_every_member_of_both_passes_has_exactly_one_source():
     from core.visualizer_engine import oscilloscope_native_schema as schema_module
     from rendering.native.mode import MODE_CORE_MEMBERS
@@ -411,6 +455,39 @@ def test_glow_0_leaves_the_bloom_strength_unread_by_declaration_only(qt_app):
         blocks([*program["unread"], "u_nothing"])
     with pytest.raises(ValueError, match="reads it"):
         blocks([*program["unread"], "u_widen"])
+
+@pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout")
+@pytest.mark.qt
+def test_a_bloom_or_composite_under_a_turned_card_is_refused(qt_app):
+    """ABI 28 (checkpoint audit 10, M3): the item-anchored bloom and composite are built for an unturned scene; under a
+    turned card (whose surface is turned against Python's SceneTarget) a program with either step is refused, fail
+    closed, until a turned consumer builds it. Control: the same card unturned packs."""
+    if _abi() < 28:
+        pytest.skip("the module predates ABI 28: its GitHub build is pending")
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering import native
+    from rendering.native.mode import _card as card_json, _settings as settings_json, program_json, schema_table_entry
+    from rendering.quick.visualizer import native_route
+    from rendering.quick.visualizer.native_route import _ModeContent
+
+    core = native.load(MODULE_DIR)
+    presentation = _presentation(1.5)
+    card = _card(presentation)
+    shown = _ModeContent.shown_card(None, card, SimpleNamespace(presentation=presentation))
+    target = tuple(int(v) for v in card["target_size"])
+    table = json.dumps(dict(schema_table_entry(schema_module.SCHEMA)))
+    for glow in (True, False):
+        logical = _logical(0) if glow else _logical(0, osc_glow=0.0)
+        settings = settings_json(_settings(logical, presentation, card))
+        record = schema_module.encode(logical)
+        program = native_route.oscilloscope_program(glow)
+        declared, packs = program_json(program["passes"], program["targets"], program["streams"],
+                                       unread=program.get("unread", ()))
+        core.module.mode_blocks(table, declared, packs, settings, record, card_json(shown), target)
+        with pytest.raises(ValueError, match="turned card"):
+            core.module.mode_blocks(table, declared, packs, settings, record, card_json(dict(shown, quarters=1)),
+                                    target)
+
 
 def _python_blocks(logical, presentation, card) -> tuple[bytes, bytes]:
     """Both passes' blocks as ``QuickOscilloscopeRenderer.render`` packs them for this card (its item the card's)."""

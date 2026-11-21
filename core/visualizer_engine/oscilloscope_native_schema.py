@@ -98,6 +98,11 @@ def project(frame: Any) -> dict[str, object]:
             values[name] = number
         else:
             values[name] = int(value)
+    if values["osc_segments"] > 0 and values["u_points"] < 2:
+        # Checkpoint audit 10, L2: the beam's vertex stage divides by u_points - 1 (the schema's checks are "at most"
+        # only): a frame that draws segments with fewer than two points a trace is refused, never drawn as garbage.
+        raise NativeSchemaError(f"u_points is {values['u_points']} with {values['osc_segments']} segments: a trace "
+                                "needs at least 2 points")
     return values
 
 

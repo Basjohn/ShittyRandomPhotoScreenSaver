@@ -151,9 +151,9 @@ def test_the_cores_conventions_are_the_faces(core, qt_app):
     assert core.mode_core_members() == MODE_CORE_MEMBERS
 
 
-def _bumped(value):
+def _bumped(value, *, whole: bool = False):
     if isinstance(value, list):
-        return [v + 1.25 for v in value]
+        return [v + (1.0 if whole else 1.25) for v in value]
     if isinstance(value, int):
         return (value + 1) % 4                       # the quarters
     return value + 0.25
@@ -167,14 +167,15 @@ def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_t
 
     card = {"quarters": 1, "item_size": [300.0, 160.0], "oriented_size": [160.0, 300.0], "dpr": 1.5,
             "content_fade": 0.5, "border_width": 2.0, "window_from_target": [0.0, 1.0, 10.0, -1.0, 0.0, 470.0],
-            "item_from_window": [0.0, 0.5, -3.0, -0.5, 0.0, 260.0]}
+            "item_from_window": [0.0, 0.5, -3.0, -0.5, 0.0, 260.0], "scene_item": [3.0, 4.0, 200.0, 100.0]}
     assert set(card) == set(MODE_CARD_KEYS)
     target = (451, 243)
     for name, (components, from_card) in MODE_CORE_MEMBERS.items():
         base = core.mode_core_values(name, card, target)
         assert len(base) == components, name
         moved_by = {key for key in card
-                    if core.mode_core_values(name, {**card, key: _bumped(card[key])}, target) != base}
+                    if core.mode_core_values(name, {**card, key: _bumped(card[key], whole=key == "scene_item")},
+                                             target) != base}
         assert bool(moved_by) == from_card, (name, moved_by)
         if from_card:
             assert core.mode_core_values(name, card, (target[0] + 3, target[1] + 5)) == base, name
@@ -185,37 +186,34 @@ def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_t
                                                                                      target)
 
 
-def _placed_card(item_px: tuple[float, float], target_px: tuple[int, int], dpr: float) -> dict:
-    """A card for an item 420 x 280 logical whose top-left lies at ``item_px`` (window device pixels, y down) in a
-    surface whose top-left is ``target_px``, in a 1920 x 1080 logical window at ``dpr`` (the route's rows: the window's
-    pixels bottom-up)."""
-    window_px = 1080.0 * dpr
-    return {"quarters": 0, "item_size": [420.0, 280.0], "oriented_size": [420.0, 280.0], "dpr": dpr,
-            "content_fade": 1.0, "border_width": 0.0,
-            "window_from_target": [1.0, 0.0, float(target_px[0]), 0.0, -1.0, window_px - target_px[1]],
-            "item_from_window": [1.0 / dpr, 0.0, -item_px[0] / dpr, 0.0, -1.0 / dpr, (window_px - item_px[1]) / dpr]}
+def _placed_card(scene_item: list[float] | None) -> dict:
+    """An unturned card 420 x 280 logical at dpr 1.5 on a surface from window pixel (44, 44), with ``scene_item``."""
+    card = {"quarters": 0, "item_size": [420.0, 280.0], "oriented_size": [420.0, 280.0], "dpr": 1.5,
+            "content_fade": 1.0, "border_width": 0.0, "window_from_target": [1.0, 0.0, 44.0, 0.0, -1.0, 1576.0],
+            "item_from_window": [1.0 / 1.5, 0.0, -45.0 / 1.5, 0.0, -1.0 / 1.5, 1575.0 / 1.5]}
+    if scene_item is not None:
+        card["scene_item"] = scene_item
+    return card
 
 
-@pytest.mark.parametrize("item_px,dpr,expected", (
-    ((45.0, 44.0), 1.5, (1, 0, 630, 420)),     # odd column, even row: the Oscilloscope's owner placement
-    ((44.0, 45.0), 1.5, (0, 1, 630, 420)),     # even column, odd row
-    ((47.0, 49.0), 1.0, (3, 5, 420, 280)),     # odd in both
-    ((46.0, 48.0), 1.0, (2, 4, 420, 280)),     # even in both
-    ((45.5, 44.25), 1.5, (1, 0, 631, 421)),    # fractional edges: outward, as item_pixel_rect
-))
-def test_the_scene_item_is_the_items_own_cover_in_the_target(core, item_px, dpr, expected, qt_app):
-    # ABI 27 (the lead's decision, 21 Nov): u_scene_item is where Python's SceneTarget starts (item_pixel_rect, the item
-    # quad's outward cover of whole window pixels) in the drawn target's pixels, from the card alone; the composite step
-    # and the bloom's first downsample read it. Negative control: stage_control's bloom_at_target_origin is the target's
-    # own origin and size (as before ABI 27).
-    card = _placed_card(item_px, (44, 44), dpr)
-    target = (int(expected[2]) + 8, int(expected[3]) + 6)
-    assert tuple(core.mode_core_values("u_scene_item", card, target)) == tuple(float(v) for v in expected)
+@pytest.mark.parametrize("scene_item", ([1.0, 0.0, 630.0, 420.0], [0.0, 1.0, 631.0, 421.0], [2.0, 3.0, 629.0, 419.0]))
+def test_the_scene_item_is_the_cards_own_rect(core, scene_item, qt_app):
+    # ABI 28 (checkpoint audit 10, M2: one owner): u_scene_item is the card's scene_item (Python's item_pixel_rect, the
+    # route's item_target_rect; tests/test_native_oscilloscope.py holds that against item_pixel_rect near whole pixels),
+    # never re-derived. Without one the item covers its target; the control bloom_at_target_origin is the target's
+    # origin and size (as before ABI 27). A fractional or empty rect is refused.
+    target = (640, 424)
+    assert tuple(core.mode_core_values("u_scene_item", _placed_card(scene_item), target)) == tuple(scene_item)
+    assert tuple(core.mode_core_values("u_scene_item", _placed_card(None), target)) == (0.0, 0.0, 640.0, 424.0)
     assert core.module.stage_control("bloom_at_target_origin", True) is True
     try:
-        assert tuple(core.mode_core_values("u_scene_item", card, target)) == (0.0, 0.0, *map(float, target))
+        assert tuple(core.mode_core_values("u_scene_item", _placed_card(scene_item), target)) == (0.0, 0.0, 640.0,
+                                                                                                    424.0)
     finally:
         core.module.stage_control("bloom_at_target_origin", False)
+    for bad in ([1.5, 0.0, 630.0, 420.0], [1.0, 0.0, 0.0, 420.0]):
+        with pytest.raises(ValueError, match="scene_item"):
+            core.mode_core_values("u_scene_item", _placed_card(bad), target)
 
 
 @pytest.mark.qt

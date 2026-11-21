@@ -26,7 +26,9 @@ void main()
     ivec4 item = ivec4(floor(u_scene_item + 0.5));
     ivec2 local = ivec2(pixel.x - item.x, item.y + item.w - 1 - pixel.y);
     if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, item.zw))) discard;
-    ivec2 texel = ivec2(pixel.x, allocation.y - content.y + pixel.y);
+    // ABI 28: the scene holds Python's SceneTarget content (sceneAnchor): the item's pixel at its allocation's bottom
+    // left, so the item's texel is read (Python's texelFetch(uScene, texel)): top-first rows here.
+    ivec2 texel = ivec2(local.x, allocation.y - 1 - local.y);
     vec4 colour = texelFetch(uScene, texel, 0);
     if (colour.a <= 0.0) discard;
     FragColor = vec4(colour.rgb / colour.a, colour.a * u_fade);

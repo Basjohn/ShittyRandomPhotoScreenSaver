@@ -777,6 +777,13 @@ the feature (D3D11 is not stated).
   - [ ] Audit 10 M4: a regression test for ABI 27's stale-stream fix: a new stream whose first frame the admission
     rejects shows nothing of the old stream (`generic_mode_check.py` case or a module test, `stale_stream_probe.py`'s
     steps), its negative control seen failing; the R number at merge.
+  - [ ] Turned-card anchoring for the Oscilloscope (from audit 10 M3, the lead 21 Nov): ABI 28 refuses a bloom or
+    composite step under a turned card (fail closed, the refusal's reason in the item's state), because a turned card's
+    native surface is turned against Python's physical `SceneTarget`, so its bloom pairs and its composite's texel and
+    dither key would be rotated. The Oscilloscope on a turned display is therefore refused (the route fades it out)
+    until this is built: the scene target in physical pixels (or the composite and first downsample taking the turn as
+    Python's `sceneTexel` does), proved at quarters 1 to 3 with odd item sides against the Python renderer. Required
+    before registration only if a turned display is offered.
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
   Bubble"). Owner rule (a) passes on the 5.5 s replay; on the four 60 s recorded takes, rejudged 21 Nov under today's
