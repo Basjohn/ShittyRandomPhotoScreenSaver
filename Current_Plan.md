@@ -85,6 +85,14 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
   not to a slot; the player-window gap is a tool note. Cost round passed (b8c6c3528). Left: registration (playbook
   checklist 18), then the lead's layer T (unattended live runs), then its docs.
+- [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
+  - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
+    generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
+    backlog line with its evidence paths; shrink figure-heavy boxes (N5.1, the N2.x-N5.7 leftovers) to a verdict and
+    evidence path per box, moving the leftovers to a backlog section; fold or delete `Docs/testfailures20261119.md`
+    (no handoff docs).
+  - [ ] `tools/agent_handover.py --retire --keep <paths file>`: copy only the listed evidence paths, with a test;
+    one handbook line in the retire step to use it.
 - [ ] Bug, big (operator 21 Nov): clicking into the application gives a slight black flicker; it repeats on clicking
   out and back in, about every second try (seen while logging). Agent a892f0de61cd0838f (Opus Medium).
 - [ ] Bug (operator 21 Nov): Achievement Pulse's extra surface controls were wired to the card. They belong to the
