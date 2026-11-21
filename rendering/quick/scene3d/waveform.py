@@ -17,6 +17,7 @@ from rendering.gl_programs.waveform_atmosphere import (BODY_FIELD_UNIT, MEDIUM_B
                                                        SKY_VERTEX, SKY_FRAGMENT)
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.mist import FOG_OFF
+from rendering.gl_programs.mip_chain import MIP_BOX_TEXTS, dispatch_mip_chain, mip_levels
 from rendering.gl_programs.reflection import mirror_view
 from rendering.quick.scene3d.fog_volume import FogVolume
 from rendering.quick.scene3d.floor_give import FloorGiveField, FLOOR_GIVE_UNIT
@@ -93,7 +94,18 @@ def floor_vertices() -> bytes:
     return b''.join(struct.pack('3f', *c) for c in corners)
 
 
-def _slope_texture(height: np.ndarray) -> int:
+#: The floor maps' level chains (N5.4, the lead's decision of 21 Nov: every level chain a sampler reads is the box
+#: kernel, ``rendering.gl_programs.mip_chain``, the native core's own text): the compute program of each format by its
+#: key in the scene's resources.
+FLOOR_CHAIN_PROGRAMS = {fmt: f"mip box {fmt}" for fmt in MIP_BOX_TEXTS}
+
+
+def _chained(texture: int, size: tuple[int, int], fmt: str, chains: dict) -> None:
+    """Every level of ``texture`` below level 0 by the box kernel of ``fmt`` (``chains``: format -> program)."""
+    dispatch_mip_chain(chains[fmt], texture, size, mip_levels(size), fmt)
+
+
+def _slope_texture(height: np.ndarray, chains: dict) -> int:
     """Height slope per uv unit (periodic central differences), baked once: two fetches instead of eight per pixel."""
     size = np.asarray(height.shape[::-1], np.float32)
     slope = np.stack(((np.roll(height, -1, 1) - np.roll(height, 1, 1))*size[0]/2,
@@ -102,22 +114,24 @@ def _slope_texture(height: np.ndarray) -> int:
     gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
     texture = int(name[0])
     # RGBA16F (N1.7: QRhi has no RG16F); the GL_RG upload leaves b = 0, a = 1, and the floor reads .rg.
-    gl.glTextureStorage2D(texture, max(slope.shape[:2]).bit_length(), gl.GL_RGBA16F, slope.shape[1], slope.shape[0])
+    size = (slope.shape[1], slope.shape[0])
+    gl.glTextureStorage2D(texture, mip_levels(size), gl.GL_RGBA16F, *size)
     gl.glTextureSubImage2D(texture, 0, 0, 0, slope.shape[1], slope.shape[0], gl.GL_RG, gl.GL_FLOAT,
                            np.ascontiguousarray(slope))
-    gl.glGenerateTextureMipmap(texture)
+    _chained(texture, size, "rgba16f", chains)
     gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
     gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-    gl.glTextureParameterf(texture, 0x84FE, 8.)
     for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
         gl.glTextureParameteri(texture, wrap, gl.GL_REPEAT)
     return texture
 
 
-def load_floor_textures(floor: Floor) -> dict:
+def load_floor_textures(floor: Floor, chains: dict) -> dict:
     """Saved maps: colour stays sRGB-encoded in plain RGBA8 and the floor shader decodes it (``srgbToLinear``, N0.3
     decision F4: Qt's OpenGL backend ignores the sRGB texture flag, so no backend relies on it; the GPU filters and
-    mips the encoded values); roughness and height are linear data. Missing assets fail."""
+    mips the encoded values); roughness and height are linear data. Missing assets fail. ``chains``: the box kernel's
+    program by format (``FLOOR_CHAIN_PROGRAMS``); the floor's anisotropy is its shader's taps (no hardware anisotropy:
+    the native core's sampler has none)."""
     textures={}
     try:
         for key,path,storage in (('albedo',floor.albedo,gl.GL_RGBA8),('roughness',floor.roughness,gl.GL_RGBA8),
@@ -127,16 +141,15 @@ def load_floor_textures(floor: Floor) -> dict:
             name = (gl.GLuint*1)()
             gl.glCreateTextures(gl.GL_TEXTURE_2D,1,name)
             texture=textures[key]=int(name[0])
-            gl.glTextureStorage2D(texture,max(image.size).bit_length(),storage,*image.size)
+            gl.glTextureStorage2D(texture,mip_levels(image.size),storage,*image.size)
             gl.glTextureSubImage2D(texture,0,0,0,*image.size,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,np.asarray(image,np.uint8))
-            gl.glGenerateTextureMipmap(texture)
+            _chained(texture,tuple(image.size),"rgba8",chains)
             gl.glTextureParameteri(texture,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR_MIPMAP_LINEAR)
             gl.glTextureParameteri(texture,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
-            gl.glTextureParameterf(texture,0x84FE,8.)  # anisotropy at glancing floor angles
             for wrap in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):
                 gl.glTextureParameteri(texture,wrap,gl.GL_REPEAT)
             if key == 'height':
-                textures['slope'] = _slope_texture(np.asarray(image, np.float32)[:, :, 0]/255.)
+                textures['slope'] = _slope_texture(np.asarray(image, np.float32)[:, :, 0]/255., chains)
         return textures
     except Exception:
         if textures:
@@ -472,7 +485,8 @@ class WaveformScene:
         recipe = self.recipe
         floor, environment = recipe.floor, recipe.environment
         if 'albedo' not in self.textures:
-            self.textures.update(load_floor_textures(floor))
+            self.textures.update(load_floor_textures(floor, {fmt: self.resources.compute_program(key, MIP_BOX_TEXTS[fmt])
+                                                             for fmt, key in FLOOR_CHAIN_PROGRAMS.items()}))
         vao, count = self.resources.mesh('floor', floor_vertices(), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         # The floor's values as its uniforms held them, one pass block (N1.6); every sampler carries its unit.

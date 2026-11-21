@@ -104,8 +104,8 @@ vec3 groundLight(vec3 world) {
 void sourceField(float x,int owner,out vec4 shape,out vec4 light) {
     float u=(x-uBodySpan.x)*uBodySpan.y;
     if(u>=0.0 && u<=1.0) {
-        shape=texture(uBodyField,vec2(u,(float(owner*2)+0.5)/8.0));
-        light=texture(uBodyField,vec2(u,(float(owner*2)+1.5)/8.0));return;
+        shape=textureLod(uBodyField,vec2(u,(float(owner*2)+0.5)/8.0),0.0);   // one level: no derivative
+        light=textureLod(uBodyField,vec2(u,(float(owner*2)+1.5)/8.0),0.0);return;
     }
     packetField(x,owner,shape,light);
 }
@@ -178,7 +178,7 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
 
 SKY_VERTEX=FOG_FULLSCREEN_VERTEX
 SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\nuniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
-void main(){vec4 fog=texture(uFogVolume,vec3(ndcToUv(vNdc),1.0));
+void main(){vec4 fog=textureLod(uFogVolume,vec3(ndcToUv(vNdc),1.0),0.0);
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}
 '''

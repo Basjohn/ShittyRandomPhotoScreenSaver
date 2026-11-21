@@ -4,7 +4,8 @@ from core.waveform_ribbon_view import physical_view  # the camera owner; re-expo
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 from rendering.quick.scene3d.frame import item_pixel_rect,orient_visualizer_scene_frame
-from rendering.quick.scene3d.waveform import SCENE_SAMPLES, WaveformScene
+from rendering.quick.scene3d.waveform import FLOOR_CHAIN_PROGRAMS, SCENE_SAMPLES, WaveformScene
+from rendering.gl_programs.mip_chain import MIP_BOX_TEXTS
 from rendering.quick.scene3d.resources import warm_programs
 from rendering.quick.scene3d.target import scene_target_programs
 from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_FRAGMENT
@@ -33,6 +34,7 @@ class QuickWaveformRibbonRenderer:
             return False
         if recipe.sparks is not None and not scene.bursts.prepare_step():return False
         programs=[(scene.resources,'floor',FLOOR_VERTEX,FLOOR_FRAGMENT)]
+        programs.extend((scene.resources,key,MIP_BOX_TEXTS[fmt]) for fmt,key in FLOOR_CHAIN_PROGRAMS.items())
         if recipe.fog is not None:
             programs.extend(((scene.fog_resources,'fog medium',MEDIUM_INJECT_SOURCE),
                              (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))

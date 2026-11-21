@@ -14,6 +14,7 @@ per-ribbon colours, and choose the knobs. Strands and rims are box-filtered over
 to their average density once sub-pixel to limit crawling under slow motion.
 """
 from core.ribbon_geometry import MAX_PATH_SAMPLES
+from core.waveform_ribbon_dynamics import PULSE_GRID
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
@@ -73,6 +74,9 @@ _RIBBON_SURFACE_GLSL = FLOOR_GIVE_GLSL + """
 struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; vec4 tint; };  // tint: colour and its share
 uniform vec2 uSurface;     // camber in half-widths; transverse subdivision count
 uniform vec3 uSweepAxis;   // zero: transported width; otherwise fixed cross-section plane
+// The draw's first vertex (N5.4): a culled draw starts at a vertex that moves every frame, and the native core's draw
+// is a count from vertex 0 (D15 point 6), so the start is a block member added here and every draw begins at 0.
+uniform int uVertexBase;
 vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
     if(u==0.0 || all(equal(b,c))) return b;
     if(u==1.0) return c;
@@ -212,8 +216,9 @@ void main() {
     int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int divisions=clamp(int(paths[owner].meta.y),1,8);
     int crossDiv=max(int(uSurface.y),1);
-    int interval=gl_VertexID/(6*crossDiv), corner=gl_VertexID%6;
-    int acrossStrip=(gl_VertexID/6)%crossDiv;
+    int vertexId=gl_VertexID+uVertexBase;
+    int interval=vertexId/(6*crossDiv), corner=vertexId%6;
+    int acrossStrip=(vertexId/6)%crossDiv;
     int segment=interval/divisions;
     gl_Position=vec4(2,2,2,1); vWorld=vec3(0); vNormal=vec3(0,0,1); vPhase=0; vAcross=0; vEmission=0;
     vColour=vec4(0); vColourB=vec4(0); vTint=vec4(0);
@@ -339,8 +344,9 @@ void continuationMain(int owner,int crossDiv) {
     float edgeX=continuationAnchor(owner,before);
     float limit=before?uContinuation.x:uContinuation.y;
     if((before && limit>=edgeX) || (!before && limit<=edgeX))return;
-    int interval=gl_VertexID/(6*crossDiv),corner=gl_VertexID%6;
-    int strip=(gl_VertexID/6)%crossDiv;
+    int vertexId=gl_VertexID+uVertexBase;
+    int interval=vertexId/(6*crossDiv),corner=vertexId%6;
+    int strip=(vertexId/6)%crossDiv;
     bool next=corner==1 || corner>=4,highAcross=corner==2 || corner==3 || corner==5;
     float across=float(strip+(highAcross?1:0))/float(crossDiv);
     float t=float(interval+(next?1:0))/uContinuation.z;
@@ -507,7 +513,8 @@ void main() {
     ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
     ringCount=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int perKnot=max(int(uStray.x),1);
-    int stray=gl_VertexID/(6*STRAY_SEGMENTS), corner=gl_VertexID%6, segment=(gl_VertexID/6)%STRAY_SEGMENTS;
+    int vertexId=gl_VertexID+uVertexBase;
+    int stray=vertexId/(6*STRAY_SEGMENTS), corner=vertexId%6, segment=(vertexId/6)%STRAY_SEGMENTS;
     int index=stray/perKnot, slot=stray%perKnot;
     gl_Position=vec4(2.0,2.0,2.0,1.0); vWorld=vec3(0.0); vAlong=0.0; vAcross=0.0; vBright=0.0; vSeed=0.0;
     vColour=vec3(0.0);
@@ -781,14 +788,27 @@ void main() {
 # swell's band over a lower plateau of older swells, and squaring keeps the plateau's rims close to their own light
 # while a passing swell's rims light up (linear, the whole rim set brightened together and the pulse did not read).
 # Smooth in the field (a square and a tanh), so the brightening has the field's own soft falloff and never a hard edge.
+# The published pulse field (``rendering.quick.scene3d.pulse_rim``) is a storage buffer of its samples read linearly
+# here (N5.4: the native core uploads no float texture per frame; a storage stream and this read need no core change):
+# u in the field's texture coordinates, sample i's centre at (i + 0.5) / n, beyond either end the edge sample (the
+# R32F texture's clamp-to-edge linear filter it replaces, at full float weights).
+PULSE_RIM_BINDING = 2
 PULSE_RIM_GLSL = """
-uniform sampler2D uPulseRimField;
+layout(std430,binding=""" + str(PULSE_RIM_BINDING) + """) readonly buffer PulseRimField { float pulseRimSamples[]; };
 uniform vec4 uPulseRim;       // field edge x (history axis), inverse covered length, strength (0: off), tap spread (u)
 uniform vec2 uPulseRimShape;  // inverse reference field level, response ceiling
+const int PULSE_RIM_SAMPLES=""" + str(int(PULSE_GRID.size)) + """;
+float pulseRimTap(float u) {
+    // Every index stays inside the bound buffer whatever its size (no robust buffer access).
+    int last=min(PULSE_RIM_SAMPLES,pulseRimSamples.length())-1;
+    float s=u*float(PULSE_RIM_SAMPLES)-0.5;
+    float i=floor(s);
+    int a=clamp(int(i),0,last), b=clamp(int(i)+1,0,last);
+    return mix(pulseRimSamples[a],pulseRimSamples[b],s-i);
+}
 float pulseRimField(float x) {
     float u=(x-uPulseRim.x)*uPulseRim.y;
-    return 0.25*textureLod(uPulseRimField,vec2(u-uPulseRim.w,0.5),0.0).r+0.5*textureLod(uPulseRimField,vec2(u,0.5),0.0).r
-          +0.25*textureLod(uPulseRimField,vec2(u+uPulseRim.w,0.5),0.0).r;
+    return 0.25*pulseRimTap(u-uPulseRim.w)+0.5*pulseRimTap(u)+0.25*pulseRimTap(u+uPulseRim.w);
 }
 float pulseRimResponse(float x) {
     float level=max(pulseRimField(x),0.0)*uPulseRimShape.x;
@@ -874,9 +894,7 @@ from rendering.gl_programs.mist import FOG_TEXTURE_UNIT as _FOG_UNIT  # noqa: E4
 from rendering.gl_programs.portable import portable_program  # noqa: E402
 
 RIBBON_FLOOR_GIVE_UNIT = 13
-RIBBON_PULSE_RIM_UNIT = 7
-_SAMPLERS = {"uFloorGiveField": RIBBON_FLOOR_GIVE_UNIT, "uPulseRimField": RIBBON_PULSE_RIM_UNIT,
-             "uFogVolume": _FOG_UNIT}
+_SAMPLERS = {"uFloorGiveField": RIBBON_FLOOR_GIVE_UNIT, "uFogVolume": _FOG_UNIT}
 (RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX), (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT), \
     RIBBON_BLOCK = portable_program((RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX),
                                     (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT),

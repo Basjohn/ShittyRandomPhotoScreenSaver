@@ -8,6 +8,8 @@ reflection lies above the plane (no clip plane is applied), and the receiver its
 """
 import numpy as np
 
+from rendering.gl_programs.anisotropic import ANISOTROPIC_GLSL
+
 
 def mirror_matrix(plane_y: float) -> np.ndarray:
     """World -> mirrored world across the horizontal plane y = plane_y (4x4, row-major numpy)."""
@@ -31,7 +33,9 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
 # each within the sampler's ratio and Gaussian-weighted along the streak. Separated point taps stamped copies.
 # Contact hardening (optional): emitters that write luminance-weighted world height into the reflection's alpha
 # (the ribbon light and spark passes do) reflect crisply near the plane and spread with height, as on a wet floor.
-PLANAR_REFLECTION_GLSL = """
+# The footprint's anisotropy is the shader's own taps (``rendering.gl_programs.anisotropic``, N5.4: the reflection target
+# carries no hardware anisotropy, as the native core's sampler has none), included here once for every receiver.
+PLANAR_REFLECTION_GLSL = ANISOTROPIC_GLSL + """
 uniform sampler2D uReflection;
 uniform vec4 uReflectionLook;   // streak half-length (uv), min/max optical mip, Gaussian sigma (receiver pixels)
 uniform vec4 uReflectionContact; // plane height (world), spread (uv per world unit of height; 0 off), along/across, probe mip
@@ -98,7 +102,7 @@ vec3 planarReflection(vec2 targetPx, vec2 offset, float roughness, float streakH
     for(int y=0;y<rows;y++) for(int x=0;x<5;x++) {
         if(acrossWeights[x]<=0.0) continue;
         vec2 tap=clamp(uv+vec2(across[x]*pixelUv.x,along[y]),vec2(0),vec2(1));
-        colour+=acrossWeights[x]*alongWeights[y]*textureGrad(uReflection,tap,dx,dy).rgb;
+        colour+=acrossWeights[x]*alongWeights[y]*srpssAnisotropic(uReflection,tap,dx,dy,16.0).rgb;
     }
     return colour;
 }

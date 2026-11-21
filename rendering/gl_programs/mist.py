@@ -37,7 +37,8 @@ vec3 fogCoordinate(vec3 world) {
 vec4 fogVolumeAt(vec3 world) {
     vec3 c=fogCoordinate(world);
     // Texel k holds the integral to the far boundary of slice k; before the first boundary blend from clear air.
-    vec4 s=texture(uFogVolume,clamp(vec3(c.xy,(c.z-0.5)/uFogRange.z),vec3(0.0),vec3(1.0)));
+    // Level 0 named (the volume has one): no implicit derivative, so a pass may read it after a discard (R-210).
+    vec4 s=textureLod(uFogVolume,clamp(vec3(c.xy,(c.z-0.5)/uFogRange.z),vec3(0.0),vec3(1.0)),0.0);
     return mix(vec4(0.0,0.0,0.0,1.0),s,clamp(c.z,0.0,1.0));
 }
 float mistTransmittance(vec3 world) {

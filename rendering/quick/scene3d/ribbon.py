@@ -21,7 +21,7 @@ from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT,
                                           RIBBON_STRAY_VERTEX, RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX)
 from rendering.gl_programs.ribbon import RIBBON_COHORT_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT
 from rendering.gl_programs.ribbon import (RIBBON_BLOCK, RIBBON_COHORT_STRAY_BLOCK, RIBBON_FLOOR_GIVE_UNIT,
-                                          RIBBON_PULSE_RIM_UNIT, RIBBON_SPARK_BLOCK, RIBBON_STRAY_BLOCK)
+                                          RIBBON_SPARK_BLOCK, RIBBON_STRAY_BLOCK)
 from rendering.gl_programs.portable import pack_block
 from core.ribbon_strand_cohorts import COHORT_BYTES,COHORT_ROWS
 from core.ribbon_geometry import MAX_PATH_SAMPLES
@@ -87,20 +87,20 @@ def _apply_floor_give(values, floor_give, frame):
     values['uFloorGiveFrame'] = (float(frame[0]), float(frame[2]), float(side[0]) if side else 1.)
 
 
-# Texture unit of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the floor's 0-4, the mist's 8-12
-# and 15, the yielding floor's 13 and the world field's 14. Bound for the light pass only and unbound after it.
-PULSE_RIM_UNIT = RIBBON_PULSE_RIM_UNIT
+# Storage binding of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the packet's 0 and the
+# strand cohorts' 1. Bound for the light pass only and unbound after it.
+from rendering.gl_programs.ribbon import PULSE_RIM_BINDING  # noqa: E402
 
 
 def _apply_pulse_rim(values, pulse_rim):
-    """``pulse_rim`` = (field texture, ``uPulseRim`` vec4, ``uPulseRimShape`` vec2) from the scene's Pulse Rim field,
+    """``pulse_rim`` = (field buffer, ``uPulseRim`` vec4, ``uPulseRimShape`` vec2) from the scene's Pulse Rim field,
     or None (off: the rims exactly as without the option). Always written: the program's values persist. Returns
-    whether a texture was bound."""
+    whether a buffer was bound."""
     if pulse_rim is None:
         values['uPulseRim'] = (0., 0., 0., 0.)
         return False
-    texture, rim, shape = pulse_rim
-    gl.glBindTextureUnit(PULSE_RIM_UNIT, int(texture))
+    buffer, rim, shape = pulse_rim
+    gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, PULSE_RIM_BINDING, int(buffer))
     values['uPulseRim'] = tuple(rim)
     values['uPulseRimShape'] = tuple(shape)
     return True
@@ -287,7 +287,7 @@ class RibbonPrimitive:
         back. ``restore=False`` is for a caller that owns the GL state of its whole frame (a scene): the program, vertex
         array and storage binding are neither read back nor restored (each read is a driver round trip).
 
-        ``pulse_rim`` = (field texture, ``uPulseRim``) brightens the light pass's rims where the pulse is; other
+        ``pulse_rim`` = (field buffer, ``uPulseRim``) brightens the light pass's rims where the pulse is; other
         shadings ignore it.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
@@ -372,6 +372,9 @@ class RibbonPrimitive:
             _apply_floor_give(values, floor_give, origin+np.asarray(mist_frame, float))
             if shading == 'light':rim_bound = _apply_pulse_rim(values, pulse_rim)
             if continuation is not None:values['uContinuation'] = (0.,0.,0.,0.)
+            body,span,extensions=(ranges if ranges is not None else
+                ((0,packet.vertices*cross_divisions),None,()))
+            values['uVertexBase'] = int(body[0])     # every draw counts from vertex 0 (N5.4)
             if shaded is None:
                 values['uDiagnostic'] = diagnostic
                 values['uFloorContact'] = _floor_contact(floor,origin+np.asarray(mist_frame,float))
@@ -381,19 +384,18 @@ class RibbonPrimitive:
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
                 try:
-                    body,span,extensions=(ranges if ranges is not None else
-                        ((0,packet.vertices*cross_divisions),None,()))
-                    if body[1]:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,body[0],body[1],packet.instances)
+                    if body[1]:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,body[1],packet.instances)
                     if ranges is not None:
                         for side,divisions,first,count in extensions:
                             values['uContinuation'] = (*span,float(divisions),side)
+                            values['uVertexBase'] = int(first)
                             rebind(pack_block(RIBBON_BLOCK, values))
-                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first,count,packet.instances)
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,count,packet.instances)
                 finally:
                     if timing_query is not None:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)
         finally:
-            if rim_bound:gl.glBindTextureUnit(PULSE_RIM_UNIT, 0)
+            if rim_bound:gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, PULSE_RIM_BINDING, 0)
             if restore:
                 gl.glBindVertexArray(vao_before)
                 gl.glUseProgram(program_before)
@@ -470,26 +472,13 @@ class RibbonPrimitive:
             u['uFloorContact'] = _floor_contact(floor, frame)
             _apply_floor_give(u, floor_give, frame)
             u.update({**GRADE_OFF, **(grade or {})})
+            if strays is not None:
+                first,count=self._stray_range(packet,strays,cohorts,continuation,frame)
+                u['uVertexBase']=first*strays.per_knot*STRAY_SEGMENTS*6   # every draw counts from vertex 0 (N5.4)
             with self._packet_bound(packet), resources.pass_blocks.bound(pack_block(block, u)):
                 if strays is None:
                     gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
                 else:
-                    first,count=0,MAX_PATH_SAMPLES
-                    if cohorts and continuation is not None:
-                        rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
-                        step=0.
-                        for path in rows:
-                            n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
-                            a=path[4+start*KNOT_ROWS,0];b=path[4+((start+n-1)%cap)*KNOT_ROWS,0]
-                            step=max(step,float(b-a)/max(n-1,1))
-                        length,reach=self._strand_bounds
-                        length*=1.+strays.pulse_growth
-                        span=(continuation[0]-length*step-1.25*reach,
-                              continuation[1]+1.25*reach,continuation[2])
-                        body,_,_=self._draw_ranges(packet,span,float(frame[0]),1)
-                        subdivisions=int(rows[0,0,1])
-                        first=body[0]//(6*subdivisions)
-                        count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
                     stride=strays.per_knot*STRAY_SEGMENTS*6
                     if cohorts:
                         if self.strand_stream is None:
@@ -499,13 +488,34 @@ class RibbonPrimitive:
                             # and a reused slot was last read four frames ago, so no wait ties a frame to the last.
                             self.strand_stream=StreamRing('ribbon strand cohorts',slots=3,slot_bytes=4*size,hold_bytes=size)
                         with self.strand_stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,strand_births,restore=restore):
-                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
-                    else:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,count*stride,packet.instances)
+                    else:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,0,count*stride,packet.instances)
         finally:
             if points:(gl.glEnable if point_size_before else gl.glDisable)(gl.GL_PROGRAM_POINT_SIZE)
             if restore:
                 gl.glBindVertexArray(vao_before)
                 gl.glUseProgram(program_before)
+
+    def _stray_range(self,packet,strays,cohorts,continuation,frame):
+        """(first knot, knot count) the strays' draw covers: every knot, or with cohorts under continuation the culled
+        knots of the visible span widened by the strands' reach."""
+        first,count=0,MAX_PATH_SAMPLES
+        if cohorts and continuation is not None:
+            rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
+            step=0.
+            for path in rows:
+                n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
+                a=path[4+start*KNOT_ROWS,0];b=path[4+((start+n-1)%cap)*KNOT_ROWS,0]
+                step=max(step,float(b-a)/max(n-1,1))
+            length,reach=self._strand_bounds
+            length*=1.+strays.pulse_growth
+            span=(continuation[0]-length*step-1.25*reach,
+                  continuation[1]+1.25*reach,continuation[2])
+            body,_,_=self._draw_ranges(packet,span,float(frame[0]),1)
+            subdivisions=int(rows[0,0,1])
+            first=body[0]//(6*subdivisions)
+            count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
+        return first,count
 
     def _material(self, view, translate, material):
         """``_material_uniforms``, once per (view, origin, material): a frame's body and light passes share them."""
