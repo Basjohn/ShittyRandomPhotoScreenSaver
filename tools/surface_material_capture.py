@@ -526,7 +526,8 @@ def measure_text_legibility(scene: MaterialScene, out: Path) -> list[dict]:
         mask = numpy.abs(full[top:bottom, left:right] - bare[top:bottom, left:right]).max(axis=2) > 24
         if mask.sum() < 6:
             continue
-        colour = item.property("color")
+        # The ink actually drawn: the card's solver may have corrected the authored colour (`inkColor`).
+        colour = item.property("inkColor") or item.property("color")
         text_l = float(_relative_luminance([colour.red(), colour.green(), colour.blue()]))
         back_l = _relative_luminance(bare[top:bottom, left:right][mask])
         hi = numpy.maximum(back_l, text_l)
