@@ -123,6 +123,11 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
+- [ ] System Stats' accent bar looks odd on the new tile wash (operator, 22 Nov): the 5 px accent bar at each tile's
+  left edge (`SystemStatsPresentation.qml` `metric_accents`). Render three candidates on a real wallpaper, dark and
+  light, Borderless off and on, beside Feed: (1) the bar drawn with a child material, (2) a thinner bar, (3) no bar;
+  the lead picks the best looking at full resolution, then the agent implements only that one at the owner, with a
+  test whose control fails on the current code.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
