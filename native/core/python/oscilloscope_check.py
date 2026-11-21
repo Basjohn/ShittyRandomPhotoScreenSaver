@@ -318,7 +318,7 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
 #: at each ratio (TURNED_SIZES: 421 x 281 at 1, 633 x 423 at 1.5), so a bloom pairing pixels from another corner, or a
 #: dither keyed from another corner, shows. The Python renderer draws each (its SceneTarget physical, the beam turned at
 #: the vertex) in a window REFERENCE_MARGIN larger on every side; the native item draws it on its turned surface.
-TURNED_QUARTERS = (1, 2, 3)
+TURNED_QUARTERS = (0, 1, 2, 3)          # 0: the same odd sides unturned (what the turn adds is what 1 to 3 add to it)
 TURNED_SIZES = {1.0: (421.0, 281.0), 1.5: (422.0, 282.0)}
 TURNED_PER_RUN = 3
 #: The item's place in the turned frames' window (logical; whole device pixels at both ratios).
