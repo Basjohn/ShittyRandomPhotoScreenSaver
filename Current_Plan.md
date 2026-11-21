@@ -84,7 +84,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   whole device pixels: at 125 % the border (6.25 px) overlaps the first content pixel by 0.25 px (8 levels of tint,
   white 177 not 255); at 150 % (7.5 px against an 8 px inset) a 0.5 px seam shows card surface between border and
   content. At 100 % only the shader's soft edge leaves about 3 levels of tint on the first content pixel.
-  Lead decision: production fix, not a looser oracle. The protected clip commits are not touched.
+  Lead decision: production fix, not a looser oracle. The protected clip commits are not touched. Sonnet agent
+  a12d770df9b94bf0d (21 Nov) builds it.
   - [ ] One owner for the device-pixel border snap, `floor(w * dpr + 0.5) / dpr` (as `inner_path` in
     `tools/card_clip_contract.py`), used by both the glass border and the content clip inset; check every
     `MaterialSurface` border consumer takes it, not the Visualizer card alone.
