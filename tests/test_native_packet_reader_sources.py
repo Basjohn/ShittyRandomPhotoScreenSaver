@@ -178,6 +178,20 @@ def test_the_adversarial_table_holds_on_the_python_reference_and_its_naive_contr
     assert set(adversary.HEAD_REFUSALS.values()) == {"schema", "mode", "version", "size"}
 
 
+def test_the_mode_without_a_schema_case_is_derived_from_the_registries_and_a_pinned_mode_is_seen_failing():
+    from core.visualizer_engine import native_schema
+    from core.visualizer_engine.packet_abi import MODE_CODES
+    covered = {schema.mode_code for schema in native_schema.native_schemas().values()}
+    chosen = adversary.mode_code_without_schema()
+    assert chosen in MODE_CODES.values() and chosen not in covered
+    # Negative control: a mode that has a schema is not a subject for the case (its refusal is by size, not schema),
+    # which is what the old pinned name became when that mode gained one.
+    with_schema = next(iter(covered))
+    with pytest.raises(native_schema.PayloadRefused) as refused:
+        native_schema.admit_slot_head(native_schema.native_schema_id(with_schema, 1), with_schema, 0, accept="native")
+    assert refused.value.cause != "schema"
+
+
 def test_the_python_reference_counts_another_streams_slot_foreign_before_its_schema():
     """Lead's decision (14 Nov): a slot whose stream identity differs is foreign before its schema is checked, so a
     stale slot of another stream never fails this one (the C++ reader's same case runs in the native table). Control:
