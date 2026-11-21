@@ -15,7 +15,6 @@ from PySide6.QtCore import QObject, QPointF, QEvent, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QAbstractButton,
-    QAbstractScrollArea,
     QAbstractSpinBox,
     QComboBox,
     QGraphicsDropShadowEffect,
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollBar,
     QStyle,
     QToolButton,
     QWidget,
@@ -625,249 +623,6 @@ def _reserve_parent_layout_shadow_clearance(widget: QWidget, config: ShadowConfi
         parent = parent.parentWidget()
 
 
-def _find_scroll_area(scrollbar: QScrollBar) -> QAbstractScrollArea | None:
-    """Return the QAbstractScrollArea that owns an internal scrollbar."""
-
-    parent = scrollbar.parentWidget()
-    while parent is not None:
-        if isinstance(parent, QAbstractScrollArea):
-            return parent
-        parent = parent.parentWidget()
-    return None
-
-
-class _ScrollBarShadowStripHelper(QObject):
-    """Keep only the exposed right/bottom pieces of a scrollbar hard cast.
-
-    The real scrollbar remains untouched. Unlike a filled rectangle behind a
-    transparent QScrollBar, these strips never exist underneath the scrollbar
-    body, so the shadow cannot bleed through its transparent track.
-    """
-
-    _CORNER_RADIUS = 1
-
-    owner = WeakWidgetSlot()
-    scroll_area = WeakWidgetSlot()
-
-    def __init__(self, owner: QScrollBar, config: ShadowConfig) -> None:
-        super().__init__(owner)
-        self.owner = owner
-        self.config = config
-        self.scroll_area: QAbstractScrollArea | None = None
-        self.right_shadow: QWidget | None = None
-        self.bottom_shadow: QWidget | None = None
-
-        owner.installEventFilter(self)
-        self._bind_scroll_area()
-        self._sync()
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
-        etype = event.type()
-
-        if watched is self.owner:
-            if etype in (
-                QEvent.Type.Move,
-                QEvent.Type.Resize,
-                QEvent.Type.Show,
-                QEvent.Type.Hide,
-                QEvent.Type.EnabledChange,
-                QEvent.Type.StyleChange,
-                QEvent.Type.ParentChange,
-                QEvent.Type.ZOrderChange,
-            ):
-                if etype == QEvent.Type.ParentChange:
-                    self._bind_scroll_area()
-                self._sync()
-            elif etype == QEvent.Type.Destroy:
-                self._dispose_shadows()
-
-        elif watched is self.scroll_area:
-            if etype in (
-                QEvent.Type.Move,
-                QEvent.Type.Resize,
-                QEvent.Type.Show,
-                QEvent.Type.Hide,
-                QEvent.Type.LayoutRequest,
-            ):
-                self._sync()
-            elif etype == QEvent.Type.Destroy:
-                self.scroll_area = None
-                self._dispose_shadows()
-
-        return super().eventFilter(watched, event)
-
-    def reconfigure(self, config: ShadowConfig) -> None:
-        self.config = config
-        self._reserve_clearance()
-        self._sync()
-
-    def _bind_scroll_area(self) -> None:
-        owner = self.owner
-        next_area = _find_scroll_area(owner) if owner is not None else None
-        if next_area is self.scroll_area:
-            return
-
-        if self.scroll_area is not None:
-            self.scroll_area.removeEventFilter(self)
-
-        self.scroll_area = next_area
-        if self.scroll_area is not None:
-            self.scroll_area.installEventFilter(self)
-
-        self._dispose_shadows()
-        self._reserve_clearance()
-
-    def _reserve_clearance(self) -> None:
-        if self.scroll_area is not None:
-            _reserve_parent_layout_shadow_clearance(
-                self.scroll_area,
-                self.config,
-            )
-
-    def _make_strip(self, page: QWidget) -> QWidget:
-        strip = QWidget(page)
-        strip.setProperty("settingsShadowInternal", True)
-        strip.setAttribute(
-            Qt.WidgetAttribute.WA_TransparentForMouseEvents,
-            True,
-        )
-        strip.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        return strip
-
-    def _ensure_shadows(self) -> tuple[QWidget | None, QWidget | None]:
-        area = self.scroll_area
-        if area is None:
-            return None, None
-
-        page = area.parentWidget()
-        if page is None:
-            return None, None
-
-        if self.right_shadow is None:
-            self.right_shadow = self._make_strip(page)
-        elif self.right_shadow.parentWidget() is not page:
-            self.right_shadow.setParent(page)
-
-        if self.bottom_shadow is None:
-            self.bottom_shadow = self._make_strip(page)
-        elif self.bottom_shadow.parentWidget() is not page:
-            self.bottom_shadow.setParent(page)
-
-        return self.right_shadow, self.bottom_shadow
-
-    def _apply_shadow_style(self, strip: QWidget, owner: QScrollBar) -> None:
-        color = QColor(self.config.color)
-        if not owner.isEnabled():
-            color.setAlpha(
-                int(color.alpha() * self.config.disabled_alpha_scale)
-            )
-
-        strip.setStyleSheet(
-            "background-color: "
-            f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()});"
-            " border: none;"
-            f" border-radius: {self._CORNER_RADIUS}px;"
-        )
-
-    def _sync(self) -> None:
-        owner = self.owner
-        if owner is None:
-            return
-        area = self.scroll_area
-        right_shadow, bottom_shadow = self._ensure_shadows()
-        if area is None or right_shadow is None or bottom_shadow is None:
-            return
-
-        page = area.parentWidget()
-        if page is None:
-            right_shadow.hide()
-            bottom_shadow.hide()
-            return
-
-        top_left = owner.mapTo(page, owner.rect().topLeft())
-        dx = max(0, int(round(float(self.config.offset.x()))))
-        dy = max(0, int(round(float(self.config.offset.y()))))
-        width = owner.width()
-        height = owner.height()
-
-        # Hard-cast geometry = translated source rectangle minus the original.
-        # Draw only those exposed pieces; absolutely nothing sits beneath the
-        # transparent scrollbar body.
-        right_shadow.setGeometry(
-            top_left.x() + width,
-            top_left.y() + dy,
-            dx,
-            height,
-        )
-        bottom_shadow.setGeometry(
-            top_left.x() + dx,
-            top_left.y() + height,
-            width,
-            dy,
-        )
-
-        self._apply_shadow_style(right_shadow, owner)
-        self._apply_shadow_style(bottom_shadow, owner)
-
-        right_shadow.stackUnder(area)
-        bottom_shadow.stackUnder(area)
-
-        visible = (
-            area.isVisible()
-            and owner.isVisible()
-            and width > 0
-            and height > 0
-            and dx > 0
-            and dy > 0
-        )
-        right_shadow.setVisible(visible)
-        bottom_shadow.setVisible(visible)
-
-    def _dispose_shadows(self) -> None:
-        for strip in (self.right_shadow, self.bottom_shadow):
-            if strip is not None:
-                strip.deleteLater()
-        self.right_shadow = None
-        self.bottom_shadow = None
-
-
-def attach_scrollbar_shadow_strip(
-    scrollbar: QScrollBar,
-    config: ShadowConfig = SCROLLBAR_SHADOW,
-) -> bool:
-    """Attach a cohesive full-scrollbar shadow using exposed sibling strips."""
-
-    if _find_scroll_area(scrollbar) is None:
-        return False
-
-    # Retire checkpoint-11's whole-widget graphics effect and its helper so an
-    # old event filter cannot reattach it later.
-    old_helper = getattr(scrollbar, "_control_shadow_helper", None)
-    if isinstance(old_helper, _ControlShadowHelper):
-        scrollbar.removeEventFilter(old_helper)
-        if scrollbar.graphicsEffect() is not None:
-            scrollbar.setGraphicsEffect(None)
-        old_helper.deleteLater()
-        setattr(scrollbar, "_control_shadow_helper", None)
-
-    existing = getattr(
-        scrollbar,
-        "_settings_scrollbar_shadow_strip_helper",
-        None,
-    )
-    if isinstance(existing, _ScrollBarShadowStripHelper):
-        existing.reconfigure(config)
-        return True
-
-    helper = _ScrollBarShadowStripHelper(scrollbar, config)
-    setattr(
-        scrollbar,
-        "_settings_scrollbar_shadow_strip_helper",
-        helper,
-    )
-    return True
-
-
 def attach_cast_shadow(
     widget: QWidget,
     config: ShadowConfig,
@@ -1338,7 +1093,6 @@ __all__ = [
     "attach_control_shadow",
     "attach_text_shadow",
     "attach_cast_shadow",
-    "attach_scrollbar_shadow_strip",
     "apply_shadows_to_existing",
     "apply_shadows_to_inputs",
 ]
