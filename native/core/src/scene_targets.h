@@ -51,6 +51,7 @@
 // SceneReadback's own lock).
 #pragma once
 
+#include "mip_chain.h"
 #include "targets.h"
 #include "rhi_owned.h"
 
@@ -98,9 +99,6 @@ struct TargetAttachment
     // only): its chain is made by the core's box kernel after each run (SceneTargets::generateSelfMips).
     bool mipsRead = false;
 };
-
-// ABI 33: the most levels a target's chain holds (16384 a side: 15).
-constexpr int kMaxChainLevels = 15;
 
 // The nearest resolve's slots of a target: its colour attachments, then its depth.
 constexpr int kNearestDepthSlot = kMaxTargetColour;
@@ -313,10 +311,11 @@ public:
         QRhiTexture *borrowedDepth = nullptr;
         bool dormant = false;
         // ABI 33: a self-mipped target's chain bindings (per attachment, level L >= 1: level L - 1 loaded, L stored),
-        // made at the first chain after an allocation (`chainGeneration` the allocation they were made for).
-        RhiOwned<QRhiShaderResourceBindings> chain[kMaxTargetColour][kMaxChainLevels];
-        int chainBindings = 0;
+        // made at the first chain after an allocation (`chainGeneration` the allocation they were made for). ABI 35:
+        // the core's one kernel owner (mip_chain.h).
+        MipChain chain[kMaxTargetColour];
         quint64 chainGeneration = 0;
+        int chainBindings() const;
 
         bool ready() const { return dormant || (stepsDone >= stepsTotal && renderTarget); }
         // The texture a sampler reads for this attachment: the resolve when multisampled.
@@ -390,14 +389,9 @@ public:
 private:
     void releaseTarget(Target &t);
     bool step(Target &t, int index, QString *error);
-    // ABI 33: the box kernel's pipeline over a layout of its own (a 2 x 2 RGBA16F texture of two levels).
-    bool ensureChainKernel(QRhi *rhi, QString *error);
-    void releaseChainKernel();
+    // ABI 33: the box kernel (ABI 35: the core's one owner of it, mip_chain.h).
     static void releaseChain(Target &t);
-    RhiOwned<QRhiComputePipeline> m_chainPipeline;
-    RhiOwned<QRhiShaderResourceBindings> m_chainLayout;
-    RhiOwned<QRhiTexture> m_chainLayoutTexture;
-    const QRhi *m_chainRhi = nullptr;
+    MipChainKernel m_chainKernel;
 
     QRhi *m_rhi = nullptr;
     std::unique_ptr<Target> m_targets[kMaxSceneTargets];

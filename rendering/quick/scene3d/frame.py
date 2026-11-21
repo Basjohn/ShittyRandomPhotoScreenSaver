@@ -35,17 +35,11 @@ def _clip_turn(matrix, quarters):
     return tuple(result)
 
 
-def orient_visualizer_scene_frame(frame):
-    """Render Scene3D in the quarter-turn's logical world; q0 is exactly the original frame.
-
-    The virtual viewport is the physical viewport turned back by the content quarter-turn. The existing target
-    composite turns its integer texels forward again. No pixel is stretched and no camera/world field is rewritten.
-    """
-    quarters = frame.content_rotation_quarters
-    if not quarters or frame.scene_output_rotation:
-        return frame
-    width, height = frame.logical_size
-    matrix = frame.matrix_values
+def oriented_scene_geometry(matrix, logical_size, viewport, quarters):
+    """(turned matrix, virtual viewport) of ``orient_visualizer_scene_frame``: the item ``matrix`` (column-major,
+    item pixels -> clip) of an item of ``logical_size`` turned into the content's orientation, and the physical
+    ``viewport`` turned back. Pure; the native route's card computes the oriented frame's rect with it (ABI 35)."""
+    width, height = logical_size
     # New logical item coordinates -> the unchanged physical item (clockwise in Qt's top-down coordinates).
     x_basis, y_basis, translation = ((0, 1), (-1, 0), (width, 0)) if quarters == 1 else (
         ((-1, 0), (0, -1), (width, height)) if quarters == 2 else ((0, -1), (1, 0), (0, height)))
@@ -55,12 +49,38 @@ def orient_visualizer_scene_frame(frame):
         turned[4 + row] = matrix[row] * y_basis[0] + matrix[4 + row] * y_basis[1]
         turned[12 + row] = matrix[12 + row] + matrix[row] * translation[0] + matrix[4 + row] * translation[1]
     turned = _clip_turn(turned, quarters)
+    _vx, _vy, vw, vh = viewport
+    return turned, ((0, 0, vh, vw) if quarters & 1 else (0, 0, vw, vh))
+
+
+def scene_from_window(quarters: int, viewport) -> list[float]:
+    """The window's pixel (Quick's framebuffer, y up, continuous) -> the oriented virtual viewport's, rows x and y:
+    the oriented composite's ``sceneTexel`` before ``uOrigin`` (``rendering/quick/scene3d/target.py``: the output
+    viewport ``viewport`` turned back by ``quarters``), exact. The native card's ``scene_from_window`` (ABI 35)."""
+    vx, vy, vw, vh = (float(v) for v in viewport)
+    if quarters == 1:
+        return [0.0, -1.0, vy + vh, 1.0, 0.0, -vx]
+    if quarters == 2:
+        return [-1.0, 0.0, vx + vw, 0.0, -1.0, vy + vh]
+    if quarters == 3:
+        return [0.0, 1.0, -vy, -1.0, 0.0, vx + vw]
+    return [1.0, 0.0, -vx, 0.0, 1.0, -vy]
+
+
+def orient_visualizer_scene_frame(frame):
+    """Render Scene3D in the quarter-turn's logical world; q0 is exactly the original frame.
+
+    The virtual viewport is the physical viewport turned back by the content quarter-turn. The existing target
+    composite turns its integer texels forward again. No pixel is stretched and no camera/world field is rewritten.
+    """
+    quarters = frame.content_rotation_quarters
+    if not quarters or frame.scene_output_rotation:
+        return frame
+    turned, viewport = oriented_scene_geometry(frame.matrix_values, frame.logical_size, frame.viewport, quarters)
     size = frame.oriented_logical_size
     presentation = frame.snapshot.presentation
     oriented = replace(presentation, outer_rect=(0.0, 0.0, *size), content_rect=frame.logical_content_rect,
                        viewport_extent=presentation.logical_viewport_extent, content_rotation_quarters=0)
-    _vx, _vy, vw, vh = frame.viewport
-    viewport = (0, 0, vh, vw) if quarters & 1 else (0, 0, vw, vh)
     return replace(frame, snapshot=replace(frame.snapshot, presentation=oriented), viewport=viewport,
                    logical_size=size, matrix_values=turned, scene_output_rotation=quarters,
                    scene_output_viewport=frame.viewport)

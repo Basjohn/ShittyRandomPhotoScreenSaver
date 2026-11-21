@@ -360,6 +360,128 @@ def floor_settings(**changes) -> dict:
     return {k: v for k, v in values.items() if k in names}
 
 
+# ------------------------------------------------------------------------------------------------------- ABI 35: item chains
+
+#: The item textures' chain scene (ABI 35, C1): an RGBA8 and an RGBA16F item texture at a size odd on both axes (every
+#: level made from an odd side, Waveform's 1254 px maps from level 1 on), every level laid side by side by the slope
+#: probe's text (texelFetch: the levels as the GPU made them) into an exact RGBA16F target each.
+CHAIN = (313, 187)
+CHAIN_FORMATS = ("rgba8", "rgba16f")
+
+
+def chain_levels_size(size: tuple[int, int] = CHAIN) -> tuple[int, int]:
+    """Every level of a full chain of ``size`` side by side (level 0 at the left): the probe target."""
+    width, (w, h) = 0, size
+    while True:
+        width += w
+        if w == 1 and h == 1:
+            break
+        w, h = max(1, w // 2), max(1, h // 2)
+    return width, size[1]
+
+
+def chain_pixels(fmt: str):
+    """(bytes, the texels as floats) of the chain scene's texture in ``fmt``: deterministic noise with detail at every
+    scale (rows top first)."""
+    import numpy as np
+
+    rng = np.random.default_rng(35 if fmt == "rgba8" else 53)
+    y, x = np.mgrid[0:CHAIN[1], 0:CHAIN[0]].astype(np.float64)
+    smooth = 0.5 + 0.5 * np.sin(x * 0.11 + y * 0.07)[..., None] * np.array([1.0, -0.7, 0.4, 0.2])
+    noise = rng.random((CHAIN[1], CHAIN[0], 4))
+    values = np.clip(0.6 * smooth + 0.4 * noise, 0.0, 1.0)
+    if fmt == "rgba8":
+        texels = np.rint(values * 255.0).astype(np.uint8)
+        return texels.tobytes(), texels.astype(np.float64) / 255.0
+    texels = (values * 3.0).astype(np.float16)                 # past 1: half floats keep light
+    return texels.tobytes(), texels.astype(np.float64)
+
+
+def chain_program(packs: dict):
+    """(passes, targets) of the chain scene: each texture's levels probed into its own exact target."""
+    from rendering.native.mode import ModePass, ModeTarget, PassSampler, TargetAttachment
+
+    targets, passes = [], []
+    for fmt in CHAIN_FORMATS:
+        targets.append(ModeTarget(f"chain_{fmt}", (TargetAttachment("colour", "rgba16f"),), size=chain_levels_size(),
+                                  allocation="exact"))
+        passes.append(ModePass(f"chain_{fmt}", packs["slope_probe"], "replace", target=f"chain_{fmt}",
+                               samplers=(PassSampler("u_slope", f"map_{fmt}", "nearest", "clamp", "nearest"),)))
+    passes.append(ModePass("show", packs["show"], "replace", samplers=(PassSampler("u_floor", "chain_rgba8.colour"),)))
+    return tuple(passes), tuple(targets)
+
+
+def chain_reference(variant: str = "box") -> dict:
+    """The Python renderer's draw of the chain scene (an offscreen GL context): each texture made with
+    ``glTextureStorage2D``, its chain by the shared box kernel (``dispatch_mip_chain``, the text the core runs) or, for
+    ``variant`` "driver", Python's former ``glGenerateTextureMipmap`` (the negative control), probed by the same text."""
+    import ctypes
+
+    import numpy as np
+    from OpenGL import GL as gl
+
+    from rendering.gl_programs.mip_chain import MIP_BOX_TEXTS, dispatch_mip_chain, mip_levels
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
+
+    if variant not in ("box", "driver"):
+        raise ValueError(f"unknown chain reference {variant!r}")
+    size = chain_levels_size()
+    host = OffscreenRenderTarget(64, 64, label="n54-chain-reference")
+    frames: dict = {}
+    with host.current():
+        probe = compile_program(REFERENCE_VERTEX, SLOPE_PROBE, label="n54 chain probe")
+        block = (ctypes.c_uint * 1)()
+        gl.glCreateBuffers(1, block)
+        data = std140(LAYOUTS["WaveSlopeProbe"], {"u_target_px": [float(size[0]), float(size[1])]})
+        gl.glNamedBufferData(int(block[0]), len(data), data, gl.GL_STATIC_DRAW)
+        for fmt in CHAIN_FORMATS:
+            pixels, _texels = chain_pixels(fmt)
+            internal = gl.GL_RGBA8 if fmt == "rgba8" else gl.GL_RGBA16F
+            handle = (ctypes.c_uint * 2)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 2, handle)
+            texture, target = int(handle[0]), int(handle[1])
+            gl.glTextureStorage2D(texture, mip_levels(CHAIN), internal, *CHAIN)
+            gl.glTextureSubImage2D(texture, 0, 0, 0, *CHAIN, gl.GL_RGBA,
+                                   gl.GL_UNSIGNED_BYTE if fmt == "rgba8" else gl.GL_HALF_FLOAT, pixels)
+            if variant == "driver":
+                gl.glGenerateTextureMipmap(texture)
+            else:
+                kernel = compile_compute_program(MIP_BOX_TEXTS[fmt], label=f"n54 chain box {fmt}")
+                dispatch_mip_chain(kernel, texture, CHAIN, mip_levels(CHAIN), fmt)
+                delete_program(kernel)
+            for parameter, value in ((gl.GL_TEXTURE_MIN_FILTER, gl.GL_NEAREST_MIPMAP_NEAREST),
+                                     (gl.GL_TEXTURE_MAG_FILTER, gl.GL_NEAREST),
+                                     (gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE),
+                                     (gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)):
+                gl.glTextureParameteri(texture, parameter, value)
+            gl.glTextureStorage2D(target, 1, gl.GL_RGBA16F, *size)
+            fbo = (ctypes.c_uint * 1)()
+            gl.glCreateFramebuffers(1, fbo)
+            gl.glNamedFramebufferTexture(int(fbo[0]), gl.GL_COLOR_ATTACHMENT0, target, 0)
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, int(fbo[0]))
+            gl.glViewport(0, 0, *size)
+            gl.glDisable(gl.GL_BLEND)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glUseProgram(probe)
+            gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, 18, int(block[0]))
+            gl.glBindTextureUnit(1, texture)
+            gl.glBindVertexArray(host.vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glFinish()
+            array = np.empty((size[1], size[0], 4), np.float16)
+            gl.glGetTextureImage(target, 0, gl.GL_RGBA, gl.GL_HALF_FLOAT, array.nbytes, array)
+            frames[f"chain_{fmt}.colour"] = {"array": array[::-1].copy(), "content": size, "size": size,
+                                             "format": "rgba16f", "samples": 1}
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, host.fbo)
+            gl.glDeleteFramebuffers(1, [int(fbo[0])])
+            gl.glDeleteTextures(2, [texture, target])
+        gl.glDeleteBuffers(1, [int(block[0])])
+        delete_program(probe)
+    host.close()
+    return frames
+
+
 # ------------------------------------------------------------------------------------------------------- box 4: the shape
 
 #: Waveform's counts (Current_Plan.md N5.4's reading): 7 compute entries, 9 storage images with Floor Give on, 4 targets,
@@ -497,7 +619,7 @@ def reference_frames(variant: str = "taps") -> dict:
     from OpenGL import GL as gl
 
     from rendering.gl_programs.conventions import conventions_block
-    from rendering.gl_programs.mip_chain import MIP_BOX_COMP, dispatch_mip_chain
+    from rendering.gl_programs.mip_chain import MIP_BOX_COMP, MIP_BOX_RGBA8_COMP, dispatch_mip_chain
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
 
@@ -514,6 +636,7 @@ def reference_frames(variant: str = "taps") -> dict:
                     for name, text in texts().items() if name in ("refl_sky", "refl_light", "prepass", "slope_probe",
                                                                    "floor")}
         box = compile_compute_program(MIP_BOX_COMP, label="n54 mip box")
+        box8 = compile_compute_program(MIP_BOX_RGBA8_COMP, label="n54 mip box rgba8")
         buffers = {}
         conventions = (ctypes.c_uint * 1)()                    # this renderer's conventions (zeros: rows bottom first)
         gl.glCreateBuffers(1, conventions)
@@ -577,15 +700,21 @@ def reference_frames(variant: str = "taps") -> dict:
             return {"array": array[::-1].copy(), "content": (w, h), "size": (w, h), "format": "rgba16f", "samples": 1}
 
         # The item textures: the checker (RGBA8) and the slope map (RGBA16F, or RGBA8 encoded), their chains made.
+        # ABI 35: an item texture's chain is the core's box kernel too (the RGBA8 text for RGBA8); the driver_chain
+        # variant is Python's shipping glGenerateTextureMipmap on every chain (the fact).
         checker = texture(gl.GL_RGBA8, (CHECKER, CHECKER), levels_of((CHECKER, CHECKER)))
         gl.glTextureSubImage2D(checker, 0, 0, 0, CHECKER, CHECKER, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
                                checker_pixels().tobytes())
-        gl.glGenerateTextureMipmap(checker)
         data, fmt = slope_texture(encoded)
         slope = texture(gl.GL_RGBA8 if fmt == "rgba8" else gl.GL_RGBA16F, (SLOPE, SLOPE), levels_of((SLOPE, SLOPE)))
         gl.glTextureSubImage2D(slope, 0, 0, 0, SLOPE, SLOPE, gl.GL_RGBA,
                                gl.GL_UNSIGNED_BYTE if fmt == "rgba8" else gl.GL_HALF_FLOAT, data)
-        gl.glGenerateTextureMipmap(slope)
+        if variant == "driver_chain":
+            gl.glGenerateTextureMipmap(checker)
+            gl.glGenerateTextureMipmap(slope)
+        else:
+            dispatch_mip_chain(box8, checker, (CHECKER, CHECKER), levels_of((CHECKER, CHECKER)), "rgba8")
+            dispatch_mip_chain(box8 if fmt == "rgba8" else box, slope, (SLOPE, SLOPE), levels_of((SLOPE, SLOPE)), fmt)
         hardware = variant == "hardware"
         # The reflection: exact, mipped RGBA16F with a depth; cleared as the core's clearing draw clears it.
         reflection = texture(gl.GL_RGBA16F, REFLECTION, levels_of(REFLECTION))
@@ -655,6 +784,7 @@ def reference_frames(variant: str = "taps") -> dict:
         for program in programs.values():
             delete_program(program)
         delete_program(box)
+        delete_program(box8)
     host.close()
     return frames
 
