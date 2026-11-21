@@ -814,6 +814,19 @@ the feature (D3D11 is not stated).
       Proof: the block size 0 and 3 owner runs and L1 within the 10-tie bound; a negative control with the
       target-sized viewport. The threshold pixel needs its own A/B (Python's composite threshold nudged) before any
       fix.
+    - Lead's decision (21 Nov): no ABI 29. D12 class (417efe8cb): the beam's one-level pixels outside the mask, up to
+      Python's own placement variance (52 a frame, the probe's worst, not multiplied); everything else unchanged.
+      Run 21 Nov:
+      - Owner `--offers` (`20261121_owner_offers_class/`): all 7 runs pass, Bubble's partner frames included.
+        Block sizes 0 and 3 peak at 20 one-level pixels a frame, every other run at 5.
+      - Controls fail: a 0.6 % brighter native beam (`20261121_control_beam_shift/`: 359 frames, 180 to 208
+        one-level pixels a frame, 708 ties); `old_origin` at all 8 placements.
+      - L1 (`n51_audit10_edge_class/`): rule (a) now passes on OpenGL at 48/35.
+      - Graticule 0 input 167 confirmed as the glow composite's cut-off: with Python's discard threshold and dither
+        floor halved, Python's four pixels equal the native ones exactly (`20261121_threshold_probe_0_5/`). They are one
+        level outside the mask, so the class admits them; no fix proposed.
+  - [ ] L1's remaining red: rule (b) at 48/35 fails one frame, an adjacent pair of 2-level ties (Vulkan against native
+    OpenGL) neither isolated nor on a content edge. 48/35 is outside the harness's own ratios. Not yet classified.
   - [ ] Audit 10 M1: `oscilloscope_check.py`'s offsets round places only the first 16 samples (Ring and Phase), and its
     Python reference is drawn through a viewport the item's size (all overrun cut, unlike the product). Place every
     sampled frame; draw the reference as the product does or state it is not the edge's oracle; run the box's owner
