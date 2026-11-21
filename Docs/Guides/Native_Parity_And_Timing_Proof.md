@@ -110,6 +110,10 @@ the run. A mode the change cannot reach is not re-run. An all-mode run happens o
 every C++ change. Parity is not re-measured on accepted modes; a guard checks they did not move (native before
 against native after, hashes, `--accepted`).
 
+**The backstop for guards-only** (lead, 21 Nov): because a change judged unable to reach a mode may still reach
+it, one full gate over every accepted mode and transition runs once before the flip (NF), unattended by the lead:
+one full take per mode per backend with `--accepted`, every transition's pack row. Not before, not per change.
+
 **Gates in general.** The lead runs batch gates unattended in the background, with references and native runs in
 separate processes and several takes at once. An agent runs its gate in the foreground (agents run nothing in the
 background), one process per take, at most the number its brief states at once, each under its timeout. A full gate runs at acceptance and once per batch of optimisations, never once per
