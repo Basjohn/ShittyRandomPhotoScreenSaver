@@ -104,7 +104,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
-- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (operator, 21 Nov, after R-248 fixed the
+- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (agent ad98162c77b175a12, Opus Medium; operator, 21 Nov, after R-248 fixed the
   speed): R-248's check matched breathing as displayed/nominal radius in logical frames, yet on screen fullscreen
   breathes and reacts visibly less. Log: `logs/worker_visualizer.log` 21 Nov 20:19:17-20:21:24 fullscreen (world
   1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
