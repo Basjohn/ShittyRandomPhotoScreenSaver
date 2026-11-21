@@ -180,6 +180,31 @@ defaults, the installer script) are committed and pushed at once, silently.
 - Verification is the lead's job: what can be proved by a harness, a hidden run, a Display 1 run or a frozen build
   is proved, not handed to the operator; what has no simple test goes to the Watchlist and holds nothing open.
 
+### 7a. Staying on course and spending lean (operator, 21 Nov 2026: about 30 % of a week's quota in one day, much of it astray)
+
+- **Critical path only.** Before every dispatch, name the critical-path item it serves: the next port, a core feature
+  a port needs, an open blocker, an acceptance, or the flip. If it serves none, it is a backlog box, however
+  interesting its root cause. A non-blocking residual on an accepted or low-priority mode never gets a slot, an agent
+  or a build (21 Nov: chasing Spline Curve's residual cost a Medium slot, two builds and a core change re-proved on
+  every mode). Weigh a fix's blast radius against its priority.
+- **Context-heavy agents.** An agent's every turn re-reads its whole context. Retire an agent at its stop point and
+  start a fresh one for the next item; never keep resuming one past about 300k tokens (the stop notice shows
+  `subagent_tokens`). Briefs stay short (section 3) so a fresh agent starts small. Interim "waiting" notices need no
+  reply; follow-ups go only when they change what the agent does.
+- **The lead's own context.** The lead's turns cost the most. Past about 400k tokens, write the stop state into the
+  plan's resume box and hand over to a fresh lead session rather than carrying on. No check-in turns that only
+  restate status; batch merges, plan edits and pushes into as few turns as the work allows.
+- **Proof economy.** Cached Python references are keyed on what draws them (shaders, renderer, settings), never on
+  judge or tool code, so tool merges never force redraws; one agent builds a reference per change and the others
+  reuse it; changes run with `--accepted`, full sweeps only at acceptance; trim a proof to what the merge needs.
+- **Builds.** Batch C++ changes so one GitHub build serves several; give concurrent C++ branches distinct ABI numbers
+  at dispatch, not at merge.
+- **Usage protocol** (section 5) still binds; check `get_usage` before each dispatch, not only at the end of a turn.
+- **Never throw away valuable work.** When a direction is stopped (wrong priority, a usage cut), what it built and
+  proved is committed, kept on its branch or merged when it is sound and nearly done, and written into its plan box with
+  what remains; root causes, harnesses, controls and evidence are never discarded. Stopping spend means parking, not
+  deleting; a parked branch is never `-s ours` merged over or retired unmerged.
+
 ## 8. Native core work (C++; `Current_Plan.md` item 8b)
 
 Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Core_P3_Decisions.md`, D5 to D11).
