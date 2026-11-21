@@ -70,6 +70,13 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a; its core C++ merged at ABI 35; the Python
   conversion's first slice approved; continuing to stop point 2.
 - [ ] Background track: N5.2d with N4.i (motion blur and trails), agent a52b367bbd9c11f5c (Opus Medium), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
+- [ ] Black flicker at a transition's start on Vulkan (`--vulkan`, operator, 21 Nov): a visible black frame when a
+  wallpaper transition begins. A serious class (fade, never vanish). Background track, the N5.2d agent's next box
+  after its merge (it holds the background layer's run path), before any further transition batch. Reproduce on a
+  live Vulkan run with `--frame-trace` (which transitions; first frame of the run: the destination upload, the slot
+  swap, the photo environment's first copy, a target made at run start, a cleared frame presented before the first
+  record); compare OpenGL native and Python. Fix at the owner so the first frame of every run shows the source or the
+  run's own first frame, never black; a test whose control is the old path, and a trace-checked run on Display 1.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
