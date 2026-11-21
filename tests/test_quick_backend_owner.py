@@ -561,6 +561,7 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/transition_route_check.py",     # its hosts through background_layer_check._host
     "native/core/python/devcurve_check.py",
     "native/core/python/bubble_check.py",               # its cost round's 4K host
+    "native/core/python/bubble_cost_matrix.py",         # its 4K-class cost hosts (one per card shape and ratio)
     "native/core/python/oscilloscope_check.py",         # its cost round's 1440p and 4K hosts
     "native/core/python/scene_target_check.py",
     "native/core/python/mesh_buffer_check.py",
