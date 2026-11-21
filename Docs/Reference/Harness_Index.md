@@ -976,8 +976,11 @@ python native/core/python/scene_target_check.py --module-dir release/native_modu
 # the bound, wave_sheet_<api>.png),
 # wave_limits (Waveform's 28 passes, 9 storage images, 4 targets admitted, one past each refused), wave_filter (the
 # linear_filter_formats facts, the faked device without linear 32-bit float filtering refusing an RGBA32F read).
+# ABI 35: wave_chain (the item textures' box chains, RGBA8 and RGBA16F at 313 x 187, every level probed: rule (a)
+# against the Python renderer's box chain, rule (b) Vulkan against native OpenGL, the job route equal to the in-frame
+# one, one chain per upload and none at rest; control: Python's former glGenerateTextureMipmap chain leaves rule (a)).
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    --rounds wave_floor wave_limits wave_filter [--apis opengl vulkan]
+    --rounds wave_floor wave_limits wave_filter wave_chain [--apis opengl vulkan]
 # N3.2 (D15): meshes and buffers on the harness scenes native/core/python/mesh_buffers (passes with their own vertex
 # stage into a surface-sized RGBA8 scene target), hidden hosts only: parity (box over storage records with depth and the
 # per-record front face, static instance stream, sprites as instanced quads, a strip with blend MAX, 900 streaks over

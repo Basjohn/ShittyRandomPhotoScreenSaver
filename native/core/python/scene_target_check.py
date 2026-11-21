@@ -1731,7 +1731,7 @@ def _sheet(out: Path, api: str, frames: dict) -> None:
 #   their reasons.
 # - wave_filter: the device facts (linear_filter_formats on both backends), an RGBA32F storage image read linearly
 #   drawn, the faked device (compute_control no_float32_linear) refusing it with its reason, and recovery.
-WAVE_ROUNDS = ("wave_floor", "wave_limits", "wave_filter")
+WAVE_ROUNDS = ("wave_floor", "wave_limits", "wave_filter", "wave_chain")
 WAVE_NATIVE_VARIANTS = ("taps", "plain", "bucket", "slope_rgba8")
 WAVE_SETTLE_S = 15.0
 
@@ -1748,7 +1748,7 @@ class WaveScene:
     ``unread`` (ABI 26: the shape's stand-ins read none)."""
 
     def __init__(self, core, engine, host, card: tuple[int, int], passes, settings: dict, *, targets=(), images=(),
-                 textures: tuple = (), schema=None, unread: tuple = ()) -> None:
+                 textures: tuple = (), schema=None, unread: tuple = (), in_frame: bool = False) -> None:
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlComponent
         from PySide6.QtQuick import QQuickItem
@@ -1777,7 +1777,8 @@ class WaveScene:
             self.stream = mbc.Stream(schema)
             self.mode.bind(self.stream.name, schema, expect=self.stream.expect)
         for name, pixels, size, fmt in textures:
-            self.mode.texture(name, pixels, size, mips=True, format=fmt)
+            # ABI 35: every mipped item texture's chain is the core's box kernel (the reference's text).
+            self.mode.texture(name, pixels, size, mips=True, format=fmt, in_frame=in_frame)
         self.expected_textures = len(textures)
 
     def publish(self) -> None:
@@ -1894,6 +1895,108 @@ def round_wave_floor(core, engine, app, api: str, packs: dict, out: Path) -> dic
         host_check._flush_deletes(app)
     _save(out, f"wave_{api}", frames)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_wave_chain(core, engine, app, api: str, packs: dict, out: Path) -> dict:
+    """ABI 35 (C1): the box chain of mipped item textures, RGBA8 and RGBA16F at a size odd on both axes, every level
+    probed; on Vulkan by both routes (the job service, and the in-frame control). The chain is made once per upload
+    (``mode_texture_chains``) and never at rest."""
+    wp = _wave_module()
+    host = core.hidden_host(*_host_size([wp.FLOOR]))
+    checks, facts, frames = {}, {}, {}
+    routes = ("job", "in_frame") if api == "vulkan" else ("in_frame",)
+    try:
+        for route in routes:
+            chains_before = core.composite_live().get("mode_texture_chains", 0)
+            passes, targets = wp.chain_program(packs)
+            textures = tuple((f"map_{fmt}", wp.chain_pixels(fmt)[0], wp.CHAIN, fmt) for fmt in wp.CHAIN_FORMATS)
+            scene = WaveScene(core, engine, host, wp.FLOOR, passes, {}, targets=targets, textures=textures,
+                              in_frame=api == "vulkan" and route == "in_frame")
+            try:
+                state = scene.settle()
+                frames[route] = scene.targets()
+                made = core.composite_live().get("mode_texture_chains", 0) - chains_before
+                facts[route] = {"content_failing": state.get("content_failing"),
+                                "content_failure": state.get("content_failure"),
+                                "texture_route": (state.get("texture_jobs") or {}).get("route"),
+                                "textures": [{k: t.get(k) for k in ("name", "format", "mips", "in_frame")}
+                                             for t in state.get("textures", [])],
+                                "chains_made": made}
+                checks[f"{route}_drew"] = not state.get("content_failing") and all(
+                    f"chain_{fmt}.colour" in frames[route] for fmt in wp.CHAIN_FORMATS)
+                checks[f"{route}_one_chain_per_texture"] = made == len(wp.CHAIN_FORMATS)
+                if api == "vulkan":
+                    checks[f"{route}_took_its_route"] = facts[route]["texture_route"] == "job" and all(
+                        bool(t.get("in_frame")) == (route == "in_frame") for t in facts[route]["textures"])
+                host.frames(2)
+                before = core.composite_live().get("mode_texture_chains", 0)
+                records = scene.mode.state().get("records")
+                host.frames(REST_FRAMES)
+                checks[f"{route}_no_chain_at_rest"] = (core.composite_live().get("mode_texture_chains", 0) == before
+                                                       and scene.mode.state().get("records") == records)
+            finally:
+                scene.close(app)
+                host.frames(2)
+                host_check._flush_deletes(app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    _save(out, f"wave_chain_{api}", frames)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_wave_chain_reference(out: Path) -> dict:
+    wp = _wave_module()
+    frames = {variant: wp.chain_reference(variant) for variant in ("box", "driver")}
+    _save(out, "wave_chain_reference", frames)
+    return {"pass": True, "checks": {}, "facts": {"textures": sorted(frames["box"])}}
+
+
+def wave_chain_verdict(out: Path, apis) -> dict:
+    """Rule (a): native OpenGL's levels against the Python renderer's box chain (SCENE_RULE_A, the float texels);
+    rule (b): Vulkan's (each route) against native OpenGL's; Vulkan's job route equal to its in-frame route. The
+    negative control: the native levels against Python's former driver chain (glGenerateTextureMipmap) leave rule (a)."""
+    wp = _wave_module()
+    reference = _load(out, "wave_chain_reference")
+    gl_frames = _load(out, "wave_chain_opengl")
+    result: dict = {"pass": True, "reasons": [], "rule_a": {}, "rule_b": {}, "control": {}, "routes": {}}
+    if not reference or not gl_frames:
+        return {"pass": False, "reasons": ["the reference or the OpenGL frames are missing"]}
+    for fmt in wp.CHAIN_FORMATS:
+        name = f"chain_{fmt}.colour"
+        native = gl_frames["in_frame"][name]
+        verdict = judged(native, reference["box"][name], SCENE_RULE_A)
+        result["rule_a"][name] = {k: verdict.get(k) for k in ("pass", "differing", "reasons")}
+        result["pass"] = result["pass"] and bool(verdict.get("pass"))
+        control = judged(native, reference["driver"][name], SCENE_RULE_A)
+        result["control"][name] = {"fails_the_bound": not control.get("pass"), "differing": control.get("differing")}
+        if control.get("pass"):
+            result["pass"] = False
+            result["reasons"].append(f"control {name}: the driver chain stayed inside rule (a)")
+        if not verdict.get("pass"):
+            result["reasons"].append(f"opengl {name}: rule (a)")
+    if "vulkan" in apis:
+        vk = _load(out, "wave_chain_vulkan")
+        if not vk:
+            result["pass"] = False
+            result["reasons"].append("vulkan: no frames")
+        else:
+            for route in ("job", "in_frame"):
+                for fmt in wp.CHAIN_FORMATS:
+                    name = f"chain_{fmt}.colour"
+                    verdict = judged(vk[route][name], gl_frames["in_frame"][name], SCENE_RULE_B)
+                    result["rule_b"][f"{route}|{name}"] = {k: verdict.get(k) for k in ("pass", "differing", "reasons")}
+                    if not verdict.get("pass"):
+                        result["pass"] = False
+                        result["reasons"].append(f"vulkan {route} {name}: rule (b)")
+            for fmt in wp.CHAIN_FORMATS:
+                name = f"chain_{fmt}.colour"
+                same = compare(vk["job"][name], vk["in_frame"][name])
+                result["routes"][name] = same
+                if not same.get("exact"):
+                    result["pass"] = False
+                    result["reasons"].append(f"vulkan {name}: the job route differs from the in-frame route")
+    return result
 
 
 def bucket_pixels_pair(size: tuple[int, int]) -> tuple[int, int]:
@@ -2236,6 +2339,11 @@ def child(args) -> dict:
                         record["wave_reference"] = round_wave_reference(out)
                     except Exception:
                         record["wave_reference"] = {"pass": False, "error": traceback.format_exc()}
+                if "wave_chain" in args.rounds:
+                    try:
+                        record["wave_chain_reference"] = round_wave_chain_reference(out)
+                    except Exception:
+                        record["wave_chain_reference"] = {"pass": False, "error": traceback.format_exc()}
                 if "parity" in args.rounds or "placement_control" in args.rounds:
                     record["reference"] = round_reference(core, packs, out)
                 if "python_cost" in args.rounds:
@@ -2290,6 +2398,8 @@ def child(args) -> dict:
                             record[name] = round_wave_limits(core, engine, app, wave_packs, folder)
                         elif name == "wave_filter":
                             record[name] = round_wave_filter(core, engine, app, wave_packs)
+                        elif name == "wave_chain":
+                            record[name] = round_wave_chain(core, engine, app, args.api, wave_packs, out)
                     except Exception:
                         record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:
@@ -2307,7 +2417,8 @@ def child(args) -> dict:
                                         "attribution": summary["groups"]}
             del engine
     if args.api == "reference":
-        record["rounds"] = [name for name in ("reference", "python_cost", "wave_reference") if name in record]
+        record["rounds"] = [name for name in ("reference", "python_cost", "wave_reference", "wave_chain_reference")
+                            if name in record]
     return record
 
 
@@ -2341,7 +2452,8 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
     if record.get("exit_code", 0) != 0:
         return False, [f"{api}: child process failed ({record['exit_code']})"]
     if api == "reference":
-        rounds = [name for name in ("reference", "python_cost", "wave_reference") if name in record]
+        rounds = [name for name in ("reference", "python_cost", "wave_reference", "wave_chain_reference")
+                  if name in record]
         failed = [f"{name}: {record[name].get('error') or 'failed'}"[:1500] for name in rounds
                   if not record[name].get("pass")]
         if not rounds:
@@ -2416,7 +2528,7 @@ def main(argv: list[str] | None = None) -> int:
     results: dict = {}
     children = [a for a in APIS if a in args.apis and set(args.rounds) - set(PYTHON_ROUNDS)]
     if (("parity" in args.rounds or "placement_control" in args.rounds) and "opengl" in args.apis) \
-            or "python_cost" in args.rounds or "wave_floor" in args.rounds:
+            or "python_cost" in args.rounds or "wave_floor" in args.rounds or "wave_chain" in args.rounds:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
@@ -2459,9 +2571,16 @@ def main(argv: list[str] | None = None) -> int:
         wave = wave_verdict(out, [api for api in APIS if api in args.apis])
         if not wave["pass"]:
             failed.append("wave_floor: " + "; ".join(wave.get("reasons", []))[:1500])
+    wave_chain = None
+    if "wave_chain" in args.rounds:
+        # ABI 35 (C1): the item textures' box chains against the Python renderer's, both routes on Vulkan.
+        wave_chain = wave_chain_verdict(out, [api for api in APIS if api in args.apis])
+        if not wave_chain["pass"]:
+            failed.append("wave_chain: " + "; ".join(wave_chain.get("reasons", []))[:1500])
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
     summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment, "wave_floor": wave,
+               "wave_chain": wave_chain,
                "require_validation": args.require_validation, "cross": cross, "placement_control": placement_control,
                "verdicts": {api: {"pass": ok, "failed": reasons} for api, (ok, reasons) in verdicts.items()},
                "results": results, "pass": not failed}

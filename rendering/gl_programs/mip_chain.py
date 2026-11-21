@@ -70,11 +70,18 @@ void main()
     taps(dst.y, source.y, ay, wy);
     precise vec4 outer = wy.x * row(ay.x, ax, wx) + wy.z * row(ay.z, ax, wx);
     precise vec4 sum = outer + wy.y * row(ay.y, ax, wx);
-    imageStore(u_dest, dst, sum);
-}
+%(store)s}
 """
-MIP_BOX_COMP = _MIP_BOX % {"format": "rgba16f"}
-MIP_BOX_RGBA8_COMP = _MIP_BOX % {"format": "rgba8"}
+_STORE = "    imageStore(u_dest, dst, sum);\n"
+#: An 8-bit level is rounded in the kernel, once, to the nearest of its 256 values (precise: no fused multiply-add, so
+#: both backends compute the same k), and the store then converts an exact value: the backends' own float-to-unorm
+#: conversions differ near the halves (measured 21 Nov on the ABI 35 build: 509 of the 14,508 level-1 texels of the
+#: chain scene one level apart between OpenGL and Vulkan, every one at a fraction between 0.486 and 0.585).
+_STORE_RGBA8 = ("    // Rounded here to the nearest 8-bit value (the backends' own conversions differ at the halves).\n"
+                "    precise vec4 level = floor(sum * 255.0 + 0.5) / 255.0;\n"
+                "    imageStore(u_dest, dst, level);\n")
+MIP_BOX_COMP = _MIP_BOX % {"format": "rgba16f", "store": _STORE}
+MIP_BOX_RGBA8_COMP = _MIP_BOX % {"format": "rgba8", "store": _STORE_RGBA8}
 #: The kernel's text by its images' format (the core's two shader files).
 MIP_BOX_TEXTS = {"rgba16f": MIP_BOX_COMP, "rgba8": MIP_BOX_RGBA8_COMP}
 MIP_BOX_GROUP = 8

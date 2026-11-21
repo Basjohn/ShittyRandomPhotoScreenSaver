@@ -85,8 +85,14 @@ def test_the_kernel_files_are_the_python_renderers_texts():
     for fmt, text in MIP_BOX_TEXTS.items():
         assert f"layout(binding = 0, {fmt}) readonly uniform image2D u_source;" in text
         assert f"layout(binding = 1, {fmt}) writeonly uniform image2D u_dest;" in text
-    # The two differ in their images' format only.
-    assert MIP_BOX_COMP.replace("rgba16f", "rgba8") == MIP_BOX_RGBA8_COMP
+    # The two differ in their images' format and the 8-bit text's own rounding to the nearest value before its store
+    # (the backends' float-to-unorm conversions differ at the halves), done once with no fused multiply-add.
+    rounding = ("    // Rounded here to the nearest 8-bit value (the backends' own conversions differ at the halves).\n"
+                "    precise vec4 level = floor(sum * 255.0 + 0.5) / 255.0;\n"
+                "    imageStore(u_dest, dst, level);\n")
+    assert rounding in MIP_BOX_RGBA8_COMP and "imageStore(u_dest, dst, sum);" in MIP_BOX_COMP
+    assert MIP_BOX_COMP.replace("rgba16f", "rgba8").replace("    imageStore(u_dest, dst, sum);\n", rounding) \
+        == MIP_BOX_RGBA8_COMP
     # Negative control: a file drifting from its text is caught (the RGBA8 file is not the RGBA16F text).
     assert (SHADERS / "mip_box_rgba8.comp").read_text(encoding="utf-8") != MIP_BOX_COMP
 
