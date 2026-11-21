@@ -84,7 +84,12 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   first), then 1C.10.
 - [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
   layer L; the lead runs layer T.
-- [ ] Second Medium (Opus Medium agent aea35d28be699535f): Spline Curve's two steady classes. Step 3's offline work is
+- [ ] Second Medium (Opus Medium agent aea35d28be699535f): Spline Curve's two steady classes are root-caused (21 Nov):
+  the core draws generic modes with one oversized triangle, Python with the card's quad, so each pixel's interpolated
+  position differs by up to 1e-4 px and boundary pixels tip a level (the shader text and composite ruled out by
+  emulation matching the real module bit for bit). Lead decision: fix at the source, the card's quad in
+  `mode_content.cpp` (an ABI bump), the triangle kept as a harness-only control; then re-prove every generic mode
+  under the split. Step 3's offline work is
   done: the hero and wake rejects halve the bubble pass at 4K (5.10 to 2.43 ms OpenGL, 4.61 to 1.75 ms Vulkan); the
   lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
