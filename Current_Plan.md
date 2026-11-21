@@ -80,9 +80,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
     failures on three takes. Still to run before merge: the content harnesses on both APIs, Spectrum hash identity,
     Bubble variant a on one take. Smallest path: run those, merge if clean; otherwise park it.
-- [ ] The Oscilloscope (unregistered, ABI 29+): rule (b) fails on every 60 s take (constant offsets on fixed pixels,
-  systematic: root cause, no bound); offer nightsolong block size 0 input 1388; the stream player's windows do not
-  reproduce its continuous frames; then the lead's layer T and cost round, registration.
+- [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
+  it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
+  (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
+  not to a slot; the player-window gap is a tool note. Left: the lead's layer T and cost round on a quiet machine, then
+  registration (playbook checklist 18) and its docs.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
