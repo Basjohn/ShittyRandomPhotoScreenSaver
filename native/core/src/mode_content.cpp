@@ -5470,7 +5470,8 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
 }
 
 void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRect &viewport,
-                           const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor, quint32 vertices)
+                           const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor,
+                           quint32 triangleVertices)
 {
     Q_UNUSED(rhi);
     const ModeProgram &program = m_source->drawnProgram();
@@ -5496,7 +5497,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
         cb->setShaderResources(nullptr, count, offsets);
         cb->setVertexInput(0, 1, &triangle);
-        cb->draw(vertices);
+        cb->draw(triangleVertices);
         return;
     }
     const bool clockwise = pass.frontSelector.kind == DrawCount::Kind::Named && resolveCount(pass.frontSelector, 0) == 1;
