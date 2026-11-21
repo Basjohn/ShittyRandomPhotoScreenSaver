@@ -1916,9 +1916,9 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
 
-- [~] The theme list's and the popup's scrollbars (native black/white bars in off-screen captures): 1B.14's Settings
-  and Studio box. Root cause (product or capture-only) with Sonnet agent a50cccb24fe71080c, 21 Nov, with 1C.9's
-  Sources list bars.
+- [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
+  1B.14's Settings and Studio box. Side defect: the other Settings tabs' QScrollArea bars are unthemed by the same
+  cause (no QScrollBar rule in `ui/settings_theme.py`); give them the same owner. The Studio's QML bars are 1B.14's.
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (contract: plan 01 M3c)
 
