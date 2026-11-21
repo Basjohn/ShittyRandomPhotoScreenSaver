@@ -73,7 +73,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Merge the fast-proof branch `worktree-agent-a6257c36aeee45f10` (head b3f8b51c6 fixes the worker-path identity
   test; its tests passed) after rerunning `tests/test_visualizer_owner_render_parity.py` on the merge. Its heavy runs
   wait for quiet CPU: the method proof, the rule (a) reruns, the Oscilloscope partner control.
-- [ ] The Oscilloscope branch: an Opus High audit, then merge, an ABI 27 build of main, the quiet cost round, layer T.
+- [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
 - [ ] The smoke-host branch `worktree-agent-ad927a7c14bbc5053`: run both smoke tools, review the sheets, merge.
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
   identical counts before the HUD fix; order-dependent bubble-normal failures too). The protected clip commits rule
