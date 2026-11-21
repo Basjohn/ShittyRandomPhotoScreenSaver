@@ -76,11 +76,32 @@ L, response tools, timing parity) applies to it.
 
 **A transition port** needs fidelity and performance, nothing else (operator, 21 Nov).
 - **Fidelity:** rule (a) and rule (b) through `transition_route_check.py` over the full canonical duration and
-  several image pairs; no separate logic layer (the pixels prove it), no response tool, no reaction modes.
-- **Performance:** C per pass at 2560 x 1440 and 4K on both backends, and one native Vulkan run for hitches and
-  stalls (`preflip_pack.py --rows "transition/<id>/*" --name <post> --backend native-vulkan
-  --app-arg=--graphics-backend=vulkan`): no late frames past the lifecycle windows, no first-frame compile stall. No
-  pre-port baseline and no timing parity.
+  several image pairs; no separate logic layer (the pixels prove it), no response tool, no reaction modes. The lead's
+  transition rules (21 Nov, N5.2c; each constant in the harness carries its reason):
+  - A 3D scene single-sampled (`N52C_RULE_A`): at most 1,750 one-level pixels a frame in groups of at most 28, nothing
+    past one level: the translated packs and Python's compiler round a face's UVs and lighting within float error of a
+    half level differently (measured worst 1,152 a frame and a group of 19, times 1.5).
+  - A 3D scene multisampled is judged by rule (b) only (D8 point 1), and its rule (a) by its single-sampled form (the
+    same geometry): the core draws its targets top row first and Python bottom row first, so the driver's 4x sample
+    pattern, not symmetric under a vertical flip, lands mirrored and a slanted edge's pixel covers a different sample.
+    The core's row order is not changed for it.
+  - Jigsaw's single-sampled scenes also admit one flip a frame on a piece's outline (`JIGSAW_RULE_A`, as Surface
+    Tension's): the two compilers put the outline either side of a pixel centre (measured one pixel, 12 levels).
+  - Blinds' flat style is a fragment pass with its own scatter bound (`BLINDS_FLAT_RULE_A`: 192, measured 128 times 1.5).
+  - A pose that is degenerate in Python itself is checked off it, never excused and never given a wider bound: Blinds'
+    slats at 0.49 and 0.51 instead of 0.5 (a slat's side edge-on covers a row only by float error, and Python draws that
+    row differently 1e-4 either side; at 0.4999 and 0.5001 the faces near edge-on still put 3,036 pixels a frame one
+    level off at dpr 1.5).
+  - Rule (b) admits the rasterisers' flips on geometry edges by name (`N52C_RULE_B`: at most 3 a frame, each isolated
+    on an edge: Cube Turn's slanted silhouette, a Jigsaw piece's outline, a Cascade card's edge), as `BEAM_RULE_B`.
+- **Performance:** C per pass at 2560 x 1440 and 4K on both backends (`transition_route_check.py --cost`, Crossfade
+  the control), and one native Vulkan run for hitches and stalls (`preflip_pack.py --rows "transition/<id>/*" --name
+  <post> --backend native-vulkan --app-arg=--graphics-backend=vulkan`, with `--per-row` for a one-transition session
+  each). Read the row's hitch figures, never its fps or late %: the render thread's frame gaps inside each run (median,
+  p90, max, the count over 33 ms; the startup reveal and the destination's handover lie outside the run's window, and its
+  first frame is measured from the run's start), cut from the frame trace by the run's records (the native layer's tick
+  and end records on Vulkan). The verdict is no gap over 33 ms inside a run, which includes no first-run compile stall.
+  No pre-port baseline and no timing parity.
 - Registration (offering it on Vulkan) waits for both.
 
 **An optimisation of a landed port.**

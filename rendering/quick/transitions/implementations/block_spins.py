@@ -29,7 +29,8 @@ from rendering.gl_programs.scene3d import (
     scene3d_shutter_progress,
     scene3d_trail_ghosts,
 )
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.motion import motion_program, set_motion_values
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, draw_ghosts, trail_program
 from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
@@ -134,7 +135,7 @@ class QuickBlockSpinsRenderer:
                         (r, *TRAIL_EDGES_PROGRAM)]
         reflections = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off")) in (1, 3)
         if reflections:
-            entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
+            entries += [(r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
         if not warm_programs(entries):

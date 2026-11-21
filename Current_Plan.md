@@ -69,11 +69,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
 - [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
   its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
-- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
-  environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
-  merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
-- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends. Its Vulkan hitch run passed 21 Nov (0 % late,
-  render 0.43/0.61 ms against Python OpenGL 1.03/1.5).
+- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): proved and registered on its branch,
+  waiting for the lead's merge (the N5.2c box).
+- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
+  crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
+  "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
+  over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
 - [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
   Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
   Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
@@ -1412,7 +1413,99 @@ whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a 
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw. Dispatched 21 Nov with N4.j
-  (agent a77d7d16afb481093, Opus High), ABI 34 reserved.
+  (agent a77d7d16afb481093, Opus High), ABI 36 (34 retired unused).
+  - [ ] Merge the branch (the ABI 36 module built from 068be1f26; nothing in the core changed after it). Every other
+    box of the port is met: rules (a) and (b) pass (route check r5, the lead's rules in `transition_route_check.py`),
+    cost per pass at 1440p and 4K on both backends, the Vulkan hitch session passes, and the four are registered.
+  - [ ] Watch after the merge: the CPU inside a run on native Vulkan is 28-36 % of a core for these four and Beam (the
+    "Performance, before the flip" box above owns the cause); Jigsaw's GUI tick is about 1.25 ms against 0.5 for the
+    others (its piece table packed every frame).
+  - Reading (Opus High agent, worktree agent-a77d7d16afb481093, 21 Nov; no Python pixel touched). Files under
+    `rendering/quick/transitions/implementations/`: `ct.py` cube_turn, `bl.py` blinds, `dc.py` depth_cascade, `jg.py`
+    jigsaw; under `rendering/gl_programs/`: `ctp.py` cube_turn_program, `bsp.py` blinds_slats_program, `dcp.py`
+    depth_cascade_program, `jgp.py` jigsaw_program, `s3d.py` scene3d; under `rendering/quick/scene3d/`: `env.py`
+    environment, `target.py`, `res.py` resources; `mc.h`/`mc.cpp` `native/core/src/mode_content.*`, `ps.h`
+    `post_stages.h`.
+    - **Shared shape.** The host fence disables blend, cull, depth and stencil and sets the frame's viewport before every
+      render (`render_host.py:239-243`), so every pass not named below is `replace`. Each 3D run draws its photographs
+      exactly at the ends (`res.py:341-351` underlay: `ct.py:56-61`, `bl.py:193-198`, `dc.py:73-79` with the end at
+      `CASCADE_DONE` 0.95, `dcp.py:25`, `jg.py:91-96`), else, with `samples` > 0 (the tier's 4 at High, 0 below,
+      `s3d.py:81-88,106-112,139-141`), inside one opaque `SceneTarget` scope: RGBA8 colour (multisampled texture), D24
+      renderbuffer depth, the whole bucketed allocation cleared to (0,0,0,1) and depth 1 (`target.py:895-939,1204-1229`),
+      left by `scene_composite_samples` (the samples averaged in the shader, alpha 1, nothing outside the item;
+      `target.py:156-162,995-1003`); with 0 samples straight into Quick's framebuffer. `begin_depth` (`res.py:378-399`)
+      clears depth inside the viewport and sets LESS after the flat passes, none of which writes depth (each disables
+      the depth mask first), so a target's one clear at its first run is the same depth. Clip z is `sceneClipDepth(w)`
+      written after the matrix (`s3d.py:224-239`): z/w = 1.0488 - 0.4295/w, inside Vulkan's 0..1 for every w above 0.43,
+      and no geometry here comes nearer than w of about 2 (camera 3.4, `s3d.py:160`; lifts at most 1.2, `dcp.py:26,105`).
+      No pass culls or reads `gl_FrontFacing`; Cascade's and Jigsaw's fragments use `fwidth` (`dcp.py:153`,
+      `jgp.py:125`). Every value is one std140 pass block per program (`portable.py:136-150`); `gl_InstanceID` reads
+      `srpssInstanceIndex` (`portable.py:130-133`, `conventions.py:97-108`).
+    - **Photo environment (N4.j, `PhotoEnvironment`, the consumer here).** Once per run and role (key run id, image
+      identity, size; `env.py:73-103`) the lent destination photograph (only ever sampled, `env.py:168`) is drawn into an
+      owned RGBA8 texture whose longer side is `SCENE3D_ENVIRONMENT_SIZE` 512 (`env.py:49-53`, `s3d.py:157`; 512 x 288 for
+      every 16:9 display) by the fullscreen triangle with a 16-tap bilinear box (`env.py:32-46`, taps a quarter copy
+      texel apart, `uStep` from Python, `env.py:169`), then the full chain (`max(size).bit_length()` levels,
+      linear-mipmap-linear, clamped; `env.py:105-129`), made since change (1) by the shared RGBA8 box kernel
+      (`dispatch_mip_chain`, the core's `mip_box_rgba8.comp`), formerly `glGenerateTextureMipmap`. Released at `park()`
+      (`ct.py:94-97`). Read with `textureLod` at roughness x 7 (`s3d.py:158,319-322`), roughness clamped from the
+      materials' 0.2 to 0.7 (`s3d.py:350-352,422-427`; `ctp.py:89`, `bsp.py:128`, `dcp.py:147`, `jgp.py:251`), and at
+      lod 5 by Cube Turn's backdrop (`ctp.py:103`): levels 0 to 5 only, which at 512 x 288 (288, 144, 72, 36, 18, 9) are
+      each made from an even-sized level (the kernel's chain is the same on both backends at any size).
+      `BackdropEnvironment` (`env.py:210-335`) is not used by these four.
+    - **Cube Turn.** Per run: axis and sign from the direction (`ct.py:52`, `ctp.py:24-29`), gloss (`ct.py:28-33`), the
+      environment (`ct.py:63`), the box: 36 vertices of position and normal, 864 B, static (`ct.py:87-88`,
+      `s3d.py:603-621`). Per frame: angle and dolly zoom from the eased progress (`ctp.py:32-36`), lift
+      `|sin 2 angle|` (`ctp.py:39-41`), `uFinal` (`ct.py:121`). Passes (`ct.py:99-129`): the backdrop (item quad, the
+      environment at lod 5 x 0.35; `ctp.py:97-110`), then depth on and the box (36 vertices, LESS, write;
+      `ctp.py:44-95`). Blocks: backdrop `uMatrix, uItemSize`; box `+ uAngle, uFinal, uAxis, uZoom, uGloss, uLift`
+      (`ctp.py:109-113`).
+    - **Blinds.** Two styles (`bl.py:91-92,133-134`). Flat: one authored fragment over the item quad between the two
+      pictures, every frame including 0 and 1, values `u_progress, u_grid, u_feather, u_direction` (`bl.py:138-157`;
+      `u_resolution` declared and never read, `bl.py:273-274`). 3D Slats: per run count (6 to 48) and gloss
+      (`bl.py:81-88`), rows or columns (`bl.py:200`; diagonal refused, `bl.py:189-190`), the environment (`bl.py:202`),
+      the slat box (the same 36-vertex box, `bsp.py:42-43`). Per frame the progress. Passes (`bl.py:212-243`): the
+      backdrop (item quad, the new picture darkened by the turning slat's lift; `bsp.py:137-150`), then depth and the
+      slats, the box instanced `count` times, the slat from the instance index (`bsp.py:58-103`). Blocks: backdrop
+      `uMatrix, uItemSize, uProgress, uCount, uVertical`; slats `+ uGloss` (`bsp.py:154-158`).
+    - **Depth Card Cascade.** Per run: the cards from (seed, count, aspect to 4 places, sweep) (`dc.py:118-126`,
+      `dcp.py:33-47`): a 6-vertex quad (`aLocal`) with an instance stream of two vec4 a card (`aRect`, `aCard`), gloss,
+      shadows, samples (`dc.py:31-44`), the environment (`dc.py:83`). Per frame the progress. Passes (`dc.py:132-166`):
+      the new picture as the underlay (`res.py:341-351`), with Shadows on the cards' shadows instanced, colour
+      SRC_ALPHA / ONE_MINUS_SRC_ALPHA and alpha ZERO / ONE, no depth (`dc.py:136-149`, `dcp.py:161-190`), then depth and
+      the cards instanced (LESS, write; `dcp.py:117-159`). Blocks: cards `uMatrix, uItemSize, uProgress, uGloss`; shadows
+      `uMatrix, uItemSize, uProgress` (`dcp.py:194-198`).
+    - **Jigsaw Piece Flip.** Per run: the geometry keyed (seed, pieces, order, aspect to 2 places)
+      (`run_geometry.py:288-307`), prepared on COMPUTE (`run_geometry.py:405-441`) or built at the first frame
+      (`jg.py:147`): one mesh of `PIECE_VERTEX_ATTRIBUTES` (2, 1, 3, 1, 1) = 32 B a vertex (`piece_layout.py:67`), the
+      first `flat_vertices` the resting faces; the piece table `uPieces` vec4[160], 2,560 B in each of three blocks
+      (`jgp.py:30,98`, `jg.py:36-45`); `uCell, uThick, uRadius, uHop` from the grid (`jg.py:164-178`); shadows from the
+      tier (`jg.py:61-62`). Per frame the progress. Passes (`jg.py:180-215`): flat (the first `flat_vertices`, no depth;
+      `jgp.py:145-176`), with shadows the built-in quad instanced once a piece, colour DST_COLOR / ZERO and alpha
+      ZERO / ONE (`jg.py:193-202`, `passes.py:11-23`, `jgp.py:259-295`), then depth and the flight (every vertex, LESS,
+      write; a resting piece sent to z = 2 and clipped, `jgp.py:202-232`).
+    - **What the ABI 32 core already has for them.** Own vertex stages on the item's meshes and the built-in quad with
+      instance streams and counts (`rendering/native/mode.py:279,367-418,880-894`), full blend declarations
+      (`mode.py:282-295`), a scene target with D32F depth, LESS and write, samples clamped to the device
+      (`mode.py:208-246`, D14 points 1, 5, 7), the clearing draw at a target's first run (`mc.cpp:6747-6755`), at most 16
+      passes (`mc.h:193`; these need at most 5), 8 textures (`mc.h:279`; these need 2), array members (Surface Tension's
+      pools, N5.2b), stills drawing stages (`mc.cpp:6956-6959`), and the photo itself at the ends: the layer's own
+      background program on either slot (`native_background.py:79-85,329-348`).
+    - **What it lacks (C++, ABI 36).** (1) The photo environment: an explicit-size mipped RGBA8 copy of an item texture,
+      drawn once per image and read with mips. A mipped target is surface-sized, its mips made only for a defocus step,
+      and a target's sampler has no mips (`mode.py:222-232`, `ps.h:26-29`, `mc.h:94-96`). (2) An opaque composite without
+      a glow: the forms are overlay, overlay_glow and opaque_glow, and opaque_glow needs a bloom step's glow
+      (`mc.cpp:2471-2480`, `native/core/shaders/composite_opaque_glow.frag`). Not needed: a mid-frame depth clear (above),
+      per-sample composite reads (D5.6 row 7: resolve first; multisampled output is judged repeat-relative, D8 point 1),
+      targets, blend, mesh, stream or pass limits.
+    - **What it lacks (Python).** The native route takes only `NativeFragmentPass` (`native_background.py:103-116`); the
+      four renderers compute their values inline with their GL calls (`ct.py:99-129`, `bl.py:138-157,212-243`,
+      `dc.py:132-166`, `jg.py:164-215`), so the values need one owner both renderers read, and their meshes are uploaded
+      per run.
+    - **Expected parity.** Single-sampled: exact but where D24 (`target.py:1227-1228`, Quick's own buffer without a
+      target) and D32F break a depth tie differently, and where the environment copy's bilinear taps land on a weight
+      step (Python interpolates `vUv`, `env.py:41`). Multisampled: QRhi's average resolve against Python's shader average
+      (`target.py:114-121`) differs by one level at half-way samples on edges, judged repeat-relative.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).

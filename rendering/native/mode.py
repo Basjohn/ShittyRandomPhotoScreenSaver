@@ -518,6 +518,8 @@ MAX_STORAGE_IMAGES = 9                 # ABI 33 (N5.4): Waveform with Floor Give
 MAX_COMPUTE_BINDINGS = 8
 #: The lost edge's prefix for storage a content made again found gone (``mode_content.h``).
 _STATE_LOST = "state:"
+#: N5.2c: and "mesh:<name>" for a mesh it has nothing to upload from.
+_MESH_LOST = "mesh:"
 
 
 @dataclass(frozen=True)
@@ -635,8 +637,11 @@ class CapturePass:
         return {"name": self.name, "capture": self.target}
 
 
-#: N3.4 (D17 point 5): the composite step's forms, and the alpha a transparency resolve writes.
-COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow")
+#: N3.4 (D17 point 5): the composite step's forms (N5.2c: ``opaque``, the 3D transitions' scenes without bloom), and the
+#: alpha a transparency resolve writes.
+COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow", "opaque")
+#: The forms that add a bloom step's glow.
+GLOW_FORMS = ("overlay_glow", "opaque_glow")
 #: A composite step's scene frames (ABI 29: the window's; ABI 35: the content's orientation; None: the surface's).
 SCENE_FRAMES = (None, "window", "oriented")
 RESOLVE_ALPHAS = ("coverage", "keep")
@@ -707,8 +712,8 @@ class CompositeStep:
     def __post_init__(self) -> None:
         if self.form not in COMPOSITE_FORMS:
             raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
-        if (self.glow is None) != (self.form == "overlay"):
-            raise ValueError("the glow forms read a bloom step's glow; the overlay reads none")
+        if (self.glow is None) == (self.form in GLOW_FORMS):
+            raise ValueError("the glow forms read a bloom step's glow; the overlay and the opaque form read none")
         if self.scene_frame not in SCENE_FRAMES:
             raise ValueError(f"unknown scene frame {self.scene_frame!r} (\"window\", \"oriented\", or none)")
 
@@ -737,7 +742,32 @@ class DefocusStep:
         return {"name": self.name, "defocus": self.layer, "onto": self.onto}
 
 
-_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep)
+#: N5.2c (N4.j): the most environment steps a program takes, and the most texels a side.
+MAX_ENVIRONMENT_STEPS = 2
+MAX_ENVIRONMENT_SIDE = 4096
+
+
+@dataclass(frozen=True)
+class EnvironmentStep:
+    """N5.2c (N4.j's ``PhotoEnvironment``, ``rendering/quick/scene3d/environment.py``): the item texture ``source``
+    box-filtered into an RGBA8 copy of ``size`` with a full mip chain (the core's ``shaders/environment.frag``, Python's
+    16-tap ``_COPY_FRAGMENT``; its levels by the core's RGBA8 box kernel, the text Python's ``PhotoEnvironment``
+    dispatches, ``rendering.gl_programs.mip_chain``), drawn once per photo; a
+    later sampler reads ``"<name>.environment"`` with mips. ``size`` is ``environment_size``'s (its one owner)."""
+
+    name: str
+    source: str
+    size: tuple[int, int]
+
+    def __post_init__(self) -> None:
+        if len(self.size) != 2 or not all(1 <= int(v) <= MAX_ENVIRONMENT_SIDE for v in self.size):
+            raise ValueError(f"an environment's size is (w, h), each 1 to {MAX_ENVIRONMENT_SIDE}")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "environment": self.source, "size": [int(self.size[0]), int(self.size[1])]}
+
+
+_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep, EnvironmentStep)
 
 
 def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
@@ -795,17 +825,22 @@ class NativeMode:
         # The core's one lost edge carries textures' names and (N3.3) "state:<resource>" names: split here.
         self._textures_lost: Callable[[list[str]], None] | None = None
         self._state_lost: Callable[[list[str]], None] | None = None
+        self._meshes_lost: Callable[[list[str]], None] | None = None   # N5.2c
 
     def _lost(self, names: list[str]) -> None:
         state = [name[len(_STATE_LOST):] for name in names if name.startswith(_STATE_LOST)]
-        textures = [name for name in names if not name.startswith(_STATE_LOST)]
+        meshes = [name[len(_MESH_LOST):] for name in names if name.startswith(_MESH_LOST)]
+        textures = [name for name in names if not name.startswith((_STATE_LOST, _MESH_LOST))]
         if textures and self._textures_lost is not None:
             self._textures_lost(textures)
         if state and self._state_lost is not None:
             self._state_lost(state)
+        if meshes and self._meshes_lost is not None:
+            self._meshes_lost(meshes)
 
     def _listen(self) -> None:
-        listening = self._textures_lost is not None or self._state_lost is not None
+        listening = (self._textures_lost is not None or self._state_lost is not None
+                     or self._meshes_lost is not None)
         self._module.composite_mode_on_lost(self._handle(), self._lost if listening else None)
 
     def _handle(self) -> int:
@@ -886,6 +921,13 @@ class NativeMode:
         storage buffers and images a content made again found gone (they are made zeroed and the compute entries
         dispatch fresh: a history restarts as at its first frame). None removes it."""
         self._state_lost = callback
+        self._listen()
+
+    def on_meshes_lost(self, callback: Callable[[list[str]], None] | None) -> None:
+        """N5.2c (playbook checklist 13): the owner's lost-mesh edge: ``callback`` is called on the GUI thread, once per
+        loss, with the meshes a content made again has nothing to upload from; the owner sends them again
+        (:meth:`mesh`) and the drawing goes on. None removes it."""
+        self._meshes_lost = callback
         self._listen()
 
     def image_size(self, name: str, size: tuple[int, ...]) -> None:
@@ -977,7 +1019,8 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
 
 
 __all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "COMPUTE_RESOURCES", "CULL_MODES",
-           "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
+           "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "EnvironmentStep", "GLOW_FORMS",
+           "MAX_ENVIRONMENT_SIDE", "MAX_ENVIRONMENT_STEPS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
            "MAX_STORAGE_IMAGES", "STORAGE_ACCESS", "STORAGE_IMAGE_FORMATS", "StorageBuffer", "StorageImage",
            "MAX_BATCHES", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS", "MODE_CORE_MEMBERS",
            "MeshAttribute", "ModePass", "ModeStream", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassGeometry",

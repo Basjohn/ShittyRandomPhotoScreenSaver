@@ -238,6 +238,15 @@ def test_the_defocus_layer_alone_takes_generate_mips() -> None:
     assert "mip_box_comp_qsb" in kernel and "mip_box_rgba8_comp_qsb" in kernel and "generateMips(" not in kernel
     passes = content[content.index("void ModeContent::recordPasses("):content.index("bool ModeContent::record(")]
     assert content.count("generateSelfMips(") == passes.count("generateSelfMips(") == 1
+    # ABI 36 (N5.2c): the photo environment's copy gets its levels from the same kernel, after its copy pass, its
+    # bindings made with its texture (MipMapped | UsedWithLoadStore).
+    stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    environment = stages[stages.index("bool PostStages::recordEnvironment("):]
+    environment = environment[:environment.index("\n}\n")]
+    assert environment.index("cb->endPass();") < environment.index("m_environmentChains.record(cb, e->chain);")
+    synced = stages[stages.index("bool PostStages::syncEnvironments("):stages.index("bool PostStages::environmentBindings(")]
+    assert "m_environmentChains.bind(rhi, e.texture.get(), spec.size, &e.chain," in synced
+    assert "QRhiTexture::UsedWithLoadStore" in synced and "UsedWithGenerateMips" not in synced
 
 
 # --------------------------------------------------------------------------- the composite and the HDR resolve (point 5)
@@ -389,7 +398,8 @@ def test_the_core_reads_every_stage_shader_it_bakes() -> None:
     for name in ("scene_oit_resolve.frag", "scene_oit_resolve_samples.frag", "scene_oit_resolve_sample0.frag",
                  "bloom_down_first.frag", "bloom_down.frag", "bloom_up.frag", "composite_overlay.frag",
                  "composite_overlay_glow.frag", "composite_opaque_glow.frag", "defocus_clip.frag", "defocus_gather.frag",
-                 "defocus_sprites.vert", "defocus_sprites.frag"):
+                 "defocus_sprites.vert", "defocus_sprites.frag",
+                 "composite_opaque.frag", "environment.frag"):   # N5.2c
         assert (SHADERS / name).is_file(), name
         symbol = re.sub(r"[^A-Za-z0-9]", "_", name) + "_qsb"
         assert f"shaderFrom({symbol}, {symbol}_size)" in stages, symbol

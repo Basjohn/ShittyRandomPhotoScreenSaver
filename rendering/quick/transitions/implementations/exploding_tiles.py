@@ -42,7 +42,8 @@ from rendering.gl_programs.scene3d import (
     scene3d_shutter_progress,
     scene3d_trail_ghosts,
 )
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.shadows import draw_planar_shadows
@@ -128,7 +129,7 @@ class QuickExplodingTilesRenderer:
         detail = scene3d_detail(detail_name)
         samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "backdrop", EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE)]
         if detail.shadows:
             entries.append((r, "shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE))

@@ -125,7 +125,8 @@ def test_named_environment_construction_uses_immutable_storage_and_only_binds_th
         assert calls["glCreateFramebuffers"] == 1
         assert calls["glNamedFramebufferTexture"] == 1
         assert calls["glCheckNamedFramebufferStatus"] == 1
-        assert calls["glGenerateTextureMipmap"] == 1
+        # N5.2c (ABI 36): the copy's levels are the shared box kernel's, never the driver's.
+        assert calls.get("glGenerateTextureMipmap", 0) == 0
         # One active/bind pair samples the lent photo. Legacy construction also
         # selected/bound the owned texture for allocation and mipmaps, so this
         # complete first-copy path removes three calls (2 + 1).
@@ -264,6 +265,71 @@ def test_environment_release_retries_a_failed_texture_deletion(qt_app, monkeypat
         environment.release()
         resources.release_resources()
         capture.close()
+
+
+def _level(texture: int, level: int, size: tuple[int, int]) -> np.ndarray:
+    width, height = max(1, size[0] >> level), max(1, size[1] >> level)
+    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+    data = gl.glGetTexImage(gl.GL_TEXTURE_2D, level, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+    return np.frombuffer(bytes(data), dtype=np.uint8).reshape(height, width, 4).astype(np.float64)
+
+
+def _area_average(level: np.ndarray) -> np.ndarray:
+    """The next level as the box kernel defines it (mip_chain.py): each texel the exact area average of the texels it
+    covers (an even side two of 1/2, an odd side 2d + 1 three of (d - i), d and i + 1 over 2d + 1), rounded once."""
+
+    def along(a: np.ndarray, axis: int) -> np.ndarray:
+        a = np.moveaxis(a, axis, 0)
+        s = a.shape[0]
+        if s == 1:
+            out = a
+        elif s % 2 == 0:
+            out = 0.5 * a[0::2] + 0.5 * a[1::2]
+        else:
+            d = s // 2
+            i = np.arange(d).reshape((-1,) + (1,) * (a.ndim - 1))
+            out = ((d - i) * a[0:2 * d:2] + d * a[1:2 * d:2] + (i + 1) * a[2:2 * d + 1:2]) / s
+        return np.moveaxis(out, 0, axis)
+
+    return np.floor(along(along(level, 0), 1) + 0.5)
+
+
+def _chain_error() -> tuple[int, int]:
+    """(the largest difference in 8-bit levels, the texels that differ) between each level of a copy of an odd-sized
+    environment and the area average of the level above it."""
+    width, height = 300, 200                         # the copy 512 x 341: an odd side from level 0
+    noise = np.random.default_rng(52).integers(0, 256, (height, width, 4), dtype=np.uint8)
+    noise[..., 3] = 255
+    capture = TransitionCapture(width, height, destination=Image.fromarray(noise, "RGBA"))
+    resources, environment = MeshResources("environment chain"), PhotoEnvironment("environment chain")
+    try:
+        texture = environment.texture(capture.frame(capture.run("glass_shatter", direction="left"), 0.5), resources)
+        size = environment_size((width, height))
+        assert size[1] % 2 == 1
+        worst = differing = 0
+        for level in range(1, max(size).bit_length()):
+            made = _level(texture, level, size)
+            expected = _area_average(_level(texture, level - 1, size))
+            worst = max(worst, int(np.abs(made - expected).max()))
+            differing += int((made != expected).any(axis=2).sum())
+        return worst, differing
+    finally:
+        environment.release()
+        resources.release_resources()
+        capture.close()
+
+
+def test_the_copys_chain_is_the_shared_box_kernels(qt_app, monkeypatch):
+    """N5.2c (ABI 36): the copy's levels are the shared box kernel's (the native core's environment step runs the same
+    text), each the area average of the level above: a texel apart only where the kernel's float sum of an odd side's
+    thirds rounds a half the other way (measured 1 of the chain's ~58,000 texels)."""
+    worst, differing = _chain_error()
+    assert worst <= 1 and differing <= 8
+    # Negative control: the former chain, the driver's glGenerateTextureMipmap (its odd levels anchored at row 0 on this
+    # machine's OpenGL; measured 12,532 texels apart), is caught.
+    monkeypatch.setattr(environment_module, "dispatch_mip_chain",
+                        lambda _program, texture, _size, _levels, _fmt: gl.glGenerateTextureMipmap(texture))
+    assert _chain_error()[1] > 8
 
 
 _PROBE_FRAGMENT = """#version 460 core

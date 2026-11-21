@@ -24,10 +24,12 @@ from rendering.gl_programs.jigsaw_program import (
 )
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_request_samples
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from ..native_scene import NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show
 from ..piece_layout import PIECE_VERTEX_ATTRIBUTES
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import PREPARED_GEOMETRY, build_jigsaw_geometry, jigsaw_geometry_key
@@ -35,6 +37,33 @@ from ..run_geometry import PREPARED_GEOMETRY, build_jigsaw_geometry, jigsaw_geom
 _ORDER_CODES = frozenset(JIGSAW_ORDERS.values())
 _PIECE_BYTES = 16                                  # one vec4 (centre uv, rank, axis angle), std140's array stride
 _NO_PIECES = bytes(JIGSAW_MAX_PIECES * _PIECE_BYTES)
+#: N5.2c: the pieces' attributes by name (``PIECE_VERTEX_ATTRIBUTES``' order).
+_PIECE_INPUTS = tuple(zip(("aUv", "aSide", "aNormal", "aBevel", "aPiece"), PIECE_VERTEX_ATTRIBUTES))
+#: The shadow's multiply (``blend_scope(GL_FUNC_ADD, GL_DST_COLOR, GL_ZERO)``: alpha ZERO, ONE).
+_SHADOW_BLEND = (("add", "dst_color", "zero"), ("add", "zero", "one"))
+_SCENE_PASSES = (
+    NativeScenePass("flat", JIGSAW_FLAT_VERTEX_SOURCE, JIGSAW_FLAT_FRAGMENT_SOURCE, mesh="pieces",
+                    samplers=(("uOldTex", "old"), ("uNewTex", "new"))),
+    NativeScenePass("shadow", JIGSAW_SHADOW_VERTEX_SOURCE, JIGSAW_SHADOW_FRAGMENT_SOURCE, topology="triangle_strip",
+                    vertices=4, blend=_SHADOW_BLEND),
+    NativeScenePass("flight", JIGSAW_FLIGHT_VERTEX_SOURCE, JIGSAW_FLIGHT_FRAGMENT_SOURCE, mesh="pieces",
+                    samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
+)
+
+
+def _progress(sample) -> float:
+    return max(0.0, min(1.0, float(sample.eased_progress)))
+
+
+def jigsaw_values(geometry, progress: float, aspect: float) -> dict[str, object]:
+    """Every pass's values for a frame of ``geometry`` (N5.2c's one owner): the schedule (``uPieces`` packed whole),
+    the cell (the shadow's) and the card's size and hop (the flight's and the shadow's); a block takes the names it
+    declares."""
+    cell_w, cell_h = aspect / geometry.cols, 1.0 / geometry.rows
+    knob = min(cell_w, cell_h)
+    return {"uProgress": progress, "uCount": geometry.count, "uPieces": _pieces_block(geometry.pieces),
+            "uCell": (cell_w, cell_h), "uThick": JIGSAW_THICKNESS * knob,
+            "uRadius": 0.5 * math.hypot(cell_w, cell_h) + 0.3 * knob, "uHop": JIGSAW_HOP * knob}
 
 
 def _pieces_block(pieces: bytes) -> bytes:
@@ -62,8 +91,41 @@ def _shadows(parameters: Mapping[str, object]) -> bool:
     return scene3d_detail(parameters.get("detail", "High")).shadows
 
 
-class QuickJigsawRenderer:
+def _run_geometry(run, logical_size: tuple[float, float]):
+    """The run's prepared pieces (COMPUTE's, ``prepare_run_geometry``; built here when it has not prepared them)."""
+    aspect = logical_size[0] / logical_size[1]
+    return PREPARED_GEOMETRY.get_or_build(jigsaw_geometry_key(run.request.parameter_dict(), aspect),
+                                          build_jigsaw_geometry), aspect
+
+
+class QuickJigsawRenderer(NativeScenePasses):
     transition_id = "jigsaw"
+
+    # ------------------------------------------------------------------------------- N5.2c: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        jigsaw_parameters(parameters)
+        geometry, _aspect = _run_geometry(run, logical_size)
+        flat, shadow, flight = _SCENE_PASSES
+        flat = NativeScenePass(flat.name, flat.vertex_source, flat.fragment_source, mesh=flat.mesh,
+                               vertices=int(geometry.flat_vertices), samplers=flat.samplers)
+        shadow = NativeScenePass(shadow.name, shadow.vertex_source, shadow.fragment_source, topology=shadow.topology,
+                                 vertices=4, instances=int(geometry.count), blend=shadow.blend)
+        pieces = NativeSceneMesh("pieces", bytes(geometry.vertices), _PIECE_INPUTS)
+        passes = (flat, shadow, flight) if _shadows(parameters) else (flat, flight)
+        return NativeScene(passes, (pieces,), scene3d_request_samples(parameters), True)
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(_progress(sample))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float]) -> dict[str, object]:
+        geometry, aspect = _run_geometry(run, logical_size)
+        return jigsaw_values(geometry, _progress(sample), aspect)
 
     # The photographs bind_frame binds (units 0 and 1); every other value is in the programs' pass blocks.
     _SAMPLERS = ("uOldTex", "uNewTex")
@@ -115,7 +177,7 @@ class QuickJigsawRenderer:
         jigsaw_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "flat", JIGSAW_FLAT_VERTEX_SOURCE, JIGSAW_FLAT_FRAGMENT_SOURCE),
                    (r, "flight", JIGSAW_FLIGHT_VERTEX_SOURCE, JIGSAW_FLIGHT_FRAGMENT_SOURCE)]
         if _shadows(parameters):
@@ -161,24 +223,9 @@ class QuickJigsawRenderer:
         self._pieces = _NO_PIECES
         self._vao = self._count = 0
 
-    def _motion_values(self, values: dict, progress: float, aspect: float, *, cell: bool, card: bool) -> None:
-        """The schedule's values into a pass block's ``values``: the pieces (``uPieces`` packed whole), and the cell
-        (the shadow pass) and the card's size and hop (the flight and shadow passes)."""
-        geometry = self._geometry
-        cell_w, cell_h = aspect / geometry.cols, 1.0 / geometry.rows
-        knob = min(cell_w, cell_h)
-        values["uProgress"] = progress
-        values["uCount"] = geometry.count
-        values["uPieces"] = self._pieces
-        if cell:
-            values["uCell"] = (cell_w, cell_h)
-        if card:
-            values["uThick"] = JIGSAW_THICKNESS * knob
-            values["uRadius"] = 0.5 * math.hypot(cell_w, cell_h) + 0.3 * knob
-            values["uHop"] = JIGSAW_HOP * knob
-
     def _draw(self, frame, progress: float, aspect: float, environment: int, shadows: bool) -> None:
         r, geometry = self._resources, self._geometry
+        frame_values = jigsaw_values(geometry, progress, aspect)   # the one owner (N5.2c)
         # The pieces where they rest: old picture, board, or new picture, with the cut lines.
         program = r.program("flat", JIGSAW_FLAT_VERTEX_SOURCE, JIGSAW_FLAT_FRAGMENT_SOURCE)
         uniforms = r.uniforms("flat", self._SAMPLERS)
@@ -186,7 +233,7 @@ class QuickJigsawRenderer:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        self._motion_values(values, progress, aspect, cell=False, card=False)
+        values.update(frame_values)
         gl.glBindVertexArray(self._vao)
         with r.pass_blocks.bound(pack_block(JIGSAW_FLAT_BLOCK, values)):
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, geometry.flat_vertices)
@@ -195,7 +242,7 @@ class QuickJigsawRenderer:
             uniforms = r.uniforms("shadow", ())
             values = r.values("shadow")
             bind_frame(program, uniforms, frame, values)
-            self._motion_values(values, progress, aspect, cell=True, card=True)
+            values.update(frame_values)
             gl.glBindVertexArray(frame.quad_vao)
             with blend_scope(gl.GL_FUNC_ADD, gl.GL_DST_COLOR, gl.GL_ZERO), \
                     r.pass_blocks.bound(pack_block(JIGSAW_SHADOW_BLOCK, values)):
@@ -206,7 +253,7 @@ class QuickJigsawRenderer:
         uniforms = r.uniforms("flight", self._SAMPLERS)
         values = r.values("flight")
         bind_frame(program, uniforms, frame, values)
-        self._motion_values(values, progress, aspect, cell=False, card=True)
+        values.update(frame_values)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glActiveTexture(gl.GL_TEXTURE0)

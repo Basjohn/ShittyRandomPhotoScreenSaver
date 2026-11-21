@@ -20,12 +20,39 @@ from rendering.gl_programs.depth_cascade_program import (
 from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEP_VECTORS
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
+from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
+                                               warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+                            item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
 
 _QUAD = (0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0)
+#: N5.2c: the card quad's and its instances' attributes by name (``_QUAD``'s corner; per card its rect and its flight).
+_CARD_INPUTS = (("aLocal", 2),)
+_CARD_INSTANCE_INPUTS = (("aRect", 4), ("aCard", 4))
+#: The shadows' blend (``_draw``: colour SRC_ALPHA, ONE_MINUS_SRC_ALPHA; alpha ZERO, ONE).
+_SHADOW_BLEND = (("add", "src_alpha", "one_minus_src_alpha"), ("add", "zero", "one"))
+_SCENE_PASSES = (
+    item_quad_pass("underlay", UNDERLAY_PROGRAM[1], UNDERLAY_PROGRAM[2], (("uImage", "new"),)),
+    NativeScenePass("shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE, mesh="cards",
+                    instances="mesh", blend=_SHADOW_BLEND),
+    NativeScenePass("cards", CASCADE_VERTEX_SOURCE, CASCADE_FRAGMENT_SOURCE, mesh="cards", instances="mesh",
+                    samplers=(("uOldTex", "old"), ("uEnvironment", "environment")), depth=True),
+)
+
+
+def _progress(sample) -> float:
+    return max(0.0, min(1.0, float(sample.eased_progress)))
+
+
+def _sweep(direction) -> tuple[float, float]:
+    sweep = CASCADE_SWEEP_VECTORS.get(str(direction))
+    if sweep is None:
+        raise ValueError(f"unknown resolved Depth Card Cascade sweep: {direction!r}")
+    return sweep
 
 
 def depth_cascade_parameters(parameters: Mapping[str, object]) -> tuple[int, float, bool, int]:
@@ -44,8 +71,32 @@ def depth_cascade_parameters(parameters: Mapping[str, object]) -> tuple[int, flo
     return cards, float(gloss), shadows, seed
 
 
-class QuickDepthCascadeRenderer:
+class QuickDepthCascadeRenderer(NativeScenePasses):
     transition_id = "depth_cascade"
+
+    # ------------------------------------------------------------------------------- N5.2c: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        count, _gloss, shadows, seed = depth_cascade_parameters(parameters)
+        width, height = logical_size
+        cards = cascade_cards(seed, count, width / max(1e-6, height), _sweep(run.request.direction))
+        mesh = NativeSceneMesh("cards", pack_floats(_QUAD), _CARD_INPUTS,
+                               pack_floats(tuple(value for card in cards for value in card)), _CARD_INSTANCE_INPUTS)
+        passes = _SCENE_PASSES if shadows else (_SCENE_PASSES[0], _SCENE_PASSES[2])
+        return NativeScene(passes, (mesh,), scene3d_request_samples(parameters), True)
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(_progress(sample), CASCADE_DONE)
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float]) -> dict[str, object]:
+        """The frame's values of the shadows and the cards (the underlay's are the core's)."""
+        _count, gloss, _shadows, _seed = depth_cascade_parameters(run.request.parameter_dict())
+        return {"uProgress": _progress(sample), "uGloss": gloss}
 
     # The photographs bind_frame binds (units 0 and 1; the cards read only the old); every other value is in the
     # programs' pass blocks.
@@ -63,10 +114,8 @@ class QuickDepthCascadeRenderer:
         return self._resources.has_resources or self._target.has_resources or self._environment.has_resources
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        sweep = CASCADE_SWEEP_VECTORS.get(str(frame.run.request.direction))
-        if sweep is None:
-            raise ValueError(f"unknown resolved Depth Card Cascade sweep: {frame.run.request.direction!r}")
+        progress = _progress(frame.sample)
+        sweep = _sweep(frame.run.request.direction)
         parameters = frame.run.request.parameter_dict()
         count, gloss, shadows, seed = depth_cascade_parameters(parameters)
         try:
@@ -83,9 +132,9 @@ class QuickDepthCascadeRenderer:
             environment = self._environment.texture(frame, self._resources)
             if samples:
                 with self._target.scope(frame, samples, self._resources):
-                    self._draw(frame, progress, gloss, shadows, environment)
+                    self._draw(frame, shadows, environment)
             else:
-                self._draw(frame, progress, gloss, shadows, environment)
+                self._draw(frame, shadows, environment)
         except Exception:
             self.release_resources()
             raise
@@ -98,7 +147,7 @@ class QuickDepthCascadeRenderer:
         depth_cascade_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "cards", CASCADE_VERTEX_SOURCE, CASCADE_FRAGMENT_SOURCE),
                    (r, "shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE)]
         if samples:
@@ -129,16 +178,17 @@ class QuickDepthCascadeRenderer:
         self._resources.drop_mesh("cards")
         self._cards_key, self._cards = None, (0, 0, 0)
 
-    def _draw(self, frame, progress: float, gloss: float, shadows: bool, environment: int) -> None:
+    def _draw(self, frame, shadows: bool, environment: int) -> None:
         r = self._resources
         vao, vertices, count = self._cards
+        frame_values = self.scene_values(frame.run, frame.sample, frame.logical_size)   # the one owner (N5.2c)
         r.draw_image(frame, frame.destination_texture_id)         # the new picture beneath the cards
         if shadows:
             program = r.program("shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE)
             uniforms = r.uniforms("shadows", ())
             values = r.values("shadows")
             bind_frame(program, uniforms, frame, values)
-            values["uProgress"] = progress
+            values.update(frame_values)
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ZERO, gl.GL_ONE)
             try:
@@ -152,8 +202,7 @@ class QuickDepthCascadeRenderer:
         uniforms = r.uniforms("cards", self._CARD_SAMPLERS, required=False)
         values = r.values("cards")
         bind_frame(program, uniforms, frame, values)
-        values["uProgress"] = progress
-        values["uGloss"] = gloss
+        values.update(frame_values)
         # Units 0 and 1 hold the photographs (bind_frame); the copy goes on 2 (restored by the host fence).
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)

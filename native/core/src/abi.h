@@ -184,7 +184,7 @@
 // SAMPLED_IMAGE_FILTER_LINEAR_BIT per storage format) and the compute facts' linear_filter_formats and
 // float32_linear_control; a linear sampler over a storage image this device does not filter linearly fails the
 // content with its reason. Backward compatible for every earlier program and caller.
-// 34: reserved for another branch (N5.2c with N4.j).
+// 34: retired unused (N5.2c moved to 36).
 // 35 (N5.4, the Waveform port's two core gaps): (1) an item texture with mips has its chain made by the core's box kernel
 // (the lead's decision of 21 Nov: every level chain a sampler reads), shaders/mip_box.comp (RGBA16F) and
 // shaders/mip_box_rgba8.comp (RGBA8), the texts rendering/gl_programs/mip_chain.py gives the Python renderer, on both
@@ -197,4 +197,10 @@
 // that viewport's), both or neither; a turned card of such a program without them is refused. Item textures with mips
 // may draw differently where a level is made from an odd size (no product mode samples them before Waveform);
 // backward compatible for every other program and caller.
-#define SRPSS_NATIVE_CORE_ABI 35
+// 36 (N5.2c with N4.j): a program's environment step ({"name", "environment": an item texture, "size": [w, h]}: N4.j's
+// photo environment, post_stages.h; its copy "<step>.environment", its chain made by the core's box kernel (mip_chain.h,
+// never generateMips), read with mips), the composite form "opaque" (no glow), composite_live's stage_environments and
+// stage_environment_copies, and the lost edge's "mesh:<name>" (a mesh a content made again has nothing to upload from:
+// the owner sends it again). Backward compatible for every earlier program (no program declares either; an owner without
+// a mesh listener ignores the name).
+#define SRPSS_NATIVE_CORE_ABI 36

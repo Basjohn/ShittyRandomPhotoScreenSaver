@@ -10,10 +10,13 @@ The matrix (``--list`` prints it and the time it needs, starting nothing):
 * every Visualizer mode of ``iter_visualizer_mode_descriptors()`` at its canonical default preset slot (one process
   per mode), and the five transitions of ``SESSION_TRANSITIONS`` (a named set, not a registry sweep: the four heaviest
   by measured cost and Crossfade as the light control; per-transition parity is proved at each port, so this is a load
-  comparison). The transitions run as ONE saver session per size and state (``--per-row`` runs one process per
-  transition instead, and a single pending transition row always does): the saver cycles the five in a fixed order, one
-  per image change, and each one's window is cut from the frame trace by its run's first and last background-render
-  records (``tools/live_check_transition_session.py``); a transition whose window has no end record is stored failed.
+  comparison). The transitions run as ONE saver session per size and state (``--per-row`` makes each transition its own
+  one-transition session; a transition row is never measured outside a session, whose figures alone describe a
+  transition): the saver cycles the five in a fixed order, one per image change, and each one's window is cut from the
+  frame trace by its run's first and last background-render records, or on the native core's background layer
+  (Vulkan) by its run's tick and end records (``tools/live_check_transition_session.py``); a transition whose window has
+  no end record is stored failed. Each window also stores the run's hitch figures and verdict (the render thread's
+  frame gaps inside it, ``run_gaps``: no gap over 33 ms, the first frame from the run's start included).
   Every other registered transition is selectable as a row by ``--rows`` (``transition/<id>/*``) at the same size and
   state, without joining the default matrix; a transition port records its pre-port row on its own (``--name`` an existing
   baseline adds rows, leaving the rest) and compares the native row against it (``--compare``).
@@ -216,12 +219,16 @@ def pending_rows(rows: list[Row], baseline: dict, *, redo: bool = False) -> list
     return [row for row in rows if redo or stored.get(row.key, {}).get("status") != "ok"]
 
 
-def plan_units(rows: list[Row], *, per_row: bool = False) -> list[tuple[str, object]]:
+def plan_units(rows: list[Row], *, per_row: bool = False, sessions: bool = True) -> list[tuple[str, object]]:
     """The saver processes the rows need: ``("row", Row)`` for one process per row, ``("session", [Row, ...])`` for the
-    transition rows of one size and state run as one session (in the order the rows have). A lone transition row is
-    never a session, and ``per_row`` makes every row its own process (single-row reruns)."""
-    if per_row:
+    transition rows of one size and state run as one session (in the order the rows have). A transition row is always
+    measured in a session (21 Nov: a per-row process reports the Visualizer's fps and late frames, which a saver without
+    one never has): ``per_row`` makes each transition its own one-transition session and every Visualizer row its own
+    process; ``sessions=False`` (no session runner given) runs every row as a row."""
+    if not sessions:
         return [("row", row) for row in rows]
+    if per_row:
+        return [("session", [row]) if row.kind == "transition" else ("row", row) for row in rows]
     groups: dict[tuple[str, str], list[Row]] = {}
     for row in rows:
         if row.kind == "transition":
@@ -229,7 +236,7 @@ def plan_units(rows: list[Row], *, per_row: bool = False) -> list[tuple[str, obj
     units, placed = [], set()
     for row in rows:
         group = groups.get((row.size, row.state)) if row.kind == "transition" else None
-        if group is None or len(group) < 2:
+        if group is None:
             units.append(("row", row))
         elif (row.size, row.state) not in placed:
             placed.add((row.size, row.state))
@@ -589,6 +596,11 @@ def session_figures(window: dict) -> dict:
         "first2s_frames": None, "first2s_late_pct": None, "steady_seconds": window.get("window_s"),
         "late_frames": window.get("late_frames"), "hitches": window.get("hitches"), "frames": window.get("frames"),
         "run_id": window.get("run_id"),
+        # The run's hitch figures (``live_check_transition_session.run_gaps``): the render thread's frame gaps inside
+        # the run, its first frame from the run's start, and the verdict (no gap over the limit).
+        "gap_ms": window.get("gap_ms"), "first_frame_ms": window.get("first_frame_ms"),
+        "gaps_over_limit": window.get("gaps_over_limit"), "gap_limit_ms": window.get("gap_limit_ms"),
+        "hitch_verdict": window.get("hitch_verdict"),
     }
 
 
@@ -616,8 +628,12 @@ def session_records(rows: list[Row], code: int, summary: dict | None, out: Path,
 
 def _log_record(record: dict, log) -> None:
     fig = record["figures"] or {}
+    gaps = fig.get("gap_ms") or {}
+    hitch = (f"  gaps {gaps.get('median')}/{gaps.get('p90')}/{gaps.get('max')} ms, first {fig.get('first_frame_ms')} ms, "
+             f"over {fig.get('gap_limit_ms')} ms: {fig.get('gaps_over_limit')}  {fig.get('hitch_verdict')}"
+             if "hitch_verdict" in fig else "")
     log(f"  {record['status']:6s} {record['key']}  fps {fig.get('fps')}  render {fig.get('render_median_ms')}/"
-        f"{fig.get('render_p90_ms')} ms  late {fig.get('late_pct')} %  cpu {fig.get('cpu_core_pct')} %"
+        f"{fig.get('render_p90_ms')} ms  late {fig.get('late_pct')} %  cpu {fig.get('cpu_core_pct')} %" + hitch
         + (f"  ({record['failure']})" if record.get("failure") else ""))
 
 
@@ -629,7 +645,8 @@ def measure_rows(rows: list[Row], baseline: dict, path: Path, *, measure, condit
     None)``; with ``measure_session(rows, out) -> (exit code, summary or None)`` the pending transition rows of one size
     and state run as one session (see ``plan_units``), unless ``per_row``."""
     outcome = {"ok": [], "failed": [], "skipped": {}}
-    for kind, payload in plan_units(pending_rows(rows, baseline, redo=redo), per_row=per_row or measure_session is None):
+    for kind, payload in plan_units(pending_rows(rows, baseline, redo=redo), per_row=per_row,
+                                    sessions=measure_session is not None):
         group = payload if kind == "session" else [payload]
         problem = display_problem(SIZES[group[0].size], displays_fn())
         if problem:
@@ -787,6 +804,17 @@ def baseline_markdown(data: dict) -> str:
                      f"{_pair(fig['swap_gap_median_ms'], fig['swap_gap_p90_ms'])} | {_cell(fig['late_pct'])} | "
                      f"{_cell(fig['hitches_per_min'], 2)} | {_cell(fig['cpu_core_pct'])} | {_cell(fig['gpu_ms_per_frame'], 3)} | "
                      f"{_pair(fig['rss_mb'], fig['private_mb'], 0)} | {_cell(fig['first2s_frames'], 0)} |")
+    hitches = [(key, record["figures"]) for key, record in sorted(data["rows"].items())
+               if record.get("status") == "ok" and (record.get("figures") or {}).get("hitch_verdict")]
+    if hitches:
+        lines += ["", "Transition runs' hitch figures (the render thread's frame gaps inside the run; handover and reveal "
+                      "outside it; the first frame from the run's start):", "",
+                  "| Row | gap med / p90 / max ms | first frame ms | gaps over limit | verdict |", "|---|---|---|---|---|"]
+        for key, fig in hitches:
+            gaps = fig.get("gap_ms") or {}
+            lines.append(f"| `{key}` | {_cell(gaps.get('median'))} / {_cell(gaps.get('p90'))} / {_cell(gaps.get('max'))} | "
+                         f"{_cell(fig.get('first_frame_ms'))} | {fig.get('gaps_over_limit')} (> {fig.get('gap_limit_ms')} ms) "
+                         f"| {fig['hitch_verdict']} |")
     return "\n".join(lines) + "\n"
 
 

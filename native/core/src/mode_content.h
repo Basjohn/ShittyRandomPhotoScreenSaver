@@ -145,7 +145,10 @@
 //   the owner between them;
 // - a bloom step ({"name", "bloom": "<target>.<attachment>"}, an empty pack): its chain from the attachment (its resolve
 //   when multisampled), its glow read by a later sampler as "<step>.glow";
-// - a composite step ({"name", "composite": overlay | overlay_glow | opaque_glow, "scene": "<target>.<attachment>",
+// - N5.2c: an environment step ({"name", "environment": <an item texture>, "size": [w, h]}, an empty pack, before every
+//   pass that reads it): N4.j's photo environment (post_stages.h), read by a later sampler as "<step>.environment" with
+//   mips; drawn once per photo;
+// - a composite step ({"name", "composite": overlay | overlay_glow | opaque_glow | opaque (N5.2c: no glow), "scene": "<target>.<attachment>",
 //   "glow"?: "<bloom step>.glow", "scene_frame"?: "window"}, an empty pack): a pass on the surface whose fragment is the
 //   core's, its block filled by the one rule (u_target_px, u_fade, u_scene_item and u_scene_from_target the core's;
 //   u_bloom_strength and u_hdr_exposure the record's or the settings'), its blend the form's (overlay: alpha;
@@ -414,11 +417,18 @@ struct ModePass
     // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
     QShader sorted;
     QList<PassOutput> sortedOutputs;
+    // N5.2c: an environment step's item texture and size (its one sampler, "uPhoto", names the texture so the program
+    // waits for it as for any texture it samples).
+    QByteArray environmentSource;
+    QSize environmentSize;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
-    // A bloom or defocus step: recorded outside the runs of passes, with render passes of its own.
-    bool stepOfItsOwn() const { return stage == StageKind::Bloom || stage == StageKind::Defocus; }
+    // A bloom, defocus or (N5.2c) environment step: recorded outside the runs of passes, with render passes of its own.
+    bool stepOfItsOwn() const
+    {
+        return stage == StageKind::Bloom || stage == StageKind::Defocus || stage == StageKind::Environment;
+    }
 };
 
 struct ModeProgram
@@ -933,6 +943,7 @@ private:
     ModeStreams m_streams;                   // N3.2: the streams and the block arena
     QByteArray m_arena;                      // N3.2: the arena's CPU copy, written whole per drawn record (choice D)
     QStringList m_meshesLost;                // N3.2: drawn meshes with nothing to upload from (a content made again)
+    QStringList m_meshesLostNoted;           // N5.2c: the names last told to the owner (the edge fires for a new one)
     // N3.2 audit 4's side defect: the waiting reason (textures uploading or lost, meshes lost), made at its edge only,
     // and what it was made for.
     bool m_waitingValid = false;
@@ -980,6 +991,8 @@ private:
     PostStages m_post;
     QList<BloomSpec> m_bloomSpecs;
     QList<DefocusSpec> m_defocusSpecs;
+    QList<EnvironmentSpec> m_environmentSpecs;   // N5.2c (derived once per program)
+    QList<QRhiTexture *> m_environmentPhotos;    // each one's photo front, written in place per record
     quint64 m_specsProgram = 0;
     bool m_stagesDeclared = false;            // the drawn program holds a stage step (its records' time is counted)
     const QRhi *m_gateRhi = nullptr;

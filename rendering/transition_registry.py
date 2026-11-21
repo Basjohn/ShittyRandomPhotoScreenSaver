@@ -155,6 +155,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Depth Card Cascade",
         stable_id="depth_cascade",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -167,12 +168,14 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Jigsaw Piece Flip",
         stable_id="jigsaw",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Cube Turn",
         stable_id="cube_turn",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -204,6 +207,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Blinds",
         stable_id="blinds",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),

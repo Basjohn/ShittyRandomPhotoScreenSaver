@@ -14,7 +14,8 @@ from rendering.gl_programs.scene3d import (
     scene3d_shutter_progress,
     scene3d_trail_ghosts,
 )
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.motion import motion_program, set_motion_values
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, draw_ghosts, trail_program
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -86,7 +87,7 @@ class QuickGlassShatterRenderer:
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM)]
         if float(parameters.get("sheen", 0.0)) > 0.0:
-            entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
+            entries += [(r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM)]
         entries.append((r, "glass_motion", GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT) if motion
                        else (r, "glass", GLASS_VERTEX, GLASS_FRAGMENT))
         if trails:

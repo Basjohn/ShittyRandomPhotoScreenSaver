@@ -9,8 +9,10 @@ direction, so a reflection moves with the piece's turn, not with where it sits o
 screen). The photographs themselves are lent presentation textures (PR-04 lends the
 destination to the native branch): they are only ever sampled, never given mip
 levels or written. Once per run each needed photograph is drawn, box-filtered, into
-a small texture this object owns, which then gets its own mipmaps; the copies are
-dropped at the host's ``park()`` with the renderer's other per-run resources.
+a small texture this object owns, which then gets its own mipmaps (N5.2c, ABI 36: made by
+the shared box kernel, ``rendering/gl_programs/mip_chain.py``, the text the native core runs
+for the same copy, never ``glGenerateTextureMipmap``, whose odd levels are the driver's); the
+copies are dropped at the host's ``park()`` with the renderer's other per-run resources.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.mip_chain import MIP_BOX_RGBA8_COMP, dispatch_mip_chain, mip_levels
 from rendering.gl_programs.scene3d import SCENE3D_ENVIRONMENT_SIZE, Scene3DBlockLayout
 from rendering.quick import gl_query
 
@@ -122,7 +125,7 @@ class PhotoEnvironment:
                 gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
             gl.glTextureStorage2D(
                 texture,
-                max(size).bit_length(),
+                mip_levels(size),
                 gl.GL_RGBA8,
                 *size,
             )
@@ -169,7 +172,10 @@ class PhotoEnvironment:
             with resources.pass_blocks.bound(COPY_BLOCK.pack({"uStep": (0.25 / size[0], 0.25 / size[1])})):
                 gl.glBindVertexArray(vao)
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-            gl.glGenerateTextureMipmap(texture)                # only our owned copy gets mip levels
+            # Only our owned copy gets mip levels: the shared box kernel's (the core's environment step runs the same
+            # text, mip_box_rgba8.comp), one dispatch a level.
+            mips = resources.compute_program(PHOTO_ENVIRONMENT_MIPS_PROGRAM[0], PHOTO_ENVIRONMENT_MIPS_PROGRAM[1])
+            dispatch_mip_chain(mips, texture, size, mip_levels(size), "rgba8")
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, draw)
             gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read)
@@ -205,6 +211,8 @@ class PhotoEnvironment:
 
 # (key, vertex, fragment) of the copy program (for a gradual warm-up).
 PHOTO_ENVIRONMENT_PROGRAM = ("photo_environment", FULLSCREEN_VERTEX_SOURCE, _COPY_FRAGMENT)
+# (key, compute) of the copy's mip chain (the shared RGBA8 box kernel; for a gradual warm-up).
+PHOTO_ENVIRONMENT_MIPS_PROGRAM = ("photo_environment_mips", MIP_BOX_RGBA8_COMP)
 
 
 class BackdropEnvironment:

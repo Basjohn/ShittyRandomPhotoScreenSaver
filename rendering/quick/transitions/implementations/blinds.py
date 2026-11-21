@@ -11,15 +11,23 @@ from rendering.gl_programs.blinds_program import blinds_program
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.render.gl_resources import compile_program, delete_program
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
+from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
+                                               warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import PassBlocks
-from ..fullscreen_pass import fullscreen_pass_parts
+from ..fullscreen_pass import SHOW_EFFECT, fullscreen_pass_parts
+from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+                            item_quad_pass)
 from ..render_contract import QuickTransitionRenderFrame
 
 # The flat style: the authored fragment over the item quad, its values one pass block (N1.6).
 _FLAT_VERTEX_SOURCE, _FLAT_BLOCK = fullscreen_pass_parts(blinds_program.fragment_source, "BlindsPass")
+#: N5.2c: the flat style's one pass (the core's item quad; the matrix, item size and resolution are the core's).
+_FLAT_PASS = item_quad_pass("flat", _FLAT_VERTEX_SOURCE, blinds_program.fragment_source,
+                            (("uOldTex", "old"), ("uNewTex", "new")))
+_BOX_INPUTS = (("aPosition", 3), ("aNormal", 3))   # the slat box's attributes by name (position, outward normal)
 
 
 _BLINDS_DIRECTION_MODES = {
@@ -106,8 +114,58 @@ def _slats_program():
     return _SLATS_PROGRAM
 
 
-class QuickBlindsRenderer:
+def _slat_passes() -> tuple[NativeScenePass, ...]:
+    """3D Slats' two passes (N5.2c), from its shader module (loaded at the first ask, as the Python style does)."""
+    shaders = _slats_program()
+    return (
+        item_quad_pass("backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE,
+                       (("uNewTex", "new"),)),
+        NativeScenePass("slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE, mesh="slat",
+                        samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uEnvironment", "environment")), depth=True),
+    )
+
+
+class QuickBlindsRenderer(NativeScenePasses):
     transition_id = "blinds"
+
+    # ------------------------------------------------------------------------------- N5.2c: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return (_FLAT_PASS, *_slat_passes())
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        if not _slats_style(parameters):
+            _blinds_feather(parameters)
+            return NativeScene((_FLAT_PASS,))
+        count, _gloss = _slats_parameters(parameters)
+        if _blinds_direction_mode(run.request.direction) == 2:
+            raise ValueError("Blinds 3D Slats turn about horizontal or vertical axes only")
+        backdrop, slats = _slat_passes()
+        slats = NativeScenePass(slats.name, slats.vertex_source, slats.fragment_source, mesh=slats.mesh,
+                                instances=count, samplers=slats.samplers, depth=True)
+        shaders = _slats_program()
+        slat = NativeSceneMesh("slat", pack_floats(shaders.BLINDS_SLAT_BOX_VERTICES), _BOX_INPUTS)
+        return NativeScene((backdrop, slats), (slat,), scene3d_request_samples(parameters), True)
+
+    def scene_show(self, run, sample) -> int:
+        if not _slats_style(run.request.parameter_dict()):
+            return SHOW_EFFECT                  # the flat style draws its shader at every progress
+        return eased_show(max(0.0, min(1.0, float(sample.eased_progress))))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float]) -> dict[str, object]:
+        """The frame's values of either style (the matrix and the item size are the core's)."""
+        parameters = run.request.parameter_dict()
+        mode = _blinds_direction_mode(run.request.direction)
+        if not _slats_style(parameters):
+            cols, rows = _blinds_grid(logical_size)
+            return {"u_progress": float(sample.eased_progress), "u_grid": (float(cols), float(rows)),
+                    "u_feather": _blinds_feather(parameters), "u_direction": mode}
+        count, gloss = _slats_parameters(parameters)
+        # Direction "Horizontal" keeps the flat style's vertical stripes: columns.
+        return {"uProgress": max(0.0, min(1.0, float(sample.eased_progress))), "uCount": count,
+                "uVertical": 1 if mode == 0 else 0, "uGloss": gloss}
 
     # The photographs each 3D Slats program reads (bind_frame binds them); every other value is in its pass block.
     _SLAT_SAMPLERS = ("uOldTex", "uNewTex")
@@ -135,18 +193,12 @@ class QuickBlindsRenderer:
             return
         if not self._program:
             self._initialize()
-        feather = _blinds_feather(parameters)
-        direction = _blinds_direction_mode(frame.run.request.direction)
-        cols, rows = _blinds_grid(frame.logical_size)
-
         # The flat program's values, one pass block (N1.6); u_resolution is declared but never read nor set.
+        frame_values = self.scene_values(frame.run, frame.sample, frame.logical_size)   # the one owner (N5.2c)
         values = self._values
         values["uMatrix"] = frame.matrix_values
         values["uItemSize"] = frame.logical_size
-        values["u_progress"] = float(frame.sample.eased_progress)
-        values["u_grid"] = (float(cols), float(rows))
-        values["u_feather"] = feather
-        values["u_direction"] = direction
+        values.update(frame_values)
         gl.glUseProgram(self._program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
@@ -167,7 +219,7 @@ class QuickBlindsRenderer:
             return size is None or self._blocks.warm()
         samples = scene3d_request_samples(parameters)
         r, shaders = self._resources, _slats_program()
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE),
                    (r, "slats", shaders.BLINDS_SLATS_VERTEX_SOURCE, shaders.BLINDS_SLATS_FRAGMENT_SOURCE)]
         if samples:
@@ -196,31 +248,27 @@ class QuickBlindsRenderer:
             if progress >= 1.0:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            # Direction "Horizontal" keeps the flat style's vertical stripes: columns.
-            columns = 1 if mode == 0 else 0
             samples = scene3d_request_samples(parameters)
             environment = self._environment.texture(frame, self._resources)
             if samples:
                 with self._target.scope(frame, samples, self._resources):
-                    self._draw_slats(frame, progress, count, columns, gloss, environment)
+                    self._draw_slats(frame, count, environment)
             else:
-                self._draw_slats(frame, progress, count, columns, gloss, environment)
+                self._draw_slats(frame, count, environment)
         except Exception:
             self._release_slats()
             raise
 
-    def _draw_slats(self, frame, progress: float, count: int, columns: int, gloss: float,
-                    environment: int) -> None:
+    def _draw_slats(self, frame, count: int, environment: int) -> None:
         r, shaders = self._resources, _slats_program()
+        frame_values = self.scene_values(frame.run, frame.sample, frame.logical_size)   # the one owner (N5.2c)
         program = r.program("backdrop", shaders.BLINDS_BACKDROP_VERTEX_SOURCE, shaders.BLINDS_BACKDROP_FRAGMENT_SOURCE)
         uniforms = r.uniforms("backdrop", self._BACKDROP_SAMPLERS)
         values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        values["uProgress"] = progress
-        values["uCount"] = count
-        values["uVertical"] = columns
+        values.update(frame_values)
         with r.pass_blocks.bound(pack_block(shaders.BLINDS_BACKDROP_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -230,10 +278,7 @@ class QuickBlindsRenderer:
         uniforms = r.uniforms("slats", self._SLAT_SAMPLERS)
         values = r.values("slats")
         bind_frame(program, uniforms, frame, values)
-        values["uProgress"] = progress
-        values["uCount"] = count
-        values["uVertical"] = columns
-        values["uGloss"] = gloss
+        values.update(frame_values)
         gl.glActiveTexture(gl.GL_TEXTURE2)                # the environment's binding
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glActiveTexture(gl.GL_TEXTURE0)
