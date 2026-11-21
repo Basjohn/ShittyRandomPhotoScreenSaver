@@ -142,7 +142,7 @@ def test_negative_control_content_relative_motion_is_caught(canonical, monkeypat
     """The retired model (motion as a fraction of the current card) must fail this oracle."""
     real = bubble_simulation.resolve_bubble_world
 
-    def content_relative(extent, *, authored_population):
+    def content_relative(extent, *, authored_population, display_wide=False):
         world = real(None, authored_population=authored_population)   # a 1x1 world on every card
         return world
 

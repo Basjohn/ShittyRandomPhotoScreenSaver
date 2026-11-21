@@ -8,13 +8,14 @@ wide and tall. Nothing is a fraction of the current card, so a tall card does no
 a wide one does not stream slower; at equal uniform visual scale every shape moves and sizes exactly
 like the canonical card. Only the population follows the card's area.
 
-The renderer holds at most :data:`BUBBLE_RENDER_CAPACITY` heroes, and that includes bubbles whose
+An ordinary card holds at most :data:`BUBBLE_CARD_CAPACITY` heroes, and that includes bubbles whose
 heads have left the card while their trails drain (measured at up to ~1.5x the live population on
 the curated presets). A card larger than the canonical one therefore grows its live population only
 up to :data:`BUBBLE_LIVE_CAPACITY` (or the authored population, if that is already larger); past
 that the whole world zooms by ``world_scale`` instead (bubbles, speeds and distances together,
 exactly like a larger uniform scale), so density and look stay those of the canonical card. On the
-canonical card and anything no larger, ``world_scale`` is exactly 1.
+canonical card and anything no larger, ``world_scale`` is exactly 1. The display-wide card (its drawn
+world, ``display_wide``) zooms less and holds more heroes, up to :data:`BUBBLE_RENDER_CAPACITY`.
 
 The world is pure geometry: resolved only when the committed extent or the authored population
 changes, never per tick, and it owns no clock, audio state or polling.
@@ -30,17 +31,27 @@ from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
 
-# Uniform arrays in the Bubble shader (u_bubbles_pos[110] ...) and the simulation's population cap.
-BUBBLE_RENDER_CAPACITY = 110
-# Live heroes a larger-than-canonical card may grow to: the render capacity less room for draining
-# trails (110 / 1.52, the largest drained-to-live ratio measured on the curated presets).
+# Uniform arrays in the Bubble shader (u_bubbles_pos[192] ...): the most heroes any world holds, live and draining.
+BUBBLE_RENDER_CAPACITY = 192
+# An ordinary card's hero cap (live and draining) and the live heroes a larger-than-canonical card may grow to: the
+# card's capacity less room for draining trails (110 / 1.52, the largest drained-to-live ratio measured on the
+# curated presets). The card's look is fixed by these two; only the display-wide card holds more.
+BUBBLE_CARD_CAPACITY = 110
 BUBBLE_LIVE_CAPACITY = 72
+# The display-wide card zooms out (operator, 22 Nov: fullscreen bubbles smaller than the card's zoom gave them, with
+# room to breathe): its capacity zoom is the overflow (needed / live capacity) to this power instead of its square
+# root, and its live population is halfway between the card's capped count and the zoomed world's density by area,
+# never more than the render capacity's live share (192 / 1.52).
+DISPLAY_WIDE_ZOOM_EXPONENT = 0.26
+DISPLAY_WIDE_LIVE_CAPACITY = 126
 
 # Stroke tuning is expressed in *physical half-stroke pixels*.  The shader owns
 # the final SDF conversion.
 BUBBLE_BASE_HALF_STROKE_PX = 0.80
 BUBBLE_MAX_HALF_STROKE_PX = 2.35
 BUBBLE_MAX_EXTRA_HALF_STROKE_PX = 1.25
+# Big heroes' outline is this much firmer per side, base and ceiling alike (bubble.frag; operator, 22 Nov).
+BUBBLE_BIG_EXTRA_HALF_STROKE_PX = 0.25
 
 # The outline firms gently as heroes grow larger than the canonical card's (only the capacity zoom
 # can do that now); a canonical-size hero keeps the canonical stroke on every shape.
@@ -77,6 +88,8 @@ class BubbleWorld:
     world_scale: float
     # Canonical cards' worth of area: authored counts are multiplied by this.
     population_scale: float
+    # The most heroes this world holds, live and draining (the simulation's cap).
+    hero_capacity: int = BUBBLE_CARD_CAPACITY
 
 
 def _extent(viewport_extent: Sequence[object] | None, baseline: tuple[float, float]) -> tuple[float, float]:
@@ -97,8 +110,14 @@ def resolve_bubble_world(
     *,
     authored_population: int,
     baseline_viewport_size: Sequence[object] = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+    display_wide: bool = False,
 ) -> BubbleWorld:
-    """Resolve the world for a committed extent and the authored hero population (big + small)."""
+    """Resolve the world for a committed extent and the authored hero population (big + small).
+
+    ``display_wide``: the extent is the display-wide card's drawn world. A world that overflows the live capacity
+    then zooms by ``overflow ** DISPLAY_WIDE_ZOOM_EXPONENT`` (smaller heroes than the card's square-root zoom) and holds
+    the population halfway between the card's capped count and the zoomed world's density by area (at most
+    ``DISPLAY_WIDE_LIVE_CAPACITY``), in the render capacity. Any other world is the ordinary card's, unchanged."""
 
     baseline_w = float(baseline_viewport_size[0])
     baseline_h = float(baseline_viewport_size[1])
@@ -113,6 +132,17 @@ def resolve_bubble_world(
     world_scale = 1.0
     if cards_w * cards_h > 1.0 and needed > capacity:
         world_scale = math.sqrt(needed / capacity)
+    if display_wide and world_scale > 1.0:
+        overflow = needed / capacity
+        card_scale = cards_w * cards_h / (world_scale * world_scale)    # the card rule's capped count, per author
+        world_scale = overflow ** DISPLAY_WIDE_ZOOM_EXPONENT
+        domain_w = cards_w / world_scale
+        domain_h = cards_h / world_scale
+        population_scale = 0.5 * (card_scale + domain_w * domain_h)
+        if population:
+            population_scale = min(population_scale, DISPLAY_WIDE_LIVE_CAPACITY / population)
+        return BubbleWorld(width=width, height=height, domain_w=domain_w, domain_h=domain_h, world_scale=world_scale,
+                           population_scale=population_scale, hero_capacity=BUBBLE_RENDER_CAPACITY)
     domain_w = cards_w / world_scale
     domain_h = cards_h / world_scale
     return BubbleWorld(
@@ -125,19 +155,25 @@ def resolve_bubble_world(
     )
 
 
-def scale_bubble_population(big: int, small: int, population_scale: float) -> tuple[int, int]:
-    """Authored big/small counts at this world's density (exact on a canonical-area world)."""
+def scale_bubble_population(big: int, small: int, population_scale: float,
+                            hero_capacity: int = BUBBLE_CARD_CAPACITY) -> tuple[int, int]:
+    """Authored big/small counts at this world's density (exact on a canonical-area world), within the world's
+    ``hero_capacity`` (``BubbleWorld.hero_capacity``)."""
 
     big = max(0, int(big))
     small = max(0, int(small))
     if population_scale == 1.0:
         return big, small
-    scaled_big = min(BUBBLE_RENDER_CAPACITY, int(math.floor(big * population_scale + 0.5)))
+    scaled_big = min(hero_capacity, int(math.floor(big * population_scale + 0.5)))
     scaled_small = int(math.floor(small * population_scale + 0.5))
-    return scaled_big, min(scaled_small, BUBBLE_RENDER_CAPACITY - scaled_big)
+    return scaled_big, min(scaled_small, hero_capacity - scaled_big)
 
 
 __all__ = [
+    "BUBBLE_BIG_EXTRA_HALF_STROKE_PX",
+    "BUBBLE_CARD_CAPACITY",
+    "DISPLAY_WIDE_LIVE_CAPACITY",
+    "DISPLAY_WIDE_ZOOM_EXPONENT",
     "BUBBLE_BASE_HALF_STROKE_PX",
     "BUBBLE_MAX_HALF_STROKE_PX",
     "BUBBLE_MAX_EXTRA_HALF_STROKE_PX",

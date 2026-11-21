@@ -27,6 +27,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Custom, Gradient, Slider, Toggle, require_mode_settings,
 )
 from ui.studio import clip_loop, framed
+from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_CARD_CAPACITY
 from ui.studio.exact_replay import PassRestart
 from ui.studio.registry import studio_title
 from ui.studio.adapter import (
@@ -574,7 +575,7 @@ class BubbleStudioEvaluator(PassRestart):
             "Bass": float(pulse.get("bass", 0.0)), "Mid / High": float(pulse.get("mid_high", 0.0)),
             "Hero Pulse": float(geometry.get("max_big_pulse_after", 0.0)),
             "Hero Size": float(geometry.get("final_big_max_radius", 0.0)) * 10.0,
-            "Bubbles": (latest.bubble_count / 110.0) if latest is not None else 0.0,
+            "Bubbles": (latest.bubble_count / float(BUBBLE_CARD_CAPACITY)) if latest is not None else 0.0,
             "Stream": float(geometry.get("stream_step_mean", 0.0)) * 100.0,
             "Drift": float(geometry.get("drift_step_mean", 0.0)) * 100.0}}
 

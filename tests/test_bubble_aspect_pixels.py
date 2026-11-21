@@ -49,6 +49,7 @@ def _snapshot(
     extras: tuple[float, float, float, float] = (0.8, 0.0, 0.0, 0.0),
     overrides: dict[str, object] | None = None,
     world_scale: float = 1.0,
+    big: bool = False,
 ):
     values = {
             "bubble_trail_strength": 0.0,
@@ -93,6 +94,7 @@ def _snapshot(
             extras=frame_extras,
             trails=(),
             bubble_count=count,
+            big_class_bits=(1 if big and count else 0, 0, 0, 0),
             source_timestamp=1.0,
             simulation_timestamp=1.0,
             parameters=parameters,
@@ -385,6 +387,21 @@ def test_real_gl_bubble_outline_tracks_drawn_hero_size_not_card_shape(_real_gl):
     assert 4.30 <= zoomed <= 5.00, zoomed
     for width, height in _LARGE_OUTLINE_SHAPES:
         assert abs(outline(width, height, world_scale=3.0) - zoomed) < 0.1, (width, height)
+
+    # Big heroes' outline is firmer by the owner's extra half-stroke per side, on the ordinary stroke and at the
+    # ceiling: the ring's integrated width grows by about twice it (the antialiased edges make it inexact: measured
+    # +0.70 and +0.61 for +0.5); small heroes (canonical, zoomed) are unchanged.
+    from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_BIG_EXTRA_HALF_STROKE_PX as extra
+
+    def big_outline(width, height, world_scale=1.0):
+        image = render(_snapshot(_presentation(width, height), radius=0.08, overrides=style,
+                                 world_scale=world_scale, big=True), width, height)
+        row = height // 2
+        return sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width))
+
+    assert extra > 0.0
+    assert big_outline(420, 280) - canonical == pytest.approx(2 * extra, abs=0.3)
+    assert big_outline(1260, 840, world_scale=3.0) - zoomed == pytest.approx(2 * extra, abs=0.3)
 
     # A huge extent at a matching low uniform scale resolves to the same content
     # rect but a 0.1 visual scale: Bubble's world is the extent, so it draws

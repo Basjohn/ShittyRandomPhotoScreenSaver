@@ -41,21 +41,23 @@ layout(std140, binding = 18) uniform BubbleDraw {
     float u_mid_energy;
     float u_high_energy;
 
-    // --- Bubble data (max 110 bubbles) ---
+    // --- Bubble data (max 192 bubbles: bubble_viewport_profile.BUBBLE_RENDER_CAPACITY) ---
     // xy = normalised position (0..1), z = radius (normalised), w = alpha
     int u_bubble_count;
-    // Four compact uint32 class words from the SAME authored snapshot. Unlike a radius threshold, this respects
+    // Eight compact uint32 class words (32 heroes each) from the SAME authored snapshot. Unlike a radius threshold, this respects
     // original small/big identity during musical pulses and temporary small-to-big promotion. No second hero draw is
     // needed.
-    // Four u32 record words fill this one vector; both block packers preserve their unsigned bits and indexing.
+    // Four u32 record words fill each vector (heroes 0-127, then 128-191); both block packers preserve their
+    // unsigned bits and indexing.
     uvec4 u_big_class_bits;
-    vec4 u_bubbles_pos[110];
+    uvec4 u_big_class_bits_hi;
+    vec4 u_bubbles_pos[192];
     // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
-    vec4 u_bubbles_extra[110];
+    vec4 u_bubbles_extra[192];
     // Trail: 3 previous (x,y,strength) samples per bubble, oldest first
     // vec4 elements read .xyz (N5.1): std140 gives a vec3 element 16 bytes anyway, and the native record fills a
     // vec4 array by name.
-    vec4 u_bubbles_trail[330];    // 110 * 3
+    vec4 u_bubbles_trail[576];    // 192 * 3
     float u_trail_strength;       // 0.0 = off, 1.0 = full
     float u_tail_opacity;         // max opacity ceiling for tail gradient (0.0-0.85)
     float u_trail_radial_scale;   // canonical-card wake ring geometry in current content heights
@@ -310,7 +312,7 @@ void main() {
     vec4 pop_col = u_pop_color;
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
-    int count = min(u_bubble_count, 110);
+    int count = min(u_bubble_count, 192);
     float viewport_stroke_extra_half_px = (u_quick_item_coords == 1)
         ? clamp(u_viewport_stroke_extra_half_px, 0.0, 1.25)
         : 0.0;
@@ -497,7 +499,8 @@ void main() {
         float balpha = bpos.w;    // bubble alpha (1.0 normal, <1.0 fading/popping)
         
         if (balpha < 0.01) continue;
-        bool hero_big = (u_big_class_bits[i >> 5] & (1u << uint(i & 31))) != 0u;
+        uint class_word = (i < 128) ? u_big_class_bits[i >> 5] : u_big_class_bits_hi[(i >> 5) - 4];
+        bool hero_big = (class_word & (1u << uint(i & 31))) != 0u;
         result = hero_big ? big_heroes : small_heroes;
 
         float spec_size_factor = u_bubbles_extra[i].x;
@@ -509,7 +512,7 @@ void main() {
         delta.x *= aspect;
         // Output-preserving square reject (item 8b's measured offender: this loop ran its whole body for every
         // fragment x live hero, about 55 % of the pass at 4K). Past r + 4 px along either axis the fragment lies
-        // outside the outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.35 px), the body's and the
+        // outside the outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.6 px), the body's and the
         // dot's edge (r + 0.5 px) and the big heroes' own reject below (r + px): the ring, the dot, the specular and
         // the coverage are each exactly 0 there, mix() leaves both layers unchanged, and skipping is byte-identical
         // (tests/test_bubble_hero_reject.py).
@@ -532,8 +535,11 @@ void main() {
         // avoiding the old late/accelerating ramp that approached ~6px total.
         // Radius proportionality remains useful for genuinely larger heads, but
         // the final physical ceiling is 2.35px per side (~4.7px total).
-        float stroke = max(0.80 * px, min(r * 0.0375, 1.8 * style_px));
-        stroke = min(2.35 * px,
+        // Big heroes draw 0.25px per side firmer, ceiling included (operator, 22 Nov:
+        // display-wide outlines read thin); small heroes and the ambience are unchanged.
+        float big_extra_half_px = hero_big ? 0.25 : 0.0;
+        float stroke = max(0.80 * px, min(r * 0.0375, 1.8 * style_px)) + big_extra_half_px * px;
+        stroke = min((2.35 + big_extra_half_px) * px,
             stroke + viewport_stroke_extra_half_px * px);
 
         // --- Tiny bubble shortcut (< ~4px radius) ---

@@ -3,10 +3,10 @@
 A generic mode's runtime schema (D12, ``native_schema._RUNTIME_SCHEMA_MODULES``): handed to the core when the route
 binds its stream, never compiled into the module. The record carries BubbleDraw's per-frame members
 (``rendering.quick.visualizer.implementations.bubble.BUBBLE_FRAME_MEMBERS``), each named as its member so the core packs
-it by name: the 110 positions and extras and the 330 trail samples (four-number elements, zero past the count and on a
-frame without trail samples), the count (at most 110), the four big-class words, the wake's strength and opacity, the
+it by name: the 192 positions and extras and the 576 trail samples (four-number elements, zero past the count and on a
+frame without trail samples), the count (at most 192), the eight big-class words (two uvec4), the wake's strength and opacity, the
 rainbow hue and the ambient layer's two switches; and the ambient layer's two instance streams (D15 point 4), the points
-(six floats each, at most 192) and the hero occluders (four floats each, at most 110), each with its used length in
+(six floats each, at most 192) and the hero occluders (four floats each, at most 192), each with its used length in
 floats. Every value is the Python renderer's own (``bubble_frame_values``); the core rounds each f64 to float as the
 Python block packer does. Everything else is the core's (the card) or a setting (``bubble_settings_values``,
 ``bubble_ambient_settings_values``).
@@ -14,7 +14,7 @@ Python block packer does. Everything else is the core's (the card) or a setting 
 ``encode`` is the route's writer; ``decode`` the pure-Python reference reader; ``project`` the field values of a logical
 frame: ``decode(encode(frame)) == project(frame)``.
 
-Version 1. A change to the fields or the layout is a new version (the test pins the layout's fingerprint).
+Version 2 (22 Nov: 192 heroes for the display-wide card, was 110). A change to the fields or the layout is a new version (the test pins the layout's fingerprint).
 """
 from __future__ import annotations
 
@@ -31,11 +31,12 @@ from core.visualizer_engine.native_schema import (
 from core.visualizer_engine.packet_abi import MODE_CODES
 
 MODE_ID = "bubble"
-VERSION = 1
+VERSION = 2
 SCHEMA_ID = native_schema_id(MODE_CODES[MODE_ID], VERSION)
-#: The shader's capacities (``bubble.frag``: ``vec4 u_bubbles_pos[110]``, ``u_bubbles_trail[330]``) and the ambient
+#: The shader's capacities (``bubble.frag``: ``vec4 u_bubbles_pos[192]``, ``u_bubbles_trail[576]``) and the ambient
 #: layer's (``bubble_ambient``: 96 microbubbles and 96 particles of six floats; one occluder of four per hero).
-BUBBLES = 110
+#: ``bubble_viewport_profile.BUBBLE_RENDER_CAPACITY`` (a test holds the two equal; this table imports no widget).
+BUBBLES = 192
 TRAIL_SAMPLES = 3 * BUBBLES
 AMBIENT_POINT_FLOATS = 6 * 192
 AMBIENT_OCCLUDER_FLOATS = 4 * BUBBLES
@@ -47,6 +48,7 @@ _ENTRIES: tuple[tuple[str, str, int], ...] = (
     ("ambient_points", "f32", AMBIENT_POINT_FLOATS),
     ("ambient_occluders", "f32", AMBIENT_OCCLUDER_FLOATS),
     ("u_big_class_bits", "u32", 4),
+    ("u_big_class_bits_hi", "u32", 4),
     ("u_trail_strength", "f64", 1),
     ("u_tail_opacity", "f64", 1),
     ("u_rainbow_hue_offset", "f64", 1),
@@ -99,7 +101,7 @@ def project(frame: Any) -> dict[str, object]:
 
 
 def encode(frame: Any) -> bytes:
-    """The writer: one Bubble logical frame as the version-1 record."""
+    """The writer: one Bubble logical frame as the version-2 record."""
     return LAYOUT.pack(SCHEMA_ID, project(frame))
 
 
