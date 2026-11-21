@@ -1052,6 +1052,175 @@ the feature (D3D11 is not stated).
     optics), how it turns, and its clear; then what the port needs that the ABI 28 core lacks beyond Waveform's six C++
     boxes (one box each, with what its proof must show), and which of Waveform's boxes it shares. File:line for every
     claim. Extruded Bubble is its own mode: never read the original Bubble as its oracle.
+    Reading (Sonnet agent a531eca73061cfa21, 21 Nov, no code touched). `eb.py` is
+    `rendering/quick/visualizer/implementations/extruded_bubble.py`; `prog.py` is `rendering/gl_programs/extruded_bubble_program.py`;
+    `scene.py` is `rendering/gl_programs/extruded_bubble_scene.py`; `solver.py` is `.../implementations/extruded_bubble_drift_solver.py`;
+    `log.py` is `widgets/spotify_visualizer/extruded_bubble_drift_log.py`; `target.py`, `probe.py`, `defocus.py` are in
+    `rendering/quick/scene3d/`; `D4` etc. are in `Native_Core_P3_Decisions.md`.
+    - Per frame from the logical frame (`ExtrudedBubbleFrame`, `widgets/spotify_visualizer/render_state.py:732-762`): the
+      bubble records (8 floats), cluster records, time, level, flash, sustain, drift, emission, stream and its speed, travel,
+      rays, shimmer, motion phase, passage, chain activity, chain drive, the wake records (50 floats each), the drift
+      families, the step log and the knot decisions. The Settings parameters ride in the same frame as frozen fields.
+    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box): the compaction of live shells
+      (`scene.py:289-291`), the cluster packing (`:310-325`), each shell's glint proxy (`:328-341`, `eb.py:559-562`), the
+      four largest shells for the shafts (`eb.py:583-585`), the camera (`:535-536`, one assembly the logical side builds
+      too), a deep light's direction from the eye (`:537-541`), the light's screen position (`:600`, `scene.py:351-358`),
+      ray strength, flicker and reach (`eb.py:564-568`), the chain, snow, fizz and speck fills and the instance counts
+      they give: beads x 160, snow, wakes x fizz-per-wake, specks (`:611-619,648-654`, `_BEADS_PER_CHAIN` `:94`).
+    - Per Settings or card change only: the knots (`eb.py:514-516`, `scene.py:114-192`), the near layer's optical height
+      (`eb.py:517-523`), the sample count and so the programs (`:131-133,430-435`; 4 at High, 2 at Balanced, 1 below,
+      `rendering/gl_programs/scene3d.py:81-87`), the probe's face size (256, 256, 128, 64 by tier, `eb.py:86,421-428`),
+      the shaft targets at half the card (`:149-170`), the near layer at the exact card size (`defocus.py:250-297`), the
+      scene target (`eb.py:498-499`), bloom 0.55 and HDR exposure 1.0, both constants (`:87,684-685`).
+    - Streams and size rules (a slot holds 1 MiB, `core/visualizer_engine/frame_capacity.py:9`): shells at most 192 x 32 B =
+      6,144 (`eb.py:89,403`, `widgets/spotify_visualizer/extruded_bubble_simulation.py:49`), clusters 96 x 76 B = 7,296
+      (`eb.py:90,406`, `scene.py:40`), proxies 192 x 32 B = 6,144 (`eb.py:407`), wakes 384 x 200 B = 76,800 (`eb.py:404`,
+      `core/constants/extruded_bubble_world.py:34`), steps 128 x 30 float32 = 15,360 (`log.py:29-37`; the frame holds
+      their float64 form, 30,720) and knots 128 x 240 chains x 12 B = 368,640 (`log.py:286-287`,
+      `widgets/spotify_visualizer/extruded_bubble_material_paths.py:12-14,184-187`). Today the slot also carries the drift
+      geometry at its maxima: chains 240 x 48 B, snow 2,500 x 32 B, specks 216,000 x 32 B = 6,912,000
+      (`frame_capacity.py:12-42`, `core/constants/extruded_bubble_world.py:11-12`), 8,420,736 B in all. Python uploads only
+      the steps newer than the last applied (`solver.py:728-743`); a storage stream uploads its used bytes whole each
+      record (`mesh_buffers.h:12-15`),
+      up to about 0.4 MB. Six streams (shells, clusters, proxies, wakes, steps, knots) of `kMaxModeStreams` 8
+      (`mesh_buffers.h:55`).
+    - The drift (`solver.py:680-875`), D4's solver: per family geometry once per revision, a state buffer of 16 B per knot
+      or mote (chains 240 x 128 knots = 491,520 B; snow 40,000; specks 3,456,000), an aux buffer (`:817-843`) and one
+      output of at most 262,144 vec4 = 4,194,304 B (`:650-678`). Three programs: chains (local size 128, one group a
+      chain row, shared memory and `barrier()`, `:185-240`), snow and specks (local size 256, `:242-302`) and the pair
+      check (`:308-319`), every dispatch only when a step is newer than the applied serial (`:716-717`), each with a
+      64-byte block (`:67`). A geometry edit runs the old revision's pending steps on the old rows, copies the history onto
+      the new geometry (the rebase reads both geometries, bindings 9 and 13, `:204-209,263-271,757-776`), then runs the new
+      steps; a capacity growth keeps the prefix (`:834-839`); a render gap past 128 steps (about 1.4 s, `log.py:37`)
+      restarts a family from zero (`solver.py:799-801`). The draws read the output as storage at binding 6
+      (`prog.py:1454`) and the wakes at binding 7 (`:1397`).
+    - Passes of a frame in order (`eb.py:679-767`). Probe (`:681,794-821`, `probe.py:264-304`): an RGBA16F cube with a full
+      chain (`probe.py:162,192`), one D32F depth shared by the faces (`:206`), each face cleared to (0,0,0,1) and depth 1
+      (`:284,289`); per face the backdrop in probe mode (`eb.py:799-806`, `prog.py:187-199`) and each shell's glint proxy,
+      an instanced quad added ONE, ONE, depth write off (`eb.py:807-818`); then every level below the top filtered from
+      the level above of the same cube, one draw a level, a geometry shader with six invocations writing `gl_Layer`
+      (`probe.py:58-73,231-262`), 32 Gaussian taps over a cone (`:76-103`). Shafts (`eb.py:682,823-846`): the march at
+      `max(1, w // 2)` into an R16F target (`:149-170`), then two separable blurs between two such targets. Scene target
+      (`:684-685`: overlay with the card's fade, bloom, depth texture, OIT, HDR; colour RGBA16F beside the emission,
+      cleared to 0): backdrop (`:696-701`), specks, instanced quads added to colour and emission, vertex-pulled over the
+      drift output (`:702-713`), the capture (`:714`, `target.py:616-690`), the transparent block (`:717-746`,
+      `target.py:692-740`: shells, clusters, one instanced beads-snow-fizz draw over the wakes and the drift output, the
+      wake trails as a strip of 82 vertices a wake), resolved per sample on leaving (`target.py:768-812`). Near layer
+      (`eb.py:747-764`): near shells and clusters into the `DefocusLayer` (RGBA16F colour and circle, full chains, the
+      exact card size, cleared to 0, premultiplied over and MAX, no depth: `defocus.py:250-297,322-350`), then its
+      composite: mips, clip, 64 plus 32 gather taps, highlight sprites (`:366-431`; read level 4 at 2160 px optical
+      height, `:316-320`, `eb.py:88,99-101`); recorded only when a shell or cluster exists (`:751`). Leaving the scope:
+      emission resolve, bloom chain, tone-mapped overlay composite (`target.py:937-975`, D17 "What the consumers do
+      today"). Compute (`eb.py:549`) comes first in the frame.
+    - Attachments and formats: scene colour and its capture RGBA16F, capture depth R32F nearest, colour linear
+      (`target.py:672-690`); the transparent passes write accumulation (0), revealage (1) and emission (2)
+      (`prog.py:1110,1257,1898`); the near passes write colour and circle (`:1112,1259`); the probe cube RGBA16F; the shaft
+      targets R16F (`eb.py:159`). Samplers: the shafts, the captured colour and the probe (`prog.py:1997`); the shell
+      fragment samples the cube with `samplerCube` and `textureSize` (`:718,950`) at the trilinear levels
+      `sceneProbe` walks (`probe.py:111-118`).
+    - Turning: the frame is oriented first (`eb.py:472,502`), everything draws unturned at the oriented item size, and
+      only the composite and the bloom's first samples are oriented (`target.py:939-941,980-1000`). The core refuses a
+      turned bloom or composite (`native/core/src/mode_content.h:445-447`, ABI 28), so Extruded Bubble is the turned-card
+      anchoring box's third consumer (after the Oscilloscope and Waveform).
+    - Clear: all constants. The scene's colour and emission clear to 0 and its depth to 1 (`target.py:923-926`), the OIT
+      attachments to 0 and 1 (`:715-716`, the core's coverage stored inverted, D17 B), the near layer to 0
+      (`defocus.py:341-342`), the probe faces to (0,0,0,1) with depth 1 (`probe.py:284,289`); the shaft targets are fully
+      written. No port decision is open (Waveform's backdrop clear has no counterpart); the cube's alpha 1 is a clear
+      value of its own declaration.
+    - Found while reading, shapes the port:
+      - The scene's depth is inert in production. The backdrop and specks draw with the depth test off (`eb.py:680,707-712`),
+        the transparent block tests with the write mask off (`target.py:724-725`), the near layer has no depth
+        (`defocus.py:343-344`), and the capture's depth is dropped (`eb.py:714`: `_depth` is never read). So the depth holds
+        its clear of 1 all frame, and the `gl_FragDepth` writes (`prog.py:1048,1066,1217`) only reject a fragment at the
+        far plane. Declaring the scene target without depth would save the multisampled D32F, the nearest resolve and the
+        capture's R32F (D14 point 10 kept the nearest depth "as Python does", `Native_Core_P3_Decisions.md:1378-1379`), but
+        the core refuses `gl_FragDepth` into a target without depth (`mode_content.cpp:688-691`) and Python's shader is
+        the same file (`mode_content.h:3-4`): both renderers drop the writes together, proved by equal frames.
+      - The core refuses what Python's shared programs do: a fragment output at a location past the target's attachments
+        or an attachment left unwritten (`mode_content.cpp:664-683`; this answers Waveform's two-outputs question), and
+        `gl_FragDepth` into the near target, which has none (`:688-691`). The backdrop's `Emission` output over the
+        one-attachment cube face, and the near passes' `gl_FragDepth` (written outside the `NEAR_LAYER` guard,
+        `prog.py:1048,1066,1217`) need fragment variants (a `#define`), the same file for both renderers.
+      - The probe's backdrop declares the shafts sampler and reads it only outside probe mode (`prog.py:188,193-198`),
+        and the shafts draw after the probe in a frame (`eb.py:681-682`): the probe variant drops the sampler (else the
+        target would need `previous_frame`, `scene_targets.h:110`). The shell programs declare `uEnvironment`, bound
+        nowhere (`prog.py:714,1997`), which the core refuses as unbound (`mode_content.cpp:619-624`). The traced glass
+        keeps loose uniforms (`prog.py:2017-2019`): converted to blocks at the port (the plan's 1D.11 notes, with the
+        binding-6 collision and the probe geometry shader's lack of HLSL).
+      - The shaft and blur shaders address their targets by `fragUv(uFrameSize)` and `textureSize` (`prog.py:195,586`):
+        with a bucketed allocation (`scene_targets.h:15-22`) `textureSize` is the allocation, and a bilinear read at the
+        content's edge reads the slack (cleared 0) where Python clamps. Fixed in the shader (content from `u_target_px`,
+        reads clamped inside the content) unless Waveform's exact-size box answers "exact" for every explicit target.
+      - Counts against the core: 32 pass entries (3 compute, 12 probe draws, 1 prefilter, 3 shafts, 13 in the scene:
+        backdrop, specks, capture, 4 transparent, resolve, 2 near, defocus, bloom, composite; 33 with the pair check)
+        against `kMaxModePasses` 16 (`mode_content.h:187`, checked `mode_content.cpp:2152`), whose mesh mask holds 32
+        (`:5040-5041`); 5 scene targets (scene, its transparency target, near, two shaft targets; 6 with the cube) of
+        `kMaxSceneTargets` 4 (`scene_targets.h:69`); 7 storage buffers (state and aux per family and the output; 8 with the
+        check's results) of 8 (`compute_passes.h:55`); 6 streams of 8; no storage image.
+      - The near layer's read level must stay inside `defocusReadLevelCap` (`post_stages.h:163`, over the bucketed
+        allocation, D17 H); the level is 4 at 2160 px optical height and grows with it, so the proof runs the largest
+        framed aperture.
+      - Revisions are 64-bit (`core/visualizer_engine/engine_worker.py:176`, `namespace << 32`) and a record trigger or
+        member is a u32 (`compute_passes.h:24-29`): the record carries a small per-family epoch and a rebase flag, the
+        worker's mapping (no C++).
+      - A family that cannot advance fades its held drift out (`solver.py:491-517`); natively a device without the compute
+        refuses the program (D16 point 6), so the fade has no counterpart.
+      - Already in the plan: the four-sample capture cost on Vulkan (N3.1b, before this item), N3.3's L2 to L5 leftovers
+        (before the first compute consumer), the display move's history copy with the drift as its first consumer (N3.9),
+        the turned-card box, and the Light Shafts owner merged with Neon Lake's (N4.k, ported with this item).
+  - [ ] C++: the scene probe (N4.d's EB half). The core has no cube: a sampler is `sampler2D`, or `sampler3D` for an image
+    (`mode_content.h:28,282`), a scene target has no layers (`scene_targets.h:74-130`) and nothing in `native/core/src`
+    mentions a cube or a layer write. Needed: a cube colour target (RGBA16F, exact size per tier, a full chain, its own
+    clear value, one D32F shared by the six face passes, cleared per face), the face passes (a pass drawn per face with
+    the face's block, or twelve entries: the pass budget decides), the core's own prefilter (N4.d's lead decision, the
+    plan's N4.d box: six passes a face, never `generateMips`; no geometry-shader `gl_Layer`, which D3D lacks, the plan's
+    1D.11 note), a `samplerCube` bound by name with a mip filter, seamless across faces, and the chain's rule under
+    QRhi's whole-texture tracking (a level written from the level above of the same texture, D17 point 4's one texture a
+    level: per-level cubes copied into the one mipped cube the shells read trilinearly, or another form; measured).
+    Proof, both backends, each tier size: every face read back against Python's capture of the same scene (the face
+    orientation per backend first, N4.d), every prefilter level against Python's, a lookup across a face edge (no seam),
+    the shells' mirrored light inside rule (a) of D12 on recorded frames, the clear and the depth per face, objects
+    released at retirement, the capture's cost against Python's. Negative controls: a swapped or mirrored face, a chain
+    built by per-face box mips (the blurred lookups leave the bound), a non-seamless read.
+  - [ ] C++: geometry once per key (D3). Decided (`Native_Core_P3_Decisions.md:2615-2647`), not built: the frame still
+    carries the families' geometry (`frame_capacity.py:12-42`, 8.4 MB a slot at most), and the core's meshes are sent from
+    the GUI thread (`mesh_buffers.h:4-11`), which does not hold the worker's bytes. Needed: the geometry arena (a second
+    mapping, two banks a family, written before the frame that names its key), the reader uploading a key it first sees
+    into a storage mesh, residency per key (requested, uploading, resident, failed, retiring), the old key kept until the
+    new is resident and one frame used it, a failed swap keeping the old drawn, capacity growth as a new key with the
+    history copied (the copy kernel, D16 C), and the previous key bound to the compute entry for the rebase record
+    (`solver.py:263-271,757-776`). Proof: D3's four tests (two streams publishing one revision with different geometry;
+    one upload a key and a frame size independent of capacity; an allocation failure injected, the old drawn, logged once;
+    zero residencies after teardown, drop, mode switch, window destruction), and a drifted run through an edit and a
+    capacity growth equal to `MaterialDriftReference` (`log.py:238-272`) and to the Python solver's output, both backends.
+    Negative controls as D3's (the key on revision alone; delete before allocate; the retire job skipped).
+  - [ ] C++: the drift pair check's readback, the one named exception. Only the harness reads storage back
+    (`compute_passes.h:177-203`, `compute_passes.cpp:425-465`); the product's once-per-program check of D4's `precise`
+    arithmetic (`solver.py:555-614`; `Docs/Guardrails/Performance_Optimization_Contract.md:450-465`) has no route. Needed:
+    a check entry's one-shot result read through `readBackBuffer` at the program's first record, the completion taken at a
+    later frame, never waited on, reported once in the content's state and the log. Proof: about 1 KB read once per program
+    build on both backends, the readback counter flat over a steady minute, no frame waits on it, N3.3's L5 test (nothing
+    else in the product reads storage) still green. Negative control: the check program compiled without `precise` is
+    reported as inexact.
+  - [ ] C++: Extruded Bubble's limits beyond Waveform's limits box. Targets: `kMaxSceneTargets` 4 to at least 5 (6 if the
+    cube counts), Waveform's box leaving it at 4. Passes: Waveform's box raises 16 to 28; this mode needs 32 (33 with the
+    check as a pass) and the mesh mask holds 32, so either the mask widens or the cube's faces and the check take
+    fewer entries (the cube box decides); raise once for both. Storage buffers stay 8, at the limit with the check's results.
+    Proof: the real program (every layer on, drift on, High tier) admitted on both backends with its warm-up counted
+    (pipelines a step) and nothing at rest; one target or pass past the new limits refused with its reason; the targets'
+    bytes at 4K recorded (`SceneTargetCounts`).
+  - [ ] C++: a stage or pass entry skipped for a record with no work. A defocus step (its target's clear, mips, clip,
+    gather and sprites) records on every accepted record (`mode_content.h:151-155`; D17 E, `Native_Core_P3_Decisions.md:2263-2266`,
+    skips a stage only by program), where Python runs the whole near layer only when a shell or cluster exists
+    (`eb.py:751`); an empty layer composites to nothing, so only the cost differs. Needed: a record u32 that skips an
+    entry. Proof: frames equal with the skip taken and not taken, GPU time at zero shells no worse than Python's, no
+    recorded work for the skipped entry (the stage counters). Negative control: the program-only form, whose zero-shell
+    record still pays. If the lead judges the zero-shell cost immaterial, this box is dropped.
+  - Shared with Waveform's boxes: the pass limit (its limits box, with this mode's higher count), and the exact-size,
+    mipped, drawable target (its first box: the probe cube is the same rule across six faces, and the shaft targets
+    follow its answer on exact sizes). Not shared: anisotropy (every sampler here is linear or trilinear), the half-float
+    mode texture (no mode texture), 32-bit float image filtering (no storage image; the capture depth is read nearest),
+    bloom and HDR off per record (bloom is the constant 0.55, never 0), the backdrop clear (every clear is a constant).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
