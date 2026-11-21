@@ -1062,6 +1062,33 @@ a turned card is refused (M3): the native surface of a turned card is itself tur
 `oscilloscope_check.py` now draws its Python reference in a window 72 pixels larger than the item on every side (an
 item-sized window had cut the overrun on every side) and places every display (M1). On ABI 27 it fails as it should:
 rule (a) on OpenGL at both ratios, and the offsets round at every placement (`20261121_n51_oscilloscope_m1_abi27/`).
+*Turned cards (ABI 29; the turned-card box, checkpoint audit 10 M3).* The plan offered two designs: the scene target in
+physical pixels, or the composite and first downsample taking the turn as Python's `sceneTexel` does
+(`_ORIENTED_COMPOSITES`). Python's turned path settles it. `_ORIENTED_COMPOSITES` serve only scenes drawn in
+`orient_visualizer_scene_frame`'s turned virtual viewport (Waveform Ribbon, Extruded Bubble, Neon Lake, Extruded
+Spectrum). The Oscilloscope hands its `SceneTarget` the physical frame (`scene_output_rotation` 0) and turns its content
+at the vertex (`physicalPoint`), so its target, allocation slack, bloom pairs and levels, glow read and dither key are
+all in the window's physical pixels. A native scene kept in the turned surface with only its reads turned cannot match
+that: the target would hold the light past the turned item's right and top edges (other physical sides than Python's)
+and the bloom would pair pixels from another corner whenever a side is odd. *The choice: the scene stays in the frame
+Python draws it in, declared by the composite step.* A composite step may declare `"scene_frame": "window"` (the
+Oscilloscope's two programs do). Under a turned card the core then builds Python's physical `SceneTarget`
+(`sceneAnchor`): the item's window rect (the card's `scene_item` through its exact `window_from_target`), its
+bottom-left pixel at the content's bottom left, the content the bucket of that rect. The beam draws into it through
+`itemClipMatrix` unchanged, and the bloom runs on it unchanged. The composite forms read Python's texel through the core
+members `u_scene_from_target_x`/`_y`: the surface pixel's centre to the scene's texel, which under a turned card is the
+window pixel less the rect's origin (Python's `gl_FragCoord.xy - uOrigin`) and for an unturned card ABI 28's own local
+texel, in exact integer arithmetic. This is Python's arithmetic in Python's frame, so no tolerance class is added.
+Without the declaration a turned card's bloom or composite is still refused, fail closed. A later turned Scene3D consumer
+adds a second frame value: Python's `sceneTexel` in `u_scene_from_target` and the anchor in the turned viewport. The
+member and the anchor are already a general signed permutation, so that consumer brings only its frame value and its
+proof. Proof (`oscilloscope_check.py --rounds turned`): each run's first three samples at quarters 1 to 3 on odd sides
+(421 x 281 at dpr 1, 633 x 423 at 1.5), rule (a) on OpenGL against the Python renderer drawn through a window 72 pixels
+larger, rule (b) on Vulkan. Pre-change control: on the ABI 28 module every turned frame is refused (the M3 reason in the
+item's state), nothing is drawn, and rule (a) fails at all six (`20261121_n51_turned_abi28_refused/`). Negative control
+`scene_frame_surface` (the turned scene anchored in the surface's frame). The test
+`test_a_turned_card_keeps_the_scene_in_the_windows_frame` derives every expectation from Python's own `item_pixel_rect`
+and float32 item matrix. The ABI 29 build's runs are recorded here when they land.
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the

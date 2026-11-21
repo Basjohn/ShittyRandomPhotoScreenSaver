@@ -145,9 +145,14 @@
 // - a bloom step ({"name", "bloom": "<target>.<attachment>"}, an empty pack): its chain from the attachment (its resolve
 //   when multisampled), its glow read by a later sampler as "<step>.glow";
 // - a composite step ({"name", "composite": overlay | overlay_glow | opaque_glow, "scene": "<target>.<attachment>",
-//   "glow"?: "<bloom step>.glow"}, an empty pack): a pass on the surface whose fragment is the core's, its block filled
-//   by the one rule (u_target_px and u_fade the core's; u_bloom_strength and u_hdr_exposure the record's or the
-//   settings'), its blend the form's (overlay: alpha; overlay_glow: premultiplied; opaque_glow: replace);
+//   "glow"?: "<bloom step>.glow", "scene_frame"?: "window"}, an empty pack): a pass on the surface whose fragment is the
+//   core's, its block filled by the one rule (u_target_px, u_fade, u_scene_item and u_scene_from_target the core's;
+//   u_bloom_strength and u_hdr_exposure the record's or the settings'), its blend the form's (overlay: alpha;
+//   overlay_glow: premultiplied; opaque_glow: replace). ABI 29: "scene_frame": "window" says the mode's Python scene is
+//   drawn through Quick's window, unturned (a SceneTarget given the physical frame, not orient_visualizer_scene_frame's:
+//   the Oscilloscope, which turns at the vertex), so under a turned card its scene target stays in the window's frame
+//   (sceneAnchor) and the composite turns each surface pixel into it; without it a turned card's bloom or composite is
+//   refused (M3, fail closed: Python's turned Scene3D frame is not built);
 // - a defocus step ({"name", "defocus": <mips target>, "onto": <scene target>}, an empty pack): the layer's mips, the
 //   clip, the gather and the highlight sprites; its block (u_defocus_radius, u_defocus_highlight, u_defocus_level) filled
 //   by the one rule. The read level is at most post_stages.h defocusReadLevelCap of the layer's allocation (a deeper
@@ -243,11 +248,21 @@ struct ModeProgram;
 // item's pixel at the content's bottom left, the content the 64-pixel bucket of the item's cover (Python's allocation).
 // A pass's light past the item's right and top edges then lands in the target as it does in Python's allocation slack,
 // and nothing lands left of or below the item. `sceneCard` is the card those passes draw under (window_from_target
-// moved to the target's pixels; scene_item the item's place in it); `sceneSize` is the content. Returns false, with the
-// card and the surface as they are, for a program without a composite step, a card without the item's rect, a turned
-// card (refused at the pack: M3), or the bloom_at_target_origin control.
+// moved to the target's pixels; scene_item the item's place in it); `sceneSize` is the content. ABI 29: under a turned
+// card of a program whose composite declares the window's frame, the target is Python's own in the window's frame
+// (Python's SceneTarget of the physical frame: the item's window rect, from scene_item through window_from_target, its
+// bottom-left pixel at the content's bottom left, the content the bucket of the item's window size, window_from_target
+// a translation and a row flip); the scene_frame_surface control anchors it in the surface's frame instead (what
+// lifting M3's refusal without the turn would draw). Returns false, with the card and the surface as they are, for a
+// program without a composite step, a card without the item's rect, a turned card of a program without the window's
+// frame (refused at the pack: M3), or the bloom_at_target_origin control.
 bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &surface, ModeCard *sceneCard,
                  QSize *sceneSize);
+
+// ABI 29: the item's cover in the window's pixels (left, bottom, width, height; y up: Python's item_pixel_rect), from
+// the card's scene_item through its window_from_target (exact: a signed permutation with whole offsets). Zeros without
+// a card's rect.
+void sceneWindowRect(const ModeCard &card, double out[4]);
 
 // N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
 enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
@@ -374,6 +389,7 @@ struct ModePass
     int stageAttachment = -1;
     bool coverageAlpha = true;                       // a resolve: alpha ONE (an overlay's coverage), else ZERO (kept)
     CompositeForm compositeForm = CompositeForm::Overlay;
+    bool sceneFrameWindow = false;                   // ABI 29: a composite's "scene_frame": "window"
     // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
     QShader sorted;
     QList<PassOutput> sortedOutputs;
@@ -442,9 +458,11 @@ struct ModeProgram
                    const float *clipCorrection = nullptr, const ModeCard *sceneCard = nullptr) const;
     // ABI 28: whether pass `p` draws into a scene target of the surface's size (sceneAnchor's: its card is the scene's).
     bool drawsSurfaceSizedScene(int p) const;
-    // M3 (checkpoint audit 10): a bloom or composite step under a turned card is refused (its anchoring is built for an
-    // unturned scene only, until a turned consumer builds it); the reason, or empty.
+    // M3 (checkpoint audit 10): a bloom or composite step under a turned card is refused unless the program's scene is
+    // in the window's frame (sceneFrameWindow, ABI 29); the reason, or empty.
     QString turnedStagesRefusal(const ModeCard &card) const;
+    // ABI 29: the program has a composite step and every composite step declares "scene_frame": "window".
+    bool sceneFrameWindow() const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's,
     // or `scene` when given: sceneAnchor's content) under `targets` (the program's own when null: ModeSource::drawnTargets
     // carries the sizes set since), into `out` in place (audit 2, M5: no new list per frame once its capacity holds the

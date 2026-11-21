@@ -28,10 +28,14 @@ The Oscilloscope's own rounds (asked by name):
           rect (rule (b)'s bound) and, on OpenGL, rule (a) against the Python renderer, whose SceneTarget starts at the
           item's own pixel.
   cost    (each API) the GPU time per pass at 2560 x 1440 and 4K.
+  turned  (each API; ABI 29) each run's first samples at quarters 1 to 3 on odd item sides (``TURNED_SIZES``): on
+          OpenGL against the Python renderer under rule (a), on Vulkan against the native OpenGL turned frames under
+          rule (b). On a module before ABI 29 the turned card is refused and the round fails (nothing drawn).
 
 Negative controls (``--control``, each in its own Vulkan child against a finished run's kept OpenGL frames; each must end
 "FAILED AS EXPECTED"): ``widen_nudged`` (record), ``alpha_dropped`` (record), ``beam_edge_narrowed`` (shader),
-``bloom_dropped`` (program), ``skipped_release`` (item) and ``old_origin`` (the offsets round at the target's origin).
+``bloom_dropped`` (program), ``skipped_release`` (item), ``old_origin`` (the offsets round at the target's origin) and
+``scene_frame_surface`` (the turned round with the scene anchored in the turned surface's frame).
 
 The owner's rule (a) (``owner_render_parity.py --native``) needs the route to draw the mode; until registration (playbook
 checklist 18) ``owner`` runs it with the route's registration process-local, every other argument passed through:
@@ -96,6 +100,10 @@ CONTROLS = {
     "old_origin": {"rounds": ["offsets"],
                    "breaks": "stage_control's bloom_at_target_origin: the bloom's grid and the composite's texel at the "
                              "target's origin (before ABI 27), not the item's own pixel"},
+    "scene_frame_surface": {"rounds": ["turned"],
+                            "breaks": "stage_control's scene_frame_surface: a turned card's scene anchored in the "
+                                      "surface's (turned) frame, as ABI 28 anchors an unturned one, not in the window's "
+                                      "frame Python's SceneTarget draws in"},
 }
 #: Glow 0's runs (``--glow-off``): the plain program, which leaves the record's bloom strength unread (ABI 26).
 GLOW_OFF: dict = {"on": False}
@@ -297,7 +305,204 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
                 mirror.close()
     finally:
         renderer.render = original
+    if _TURNED["on"]:
+        with parity.single_sample_scene_targets():
+            _save_turned(records, samples)
     return records, samples
+
+
+# --------------------------------------------------------------------------------------------------------- turned
+
+#: Turned-card anchoring's proof (ABI 29; checkpoint audit 10 M3; Current_Plan.md N5.1 Oscilloscope "Turned-card
+#: anchoring"): each run's first TURNED_PER_RUN sampled frames at quarters 1 to 3, the item resized to odd device sides
+#: at each ratio (TURNED_SIZES: 421 x 281 at 1, 633 x 423 at 1.5), so a bloom pairing pixels from another corner, or a
+#: dither keyed from another corner, shows. The Python renderer draws each (its SceneTarget physical, the beam turned at
+#: the vertex) in a window REFERENCE_MARGIN larger on every side; the native item draws it on its turned surface.
+TURNED_QUARTERS = (1, 2, 3)
+TURNED_SIZES = {1.0: (421.0, 281.0), 1.5: (422.0, 282.0)}
+TURNED_PER_RUN = 3
+#: The item's place in the turned frames' window (logical; whole device pixels at both ratios).
+TURNED_ORIGIN = (16.0, 16.0)
+#: Whether this child builds the turned material (set from its rounds: ``child``).
+_TURNED: dict = {"on": False}
+
+
+def _turned_snapshot(snapshot, quarters: int, dpr: float):
+    """``snapshot`` at ``dpr`` with its card turned by ``quarters`` and resized to TURNED_SIZES[dpr] at TURNED_ORIGIN,
+    its content keeping the card's own insets (the physical item turns; the content is laid out in the turned frame)."""
+    from dataclasses import replace
+
+    presentation = snapshot.presentation
+    ox, oy, ow, oh = (float(v) for v in presentation.outer_rect)
+    cx, cy, cw, ch = (float(v) for v in presentation.content_rect)
+    left, top, right, bottom = cx - ox, cy - oy, ow - (cx - ox) - cw, oh - (cy - oy) - ch
+    width, height = TURNED_SIZES[float(dpr)]
+    x, y = TURNED_ORIGIN
+    turned = replace(presentation, dpr=float(dpr), outer_rect=(x, y, width, height), viewport_extent=(width, height),
+                     content_rect=(x + left, y + top, width - left - right, height - top - bottom),
+                     current_aspect_ratio=(height / width if quarters % 2 else width / height),
+                     content_rotation_quarters=int(quarters))
+    return replace(snapshot, presentation=turned)
+
+
+def _save_turned(records: list[dict], samples: list) -> None:
+    """The turned material (OpenGL child): each chosen sample's card, settings and core card at each quarter and ratio
+    (work/turned.json) and the Python renderer's draw of it (work/turned_references.npz)."""
+    import json
+
+    import numpy as np
+
+    import spectrum_check
+    from rendering.native.composite import composite_geometry
+    from rendering.native.spectrum import spectrum_presentation
+    from rendering.quick.visualizer.native_route import OSCILLOSCOPE_SETTINGS
+
+    taken: dict = {}
+    chosen = []
+    for sample in samples:
+        key = records[sample[0]]["key"]
+        if taken.get(key, 0) < TURNED_PER_RUN:
+            taken[key] = taken.get(key, 0) + 1
+            chosen.append(sample)
+    entries: list[dict] = []
+    moved = []
+    for index, snapshot, _logical_size, _quarters in chosen:
+        for dpr in base.DPRS:
+            for quarters in TURNED_QUARTERS:
+                turned = _turned_snapshot(snapshot, quarters, dpr)
+                presentation = turned.presentation
+                width, height = TURNED_SIZES[float(dpr)]
+                window = (width + 2.0 * TURNED_ORIGIN[0], height + 2.0 * TURNED_ORIGIN[1])
+                pixels = (int(round(window[0] * dpr)), int(round(window[1] * dpr)))
+                card = spectrum_presentation(presentation, composite_geometry(presentation), window_size=window,
+                                             window_pixels=pixels)
+                entries.append({"record_index": index, "key": records[index]["key"], "quarters": quarters,
+                                "dpr": float(dpr), "card": card, "shown": base._shown(card, presentation),
+                                "settings": OSCILLOSCOPE_SETTINGS(turned, card)})
+                moved.append((len(entries) - 1, turned, (width, height), quarters))
+    references = spectrum_check.python_references(moved, REFERENCE_MARGIN)
+    work = base._work(Path(_OUT["dir"]))
+    (work / "turned.json").write_text(json.dumps(entries), encoding="utf-8")
+    np.savez_compressed(work / "turned_references.npz", **{str(i): rows for i, rows, _q in references})
+
+
+def turned_frames_name(api: str) -> str:
+    control = base.CONTROL or ""
+    return f"native_turned_{api}_{control}.npz" if control else f"native_turned_{api}.npz"
+
+
+def round_turned(core, engine, app, api: str, records: list, out: Path) -> dict:
+    """The turned material drawn by the native item (each quarter and ratio its own scene): on OpenGL against the Python
+    renderer under rule (a) (``owner_render_parity.rule_a_frame``, the Oscilloscope's class), on Vulkan against the
+    native OpenGL frames of the same turned samples under rule (b) (``VULKAN_RULE_B``), the reference's mask on both.
+    The ``scene_frame_surface`` control (the scene anchored in the surface's frame) must fail it."""
+    import json
+
+    import numpy as np
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    work = base._work(out)
+    entries = json.loads((work / "turned.json").read_text(encoding="utf-8"))
+    references = np.load(work / "turned_references.npz")
+    against = None
+    if api != "opengl":
+        path = work / "native_turned_opengl.npz"
+        if not path.exists():
+            return {"pass": False, "error": "the OpenGL child's turned frames are missing"}
+        against = np.load(path)
+    if base.CONTROL == "scene_frame_surface" and not core.module.stage_control("scene_frame_surface", True):
+        return {"pass": False, "error": "the module has no scene_frame_surface control (it predates ABI 29)"}
+    host = core.hidden_host(*base.HOST_PIXELS)
+    frames: dict = {}
+    by_turn: dict = {}
+    checks: dict = {}
+    try:
+        for dpr in base.DPRS:
+            host.set_device_pixel_ratio(float(dpr))
+            for quarters in TURNED_QUARTERS:
+                chosen = [(i, e) for i, e in enumerate(entries) if e["dpr"] == float(dpr) and e["quarters"] == quarters]
+                scene = None
+                stream = base.Stream()
+                state: dict = {}
+                try:
+                    scene = base.Scene(core, engine, host)
+                    for step, (i, entry) in enumerate(chosen):
+                        card = scene.place(entry, dpr, stream)
+                        stream.publish(records[entry["record_index"]]["record"], float(step))
+                        scene.mode.update()
+                        frames[str(i)] = scene.read(card)
+                        if not state:
+                            seen = scene.mode.state()
+                            state = {key: seen.get(key) for key in ("error", "failure", "last_refusal",
+                                                                    "refused_frames", "content_failing")}
+                finally:
+                    stream.close()
+                    if scene is not None:
+                        scene.close(app)
+                    host.frames(2)
+                    base.host_check._flush_deletes(app)
+                judged: list[dict] = []
+                against_python: list[dict] = []
+                shapes_equal = True
+                for i, _entry in chosen:
+                    drawn, reference = frames[str(i)], references[str(i)]
+                    if drawn.shape[:2] != reference.shape[:2]:
+                        shapes_equal = False
+                        continue
+                    mask = reference_mask(reference)
+                    against_python.append(dict(parity.rule_a_frame(drawn[..., :3], reference[..., :3], mask, MODE_ID),
+                                               index=i))
+                    if against is not None:
+                        other = against[str(i)] if str(i) in against.files else None
+                        if other is None or other.shape != drawn.shape:
+                            shapes_equal = False
+                            continue
+                        judged.append(dict(pt.judge(drawn[..., :3], other[..., :3], VULKAN_RULE_B, mask=mask), index=i))
+                key = f"q{quarters}@{dpr}"
+                width, height = TURNED_SIZES[float(dpr)]
+                rule_a = parity.rule_a_verdict(against_python, MODE_ID)
+                by_turn[key] = {"item_device_pixels": [int(round(width * dpr)), int(round(height * dpr))],
+                                "compared": len(against_python), "state_first_frame": state,
+                                "rule_a_against_python": rule_a}
+                checks[f"{key}_compared"] = shapes_equal and len(against_python) == len(chosen) > 0
+                if api == "opengl":
+                    checks[f"{key}_rule_a"] = bool(rule_a["pass"])
+                else:
+                    summary = pt.summarise(judged)
+                    by_turn[key]["rule_b_against_opengl"] = summary
+                    checks[f"{key}_rule_b"] = bool(summary["pass"]) and len(judged) == len(chosen)
+    finally:
+        if base.CONTROL == "scene_frame_surface":
+            core.module.stage_control("scene_frame_surface", False)
+        host.close()
+        base.host_check._flush_deletes(app)
+    np.savez_compressed(work / turned_frames_name(api), **frames)
+    if not base.CONTROL:
+        _turned_sheet(out, api, entries, references, frames)
+    return {"pass": all(checks.values()), "checks": checks, "by_turn": by_turn,
+            "control": base.CONTROL if base.CONTROL == "scene_frame_surface" else None}
+
+
+def _turned_sheet(out: Path, api: str, entries: list, references, frames: dict) -> None:
+    """One sheet per API: the first turned sample of each quarter and ratio, Python | native | difference x64."""
+    import numpy as np
+    from PIL import Image
+
+    rows = []
+    seen = set()
+    for i, entry in enumerate(entries):
+        key = (entry["quarters"], entry["dpr"])
+        drawn, reference = frames.get(str(i)), references[str(i)]
+        if key in seen or drawn is None or drawn.shape != reference.shape:
+            continue
+        seen.add(key)
+        delta = np.clip(np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]) * 64, 0, 255).astype(np.uint8)
+        rows.append(np.concatenate([reference[..., :3], drawn[..., :3], delta], axis=1))
+    if rows:
+        width = max(row.shape[1] for row in rows)
+        sheet = np.concatenate([np.pad(row, ((0, 4), (0, width - row.shape[1]), (0, 0))) for row in rows], axis=0)
+        Image.fromarray(sheet, "RGB").save(out / f"turned_{api}_python_native_difference_x64.png")
 
 
 # --------------------------------------------------------------------------------------------------------- block
@@ -623,6 +828,7 @@ _child = base.child
 
 def child(args) -> dict:
     _OUT["dir"] = args.out_dir
+    _TURNED["on"] = "turned" in args.rounds
     base.use_mode(SLOT_BYTES=_slot_bytes())          # the route's slot for the record (whole 4096-byte steps)
     return _child(args)
 
@@ -632,7 +838,8 @@ base.use_mode(MODE_ID=MODE_ID, _schema=_schema, _passes=_passes,
               control_record=control_record, item_settings_change=item_settings_change, reference_mask=reference_mask,
               ITEM_RECORD_FIELD=ITEM_RECORD_FIELD, item_reshaped=item_reshaped, VULKAN_RULE_B=VULKAN_RULE_B,
               SCRIPT=Path(__file__).resolve(), EVIDENCE_TOPIC="n5_1_oscilloscope", DEFAULT_LABEL="n51_oscilloscope",
-              CONTROLS=CONTROLS, child=child, EXTRA_ROUNDS={"cost": round_cost, "offsets": round_offsets},
+              CONTROLS=CONTROLS, child=child,
+              EXTRA_ROUNDS={"cost": round_cost, "offsets": round_offsets, "turned": round_turned},
               REFERENCE_MARGIN=REFERENCE_MARGIN)
 vulkan_against_opengl = base.vulkan_against_opengl
 api_verdict = base.api_verdict

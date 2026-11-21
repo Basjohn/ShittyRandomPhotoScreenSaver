@@ -201,12 +201,15 @@ def oscilloscope_program(glow: bool) -> dict:
                  geometry=PassGeometry(_shader_pack("oscilloscope_beam.vert"), topology="triangle_strip", vertices=4,
                                        instances="osc_segments", storage=(("OscPoints", "osc_points"),))),
     ]
+    # ABI 29: the Python renderer's SceneTarget is drawn through Quick's window, unturned (the beam turns at the vertex),
+    # so a turned card keeps the scene in the window's frame (D12 "As built: Oscilloscope", turned cards).
     if glow:
         passes += [BloomStep("oscilloscope_bloom", f"{OSCILLOSCOPE_TARGET}.emission"),
                    CompositeStep("oscilloscope_show", "overlay_glow", f"{OSCILLOSCOPE_TARGET}.colour",
-                                 "oscilloscope_bloom.glow")]
+                                 "oscilloscope_bloom.glow", scene_frame="window")]
     else:
-        passes.append(CompositeStep("oscilloscope_show", "overlay", f"{OSCILLOSCOPE_TARGET}.colour"))
+        passes.append(CompositeStep("oscilloscope_show", "overlay", f"{OSCILLOSCOPE_TARGET}.colour",
+                                    scene_frame="window"))
     streams = [ModeStream("osc_points", "osc_points", "storage", used="osc_point_floats")]
     program = {"passes": passes, "targets": [ModeTarget(OSCILLOSCOPE_TARGET, attachments)], "streams": streams}
     if not glow:

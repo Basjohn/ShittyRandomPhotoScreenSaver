@@ -480,37 +480,135 @@ def test_glow_0_leaves_the_bloom_strength_unread_by_declaration_only(qt_app):
     with pytest.raises(ValueError, match="reads it"):
         blocks([*program["unread"], "u_widen"])
 
-@pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout")
-@pytest.mark.qt
-def test_a_bloom_or_composite_under_a_turned_card_is_refused(qt_app):
-    """ABI 28 (checkpoint audit 10, M3): the item-anchored bloom and composite are built for an unturned scene; under a
-    turned card (whose surface is turned against Python's SceneTarget) a program with either step is refused, fail
-    closed, until a turned consumer builds it. Control: the same card unturned packs."""
-    if _abi() < 28:
-        pytest.skip("the module predates ABI 28: its GitHub build is pending")
-    from core.visualizer_engine import oscilloscope_native_schema as schema_module
-    from rendering import native
-    from rendering.native.mode import _card as card_json, _settings as settings_json, program_json, schema_table_entry
+def test_the_oscilloscopes_composite_declares_the_windows_scene_frame():
+    # ABI 29: the Python renderer's SceneTarget is drawn through Quick's window, unturned (the beam turns at the vertex:
+    # implementations/oscilloscope.py hands its scope the physical frame), so both programs' composites say so.
+    from rendering.native.mode import CompositeStep
     from rendering.quick.visualizer import native_route
+
+    for glow in (True, False):
+        steps = [p for p in native_route.oscilloscope_program(glow)["passes"] if isinstance(p, CompositeStep)]
+        assert steps and all(p.declaration().get("scene_frame") == "window" for p in steps)
+    with pytest.raises(ValueError, match="scene frame"):
+        CompositeStep("show", "overlay", "scope.colour", scene_frame="turned")
+
+
+def _turned_inputs(glow: bool, quarters: int):
+    """A turned Oscilloscope card (odd device sides, 641 x 361 at dpr 1: exact) with the route's own maps, and its
+    program's inputs."""
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering.native.mode import _settings as settings_json
     from rendering.quick.visualizer.native_route import _ModeContent
 
-    core = native.load(MODULE_DIR)
-    presentation = _presentation(1.5)
+    presentation = _presentation(1.0, viewport_extent=(641.0, 361.0), outer_origin=(801.0, 515.0),
+                                 content_rotation_quarters=quarters)
     card = _card(presentation)
     shown = _ModeContent.shown_card(None, card, SimpleNamespace(presentation=presentation))
-    target = tuple(int(v) for v in card["target_size"])
+    logical = _logical(0) if glow else _logical(0, osc_glow=0.0)
+    return (presentation, card, shown, settings_json(_settings(logical, presentation, card)),
+            schema_module.encode(logical))
+
+
+def _pythons_scene_rect(presentation, card) -> tuple[int, int, int, int]:
+    """The Python renderer's SceneTarget rect (left, bottom, width, height in window pixels, y up): item_pixel_rect of
+    its own float32 item matrix, computed here from the presentation, never from the core."""
+    from rendering.native.spectrum import _ortho_item_matrix
+    from rendering.quick.scene3d.frame import item_pixel_rect
+    from rendering.quick.visualizer.native_route import content_host_origin
+
+    dpr = float(presentation.dpr)
+    pixels = (int(round(WINDOW[0] * dpr)), int(round(WINDOW[1] * dpr)))
+    frame = SimpleNamespace(matrix_values=_ortho_item_matrix(WINDOW, content_host_origin(presentation), single=True),
+                            logical_size=tuple(float(v) for v in card["item_size"]), viewport=(0, 0, *pixels))
+    return item_pixel_rect(frame), frame
+
+
+def _member(facts: dict, block: bytes, index: int, name: str, count: int) -> tuple[float, ...]:
+    rows = {row[0]: row for row in facts["program"]["passes"][index]["block"]["members"]}
+    return struct.unpack_from(f"<{count}f", block, int(rows[name][2]))
+
+
+@pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout")
+@pytest.mark.qt
+@pytest.mark.parametrize("quarters", (1, 2, 3))
+def test_a_turned_card_keeps_the_scene_in_the_windows_frame(quarters, qt_app):
+    """ABI 29 (checkpoint audit 10, M3; N5.1's turned-card box): under a turned card the Oscilloscope's scene target is
+    Python's SceneTarget of the physical frame. Every expectation is the Python renderer's own: its item_pixel_rect
+    (the SceneTarget's origin and size, its bucket the allocation) and its float32 item matrix (where the beam's item
+    pixels land in that target), and its composite's texel gl_FragCoord.xy - uOrigin through the card's
+    window_from_target. Controls: the same program without the scene frame is refused (M3, fail closed); the
+    scene_frame_surface control (the scene in the surface's turned frame) moves the composite's texels."""
+    if _abi() < 29:
+        pytest.skip("the module predates ABI 29 (turned-card anchoring): its GitHub build is pending")
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering import native
+    from rendering.native.mode import CompositeStep, _card as card_json, program_json, schema_table_entry
+    from rendering.quick.scene3d.target import _bucket
+    from rendering.quick.visualizer import native_route
+
+    core = native.load(MODULE_DIR)
     table = json.dumps(dict(schema_table_entry(schema_module.SCHEMA)))
     for glow in (True, False):
-        logical = _logical(0) if glow else _logical(0, osc_glow=0.0)
-        settings = settings_json(_settings(logical, presentation, card))
-        record = schema_module.encode(logical)
+        presentation, card, shown, settings, record = _turned_inputs(glow, quarters)
+        target = tuple(int(v) for v in card["target_size"])
         program = native_route.oscilloscope_program(glow)
-        declared, packs = program_json(program["passes"], program["targets"], program["streams"],
-                                       unread=program.get("unread", ()))
-        core.module.mode_blocks(table, declared, packs, settings, record, card_json(shown), target)
+        unread = program.get("unread", ())
+        declared, packs = program_json(program["passes"], program["targets"], program["streams"], unread=unread)
+        found, facts = core.module.mode_blocks(table, declared, packs, settings, record, card_json(shown), target)
+        found, facts = [bytes(b) for b in found], json.loads(facts)
+        (left, bottom, width, height), frame = _pythons_scene_rect(presentation, card)
+        assert width % 2 == 1 and height % 2 == 1                       # odd sides: another corner pairs otherwise
+        names = [p.name for p in program["passes"]]
+        # The beam's item pixels land where Python's SceneTarget holds them: the window pixel less the rect's origin,
+        # rows top first over the allocation's content (the bucket of the rect).
+        beam = names.index("oscilloscope_beam")
+        matrix = np.array(_member(facts, found[beam], beam, "uMatrix", 16), dtype=np.float64).reshape(4, 4).T
+        python = np.array(frame.matrix_values, dtype=np.float64).reshape(4, 4).T
+        scene_h = _bucket(height)
+        vw, vh = frame.viewport[2], frame.viewport[3]
+        item_w, item_h = card["item_size"]
+        for x, y in ((0.0, 0.0), (item_w, 0.0), (0.0, item_h), (item_w, item_h), (0.3 * item_w, 0.7 * item_h)):
+            clip = python @ np.array([x, y, 0.0, 1.0])
+            wx, wy = (clip[0] / clip[3] + 1.0) * 0.5 * vw, (clip[1] / clip[3] + 1.0) * 0.5 * vh
+            native_clip = matrix @ np.array([x, y, 0.0, 1.0])
+            tx = (native_clip[0] / native_clip[3] + 1.0) * 0.5 * _bucket(width)
+            ty = (1.0 - native_clip[1] / native_clip[3]) * 0.5 * scene_h
+            assert abs(tx - (wx - left)) < 2e-3 and abs(ty - (scene_h - (wy - bottom))) < 2e-3, (x, y, tx, ty)
+        # The composite reads Python's texel: gl_FragCoord.xy - uOrigin of the window pixel each surface pixel shows.
+        show = names.index("oscilloscope_show")
+        rows = [_member(facts, found[show], show, f"u_scene_from_target_{axis}", 3) for axis in "xy"]
+        a, b, c, d, e, f = card["window_from_target"]
+        sx, sy, sw, sh = (int(v) for v in card["scene_item"])
+        corners = set()
+        for px in (sx, sx + 1, sx + sw - 1):
+            for py in (sy, sy + 1, sy + sh - 1):
+                centre = (px + 0.5, py + 0.5, 1.0)
+                local = tuple(int(np.floor(sum(r * v for r, v in zip(row, centre)))) for row in rows)
+                window = (int(np.floor(a * centre[0] + b * centre[1] + c)), int(np.floor(d * centre[0] + e * centre[1] + f)))
+                assert local == (window[0] - left, window[1] - bottom), (px, py, local, window)
+                assert 0 <= local[0] < width and 0 <= local[1] < height
+                corners.add(local)
+        assert {(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)} <= corners
+        # Control (the negative control of M3's refusal): without the declared frame the turned card is refused.
+        bare = [CompositeStep(p.name, p.form, p.scene, p.glow) if isinstance(p, CompositeStep) else p
+                for p in program["passes"]]
+        declared_bare, packs_bare = program_json(bare, program["targets"], program["streams"], unread=unread)
         with pytest.raises(ValueError, match="turned card"):
-            core.module.mode_blocks(table, declared, packs, settings, record, card_json(dict(shown, quarters=1)),
-                                    target)
+            core.module.mode_blocks(table, declared_bare, packs_bare, settings, record, card_json(shown), target)
+        # ... and packs unturned (an unturned card needs no declaration).
+        _p0, card0, shown0, settings0, record0 = _turned_inputs(glow, 0)
+        core.module.mode_blocks(table, declared_bare, packs_bare, settings0, record0, card_json(shown0),
+                                tuple(int(v) for v in card0["target_size"]))
+        # Control: the scene in the surface's turned frame reads other texels.
+        assert core.module.stage_control("scene_frame_surface", True) is True
+        try:
+            moved, moved_facts = core.module.mode_blocks(table, declared, packs, settings, record, card_json(shown),
+                                                         target)
+            moved_rows = [_member(json.loads(moved_facts), bytes(moved[show]), show, f"u_scene_from_target_{axis}", 3)
+                          for axis in "xy"]
+            assert moved_rows != rows
+        finally:
+            core.module.stage_control("scene_frame_surface", False)
 
 
 def _python_blocks(logical, presentation, card) -> tuple[bytes, bytes]:
