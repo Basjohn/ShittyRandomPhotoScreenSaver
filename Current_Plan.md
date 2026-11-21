@@ -67,9 +67,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    this plan sets a global order.
 
 **Resume here (lead, 21 Nov, usage cut):**
-- [ ] Merge the fast-proof branch `worktree-agent-a6257c36aeee45f10` (head b3f8b51c6 fixes the worker-path identity
-  test; its tests passed) after rerunning `tests/test_visualizer_owner_render_parity.py` on the merge. Its heavy runs
-  wait for quiet CPU: the method proof, the rule (a) reruns, the Oscilloscope partner control.
+- [ ] The fast-proof tools are merged (6055b0f97). Agent a6257c36aeee45f10 is running the held heavy runs: the
+  Bubble method proof (it decides whether coverage windows become the default), and the rule (a) reruns of
+  human_heavy1 and nightsolong. The Oscilloscope partner control follows the Oscilloscope merge.
 - [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
 - [ ] The smoke-host branch `worktree-agent-ad927a7c14bbc5053`: run both smoke tools, review the sheets, merge.
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
