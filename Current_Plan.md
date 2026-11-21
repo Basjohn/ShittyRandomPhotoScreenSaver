@@ -70,7 +70,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Resume here (lead, 21 Nov, usage cut):**
 - [ ] The fast proof is complete (8578ae50f): full-take native runs against cached references, `--accepted` keeping
   unchanged frames' verdicts (a 60 s Bubble take in 57.6 s against 399 s). Next under it (Medium): the 60 s reruns the
-  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b), then Bubble's rule (b) 60 s failures once the
+  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b; Opus Medium agent a40f1b6d7aec65276), then Bubble's rule (b) 60 s failures once the
   rule (b) union mask lands with the Oscilloscope's turned work.
 - [ ] The Oscilloscope at ABI 28 is merged (audit 10's H1, M1-M4 and L2 fixed; Trace, Ring and Phase pass rule (a)
   on both APIs). Open before its 60 s takes, layer T and registration, agent a652d2d5a77e690ff (details under the
