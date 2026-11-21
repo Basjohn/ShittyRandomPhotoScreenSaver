@@ -565,6 +565,13 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 started = time.perf_counter()
                 scene.layer.transition(run)
                 entry["gui_start_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+                # The run's first frame, before its destination's upload job is waited for (black flicker, 21 Nov:
+                # on Vulkan it was black while the job ran): the source's lit pixels are never black.
+                scene.frames(1)
+                first = scene.display_rows(scene.read())
+                entry["first_frame_black"] = black_over_lit(first, photos[0][1])
+                entry["first_frame_not_black"] = entry["first_frame_black"] <= FIRST_FRAME_BLACK
+                entry["first_frame_waiting_kept"] = scene.mode_state().get("waiting_kept")
                 scene.settle()                                   # the destination's upload job committed
                 ticks_before = scene.layer.ticks
                 scene.frames(2)
@@ -654,7 +661,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     key=lambda e: e[2].get("max_level", 0), default=("", 0.0, {}))
         facts["rule_a_worst"] = {"variant": worst[0], "progress": worst[1], **worst[2]}
     for name in ("end_is_the_destination", "end_uploads_nothing", "clock_disconnected", "nothing_at_rest",
-                 "environment_once_per_photo"):
+                 "environment_once_per_photo", "first_frame_not_black"):
         checks[name] = all(facts["variants"][k][name] for k in keys)
     if vulkan:
         checks.update(_route_on_vulkan(core, engine, app, frames, facts))
@@ -837,6 +844,23 @@ def _native_velocity(scene):
     h, w = blc.DISPLAY[1], blc.DISPLAY[0]
     vx, vy = got["scene.vx"], got["scene.vy"]
     return vx[vx.shape[0] - h:, :w], vy[vy.shape[0] - h:, :w]
+
+
+#: Black flicker (operator, 21 Nov): a run's first frame keeps the source's lit pixels lit (at most this fraction of
+#: them black: a transition's own first frame may darken a few, none blacks the picture out).
+FIRST_FRAME_BLACK = 0.01
+BLACK_LEVEL = 4
+LIT_LEVEL = 24
+
+
+def black_over_lit(frame, source) -> float:
+    """The fraction of the source's lit pixels (any channel past LIT_LEVEL) that ``frame`` shows black (every channel at
+    most BLACK_LEVEL)."""
+    import numpy as np
+
+    lit = source[..., :3].max(axis=2) > LIT_LEVEL
+    black = frame[..., :3].max(axis=2) <= BLACK_LEVEL
+    return round(float((black & lit).sum()) / max(1, int(lit.sum())), 5)
 
 
 def _over(a, b, level: int) -> int:

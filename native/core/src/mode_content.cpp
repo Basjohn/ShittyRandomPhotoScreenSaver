@@ -4491,6 +4491,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
+    o.insert(QStringLiteral("waiting_kept"), double(r.waitingKept)); // black flicker: the held frame while waiting
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("storage"), m_storageState);                             // N3.3 (noted at an edge)
@@ -7350,6 +7351,17 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                       triangle + (kFirstBloomTriangle + n) * kTriangleFloats);
     m_keptTarget = false;
     const bool readback = m_source->targetReadRequests() != m_targetReadsDone; // N3.1, harness
+    if (m_draw && !withPasses && !readback && holdsFrame(target)) {
+        // Black flicker (operator, 21 Nov): a content waiting for its textures or meshes (a transition's destination
+        // uploading by its job on Vulkan, the program already the run's) keeps the frame its target holds, as a refused
+        // build does (M4), instead of recording no pass over a cleared target: the layer showed one black frame at
+        // every run's start. The record after the commit draws the new program (its still signature is new).
+        cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
+        m_keptTarget = true;
+        ++m_report.waitingKept;
+        reportTextures();
+        return true;
+    }
     if (draw && m_source->drawnStill()) {
         // A still (N5.7a) draws again only when what it draws changed: its program, its blocks (settings and the core's
         // members), its triangle (card and target), its target and the textures its passes sample. A record that only

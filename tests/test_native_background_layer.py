@@ -637,3 +637,33 @@ def test_the_item_makes_the_layer_only_on_the_native_backend_at_its_first_image(
     assert len(made) == 1 and made[0].images == [first, second, None]
     item.close_native_layer()
     assert made[0].closed and item.native_layer is None
+
+
+def _keeps_the_frame_while_waiting(source: str) -> bool:
+    """``ModeContent::record``: a content waiting for its textures or meshes (``m_draw && !withPasses``) whose target holds
+    a frame keeps it (returns before ``recordPasses``, the record that drew no pass over a cleared target)."""
+    body = source[source.index("bool ModeContent::record(QRhi *rhi"):]
+    body = body[:body.index("\n}\n")]
+    guard = body.find("if (m_draw && !withPasses && !readback && holdsFrame(target)) {")
+    passes = body.find("recordPasses(rhi, cb, target, updates, draw, readback);")
+    if guard < 0 or passes < 0 or guard > passes:
+        return False
+    block = body[guard:body.index("\n    }\n", guard)]
+    return "m_keptTarget = true;" in block and "return true;" in block and "++m_report.waitingKept;" in block
+
+
+def test_a_content_waiting_for_its_textures_keeps_its_frame_instead_of_a_black_one():
+    """Black flicker (operator, 21 Nov): on Vulkan a transition's destination uploads by a job, and the run's program
+    waits for it; the core recorded no pass over a cleared target, so the layer showed one black frame at the run's
+    start (route check flicker/control_old_core: Burn's first frame 100 % black). The waiting content keeps the frame
+    its target holds, as a refused build does (M4); the live proof is the route check's first_frame_not_black."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "native" / "core" / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert _keeps_the_frame_while_waiting(source)
+    assert '"waiting_kept"' in source                     # counted in the content's state
+    # Control: the old record (no keep while waiting) is caught.
+    start = source.index("    if (m_draw && !withPasses && !readback && holdsFrame(target)) {")
+    end = source.index("    if (draw && m_source->drawnStill()) {", start)
+    assert not _keeps_the_frame_while_waiting(source[:start] + source[end:])
