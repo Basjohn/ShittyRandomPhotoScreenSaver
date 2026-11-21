@@ -67,8 +67,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a; its core C++ merged at ABI 35; the Python
-  conversion's first slice approved; continuing to stop point 2.
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a. Its branch holds 17a4bb9e0 (placement, bucket
+  discard, row order; Python stills unchanged) and e3a84a443 (core C++, not compiled: record f64/u32 into vector and
+  matrix members, the conventions `w` flag, the sampler W-wrap fix). Next: lead reserves ABI 38 (37 is N5.2d's), the
+  agent renumbers, lead builds; rule (a) needs a measured Waveform bound (bloom rounding 13-29k px at 2-3 levels,
+  edges 400-1,200 past 3) decided on the rerun after the W-wrap fix; then L, P, rule (b), C, T.
 - [ ] Background track: N5.2d with N4.i (motion blur and trails), agent a52b367bbd9c11f5c (Opus Medium), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
 - [ ] Black flicker at a transition's start on Vulkan (`--vulkan`, operator, 21 Nov): a visible black frame when a
   wallpaper transition begins. A serious class (fade, never vanish). Background track, the N5.2d agent's next box
