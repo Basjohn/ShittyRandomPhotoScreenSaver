@@ -1123,18 +1123,15 @@ OverlayWidget {
                         color: progressCircleFace.originalFill
                     }
 
-                    // The ring: the material disc masked to the stroke's annulus,
-                    // with the stroke's outer edge kept as a thin outline.
+                    // The ring: the material's own border-only annulus, drawn in the
+                    // scene (no layer: a layer would make the backdrop coordinate span
+                    // the layer's texture instead of the screen), with the stroke's
+                    // outer edge kept as a thin outline.
                     Item {
                         id: progressRingLayer
                         objectName: "achievementProgressRingLayer"
                         anchors.fill: parent
                         visible: progressCircleFace.ringIsMaterial
-                        layer.enabled: visible
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: progressRingMask
-                        }
 
                         ChildMaterialSurface {
                             id: progressRingMaterial
@@ -1143,20 +1140,10 @@ OverlayWidget {
                             materialOverride: progressCircleFace.ringMaterialChoice
                             fillColor: achievementRoot.achievementModel.progressRingColor
                             cornerRadius: progressCircleFace.width * 0.5
+                            ringWidth: progressCircleFace.ringWidth
                             tintAlphaScale: 0.4
                             legibilityPanel: false
                         }
-                    }
-
-                    Rectangle {
-                        id: progressRingMask
-                        anchors.fill: parent
-                        radius: width * 0.5
-                        color: "transparent"
-                        border.width: progressCircleFace.ringWidth
-                        border.color: "white"
-                        visible: false
-                        layer.enabled: progressCircleFace.ringIsMaterial
                     }
 
                     Rectangle {

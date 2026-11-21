@@ -40,6 +40,13 @@ Loader {
     property real tintAlphaScale: 1.0
     // Controls with glyphs keep the darker legibility panel; a textless track passes false.
     property bool legibilityPanel: true
+    // Above zero the surface is only a ring of this width inside its rounded outline (the
+    // material's own border-only mode: the SDF annulus, sampled at the fragment's real
+    // render-target position like every other surface). Never mask a face with a layer
+    // for this: inside a layer the target is the layer's texture, so the backdrop
+    // coordinate would span the layer instead of the screen.
+    property real ringWidth: 0.0
+    readonly property bool ringOnly: ringWidth > 0.0
 
     anchors.fill: parent
     active: !forceFlat && visible && width > 0 && height > 0
@@ -56,9 +63,17 @@ Loader {
         contentInset: 0.0
         // Negative: the control's own outline is its border (the panel spans the whole face
         // of every surface since 1B.8 M2; the value is kept for the ring shading to read).
-        borderWidth: -1.0
+        borderWidth: child.ringOnly ? child.ringWidth : -1.0
+        fillSurfaceEnabled: child.ringOnly ? 0.0 : 1.0
+        borderSurfaceEnabled: child.ringOnly ? 1.0 : 0.0
+        borderMaterial: child.resolvedMaterial
+        borderOpacityAdjust: Math.max(-1.0, Math.min(1.0,
+            child.resolvedOpacityAdjust + child.additionalOpacityAdjust))
+        borderNormalColor: child.fillColor
+        borderTintColor: Qt.rgba(child.fillColor.r, child.fillColor.g, child.fillColor.b,
+                                 child.fillColor.a * child.tintAlphaScale)
         legibilityPanel: child.legibilityPanel
-        normalColor: child.fillColor
+        normalColor: child.ringOnly ? "transparent" : child.fillColor
         tintColor: Qt.rgba(child.fillColor.r, child.fillColor.g, child.fillColor.b,
                            child.fillColor.a * child.tintAlphaScale)
         textColor: child.resolvedTextColor

@@ -228,3 +228,34 @@ def test_settings_page_round_trips_the_ring_and_circle_controls(qt_app, settings
             tab.deleteLater()
     finally:
         force_gate(steam=prior)
+
+
+def _layer_enabled(item) -> bool:
+    # An item with layer.enabled is a texture provider (the shader effect itself is not a layer).
+    return bool(item.objectName() != "materialSurface" and item.isTextureProvider())
+
+
+@pytest.mark.qt
+def test_ring_material_is_a_border_only_surface_drawn_in_the_scene_not_through_a_layer(qt_app) -> None:
+    """A layer makes the material's backdrop coordinate span the layer's texture (a whole
+    wallpaper squeezed into the ring: the blotchy smear). The ring must be the material's own
+    border-only annulus with no layered ancestor between it and the card."""
+    ring, _circle = _explicit_materials()
+    model, engine, component, item = _prepared_item(_config(**{_RING_KEY: ring}))
+    backdrop = QQuickItem()
+    try:
+        ring_material = _find_visual_item(item, "achievementProgressRingMaterial")
+        item.setProperty("cardSurfaceBackdrop", backdrop)
+        item.setProperty("cardSurfaceMaterial", "normal")
+        qt_app.processEvents()
+        assert ring_material.property("active") is True
+        surface = ring_material.property("item")
+        assert surface.property("fillSurfaceEnabled") == 0.0
+        assert surface.property("borderSurfaceEnabled") == 1.0
+        assert surface.property("borderWidth") > 0.0
+        node = surface
+        while node is not None:
+            assert not _layer_enabled(node), node.objectName()
+            node = node.parentItem()
+    finally:
+        _teardown(qt_app, model, item, component, engine, backdrop)
