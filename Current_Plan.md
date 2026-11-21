@@ -1624,13 +1624,6 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] Side defect (found by Sonnet a9c166d87f2e0801b, fixing: Sonnet ad2c2724ff336646b, 21 Nov): on a narrow Visualizer card (150 x 70) the
-  common hover glyphs (`WidgetHoverEditGlyphs`: Restore and a transfer arrow) draw over the card's own bottom-right
-  `glyphRow` (the preset steps and Studio), with or without Rotate; the row's own members do not overlap. Reproduce:
-  the Spectrum card at `viewport_extent=(150, 70)`, every glyph property on, pointer centred
-  (`.artifacts/evidence/visualizers/shared/hover_rotate_glyph/20261121_row/narrow_norotate_hover_card.png`). Fix at the
-  owner of the two glyph groups' placement so they never collide at any card size.
-
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
 ### 1.0 Rotate in ordinary and fullscreen Edit
