@@ -6557,13 +6557,15 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
         if (!ok)
             break;
-        // The samplers (N4.a): each with its declared state (passBindings binds them over their textures).
+        // The samplers (N4.a): each with its declared state (passBindings binds them over their textures). ABI 36
+        // (N5.4): the declared wrap on W too, as a compute entry's samplers have it; QRhi's default W is Repeat, so a
+        // 3D image (Waveform's fog volume, read at its far and near slices) blended its first and last slices.
         p.samplerCount = int(pass.samplers.size());
         for (int s = 0; ok && s < p.samplerCount; ++s) {
             const PassSampler &declared = pass.samplers.at(s);
             p.samplers[s].reset(rhi->newSampler(rhiFilter(declared.filter), rhiFilter(declared.filter),
                                                 rhiMipFilter(declared.mips), rhiWrap(declared.wrap),
-                                                rhiWrap(declared.wrap)));
+                                                rhiWrap(declared.wrap), rhiWrap(declared.wrap)));
             p.samplers[s]->setName(label + QByteArrayLiteral(" sampler ") + declared.name);
             ok = ok && created(p.samplers[s]->create());
         }

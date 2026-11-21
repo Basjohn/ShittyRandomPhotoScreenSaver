@@ -287,7 +287,7 @@ bool ProbePass::ensure(QRhi *rhi, QString *error)
                  frontFaceClockwise(upload.matrix(), ndcYUp) ? QStringLiteral("cw") : QStringLiteral("ccw"));
     facts.insert(QStringLiteral("conventions_binding"), kConventionsBinding);
     facts.insert(QStringLiteral("conventions_block"), QJsonArray { double(block.fragmentFlip), double(block.ndcFlip),
-                                                                   double(block.clipTopDown), double(block.reserved1) });
+                                                                   double(block.clipTopDown), double(block.clipDepthZeroToOne) });
     facts.insert(QStringLiteral("size"), QJsonArray { w, h });
     facts.insert(QStringLiteral("front_triangle"), pointsJson(front));
     facts.insert(QStringLiteral("back_triangle"), pointsJson(back));

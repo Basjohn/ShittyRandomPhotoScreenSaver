@@ -61,7 +61,8 @@ struct ConventionsBlock
     float ndcFlip = 0.0f;      // y
     float clipTopDown = 0.0f;  // z (N3.2, D15 point 5): 1 where the target's top row lies at clip NDC -Y after the
                                // correction (OpenGL, F1's flip, and Vulkan); read by srpss_geometry.glsl's sprites
-    float reserved1 = 0.0f;
+    float clipDepthZeroToOne = 0.0f; // w (ABI 36, N5.4): 1 where the target's clip depth runs 0 to 1 (Vulkan, D3D, Metal);
+                                     // read by conventions.SRPSS_TARGET_CLIP_GLSL (an OpenGL-form scene's depth)
 };
 static_assert(sizeof(ConventionsBlock) == 16, "std140 vec4");
 
