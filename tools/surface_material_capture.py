@@ -790,15 +790,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.wallpapers:
         parser.error("--wallpapers is required")
 
-    from PySide6.QtGui import QGuiApplication
-    from rendering.quick.bootstrap import configure_quick_graphics
-
-    if os.environ.get("QT_QPA_PLATFORM", "").lower() not in ("", "windows"):
-        raise SystemExit("needs the Windows QPA (hidden GL); nothing is ever shown")
-    configure_quick_graphics(reason="surface-material-capture")
-    app = QGuiApplication(["surface-material-capture"])
-    del app
     from tools import onboarding_preview_foundry as foundry
+
+    app = foundry.open_hidden_gl_application("surface-material-capture")
+    del app
 
     args.output.mkdir(parents=True, exist_ok=True)
     # The preview builders write their fixture images (avatars, stories) beside the art: keep them

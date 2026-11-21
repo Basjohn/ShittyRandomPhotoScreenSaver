@@ -1,4 +1,10 @@
-"""Render retained Achievement Pulse states through one real Quick window."""
+"""Render retained Achievement Pulse states on the hidden Windows-QPA GL host.
+
+The production ``DisplayScene`` is drawn by ``QQuickRenderControl`` into a hidden GL texture
+(``tools/onboarding_preview_foundry._HiddenQuickScene``, the same host
+``tools/surface_material_capture.py`` uses); no window is shown. Offscreen QPA is not used: it draws
+blank artwork. Run it with the default Windows QPA.
+"""
 
 from __future__ import annotations
 
@@ -12,36 +18,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from rendering.quick.bootstrap import (  # noqa: E402
-    configure_quick_environment,
-    configure_quick_graphics,
-)
-
-
-configure_quick_environment()
-configure_quick_graphics(reason="qtquick-achievement-pulse-smoke")
-
-from PySide6.QtCore import QEventLoop, QObject, QSize, Qt, QTimer  # noqa: E402
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QColor,
-    QGuiApplication,
     QImage,
     QLinearGradient,
     QPainter,
 )
-from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 
-from rendering.quick.scene_controller import QuickSceneFactory  # noqa: E402
 from rendering.quick.widgets.achievement_pulse import (  # noqa: E402
     AchievementPulsePresentationConfig,
     AchievementPulsePresentationModel,
     AchievementPulsePresentationStyle,
     RetainedAchievementPulsePresentation,
 )
-from rendering.quick.widgets.host import (  # noqa: E402
-    OrdinaryWidgetPresentationHost,
-    OverlayWidgetGeometry,
-)
+from rendering.quick.widgets.host import OverlayWidgetGeometry  # noqa: E402
 from widgets.steam_achievement_preparation import (  # noqa: E402
     AchievementPulsePreparedPresentation,
 )
@@ -128,44 +119,20 @@ def _synthetic_art(path: Path, *, accent: QColor, portrait: bool) -> QImage:
     return image
 
 
-def _grab(item: QQuickItem, size: QSize) -> QImage:
-    result = item.grabToImage(size)
-    loop = QEventLoop()
-    timer = QTimer()
-    timer.setSingleShot(True)
-    timer.timeout.connect(loop.quit)
-    result.ready.connect(loop.quit)
-    timer.start(5000)
-    loop.exec()
-    timer.stop()
-    image = result.image()
-    if image.isNull():
-        raise RuntimeError("Achievement Pulse grabToImage returned a null image")
-    return image
+def _busy(image, path: Path) -> None:
+    """``image`` (PIL RGBA) over a checker of dark tiles, saved as PNG."""
 
+    from PIL import Image, ImageDraw
 
-def _busy(image: QImage, path: Path) -> None:
-    canvas = QImage(image.size(), QImage.Format.Format_ARGB32_Premultiplied)
-    overlay = image.copy()
-    overlay.setDevicePixelRatio(1.0)
-    painter = QPainter(canvas)
-    try:
-        tile = max(24, image.width() // 12)
-        colors = (QColor(22, 62, 88), QColor(105, 48, 54))
-        for y in range(0, image.height(), tile):
-            for x in range(0, image.width(), tile):
-                painter.fillRect(
-                    x,
-                    y,
-                    tile,
-                    tile,
-                    colors[(x // tile + y // tile) % 2],
-                )
-        painter.drawImage(0, 0, overlay)
-    finally:
-        painter.end()
-    if not canvas.save(str(path), "PNG"):
-        raise RuntimeError(f"failed to save {path}")
+    canvas = Image.new("RGBA", image.size, (0, 0, 0, 255))
+    draw = ImageDraw.Draw(canvas)
+    tile = max(24, image.width // 12)
+    colors = ((22, 62, 88, 255), (105, 48, 54, 255))
+    for y in range(0, image.height, tile):
+        for x in range(0, image.width, tile):
+            draw.rectangle((x, y, x + tile - 1, y + tile - 1), fill=colors[(x // tile + y // tile) % 2])
+    canvas.alpha_composite(image)
+    canvas.convert("RGB").save(path)
 
 
 def _prepared(
@@ -188,7 +155,16 @@ def _prepared(
 
 
 def run(output_dir: Path) -> dict[str, object]:
-    app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
+    from tools import onboarding_preview_foundry as foundry
+    from widgets.steam_achievement_preparation import AchievementPulsePreparedPresentation
+    from widgets.steam_card_models import (
+        build_mock_steam_view_model,
+        with_long_title,
+        with_stale_connection_info,
+        with_unavailable_state,
+    )
+
+    app = foundry.open_hidden_gl_application("qtquick-achievement-pulse-smoke")
     output_dir.mkdir(parents=True, exist_ok=True)
     portrait_path = output_dir / "synthetic_portrait.png"
     wide_path = output_dir / "synthetic_wide.png"
@@ -209,28 +185,9 @@ def run(output_dir: Path) -> dict[str, object]:
         portrait=False,
     )
 
-    owner = QObject()
-    factory = QuickSceneFactory(owner)
-    window = QQuickWindow()
-    window.resize(1540, 1180)
-    context, root = factory.create_display_root(
-        owner=owner,
-        screen_index=0,
-        runtime_generation=1,
-    )
-    root.setParent(window.contentItem())
-    root.setParentItem(window.contentItem())
-    root.setWidth(window.width())
-    root.setHeight(window.height())
-    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
-    if host_item is None:
-        raise RuntimeError("ordinary widget host is unavailable")
-    host = OrdinaryWidgetPresentationHost(
-        host_item=host_item,
-        context=context,
-        create_overlay_item=factory.create_overlay_widget,
-        create_family_item=factory.create_ordinary_widget_family,
-    )
+    scene = foundry._HiddenQuickScene(1540, 1180, dpr=1.0)
+    owner = scene.owner
+    host = scene.host
 
     base = build_mock_steam_view_model("achievement_pulse")
     stale = with_stale_connection_info(
@@ -288,8 +245,8 @@ def run(output_dir: Path) -> dict[str, object]:
     )
 
     manifest = []
+    sheet_cases = []
     try:
-        window.show()
         # The retained identity is one per widget kind, so each case is built,
         # settled, grabbed and retired before the next one takes the slot.
         for name, config, direction, card, art, art_path, geometry in (
@@ -324,17 +281,15 @@ def run(output_dir: Path) -> dict[str, object]:
                     ),
                     animate=False,
                 )
-            settle = QEventLoop()
-            QTimer.singleShot(1200, settle.quit)
-            settle.exec()
-            image = _grab(
-                presentation.item,
-                QSize(int(geometry.width), int(geometry.height)),
+            scene.settle(
+                minimum_ms=1200,
+                until=lambda item=presentation.item: not foundry._unsettled_images(item),
             )
+            image = foundry.crop_item(scene, scene.read(), presentation.item)
+            sheet_cases.append((name, image))
             path = output_dir / f"{name}.png"
             busy_path = output_dir / f"{name}_busy.png"
-            if not image.save(str(path), "PNG"):
-                raise RuntimeError(f"failed to save {path}")
+            image.save(path)
             _busy(image, busy_path)
             manifest.append(
                 {
@@ -342,28 +297,21 @@ def run(output_dir: Path) -> dict[str, object]:
                     "direction": direction,
                     "card": config.show_background,
                     "artwork_shape": config.artwork_shape,
-                    "image_size": [image.width(), image.height()],
+                    "image_size": [image.width, image.height],
                     "path": str(path.resolve()),
                     "busy_background_path": str(busy_path.resolve()),
                 }
             )
             presentation.retire()
             app.processEvents()
+        foundry.write_review_sheet(sheet_cases, output_dir / "review_sheet.png")
     finally:
-        host.retire_all()
-        window.hide()
-        root.setParentItem(None)
-        root.setParent(None)
-        root.deleteLater()
-        context.deleteLater()
-        window.deleteLater()
-        owner.deleteLater()
-        app.processEvents()
+        scene.close()
 
     payload = {
         "graphics_api": "OpenGL",
-        "render_loop": "threaded",
-        "device_pixel_ratio": window.devicePixelRatio(),
+        "render_loop": "hidden QQuickRenderControl",
+        "device_pixel_ratio": scene.dpr,
         "cases": manifest,
     }
     manifest_path = output_dir / "manifest.json"

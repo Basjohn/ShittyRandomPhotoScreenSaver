@@ -378,6 +378,66 @@ class _HiddenQuickScene:
         self.app.processEvents()
 
 
+def open_hidden_gl_application(reason: str):
+    """The hidden Windows-QPA GL application every hidden-scene capture tool starts from.
+
+    Applies the product's Quick graphics configuration, refuses any non-Windows QPA (offscreen
+    QPA draws blank artwork and materials) and returns the ``QGuiApplication`` that
+    :class:`_HiddenQuickScene` requires. Nothing is ever shown.
+    """
+
+    import os
+
+    from PySide6.QtGui import QGuiApplication
+    from rendering.quick.bootstrap import configure_quick_graphics
+
+    if os.environ.get("QT_QPA_PLATFORM", "").lower() not in ("", "windows"):
+        raise SystemExit("needs the Windows QPA (hidden GL); nothing is ever shown")
+    configure_quick_graphics(reason=reason)
+    return QGuiApplication.instance() or QGuiApplication([reason])
+
+
+def crop_item(scene: "_HiddenQuickScene", frame, item):
+    """``item``'s exact scene rectangle cut from a ``scene.read()`` frame (device pixels)."""
+
+    from PySide6.QtCore import QRectF
+
+    rect = item.mapRectToScene(QRectF(0.0, 0.0, item.width(), item.height()))
+    k = scene.dpr
+    return frame.crop((max(0, round(rect.left() * k)), max(0, round(rect.top() * k)),
+                       min(frame.width, round(rect.right() * k)), min(frame.height, round(rect.bottom() * k))))
+
+
+def write_review_sheet(cases, path):
+    """One labelled sheet of ``(name, PIL RGBA image)`` cases, each over a checker so a card
+    without a fill (and its shadow) is judged against something busy. Returns ``path``."""
+
+    from PIL import Image, ImageDraw
+
+    gap, label = 12, 18
+    columns = 2
+    cell_w = max(image.width for _name, image in cases)
+    cell_h = max(image.height for _name, image in cases) + label
+    rows = (len(cases) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * (cell_w + gap) + gap, rows * (cell_h + gap) + gap), (14, 14, 16))
+    draw = ImageDraw.Draw(sheet)
+    for index, (name, image) in enumerate(cases):
+        x = gap + (index % columns) * (cell_w + gap)
+        y = gap + (index // columns) * (cell_h + gap)
+        tile = max(24, image.width // 12)
+        panel = Image.new("RGBA", image.size, (0, 0, 0, 255))
+        panel_draw = ImageDraw.Draw(panel)
+        for ty in range(0, image.height, tile):
+            for tx in range(0, image.width, tile):
+                panel_draw.rectangle((tx, ty, tx + tile - 1, ty + tile - 1),
+                                     fill=((20, 58, 88, 255), (118, 52, 42, 255))[(tx // tile + ty // tile) % 2])
+        panel.alpha_composite(image)
+        draw.text((x, y), name, fill=(255, 220, 90))
+        sheet.paste(panel.convert("RGB"), (x, y + label))
+    sheet.save(path)
+    return path
+
+
 def _straight_alpha(pixels):
     """Convert premultiplied RGBA pixels (Quick/GL output) to straight alpha."""
 
