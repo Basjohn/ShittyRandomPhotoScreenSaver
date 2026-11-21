@@ -337,11 +337,31 @@ void main() {
         float ring_freq = 220.0 / trail_radial_scale;
         float ring_thickness = 0.38;      // how sharp the rings are (0=needle, 1=solid)
         float max_ripple_radius = 0.12 * trail_radial_scale;
+        // The fragment's square grown by 3 px, for the per-bubble reject below. Written with fma, never from
+        // uv_aspect: built from uv_aspect (a second use of it, likely no longer fused into each sample's delta) this
+        // reject changed about a quarter of the four takes' Vulkan frames by rounding alone (OpenGL unchanged).
+        vec2 wake_frag_lo = vec2(fma(uv.x, aspect, -3.0 * px), uv.y - 3.0 * px);
+        vec2 wake_frag_hi = vec2(fma(uv.x, aspect, 3.0 * px), uv.y + 3.0 * px);
 
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             float brad = bpos.z * response_scale;
             float balpha = bpos.w;
+            // Output-preserving per-bubble reject (item 8b: after the hero reject this loop was the pass's largest
+            // stage, every fragment paying three samples' square tests for every live bubble). Each sample's own
+            // reject below skips it past ripple_r + 2 px along either axis from its source, and every sample's ripple_r
+            // is at most the oldest's (age 1: 8 radii x the trail strength, under the same cap), wake_reach. A
+            // fragment more than wake_reach + 3 px outside the box of the bubble's three sources is therefore
+            // rejected by all three samples' tests, with 1 px to spare for rounding: skipping the bubble here changes
+            // no pixel (tests/test_bubble_wake_reject.py). Its terms are per bubble only, the px terms per
+            // fragment outside the loop.
+            vec2 wake_lo = min(min(u_bubbles_trail[i * 3].xy, u_bubbles_trail[i * 3 + 1].xy),
+                               u_bubbles_trail[i * 3 + 2].xy) * vec2(aspect, 1.0);
+            vec2 wake_hi = max(max(u_bubbles_trail[i * 3].xy, u_bubbles_trail[i * 3 + 1].xy),
+                               u_bubbles_trail[i * 3 + 2].xy) * vec2(aspect, 1.0);
+            float wake_reach = min(brad * 8.0 * trail_strength, max_ripple_radius);
+            if (any(lessThan(wake_frag_hi, wake_lo - wake_reach))
+                || any(greaterThan(wake_frag_lo, wake_hi + wake_reach))) continue;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
             // Process each of the 3 trail samples as a ripple source
