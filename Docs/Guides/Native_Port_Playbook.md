@@ -82,8 +82,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   the shared tolerance (checklist 9) with the mask named: the translucent pixels found by drawing the reference over
   two backgrounds or from its own alpha, or the pixels a blended layer sums into; float textures judged by their own
   ulp (D12 "The pixel tolerance"). Bounds are the measured worst times 1.5, stated beside their measured reasons.
-- Owner-level parity on recorded music, logic, timing and cost: `Native_Parity_And_Timing_Proof.md` owns the
-  method (layers L, P, T, C; material, how much to run, acceptance). It is not repeated here.
+- A Visualizer mode: owner-level parity on recorded music, logic, timing and cost; `Native_Parity_And_Timing_Proof.md`
+  owns the method (layers L, P, T, C; material, how much to run, acceptance). It is not repeated here. A transition:
+  fidelity and performance only (that guide's section 3, "A transition port"), never the mode method.
 - Negative controls for every rule, each seen failing on the broken form (a one-level shift on every pixel, a fixed
   artefact, the wrong order, the skipped release); `tests/test_pixel_tolerance.py` holds the tolerance's own.
 - Vulkan validation with synchronisation checks and the shader-access opt-in: `syncval_shader_accesses_heuristic` is

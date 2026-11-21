@@ -72,8 +72,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
   environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
   merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
-- [ ] Beam leftover (merged 21 Nov): performance only, the transition rule: cost per pass at 1440p and 4K on both
-  backends, and its Vulkan hitch run (running 21 Nov). Lead, unattended.
+- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends. Its Vulkan hitch run passed 21 Nov (0 % late,
+  render 0.43/0.61 ms against Python OpenGL 1.03/1.5).
+- [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
+  Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
+  Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
+  that path) before NF; evidence `tools/baselines/preflip/beam_*` and `crossfade_native_vulkan*`.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at

@@ -1,4 +1,4 @@
-# Native parity and timing proof (every port, every optimisation)
+# Native parity and timing proof (Visualizer mode ports and optimisations; transitions: section 3's own list)
 
 The method for proving that a native port, or an optimisation of one, loses nothing: no fidelity, reactivity,
 smoothness or timing. It is also the long-term control. The stored references are rerun after a driver, Qt, compiler or
@@ -19,8 +19,10 @@ Decided with the operator on 17 Nov 2026, after Bubble's parity had been resting
 | **T, timing and smoothness** | Is anything drawn later or less evenly? | Live cadence and presentation in the real process (section 4). | Invisible saver on Display 1, never Display 0 |
 | **C, cost** | What does it cost? | GPU time per pass, median and p90 of 240 frames, with the GPU state and display state recorded. | Hidden host plus the invisible saver |
 
-A hash cannot see timing, and a timing trace cannot see a wrong pixel. Every port and every optimisation needs all
-four layers, scaled as in section 3.
+A hash cannot see timing, and a timing trace cannot see a wrong pixel. Every Visualizer mode port and every optimisation
+needs all four layers, scaled as in section 3. A transition is not a mode: it needs fidelity and performance only
+(section 3, "A transition port"); none of the mode material (recorded takes, reaction modes, coverage windows, layer
+L, response tools, timing parity) applies to it.
 
 ## 2. Material: recorded music, never short synthetic clips
 
@@ -169,9 +171,9 @@ The acceptance figures:
 | Extruded Bubble (N5.6) | its variants | drift compute, defocus, transparency (OIT) | its response comparison | Heavy render; less variance, so coverage windows are fewer. |
 | Neon Lake (N5.5) | its variants | reaction and growth arrays, terrain | `neon_lake_music_response.py` | Persisted id `shockwave_grid`. |
 | Extruded Spectrum, Sphere (N5.3) | their variants | none beyond the frame | the live run | Meshes, lighting, silhouette shadows. |
-| Transitions (N5.2) | each transition | per transition | the session pack (`preflip_pack.py`) | Full canonical duration over several image pairs; no music. |
+| Transitions (N5.2) | not a mode: fidelity and performance only (section 3) | none | none (one Vulkan hitch run) | Full canonical duration over several image pairs; no music, no layers. |
 
-A port's brief names this guide plus the playbook. Its plan box lists its four layers' commands and states its
+A mode port's brief names this guide plus the playbook. Its plan box lists its four layers' commands and states its
 warm-up length before dispatch.
 
 ## 6. The long-term control
