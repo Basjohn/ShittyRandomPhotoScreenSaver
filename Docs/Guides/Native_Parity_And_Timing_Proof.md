@@ -41,7 +41,9 @@ four layers, scaled as in section 3.
 **A port.**
 - **L:** every frame of every take and reaction mode.
 - **P:** the Python reference hashes are rendered once per take, reaction mode and placement, then cached. The Python
-  renderers are frozen until N5.2h deletes them, so the references never need re-rendering. Each native run renders
+  renderers are frozen until N5.2h deletes them, so the references never need re-rendering, except after a
+  checklist-16 conversion (a port's decided change to the Python renderer): its references redraw once through the
+  cache key, with stills before and after and the port's showcase WebP. Each native run renders
   only the native path against the cache.
 - **Coverage:** per reaction mode, one full 60 s take, plus coverage-selected windows from the other takes. L's
   records choose the windows: the extremes of each record field, the cold start, mode switches and fades, the loudest
@@ -66,9 +68,16 @@ four layers, scaled as in section 3.
 - **Response:** the mode's own response tool (section 4's list; Waveform `waveform_music_response.py`, Neon Lake
   `neon_lake_music_response.py`) for every reaction mode separately, before against after, on the recorded
   continuous-play chain; also for any later change that touches the mode's simulation or its visible response
-  (operator, 21 Nov: part of the fast proof for every mode).
+  (operator, 21 Nov: part of the fast proof for every mode). It is CPU only: run it in parallel with L, not after it.
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
+
+**A transition port** (no music, no reaction modes).
+- **L:** the per-frame uniform record against Python's over the full canonical duration and several image pairs.
+- **P:** rule (a) and rule (b) as above, every frame of that duration, through `transition_route_check.py`.
+- **T:** `preflip_pack.py --rows <its transitions> --compare` against the pre-flip rows.
+- **C:** per pass at 2560 x 1440 and 4K, on both backends.
+- Registration (offering it on Vulkan) waits for T, as the playbook's checklist 18 says for modes.
 
 **An optimisation of a landed port.**
 - **No coverage sampling:** P hashes every frame of all three takes.
@@ -101,8 +110,9 @@ the run. A mode the change cannot reach is not re-run. An all-mode run happens o
 every C++ change. Parity is not re-measured on accepted modes; a guard checks they did not move (native before
 against native after, hashes, `--accepted`).
 
-**Gates in general.** Gates run unattended in the background, with references and native runs in separate processes
-and several takes at once. A full gate runs at acceptance and once per batch of optimisations, never once per
+**Gates in general.** The lead runs batch gates unattended in the background, with references and native runs in
+separate processes and several takes at once. An agent runs its gate in the foreground (agents run nothing in the
+background), one process per take, at most the number its brief states at once, each under its timeout. A full gate runs at acceptance and once per batch of optimisations, never once per
 candidate.
 
 ## 4. Timing and smoothness (layer T)
@@ -167,7 +177,8 @@ Each accepted port keeps:
 
 Spectrum, Spline Curve and Bubble are accepted (operator, 17 Nov). Their four-take hashes are their reference. Rerun
 the gate after:
-- a GPU driver, Qt or shader-compiler upgrade (all accepted modes);
+- a GPU driver, Qt or shader-compiler upgrade: one full take per accepted mode per backend with `--accepted`; every
+  take only for a mode whose hashes moved;
 - a native core ABI change that touches drawing: only the modes section 3's regression-guard rule names;
 - an optimisation: the mode it optimises.
 

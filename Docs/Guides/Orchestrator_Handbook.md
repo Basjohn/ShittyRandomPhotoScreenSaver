@@ -21,7 +21,7 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   |---|---|---|
   | Complex or architecturally sensitive work | Opus 5.5 High | Sol 6.1 High |
   | General work (bounded repairs, tests, presets) | Opus 5.5 Medium | Sol 6.1 Medium |
-  | Audits, including document and plan audits | Opus 5.5 High | Terra 6.1 High (a Codex audit always uses Terra 6.1 High) |
+  | Audits, including document and plan audits | Opus 5.5 Medium; Opus 5.5 High only for core C++ with real risk | Terra 6.1 High (a Codex audit always uses Terra 6.1 High) |
   | Research, documents, and large writing with little deduction (much code, simple logic: mechanical ports, bulk test or doc writing to a decided design) | Sonnet 5.5 Medium | Terra 6.1 Medium |
   | Milestone audit (rare, below) | Fable 5.2 High | none: Opus 5.5 High when Fable is unavailable |
 
@@ -63,8 +63,9 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
    your brief", plus only what the item cannot say (the review point where it must stop, files another agent is
    in, anything the operator said that day). Never restate the environment rules. Never narrow or rewrite a
    proof in the brief from memory: before writing one, open the owning checklist for the change's kind (a port:
-   `Native_Port_Playbook.md` section 1 and `Native_Parity_And_Timing_Proof.md` section 3's "A port" list; an
-   optimisation or core change: section 3's table and regression-guard rule) and name it in the brief ("its proof is
+   `Native_Port_Playbook.md` sections 1, 2 and each section 3 primitive it uses, and `Native_Parity_And_Timing_Proof.md`
+   section 3's "A port" list (or "A transition port") and its section 5 row; an optimisation or core change: section
+   3's table and regression-guard rule) and name it in the brief ("its proof is
    that list, every bullet"), so the agent reads the documented list, not the lead's summary of it.
 3. **Dispatch** with `isolation: "worktree"`, the slot's `model` and `effort`. Note the agent id in the plan item.
 4. **While it runs:** do not poll. If it seems stuck, `tools/agent_handover.py <worktree>` shows its journal,
@@ -81,6 +82,8 @@ one audit; docs, tests and tooling merges get none (the lead's own check below s
 
 - The report against the owning checklist named in the brief, bullet by bullet (each layer, each reaction mode,
   each tool the list names): a bullet with no figure in the report is not done, whatever the verdict line says.
+  Check against the checklist for the change's kind even when the brief named none. Read each figure, and frames
+  judged against frames held, from the cited evidence file, never from the report text.
 - Each box claimed done: find it in the diff; run its tests on the merge, not only on the branch (skip the rerun when
   `git log <branch>..main` is empty: main has not moved since the branch was cut).
 - A negative control exists for every new test and the agent says how it saw it fail.

@@ -62,33 +62,18 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
-**Resume here (lead, 21 Nov ~09:30 UTC; spend stopped: weekly 39 %, 5-hour 97 %; start a fresh lead session):**
-- [ ] Efficiency first (operator, 21 Nov: the day spent too much, a Spline residual chase above all): critical path only
-  (the Oscilloscope's blockers, the core features the ports need, then Waveform); no slot for non-blocking residuals of
-  accepted modes (references are keyed on drawing inputs only: audit 9 M1/M2 and tests 268bf53db); one reference build per change, shared; `--accepted` by default; one
-  C++ build per batch; fresh agents instead of resuming ones with huge contexts.
-- [ ] Two built, unmerged C++ branches both at ABI 31 (renumber the second merged to 32, rebuild main after each):
-  - `worktree-agent-a8797a6d7c59d45af` (audit 11's fixes for N3.6, built 87f8c4974): run `device_loss_check.py` all
-    rounds and `make_controls.py` controls (sent to the same agent, 21 Nov ~12:10), then merge.
-  - `worktree-agent-aea35d28be699535f` (the card quad, built 55433ebff; agent stopped by the lead): Spline Curve 23
-    failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
-    failures on three takes. Still to run before merge (regression guards only, the generic modes it touches):
-    the content harnesses on both APIs and Bubble variant a on one take; Spectrum's own item is not touched, so no
-    Spectrum run. Merge if clean; otherwise park it.
-- [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
-  it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
-  (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
-  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered and documented
-  21 Nov. Left: its two side defects and the backlog line.
-- [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
-  - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
-    generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
-    backlog line with its evidence paths; shrink figure-heavy boxes (N5.1, the N2.x-N5.7 leftovers) to a verdict and
-    evidence path per box, moving the leftovers to a backlog section; fold or delete `Docs/testfailures20261119.md`
-    (no handoff docs).
-  - [ ] `tools/agent_handover.py --retire --keep <paths file>`: copy only the listed evidence paths, with a test;
-    one handbook line in the retire step to use it. (Plan trim: agent dispatched 21 Nov; --keep: agent dispatched
-    21 Nov, both Sonnet Medium.)
+**Resume here (lead, 21 Nov ~16:30 UTC; main at ABI 33, built; weekly about 47 %):**
+- [ ] Working rules (operator, 21 Nov; handbook 7a and section 3-4, proof guide section 3): critical path only; related
+  work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
+  at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
+  ABI numbers reserved at dispatch; main built once per batch of C++ merges.
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
+  its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
+- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High, ABI 34): the reading first, its own stop.
+- [ ] Beam leftover (merged 21 Nov; registered before its T, against checklist 18): its T row
+  (`preflip_pack.py --rows beam --compare`), C per pass at 1440p and 4K on both backends, the per-rule negative
+  controls and retirement to zero, recorded in its D13 record. Lead, unattended.
+- [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
@@ -625,8 +610,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 Slots (lead, 12 Nov): the first port of each kind, and the heavy 3D ports (Waveform Ribbon, Extruded Bubble, Neon
 Lake, Extruded Spectrum and Sphere), go to Opus High. Once Spectrum (N2.5) has proved the pattern, the simple modes
 (Spline Curve, Oscilloscope, Bubble) go to Opus Medium, proved frame by frame against the Python renderer with the
-identity harnesses. A difference that is not byte for byte goes back to the lead to judge. An Opus High audit
-reruns every port's parity proof and its negative controls before merge.
+identity harnesses. A difference that is not byte for byte goes back to the lead to judge. An audit reruns the port's
+negative controls and one take per backend from the cited evidence; it never repeats the full parity sweep.
 
 Rule for every port here (Qt 6.12): where a mode's small instanced batches (bars, specks, snow, sprite families)
 are measured above a handful per frame, one pipeline and one indirect call with `QRhi::ShaderDrawParameters`
