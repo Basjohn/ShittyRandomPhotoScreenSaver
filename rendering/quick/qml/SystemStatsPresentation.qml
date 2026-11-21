@@ -53,8 +53,6 @@ OverlayWidget {
     // internals. The only editable metric role is their common outer stack.
     // No mirror transforms, scene lookup, polling or second layout authority.
     function metricRoleX(roleId, panelWidth, roleWidth) {
-        if (roleId === "metric_accents")
-            return headerFlipped ? panelWidth - roleWidth : 0.0
         if (roleId === "metric_labels" || roleId === "metric_details")
             return headerFlipped ? panelWidth - 18.0 - roleWidth : 18.0
         if (roleId === "metric_values")
@@ -266,16 +264,6 @@ OverlayWidget {
         // The Feed tile's hairline (invisible under Borderless), not an accent-tinted stroke.
         border.color: statsRoot.systemStatsModel.headerBorderColor
         border.width: statsRoot.scaleAwareStrokeWidth(1.0)
-
-        Rectangle {
-            objectName: panel.objectPrefix + "Accent"
-            x: statsRoot.metricRoleX("metric_accents", panel.width, width)
-            y: 0.0
-            width: 5.0
-            height: panel.height
-            radius: Math.min(width / 2.0, 2.5)
-            color: panel.accentColor
-        }
 
         // On a surface material: one rounded row filling the panel (its fill is the
         // underlay), drawn over the panel fill and under the
