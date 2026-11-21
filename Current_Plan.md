@@ -120,6 +120,13 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
+- [ ] Achievement Pulse ring material garbled whatever is selected (operator, 21 Nov, screenshot: the ring shows a
+  blotchy pink smear instead of the chosen material). Likely a regression of this session's fix that gave the ring and
+  inner circle their own surface materials (5a1d84407, merged d604ae84a): check the ring's material sampling (backdrop
+  UVs or blur level mapped to a thin annulus, the ring's own demand for the shared backdrop, the alpha/mask) against
+  the card's working path. Fix at the owner; render every ring material on a real wallpaper (smoke tool, hidden GL
+  host) before and after, zoomed, with the inner circle and borderless unaffected; a test whose control fails on the
+  current code.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
