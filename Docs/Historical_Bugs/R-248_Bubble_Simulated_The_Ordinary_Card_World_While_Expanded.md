@@ -1,4 +1,4 @@
-# R-NEW | Bubble simulated the ordinary card's world while the display-wide card drew a grown one
+# R-248 | Bubble simulated the ordinary card's world while the display-wide card drew a grown one
 
 **Status:** fixed 2026-11-21 at the owners (`QuickDisplayVisualizerOwner._apply_expanded_presentation` /
 `_apply_resolved_presentation`, `VisualizerRuntimeController.set_drawn_world_extent` / `logical_world_extent`, the

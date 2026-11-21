@@ -81,12 +81,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] `--perf` overlay on Vulkan (operator, 21 Nov): the Visualizer's overlay shows no fps, rev or age when the saver
   runs on Vulkan (`--vulkan`). Root-cause where the native path stops feeding the overlay's figures; fix at the owner
   so both backends feed it the same way, with a test. Before NF.
-- [ ] Bubble in fullscreen (operator, 21 Nov; not port-related; agent acbcfa60c0570218e, Opus Medium): in a viewport bubbles breathe and move at a decent
-  speed; fullscreen they accelerate massively and lose their breathing. Likely a size-dependent scale (speed or
-  reactivity derived from the card's pixels instead of a normalised size). Evidence: the operator's latest log
-  (`logs/`, viewport then fullscreen). Root-cause first (which value scales with size, since when: `git log` on the
-  Bubble sim and the card quad merge), fix at the owner so behaviour is size-independent, test at two sizes with a
-  control on the old code; then a reaction check on a recorded take at viewport and fullscreen size.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
