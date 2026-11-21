@@ -73,15 +73,41 @@ void main()
 %(store)s}
 """
 _STORE = "    imageStore(u_dest, dst, sum);\n"
-#: An 8-bit level is rounded in the kernel, once, to the nearest of its 256 values (precise: no fused multiply-add, so
-#: both backends compute the same k), and the store then converts an exact value: the backends' own float-to-unorm
-#: conversions differ near the halves (measured 21 Nov on the ABI 35 build: 509 of the 14,508 level-1 texels of the
-#: chain scene one level apart between OpenGL and Vulkan, every one at a fraction between 0.486 and 0.585).
-_STORE_RGBA8 = ("    // Rounded here to the nearest 8-bit value (the backends' own conversions differ at the halves).\n"
-                "    precise vec4 level = floor(sum * 255.0 + 0.5) / 255.0;\n"
-                "    imageStore(u_dest, dst, level);\n")
 MIP_BOX_COMP = _MIP_BOX % {"format": "rgba16f", "store": _STORE}
-MIP_BOX_RGBA8_COMP = _MIP_BOX % {"format": "rgba8", "store": _STORE_RGBA8}
+
+#: The RGBA8 text sums integers: each loaded texel is taken back to its 8-bit value 0..255 (``unorm8``) and the level
+#: rounded once to the nearest of them before its store. Why (measured 21 Nov on the ABI 35 builds, the chain scene):
+#: NVIDIA's OpenGL returns an RGBA8 image's texel at half-float precision (k / 255 off by up to 2.4e-4) where its Vulkan
+#: returns it at single precision, so float sums of the loads differed by up to 0.06 of a level and rounded apart at
+#: the halves (530 of the 14,508 level-1 texels one level apart, at fractions 0.46 to 0.53; Vulkan matched the exact
+#: average, OpenGL did not); and even sides' ties (a sum ending in exactly .5) fell either way on the loads' last bits.
+#: Integers are exact in any precision, so both backends sum the same values, ties included, and the store converts an
+#: exact 8-bit value.
+_UNORM8 = """// An 8-bit texel as its integer value 0..255, recovered exactly whatever precision the load returns (NVIDIA's OpenGL
+// loads an RGBA8 image at half-float precision, its Vulkan at single), so the sums below are of integers and every
+// backend computes the same bits, ties included.
+vec4 unorm8(ivec2 p)
+{
+    return floor(imageLoad(u_source, p) * 255.0 + 0.5);
+}
+
+vec4 row("""
+_STORE_RGBA8 = ("    // The level in 8-bit units, rounded once to the nearest value and stored exactly.\n"
+                "    precise vec4 level = floor(sum + 0.5) / 255.0;\n"
+                "    imageStore(u_dest, dst, level);\n")
+
+
+def _rgba8_text() -> str:
+    text = _MIP_BOX % {"format": "rgba8", "store": _STORE_RGBA8}
+    for tap in ("ax.x", "ax.z", "ax.y"):
+        old = f"imageLoad(u_source, ivec2({tap}, y))"
+        assert text.count(old) == 1, old
+        text = text.replace(old, f"unorm8(ivec2({tap}, y))")
+    assert text.count("\nvec4 row(") == 1
+    return text.replace("\nvec4 row(", "\n" + _UNORM8, 1)
+
+
+MIP_BOX_RGBA8_COMP = _rgba8_text()
 #: The kernel's text by its images' format (the core's two shader files).
 MIP_BOX_TEXTS = {"rgba16f": MIP_BOX_COMP, "rgba8": MIP_BOX_RGBA8_COMP}
 MIP_BOX_GROUP = 8

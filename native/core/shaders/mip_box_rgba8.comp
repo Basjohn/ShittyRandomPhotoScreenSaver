@@ -25,11 +25,19 @@ void taps(int i, int s, out ivec3 at, out vec3 w)
     }
 }
 
+// An 8-bit texel as its integer value 0..255, recovered exactly whatever precision the load returns (NVIDIA's OpenGL
+// loads an RGBA8 image at half-float precision, its Vulkan at single), so the sums below are of integers and every
+// backend computes the same bits, ties included.
+vec4 unorm8(ivec2 p)
+{
+    return floor(imageLoad(u_source, p) * 255.0 + 0.5);
+}
+
 vec4 row(int y, ivec3 ax, vec3 wx)
 {
     // precise: no fused multiply-add, so the outer pair's sum is the same whichever tap comes first.
-    precise vec4 outer = wx.x * imageLoad(u_source, ivec2(ax.x, y)) + wx.z * imageLoad(u_source, ivec2(ax.z, y));
-    precise vec4 sum = outer + wx.y * imageLoad(u_source, ivec2(ax.y, y));
+    precise vec4 outer = wx.x * unorm8(ivec2(ax.x, y)) + wx.z * unorm8(ivec2(ax.z, y));
+    precise vec4 sum = outer + wx.y * unorm8(ivec2(ax.y, y));
     return sum;
 }
 
@@ -48,7 +56,7 @@ void main()
     taps(dst.y, source.y, ay, wy);
     precise vec4 outer = wy.x * row(ay.x, ax, wx) + wy.z * row(ay.z, ax, wx);
     precise vec4 sum = outer + wy.y * row(ay.y, ax, wx);
-    // Rounded here to the nearest 8-bit value (the backends' own conversions differ at the halves).
-    precise vec4 level = floor(sum * 255.0 + 0.5) / 255.0;
+    // The level in 8-bit units, rounded once to the nearest value and stored exactly.
+    precise vec4 level = floor(sum + 0.5) / 255.0;
     imageStore(u_dest, dst, level);
 }
