@@ -75,9 +75,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
   over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
-- [ ] Performance, before the flip (found 21 Nov): the saver's CPU on native Vulkan transitions is about 1.7-2x
-  Python OpenGL (Beam 16.5 % of a core against 9.9; Crossfade 19.9 % on Vulkan), while GPU render time halves.
-  Not Beam's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
+- [ ] Performance, before the flip (found 21 Nov): inside a run, the saver's CPU on native Vulkan transitions is
+  28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
+  Python OpenGL. The earlier whole-row figures (Beam 16.5 % against 9.9, Crossfade 19.9 %) included idle time between
+  runs; the first step is the same inside-run figure for Python OpenGL, so the ratio is like for like.
+  Not one transition's own: it is the Vulkan path. Root cause (the present path, the frame driver, the trace and sampler on
   that path) before NF; evidence `tools/baselines/preflip/beam_*` and `crossfade_native_vulkan*`.
 - [ ] `--perf` overlay on Vulkan (operator, 21 Nov): the Visualizer's overlay shows no fps, rev or age when the saver
   runs on Vulkan (`--vulkan`). Root-cause where the native path stops feeding the overlay's figures; fix at the owner
