@@ -75,7 +75,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
   over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
-- [ ] Performance, before the flip (found 21 Nov): inside a run, the saver's CPU on native Vulkan transitions is
+- [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
+  performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov: inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
   Python OpenGL. The earlier whole-row figures (Beam 16.5 % against 9.9, Crossfade 19.9 %) included idle time between
   runs; the first step is the same inside-run figure for Python OpenGL, so the ratio is like for like.
