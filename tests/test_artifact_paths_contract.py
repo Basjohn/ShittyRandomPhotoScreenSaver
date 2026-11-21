@@ -400,6 +400,7 @@ def test_the_layout_is_the_running_checkouts_own_even_in_a_linked_worktree(tmp_p
     (worktree / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'agent'}\n", encoding="utf-8")
 
     in_worktree = _load_owner_from(worktree)
+    in_worktree.SCRATCH_DRIVE_ROOT = tmp_path / "no_scratch_drive"      # absent: real folders, nothing linked
     assert in_worktree.REPO_ROOT == worktree.resolve()
     assert in_worktree.ARTIFACTS_ROOT == worktree.resolve() / ".artifacts"
     assert in_worktree.SCRATCH_ROOT == worktree.resolve() / ".artifacts" / "scratch"

@@ -33,7 +33,11 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
   `extruded_bubble` (Extruded Bubble), `waveform_ribbon` (Waveform Ribbon), plus `shared` and the retired
   `blob`/`sine_wave`. `python tools/artifact_paths.py areas` prints the current list. The layout resolves to the
   `.artifacts` of the checkout the tool runs from, a linked worktree's own included (no redirect); a worktree agent
-  lists its evidence paths and the lead copies them into the main checkout when merging.
+  lists its evidence paths and the lead copies them into the main checkout when merging. On first use a linked
+  worktree's missing `.artifacts/{webp,evidence,scratch}` become junctions to
+  `D:\Temp\Scratch\SRPSS\worktrees\<worktree>\<folder>` (heavy output never lands on F:); an existing real folder is
+  never moved, a junction target outside `D:\Temp\Scratch\SRPSS` is refused, and `agent_handover --retire` copies the
+  keep group through them, then deletes that worktree's D: targets (links inside are never entered).
 - A tool's output argument defaults to the layout. An explicit one must lie inside it: anything else
   (elsewhere in the repository, `logs/`, `%TEMP%`, a Claude session scratchpad, another drive) is refused
   with a usage error. Programmatic APIs that tests call still take `tmp_path`.
@@ -48,6 +52,9 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
   process has exited. It only reports (never deletes) PNG frame sequences (12 or more numbered frames in one folder), WebPs over
   10 MB and `profile/` folders
   under `evidence/` or `webp/`. The lead runs it at milestones; nothing schedules it. Nothing deletes `logs/`.
+  **Protected, never deleted by any cleanup:** `D:\Temp\Scratch\SRPSS\fast_proof\references` (the cached Python
+  references) and every accepted `native_render_parity.json` (`artifact_paths.is_protected`; `prune-scratch` refuses
+  to delete either).
 - **Relocation.** `.artifacts/evidence`, `.artifacts/webp` and `.artifacts/scratch` may each be a Windows
   directory junction to another drive (the archive on the HDD, e.g. `D:\Temp\Scratch\SRPSS\evidence`, scratch
   on a fast NVMe). The owner resolves both the layout roots and every candidate path, so paths written through
