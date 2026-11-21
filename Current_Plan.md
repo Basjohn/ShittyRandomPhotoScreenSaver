@@ -127,6 +127,12 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   the card's working path. Fix at the owner; render every ring material on a real wallpaper (smoke tool, hidden GL
   host) before and after, zoomed, with the inner circle and borderless unaffected; a test whose control fails on the
   current code.
+- [ ] Games You Follow draws an extra backdrop the feed cards do not (operator, 21 Nov, screenshot
+  `.artifacts/evidence/widgets/steam/20261121_operator_reports/games_you_follow_extra_backdrop.webp`): its stories sit on
+  a layer the News/Feed card lacks, so the two read inconsistently. Find the extra layer in
+  `rendering/quick/qml/GamesYouFollowPresentation.qml` against `FeedPresentation.qml` (story tile, legibility row,
+  group or body fill), remove it so both share the same tile treatment; before/after renders of both cards on a real
+  wallpaper, light and dark theme; a test with a control.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
