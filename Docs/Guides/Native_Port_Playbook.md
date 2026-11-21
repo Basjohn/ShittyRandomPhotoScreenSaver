@@ -91,10 +91,11 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   between them: a harness that reads back between records hides a missing barrier (audit 2 H1).
 - Nothing at rest, no object or allocation over a steady minute (a remade-streams control must fail), retirement to
   zero with a skipped-release control (D15 "proof"; D16 "proof").
-- Cost under the layer and, where the GPU allows, without it, with the GPU state recorded (checklist 11).
-- The earlier harnesses rerun unchanged (`generic_mode_check`, `scene_target_check`, `mesh_buffer_check`,
-  `compute_pass_check`, `fullscreen_pass_check`, `background_layer_check`, `backdrop_pyramid_check`,
-  `transition_route_check`, `devcurve_check`; D15 choice C).
+- Cost once, without the validation layer (it distorts GPU times), with the GPU state recorded (checklist 11).
+- The earlier harnesses rerun unchanged only where the port's change reaches them (D15 choice C, narrowed by the
+  regression-guard rule, `Native_Parity_And_Timing_Proof.md` section 3): the harness of every primitive or core path
+  the port's C++ touches, named with the reason in the report. A data-only port reruns none but its own; all of them
+  only after a change to a path every mode shares (the generic content, the route, the packet ABI's layout).
 - Run each negative control in its own process (checklist 6).
 
 ## 3. Sections by primitive

@@ -204,8 +204,10 @@ decision, recorded with its reason.
   (`ulp_ring` flips 3 frames per full take, none in a window). A one-ulp change flips only pixels on a rounding
   boundary, and no record predicts those frames. Evidence: `.artifacts/evidence/native_core/fast_proof/20261121_method_*`.
 - **The split this sets (lead, 21 Nov):** what changed decides the material.
-  - A shader, core or optimisation change, and every port's acceptance: a native-only run over each full take, every
-    frame judged against the cached Python references (a frame hash-identical to the accepted native baseline needs
+  - A mode's own shader or optimisation change, and every port's acceptance: a native-only run over each full take
+    of that mode. A shared core change on accepted modes is a regression guard (section 3): one full take per mode it
+    is likely to touch, with `--accepted`, never every take of every mode. Either way every frame is judged against
+    the cached Python references (a frame hash-identical to the accepted native baseline needs
     no rejudge). Coverage windows never stand in for this. The run: `owner_render_parity.py --native --recording TAKE
     --seconds 60 --references --accepted ACCEPTED.json`. Confirmed 21 Nov on Bubble, nightsolong, variant a: the
     accepted run is the full replay (399.2 s, Python drawn and stored); with `--accepted`, 57.6 s (all 5,266 judged
