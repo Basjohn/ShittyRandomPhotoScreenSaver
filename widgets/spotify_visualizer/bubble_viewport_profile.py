@@ -50,6 +50,8 @@ DISPLAY_WIDE_LIVE_CAPACITY = 126
 BUBBLE_BASE_HALF_STROKE_PX = 0.80
 BUBBLE_MAX_HALF_STROKE_PX = 2.35
 BUBBLE_MAX_EXTRA_HALF_STROKE_PX = 1.25
+# Big heroes' outline is this much firmer per side, base and ceiling alike (bubble.frag; operator, 22 Nov).
+BUBBLE_BIG_EXTRA_HALF_STROKE_PX = 0.25
 
 # The outline firms gently as heroes grow larger than the canonical card's (only the capacity zoom
 # can do that now); a canonical-size hero keeps the canonical stroke on every shape.
@@ -168,6 +170,7 @@ def scale_bubble_population(big: int, small: int, population_scale: float,
 
 
 __all__ = [
+    "BUBBLE_BIG_EXTRA_HALF_STROKE_PX",
     "BUBBLE_CARD_CAPACITY",
     "DISPLAY_WIDE_LIVE_CAPACITY",
     "DISPLAY_WIDE_ZOOM_EXPONENT",

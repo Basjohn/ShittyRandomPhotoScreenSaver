@@ -512,7 +512,7 @@ void main() {
         delta.x *= aspect;
         // Output-preserving square reject (item 8b's measured offender: this loop ran its whole body for every
         // fragment x live hero, about 55 % of the pass at 4K). Past r + 4 px along either axis the fragment lies
-        // outside the outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.35 px), the body's and the
+        // outside the outline's outer edge (r + stroke + 0.5 px, the stroke at most 2.6 px), the body's and the
         // dot's edge (r + 0.5 px) and the big heroes' own reject below (r + px): the ring, the dot, the specular and
         // the coverage are each exactly 0 there, mix() leaves both layers unchanged, and skipping is byte-identical
         // (tests/test_bubble_hero_reject.py).
@@ -535,8 +535,11 @@ void main() {
         // avoiding the old late/accelerating ramp that approached ~6px total.
         // Radius proportionality remains useful for genuinely larger heads, but
         // the final physical ceiling is 2.35px per side (~4.7px total).
-        float stroke = max(0.80 * px, min(r * 0.0375, 1.8 * style_px));
-        stroke = min(2.35 * px,
+        // Big heroes draw 0.25px per side firmer, ceiling included (operator, 22 Nov:
+        // display-wide outlines read thin); small heroes and the ambience are unchanged.
+        float big_extra_half_px = hero_big ? 0.25 : 0.0;
+        float stroke = max(0.80 * px, min(r * 0.0375, 1.8 * style_px)) + big_extra_half_px * px;
+        stroke = min((2.35 + big_extra_half_px) * px,
             stroke + viewport_stroke_extra_half_px * px);
 
         // --- Tiny bubble shortcut (< ~4px radius) ---

@@ -607,7 +607,7 @@ def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> No
     )
     assert "float stroke = max(0.80 * px" in shader
     assert "stroke + viewport_stroke_extra_half_px * px" in shader
-    assert "min(2.35 * px" in shader
+    assert "min((2.35 + big_extra_half_px) * px" in shader
     assert "stroke - 0.5 / inner_h" not in shader
 
 
