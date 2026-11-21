@@ -882,15 +882,28 @@ the feature (D3D11 is not stated).
     `native_stream_player.py --windows` and `owner_render_parity.py --windows` draw only the windows. Bubble's four
     takes: 11, 10, 12 and 8 windows, 972, 954, 1,143 and 856 of 5,313 inputs drawn, late windows at 45.1, 43.8,
     50.6 and 57.1 s, all 14 fields covered (`fast_proof/20261121_coverage_bubble_<take>/`).
-  - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
-    one-ulp shader change.
-    Controls built (WIP 503784340): `owner_render_parity --native-control shift`, `native_stream_player
-    --shader-control ulp_gradient`. Not run yet (held for the layer T agent's quiet CPU). The runs: nightsolong
-    `--references --windows` (input 22 in the cold-start window); the 5.5 s offers `stream_direction=2` and `=6` with
-    5.5 s windows (input 337); one take with `--native-control shift`; the player `--windows --shader-control
-    ulp_gradient --apis opengl --against` a full-run report.
-  - [ ] Rule (a) reruns of human_heavy1 and nightsolong under today's rule (isolation clause retired 270313a62): the
-    M2 frames 2182, 2223 and 2128 must pass and input 22 still fail; store their references (`--references`).
+  - [ ] Method proof on Bubble: FAILED on the one-ulp shader change (21 Nov, `fast_proof/20261121_method_*`), so
+    under the guide's rule coverage windows are not the default; the full replay stays (the lead's call on what next).
+    Three of the four criteria are caught, with windowed frames hash-identical to the full continuous run's at every
+    window input: nightsolong's 856 window frames fail only input 22 (53.5 s against 762.5 s for the full run's two
+    variants); the 5.5 s offers `stream_direction=2` and `=6` (windows from variant a's 5.5 s stream, 324 of 359
+    inputs) fail only input 337 in the switch window; `--native-control shift` on human_heavy1 fails all 954 window
+    frames. The one-ulp control (`native_stream_player --shader-control ulp_ring`; the old `ulp_gradient` changed no
+    frame because the takes' light and dark gradient colours are equal) changes 3 frames of each full run (nightsolong
+    1175, 2026, 2436; human_heavy1 304, 1397, 5177) and none of the 6 lies in a window: a one-ulp change flips only
+    pixels sitting on a rounding boundary, at frames no record-driven selection predicts. Options for the lead:
+    accept coverage windows for record- and settings-driven classes with the full native-only hash run
+    (`--native-only --against`, every frame, no Python render) as the shader-change detector, or keep the full
+    replay.
+  - [ ] Side defect: `owner_render_parity --native --native-control shift` never unbinds the native route at the
+    mode switch. The route publishes every input (5.5 s Studio clip: 549 against 360 without the control; human_heavy1
+    60 s: 5,503 against 5,314) and the native run's logical digests differ from the Python reference's, so a stored
+    reference is judged stale and redrawn (2,200 s on human_heavy1). Reproduce: `--mode bubble --runs bubble
+    --references --native-control shift` against the same command without the control
+    (`fast_proof/20261121_shift_control_digests_bubble_studio*`). The control only re-encodes each native frame in
+    `NativeSceneMirror.frame` (`_SpilledFrames.replace_last`, a new record hash) and the clock is logical; the cause
+    is not found yet. The control's verdict stands (its Bubble frames fail), but the run must match the uncontrolled
+    one apart from the shifted pixels.
   - [ ] The partner-bounds control on real frames: the Oscilloscope 5.5 s smoke's Bubble frames (inputs 390-418) pass
     under Bubble's bounds (5608f58db) and fail under the Oscilloscope's.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
