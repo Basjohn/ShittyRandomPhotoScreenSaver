@@ -160,6 +160,10 @@ public:
     // Audit N38 L1, job thread: the device was found lost (an upload's completion edge returned it). The service then
     // fails closed: the job fails, every later job fails at once and its consumer runs the in-frame form.
     virtual bool deviceLost() const { return false; }
+    // N3.6, checkpoint audit 11 L2 (any thread, before the service's stop): the device was found lost outside the job
+    // thread (its window's QRhi reported it). deviceLost() is true afterwards: no job touches it, the teardown saves
+    // nothing of it.
+    virtual void markDeviceLost() {}
     virtual QJsonObject stateJson() const = 0;
 };
 
@@ -214,6 +218,9 @@ public:
     // The thread that destroys the device (GUI). Abandons, destroys every output, tears the backend down, joins.
     // Idempotent; the service refuses jobs afterwards.
     QJsonObject stop();
+    // N3.6, checkpoint audit 11 L2: the device's destruction, before stop(), for a device its window found lost (the
+    // backend's markDeviceLost; the stop record's told_device_lost and device_lost say so).
+    void deviceWasLost();
     bool failed() const { return m_failed.loadAcquire() != 0; }
     bool stopped() const { return m_stopped.loadAcquire() != 0; }
 
@@ -270,6 +277,7 @@ private:
     qint64 m_releasesDone = 0;
     QJsonObject m_stopRecord;
 
+    bool m_toldDeviceLost = false;               // deviceWasLost() (audit 11 L2)
     bool m_started = false;                      // the thread was started (at the first job)
     bool m_failThreadStart = false;              // the self-test's control (L3)
 
