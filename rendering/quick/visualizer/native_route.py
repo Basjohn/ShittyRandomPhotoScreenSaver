@@ -541,10 +541,16 @@ GENERIC_MODE_FRAME_GATES: dict[str, Callable[[Any], bool]] = {}
 def waveform_frame_ready(snapshot: Any) -> bool:
     """Whether a Waveform frame's framed view (the camera its record is built from, ``core.framed_view``) is the
     drawn card's (``framed_view.resolve_framed_view``): before the scene first sends its view, and on a resize
-    edge until the worker's frames catch up, it is not, and the frame is held (Item 2's design, D5.5)."""
+    edge until the worker's frames catch up, it is not, and the frame is held (Item 2's design, D5.5). A frame whose
+    ribbon is not ready yet (its history still priming, the first second of a model) is held too: the Python renderer
+    draws nothing for it (``QuickWaveformRibbonRenderer._draw``), and a model is new only with a new runtime
+    generation, whose route shows nothing until its first published frame (layer L's first run)."""
     from rendering.quick.visualizer.framed_view import resolve_framed_view
 
-    view = tuple(getattr(snapshot.logical.mode_state, "framed_view", ()) or ())
+    state = snapshot.logical.mode_state
+    if not bool(getattr(state, "ready", False)):
+        return False
+    view = tuple(getattr(state, "framed_view", ()) or ())
     drawn = resolve_framed_view(snapshot.presentation)
     return bool(view) and drawn is not None and view == tuple(drawn)
 #: Waveform's route entries (N5.4), registered only by the port's last step (playbook checklist 18) and, until then,
@@ -980,6 +986,7 @@ class NativeVisualizerRoute:
         recheck, self._recheck = self._recheck, False
         sent = False
         sent_bits = 0                                     # --frame-trace only: what this sync sent (see the record)
+        published_now = False                             # a frame published this sync (a frame gate may hold it)
         try:
             # The frame's own stage (N29 M1; round 2 M1: the admission and the take too): a failure here is tried
             # again at the next update, never latched for the activation.
@@ -1015,7 +1022,8 @@ class NativeVisualizerRoute:
                 sent = True
                 sent_bits |= 4
             gate = GENERIC_MODE_FRAME_GATES.get(identity.mode_id)
-            if snapshot is not None and (gate is None or gate(snapshot)):
+            published_now = snapshot is not None and (gate is None or gate(snapshot))
+            if published_now:
                 logical = snapshot.logical
                 payload, payload_schema = content.encode(logical)
                 self._writer.publish(payload, payload_schema=payload_schema,
@@ -1029,7 +1037,7 @@ class NativeVisualizerRoute:
             raise refused.cause from None             # the setup stage's: latched until an input changes
         except Exception as exc:
             raise _FrameFailure(exc) from exc
-        if healthy and placed != self._placed:
+        if healthy and placed != self._placed and (published_now or self._snapshot is not None):
             # Shown once a frame of its own is published for it, never before. After a fade-out (a failure, a hide) it
             # fades back in, and so does an activation whose first frame came late (M2); a new activation's first
             # frame shows at once, its fade-in the card's own content fade (the Python renderer's: rule (a) holds
@@ -1042,7 +1050,7 @@ class NativeVisualizerRoute:
             self._failure = None                          # shown again: the next failure is logged again
             sent = True
             sent_bits |= 8
-        if snapshot is not None:
+        if published_now:
             self._snapshot = snapshot
             self.published += 1
         if sent:

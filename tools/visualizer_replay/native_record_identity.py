@@ -443,6 +443,9 @@ MODES: dict[str, LMode] = {
             "give_section", "give_blur", "field", "medium", "integrate", "medium_mirror", "integrate_mirror",
             "sky_mirror", "ribbon_mirror", "strays_mirror", "bursts_mirror", "sky", "floor_prepass", "floor",
             "ribbon_body", "ribbon_light", "strays", "bursts")}, _waveform_layouts, read_spans=_waveform_spans,
+        # The drawn target's pixels, the core's own (Python leaves it 0: its programs read it only on the core's
+        # targets, ``conventions.SRPSS_TARGET_CLIP_GLSL``): placement, proved by P's pixels.
+        positional={"u_target_px": "the core's target pixels: the scene's placement in its bucket (layer P)"},
         streams={"ribbon_knots": ("ribbon_knot_floats", (), ""), "ribbon_cohorts": ("ribbon_cohort_floats", (), ""),
                  "ribbon_bursts": ("ribbon_burst_floats", (), ""), "ribbon_pulse": ("ribbon_pulse_floats", (), "")},
         ulp_field="ribbon_u_mvp", register=lambda: _waveform_registered(), python=lambda d: WaveformPython(d)),

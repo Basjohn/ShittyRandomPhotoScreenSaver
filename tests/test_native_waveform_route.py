@@ -77,6 +77,24 @@ def test_a_frame_is_published_only_for_its_drawn_cards_view(monkeypatch):
                                                           presentation=None))
 
 
+def test_a_frame_whose_ribbon_is_not_ready_is_held(monkeypatch):
+    """The Python renderer draws nothing while the ribbon's history primes (``state.ready`` false), so the route holds
+    those frames: a new model's route shows nothing until its first ready frame (layer L's first run)."""
+    from rendering.quick.visualizer import framed_view
+    from rendering.quick.visualizer import native_route as route
+
+    snapshot = _snapshot()
+    monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.5, 1.0, 1.0))
+    assert snapshot.logical.mode_state.ready and route.waveform_frame_ready(snapshot)
+    priming = replace(snapshot.logical.mode_state, ready=False)
+    held = SimpleNamespace(logical=SimpleNamespace(mode_state=priming), presentation=snapshot.presentation)
+    assert not route.waveform_frame_ready(held)
+    # Negative control: the same frame ready again is published.
+    ready = SimpleNamespace(logical=SimpleNamespace(mode_state=replace(priming, ready=True)),
+                            presentation=snapshot.presentation)
+    assert route.waveform_frame_ready(ready)
+
+
 def test_a_variant_program_mode_loads_without_a_fragment_pack():
     """Waveform builds every pass from its variant's packs: loading it reads no single fragment pack (it has none)."""
     import pytest

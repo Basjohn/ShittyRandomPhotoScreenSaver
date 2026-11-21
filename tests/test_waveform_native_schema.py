@@ -79,6 +79,24 @@ def test_the_record_holds_the_pass_values_streams_and_counts():
     assert schema.decode(schema.encode(_logical(later)))[age] != decoded[age]
 
 
+def test_a_frame_with_no_ribbon_yet_encodes():
+    """Layer L's first run: the record is encoded for every frame, and the first frames carry an empty packet (no
+    ribbon yet); its continuation bounds are empty and it encodes with no ribbon drawn."""
+    from core.ribbon_packet import RibbonPacket
+    from core.visualizer_engine import waveform_native_schema as schema
+
+    state = _frame_state()
+    empty = replace(state, packet=RibbonPacket(b"", 0, 0, state.packet.world_origin, state.packet.coordinate_origin))
+    decoded = schema.decode(schema.encode(_logical(empty)))
+    assert int(np.asarray(decoded["ribbon_instances"]).ravel()[0]) == 0
+    # Negative controls: the reshape the bounds used to do on an empty packet raises, and a packet claiming a ribbon
+    # it does not hold is still refused (by the frame's own contract).
+    with pytest.raises(ValueError):
+        np.frombuffer(b"", np.float32).reshape(0, -1, 4)
+    with pytest.raises(ValueError):
+        replace(state, packet=RibbonPacket(b"", 1, 0, state.packet.world_origin, state.packet.coordinate_origin))
+
+
 def test_a_frame_without_its_framed_view_is_refused():
     from core.visualizer_engine import waveform_native_schema as schema
     from core.visualizer_engine.native_schema import NativeSchemaError
