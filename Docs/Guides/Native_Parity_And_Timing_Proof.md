@@ -85,9 +85,13 @@ L, response tools, timing parity) applies to it.
     same geometry): the core draws its targets top row first and Python bottom row first, so the driver's 4x sample
     pattern, not symmetric under a vertical flip, lands mirrored and a slanted edge's pixel covers a different sample.
     The core's row order is not changed for it.
-  - A pose that is degenerate in Python itself is checked a hair either side, never excused: Blinds' slats at 0.4999
-    and 0.5001 instead of 0.5 (a slat's side edge-on covers a row only by float error; Python draws that row
-    differently 1e-4 either side).
+  - Jigsaw's single-sampled scenes also admit one flip a frame on a piece's outline (`JIGSAW_RULE_A`, as Surface
+    Tension's): the two compilers put the outline either side of a pixel centre (measured one pixel, 12 levels).
+  - Blinds' flat style is a fragment pass with its own scatter bound (`BLINDS_FLAT_RULE_A`: 192, measured 128 times 1.5).
+  - A pose that is degenerate in Python itself is checked off it, never excused and never given a wider bound: Blinds'
+    slats at 0.49 and 0.51 instead of 0.5 (a slat's side edge-on covers a row only by float error, and Python draws that
+    row differently 1e-4 either side; at 0.4999 and 0.5001 the faces near edge-on still put 3,036 pixels a frame one
+    level off at dpr 1.5).
   - Rule (b) admits the rasterisers' flips on geometry edges by name (`N52C_RULE_B`: at most 3 a frame, each isolated
     on an edge: Cube Turn's slanted silhouette, a Jigsaw piece's outline, a Cascade card's edge), as `BEAM_RULE_B`.
 - **Performance:** C per pass at 2560 x 1440 and 4K on both backends (`transition_route_check.py --cost`, Crossfade

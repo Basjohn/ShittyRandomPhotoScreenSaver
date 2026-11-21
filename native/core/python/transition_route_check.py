@@ -163,13 +163,25 @@ N52C_SCATTER_PIXELS = 1750
 N52C_SCATTER_GROUP = 28
 N52C_RULE_A = pt.Tolerance("3D transition scene, single-sampled, against its Python renderer (rule a)",
                            scatter_pixels=N52C_SCATTER_PIXELS, scatter_cluster_pixels=N52C_SCATTER_GROUP)
+#: Jigsaw's single-sampled scenes also admit one flip a frame on an edge (the lead, 21 Nov, as Surface Tension's): a
+#: pixel of a piece's outline where the two compilers put the outline's edge either side of the pixel centre (r4:
+#: Jigsaw with options at 0.05, one pixel 12 levels off, isolated on the outline, both dprs).
+JIGSAW_RULE_A = pt.Tolerance("Jigsaw scene, single-sampled, against its Python renderer (rule a; a piece outline's flip)",
+                             scatter_pixels=N52C_SCATTER_PIXELS, scatter_cluster_pixels=N52C_SCATTER_GROUP,
+                             flip_pixels=1)
+#: Blinds' flat style (one fragment between the pictures, judged as a fragment pass): its own scatter bound (the lead, 21
+#: Nov): measured 128 pixels a frame one level off (progress 0 to 0.35, both dprs; the two compilers' rounding of its
+#: feathered edges), times 1.5.
+BLINDS_FLAT_RULE_A = pt.Tolerance("Blinds flat, a fragment pass, against its Python renderer (rule a)", scatter_pixels=192)
 MULTISAMPLED_RULE_A = ("a multisampled scene: rule (b) only (D8 point 1: the sample pattern lands mirrored on Python's "
                        "bottom-first rows); rule (a) is its single-sampled form's")
 #: Blinds' slats are edge-on at exactly half the run: a slat's side then covers a row only by float error, and Python
 #: itself draws that row differently a hair either side (measured: row 267 grey at 0.49999, 0.5 and 0.50001, the picture
-#: at 0.4999, another colour at 0.5001). Their check takes 0.4999 and 0.5001 in place of 0.5 (the lead, 21 Nov), never a
-#: pose exception.
-SLAT_PROGRESS = (0.4999, 0.5001)
+#: at 0.4999, another colour at 0.5001). A hair either side is still too near: at 0.4999 and 0.5001 the faces are so
+#: near edge-on that six slats at dpr 1.5 put 3,036 pixels one level off (r4), past N52C_RULE_A, where every other pose
+#: is within it. So the check takes 0.49 and 0.51 in place of 0.5 (the lead, 21 Nov), never a pose exception or a wider
+#: bound for near edge-on faces.
+SLAT_PROGRESS = (0.49, 0.51)
 SLAT_VARIANTS = ("blinds", "blinds_slats", "blinds_slats_few")
 #: Rule (b)'s flips (lead's instruction 21 Nov, as BEAM_RULE_B): measured on the ABI 36 build (068be1f26, r3) at most 3
 #: pixels a frame past 2 levels, each isolated on a geometry edge, where the two APIs' rasterisers decide a pixel centre
@@ -373,7 +385,8 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
             e["tolerance"]["pass"] and (_rule_a(k, facts["variants"][k]) is not pt.EXACT or e["equal"])
             for k, _p, e in judged)
         facts["rule_a_tolerance"] = {
-            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A.bound()],
+            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A.bound(), JIGSAW_RULE_A.bound(),
+                       BLINDS_FLAT_RULE_A.bound()],
             "not_judged": sorted({k for k, _p, e in judged if e["tolerance"].get("judged") is False}),
             **pt.summarise(e["tolerance"] for _k, _p, e in judged if e["tolerance"].get("judged") is not False)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
@@ -533,8 +546,7 @@ def _over(a, b, level: int) -> int:
 
 
 #: N5.2c variants that are one authored fragment between the two pictures (Blinds' flat style: no scene, no target),
-#: judged as N5.2b's fragment passes (PROPOSED, agent 21 Nov: measured 125 pixels a frame at 1 level on the ABI 36
-#: build, the two compilers' rounding; the bound is the lead's).
+#: judged as N5.2b's fragment passes are (the lead, 21 Nov), with its own scatter bound: BLINDS_FLAT_RULE_A.
 N52C_FRAGMENT_VARIANTS = ("blinds_flat",)
 
 
@@ -552,9 +564,14 @@ def _rule_a(variant: str, entry: dict):
     """Rule (a)'s tolerance for ``variant`` (None: not judged by rule a, a multisampled scene)."""
     if _multisampled_scene(entry):
         return None
+    drawn = variant.split("@", 1)[0]
+    if drawn in N52C_FRAGMENT_VARIANTS:
+        return BLINDS_FLAT_RULE_A
     if _is_fragment_pass(variant):
         return FRAGMENT_PASS_RULE_A
-    return N52C_RULE_A if entry.get("scene") else pt.EXACT
+    if not entry.get("scene"):
+        return pt.EXACT
+    return JIGSAW_RULE_A if variant_transition(drawn) == "jigsaw" else N52C_RULE_A
 
 
 def _environment_copies(core) -> int:

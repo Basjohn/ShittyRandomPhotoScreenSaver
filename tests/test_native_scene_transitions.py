@@ -242,12 +242,36 @@ def test_a_single_sampled_scene_admits_its_scatter_and_nothing_past_one_level():
     assert not pt.judge_delta(patch, rule)["pass"]
 
 
+def test_jigsaw_admits_one_outline_flip_and_blinds_flat_its_own_scatter():
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
+
+    trc = _trc()
+    edges = np.zeros((400, 640), bool)
+    edges[:, 300] = True                                               # a piece's outline
+    flip = _scattered(10)
+    flip[200, 300] = 12
+    assert pt.judge_delta(flip, trc.JIGSAW_RULE_A, edges=edges)["pass"]
+    # Controls: the other scenes admit no flip, a second flip fails, and a flip off the outline fails.
+    assert not pt.judge_delta(flip, trc.N52C_RULE_A, edges=edges)["pass"]
+    two = flip.copy()
+    two[100, 300] = 12
+    assert not pt.judge_delta(two, trc.JIGSAW_RULE_A, edges=edges)["pass"]
+    off = _scattered(10)
+    off[200, 200] = 12
+    assert not pt.judge_delta(off, trc.JIGSAW_RULE_A, edges=edges)["pass"]
+    assert pt.judge_delta(_scattered(192), trc.BLINDS_FLAT_RULE_A)["pass"]
+    assert not pt.judge_delta(_scattered(193), trc.BLINDS_FLAT_RULE_A)["pass"]     # control: one more
+
+
 def test_a_multisampled_scene_is_judged_by_rule_b_only_and_its_single_sampled_form_by_rule_a():
     trc = _trc()
     assert trc._rule_a("cube_turn", {"scene": True, "samples": 4}) is None
     # Control: the same scene single-sampled is judged by rule (a); Blinds' flat style is a fragment pass.
     assert trc._rule_a("cube_turn_options", {"scene": True, "samples": 0}) is trc.N52C_RULE_A
-    assert trc._rule_a("blinds_flat", {"scene": True, "samples": 0}) is trc.FRAGMENT_PASS_RULE_A
+    assert trc._rule_a("jigsaw_options@1.5", {"scene": True, "samples": 0}) is trc.JIGSAW_RULE_A
+    assert trc._rule_a("blinds_flat", {"scene": True, "samples": 0}) is trc.BLINDS_FLAT_RULE_A
     for variant, overrides in trc.N52C_VARIANTS.items():               # each 4x default has a single-sampled form
         if overrides.get("samples", 4) and variant != "blinds_flat":
             twin = [v for v, o in trc.N52C_VARIANTS.items()
