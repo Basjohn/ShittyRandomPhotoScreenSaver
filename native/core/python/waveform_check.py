@@ -445,6 +445,7 @@ def round_block(core, records: list[dict]) -> dict:
     import json
 
     from rendering.native.mode import _card, _settings, program_json, schema_table_entry
+    from core.visualizer_engine.waveform_native_names import CORE_MEMBERS, member_name
     from rendering.quick.visualizer.implementations.waveform_ribbon import named_packs, pass_layout
 
     schema = _schema()
@@ -497,15 +498,16 @@ def round_block(core, records: list[dict]) -> dict:
             if not layout_differs.get(native_name + ".checked"):
                 rows = {row[0]: row for row in facts["program"]["passes"][index]["block"]["members"]}
                 for member, (offset, _size) in members.items():
-                    module = (rows.get(f"{_pass_id(native_name)}_{member}") or [None] * 3)[2]
+                    # The module's block names each member as its pass file does (the core's field-name form).
+                    module = (rows.get(member_name(_pass_id(native_name), member)) or [None] * 3)[2]
                     if module != offset:
                         layout_differs[f"{native_name}.{member}"] = {"python": offset, "module": module}
                 layout_differs[native_name + ".checked"] = True
             passes_compared[native_name] = passes_compared.get(native_name, 0) + 1
             block, expected = found[index], python[name]
             for member, (offset, size) in members.items():
-                if member in _UNREAD_IN_PYTHON.get(native_name, ()):
-                    continue
+                if member in _UNREAD_IN_PYTHON.get(native_name, ()) or member in CORE_MEMBERS:
+                    continue              # a core member (u_target_px) is the core's own: Python leaves it 0
                 if block[offset:offset + size] != expected[offset:offset + size]:
                     differing.append(f"{native_name}.{member}")
         for name in differing:
