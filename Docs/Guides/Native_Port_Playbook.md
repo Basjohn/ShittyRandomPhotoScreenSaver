@@ -64,6 +64,11 @@ found in this kind of code: the port proves it absent, with the negative control
     Research section 14); no 64-bit shader types (D4); no restart index, wide lines or point sprites (Research section
     18; D15 point 5); one clear value for every attachment (Research section 8); no clamp-to-border (Research
     section 13); core targets top-left, Y down, one correction at upload (`Primitives.md` section 7, Portability).
+    **Check row order before the first parity figure**: the core draws its targets top row first, Python bottom
+    first. Under multisampling a whole-frame flip mirrors the sample pattern, so every slanted edge differs by a
+    quarter of its contrast and bloom carries it further (N5.2c's and N5.2d's edge flips, N5.4's left-edge bloom,
+    22 Nov). A mode that needs exact parity draws in Python's row order (the composite's `scene_rows: "up"`,
+    N5.4); a transition may admit the flips as a guarded class.
 18. **Registration comes last.** Offering a mode on a backend (`GENERIC_MODE_SETTINGS`, the descriptor's
     `renderer_backends`) is the port's last code step, after rule (a) and rule (b) pass
     (`Native_Parity_And_Timing_Proof.md`). Layer T needs the registration to time the native path, so the lead
