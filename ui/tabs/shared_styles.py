@@ -1024,8 +1024,45 @@ def _build_combobox_style(theme: SettingsThemeSpec | None = None) -> str:
 
 COMBOBOX_STYLE = _build_combobox_style()
 
+def _settings_scrollbar_qss(owner: str, theme: SettingsThemeSpec | None = None) -> str:
+    """The one themed scrollbar of Settings' lists and popups, scoped under the selector ``owner``.
+
+    Without it Qt paints the native bar of the platform style (black and white under Fusion, the system's own
+    scheme under Windows 11), which ignores the Settings theme. The track is the list's own input surface, the
+    handle the list accent; the arrow buttons are dropped, as Guided Setup's list bar does.
+    """
+    parts = []
+    for orientation, thickness, span in (("vertical", "width", "height"), ("horizontal", "height", "width")):
+        bar = f"{owner} QScrollBar:{orientation}"
+        handle = f"{owner} QScrollBar::handle:{orientation}"
+        parts.append(f"""
+    {bar} {{
+        {thickness}: 12px;
+        margin: 2px;
+        border: none;
+        border-radius: 6px;
+        background: @@rgba:control.input.surface@@;
+    }}
+    {handle} {{
+        min-{span}: 36px;
+        border-radius: 5px;
+        background: @@rgba:control.list.selected_accent@@;
+    }}
+    {handle}:hover, {handle}:pressed {{
+        background: @@color:control.list.selected_accent@@;
+    }}
+    {owner} QScrollBar::add-line:{orientation}, {owner} QScrollBar::sub-line:{orientation} {{
+        {span}: 0px;
+    }}
+    {owner} QScrollBar::add-page:{orientation}, {owner} QScrollBar::sub-page:{orientation} {{
+        background: transparent;
+    }}
+    """)
+    return _theme_qss("".join(parts), theme=theme)
+
+
 def _build_combobox_popup_view_style(theme: SettingsThemeSpec | None = None) -> str:
-    return _theme_qss("""
+    return _settings_scrollbar_qss("QListView[customComboPopup='true']", theme) + _theme_qss("""
     QListView[customComboPopup='true'],
     QListWidget[customComboPopup='true'] {
         background-color: @@rgba:combo.popup.surface@@;
@@ -1537,6 +1574,7 @@ def _build_settings_list_style() -> str:
         " font-size: 12pt;"
         "}"
         f"QListWidget::item {{ min-height: {SETTINGS_LIST_ROW_HEIGHT}px; }}"
+        + _settings_scrollbar_qss("QListWidget")
     )
 
 
