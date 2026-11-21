@@ -69,7 +69,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
 - [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, its port C++ at ABI 35 (b3ad12a4a) building on
   its branch; next it reruns the harnesses its change reaches, then the port to stop point 2.
-- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High, ABI 34): the reading first, its own stop.
+- [ ] Background track: N5.2c with N4.j, agent a77d7d16afb481093 (Opus High): reading 3af359017 approved; the
+  environment's chain moves to the box-kernel owner from Waveform's ABI 35 C++, so N5.2c rebases on it after that
+  merges and takes ABI 36 (34 retires unused); the mid-run remake must restore the scene, not wait for the run's end.
 - [ ] Beam leftover (merged 21 Nov; registered before its T, against checklist 18): its T row
   (`preflip_pack.py --rows beam --compare`), C per pass at 1440p and 4K on both backends, the per-rule negative
   controls and retirement to zero, recorded in its D13 record. Lead, unattended.
