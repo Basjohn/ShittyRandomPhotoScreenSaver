@@ -24,11 +24,6 @@ balanced, two-worker chunked suite only at milestones; file-isolated execution i
 not a routine agent gate; no build/installer unless requested. Visual work is judged on rendered pixels against
 its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
 
-**Temporary test-failure handoff (19 Nov):** `Docs/testfailures20261119.md` records the
-three oversized-chunk timeouts, four earlier file-isolated timeouts, Settings foreground,
-Glass clipping and absent-policy-test investigation. Preserve native-worker dormancy;
-remove this pointer when the documented failures are resolved/accepted.
-
 **Linux compatibility** runs as a separate operator-requested plan, `Linux_Plan.md`; it does not reorder this plan.
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
@@ -103,20 +98,10 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): N3.6 is merged (ABI 30); audit 11's fixes (agent a8797a6d7c59d45af), then
-  Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
-  layer L go to a Medium. Defects between N steps: 1D.6 (design note
-  first), then 1C.10.
-- [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
-  layer L; the lead runs layer T.
-- [ ] Second Medium (Opus Medium agent aea35d28be699535f): Spline Curve's two steady classes are root-caused (21 Nov):
-  the core draws generic modes with one oversized triangle, Python with the card's quad, so each pixel's interpolated
-  position differs by up to 1e-4 px and boundary pixels tip a level (the shader text and composite ruled out by
-  emulation matching the real module bit for bit). Lead decision: fix at the source, the card's quad in
-  `mode_content.cpp` (an ABI bump), the triangle kept as a harness-only control; then re-prove every generic mode
-  under the split. Step 3's offline work is
-  done: the hero and wake rejects halve the bubble pass at 4K (5.10 to 2.43 ms OpenGL, 4.61 to 1.75 ms Vulkan); the
-  lead's live Display 1 baseline remains.
+- [ ] High (Opus High, core-critical C++): audit 11's fixes (agent a8797a6d7c59d45af), then Waveform's C++ boxes
+  (N5.4). Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
+  the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   and hygiene (item 6).
@@ -453,71 +438,22 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N2. The substrate's 2D half and Spectrum (C++; `native/spike_p1` stays evidence, never a shipped renderer)**
 
-- [ ] N2.2 leftovers (proved; `native/core/python/host_check.py`; lifecycle facts J1 to J4 in
-  `Native_Core_N06_N07_Qt_Facts.md`):
-  - [ ] The hidden host's Qt Quick target keeps its contents between frames (defect B). A hidden host with
-    transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
-- [ ] N2.4 leftovers (proved; `native/core/python/composite_check.py`):
-  - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
-    When the card material moves to the core, its grain takes an integer hash exact on every backend (today 2 frosted
-    pixels sit 12 levels apart on Vulkan where the float hash's `fract` wraps near 1.0; accepted 14 Nov).
+- [ ] N2.2 leftovers (proved; `native/core/python/host_check.py`): one open item, the hidden host's stale Qt Quick contents; see Backlog.
+- [ ] N2.4 leftovers (proved; `native/core/python/composite_check.py`): the Glass material on the native composite; see Backlog.
 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, N2.6, N2.7, N2.5, then
 N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] N2.5 leftovers (merged 14 Nov at ABI 8; the Python renderer retires only after N2.8 passes, in the switch
-  change):
-  - [ ] Studio on Vulkan: Spectrum's Studio preview is the Python renderer in an OpenGL node, so `has_studio` is
-    OpenGL-only (`STUDIO_PREVIEW_BACKENDS`). A native Studio preview (the same native item in the Studio's scene)
-    before the flip (NF) or before Vulkan becomes a default, whichever is first.
-  - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
-    per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
-    widened run set. With audit M3: `spectrum_settings_values` and `QuickSpectrumRenderer.render` share one
-    settings owner (today the guard compares one frozen setup).
-  - [ ] Audit lows: L6 the native pipeline joins the gradual warm-up (`renderer_prepared` is True at once on the
-    native route, `item.py:316-323`); L8 the destruction barrier sees the native objects.
-  - [ ] Side defect (R-214's sibling, low): the activation deadline's fading-out phase has no slow-but-alive
-    extension (cancels the switch after 6 s; only reached at about 270 ms a frame). Same rule as R-214 when the
-    owner is next touched.
-  - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
-    `surface_format` stays a harness-only switch.
-- [ ] N2.9 leftovers (generic mode content landed 14 Nov at ABI 10: a mode is a Python simulation, its product shader
-  and its spec, with no build; README "How a new mode is built", decision D12):
-  - [ ] Samplers are a primitive (N4.a): Bubble's `u_ambient_texture` (binding 0, the water-decoration underlay)
-    and `u_ambient_light` (binding 1, the particles' linear light), both from Bubble's offscreen ambient render.
-  - [ ] The Oscilloscope's port: its Quick renderer draws an instanced beam from a storage buffer with its own scene
-    target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
-- [ ] N2.8 leftovers (the first rehearsal on Display 1 passed 14 Nov for Spectrum, rule (f); the Python renderer
-  retires in the switch change):
-  - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
-    purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as an
-    empty frame. OpenGL unchanged.
+- [ ] N2.5 leftovers (merged 14 Nov at ABI 8): Studio on Vulkan, the two-block split, audit lows L6 and L8, an activation-deadline side defect; see Backlog.
+- [ ] N2.9 leftovers (landed 14 Nov at ABI 10, decision D12): the sampler primitive (N4.a) and the Oscilloscope's primitives; see Backlog.
+- [ ] N2.8 leftovers (Spectrum rehearsal passed 14 Nov): an empty Visualizer card frame with no renderable mode; see Backlog.
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] N3.8 leftovers (the async job service landed 14 Nov at ABI 14, D9 "As built (N3.8)"; OpenGL stays in-frame by
-  design):
-  - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
-    D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
-    in-frame (Vulkan only; OpenGL runs in-frame).
-  - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
-    gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
-- [ ] N5.7b leftovers (the native backdrop pyramid landed 14 Nov at ABI 16, D7 "as built (N5.7b)"):
-  - [ ] The slower-device fallback (D7 point 3's minimum build interval) is not built; Vulkan follows every layer frame.
-  - [ ] D7 point 7 (glass over the live Visualizer) is not built.
-- [ ] N5.2a leftovers (the seven transitions landed 14 Nov at ABI 15, each drawn on Vulkan from its own product
-  fragment over the background layer):
-  - [ ] The first frame's pipeline build cost when a run switches program, and the 4K cost (not measured).
-  - [ ] Side defect (C++): the core refusing a still for "no card" draws black silently and `content_status`
-    reports no failure, so the layer's fade-out on failure would not trigger; report it and fail closed.
-- [ ] N5.7c leftovers (the D1 rehearsal on Vulkan, 15 Nov, covered wallpaper, cards on all five materials, Spectrum,
-  live Settings changes, a transition and a clean exit):
-  - [ ] Sleep and wake through Windows' console display state (`[DISPLAY_POWER]` off, then on). The operator's power
-    cycle of the TV during the run raised no display-power event and rendering carried on; a real monitor sleep
-    remains unexercised.
-  - [ ] `[STARTUP_REVEAL]` still says "the vulkan backend has no background renderer, so no wallpaper frame is awaited
-    (D10)". Since N5.7a, Vulkan draws the native wallpaper, so the reveal should wait for its first wallpaper frame as
-    OpenGL does. Fix the reveal gate, or show that the first presented frame already holds the wallpaper.
+- [ ] N3.8 leftovers (landed 14 Nov at ABI 14, D9 "As built (N3.8)"): D8 row 3's contention gate and the warm-up job class; see Backlog.
+- [ ] N5.7b leftovers (landed 14 Nov at ABI 16, D7 "as built (N5.7b)"): the slower-device fallback and glass over the live Visualizer; see Backlog.
+- [ ] N5.2a leftovers (landed 14 Nov at ABI 15): first-frame pipeline and 4K cost, and a C++ side defect (a refused still draws black silently); see Backlog.
+- [ ] N5.7c leftovers (D1 rehearsal on Vulkan, 15 Nov): real monitor sleep and wake, and the `[STARTUP_REVEAL]` gate for the native wallpaper; see Backlog.
 
 **N3. The 3D substrate core (C++; harness scenes, no mode yet)**
 
@@ -707,57 +643,12 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (unregistered on main at ABI 29; N3.4 bloom's first consumer). Python oracle:
-  `rendering/quick/visualizer/implementations/oscilloscope.py`; shapes and reaction rules:
-  `rendering/gl_programs/oscilloscope_program.py`. Follow `Docs/Guides/Native_Port_Playbook.md` and prove it under
-  `Docs/Guides/Native_Parity_And_Timing_Proof.md` (section 7's split). Harness: `native/core/python/oscilloscope_check.py`.
-  As built (reference): ABI 26 `unread` record fields (Glow 0's program); ABI 27 the bloom grid and composites anchored
-  at the item's pixel and R-241's stale-stream fix; ABI 28 the scene target with Python's `SceneTarget` geometry, the
-  card carrying Python's `item_pixel_rect`, a turned bloom or composite refused. D12 "The pixel tolerance": the
-  Oscilloscope's placement class (up to 52 one-level pixels outside the mask, Python's own placement variance) and
-  rule (b) 3 ties at 2 levels. The 5.5 s `--offers` owner smoke passes every display (`20261121_owner_offers_class/`);
-  controls `old_origin` and a 0.6 % brighter beam fail.
-  ABI 29: a composite step may declare `"scene_frame": "window"` (both Oscilloscope programs do), so a turned card
-  keeps Python's physical scene target; proven at quarters 0-3 on both APIs, unturned frames hash-identical to ABI 28
-  (`20261121_n51_turned_abi29_band/`). Rule (b)'s mask is the union of both peers' mask classes (`peer_mask`).
-  - [ ] Rule (a) for the Choice offers by coverage windows (the five offers' own windows merged per take, 921-1,045
-    inputs drawn a run; ABI 29 for human_heavy1, ABI 30 for the other two): 14 of 15 runs pass (max level 2; scatter
-    worst 3-4 for the display and graticule offers, 18-31 for the audio block sizes; ties worst 3-6). One frame fails:
-    nightsolong `oscilloscope_audio_block_size=0` input 1388, two diagonally touching 2-level pixels on the mask in
-    the beam's edge (Python (167, 97, 45) and (161, 88, 46), native green 2 lower), one on a content edge (3x3 range
-    80), the other at range 24, so it is neither isolated nor on an edge. Not judged a class here: the lead decides
-    (rule (a)'s ties bound is 10 at 3 levels; the edge contrast is 32). Evidence
-    `n5_1_oscilloscope/20261121_owner_offers_<take>/`, windows `20261121_offer_windows/`.
-  - [ ] Layer P's rule (b) over the three 60 s takes (lead decision; rule (a) passes every frame of the six full runs,
-    variants a and b: max level 2, 3 once on nightsolong a; scatter worst 2-6 and ties worst 3-5 a frame in either
-    half; cold start 0-100 clean). Every frame of each take's delivery stream
-    drawn on both APIs (`native_stream_player.py`, ABI 29 module a4e59ccb, 5,313 frames compared a run) fails
-    `VULKAN_RULE_B` (3 ties at 2 levels, no scatter, measured on the 5.5 s replay's 126 sampled frames). Failed frames
-    (first half / second half), worst pixels past their allowance in a frame, worst level:
-    - human_heavy1: a 298 (297 / 1), 22, 5; b 13 (13 / 0), 3, 3.
-    - ragdoll: a 303 (299 / 4), 23, 6; b 5 (5 / 0), 5, 4.
-    - nightsolong: a 414 (410 / 4), 39, 4; b 338 (338 / 0), 4, 4.
-    Every such pixel (9,143 over the six runs) is on the mask (lit or translucent): no scatter. 95 % sit on a content
-    edge and 98 % are isolated. Most fall in the first 6 s of variant a (inputs 2-600), where the glow is widest. Two
-    shapes: (A) a pixel in the beam's saturated core or its glow-only fringe (alpha 0) whose one unsaturated channel
-    is 2-6 levels apart; the fringe ones are the composite's dither over float16 bloom values. (B) one fixed pixel held
-    for hundreds of frames while the afterglow or the graticule stays: human_heavy1 a (370, 251), the graticule at
-    alpha 121, Vulkan's blue 4 under OpenGL's over inputs 280-517; nightsolong b (264, 208), glow only, 76 against 72
-    over 229-563. No bound is widened here. The guide's rule is that a bound is measured on the acceptance material,
-    as Bubble's was. The lead decides from these figures, or orders a root cause first (B is one value, constant
-    across hundreds of frames). Evidence: `n5_1_oscilloscope/20261121_rule_b_60s_<take>_<a|b>/`
-    (`classify_rule_b.json`: every past pixel by level, mask, alpha, edge, isolation; crop sheets
-    `rule_b_failing_crops_gl_vk_diff_x32_x8.png`), figures `20261121_layer_p_summary/summary.json`.
-  - [ ] Rule (b) for the Choice offers, not run: the stream player's windows do not reproduce its continuous frames
-    for the Oscilloscope. Skipping input 0 alone (window [300, 310], warm-up 299) changes every later frame, and
-    warm-ups of 30, 300 and 1,000 inputs never converge (57,000 pixels more than 2 levels apart, max 255). The player's
-    full runs are deterministic (the 5.5 s stream twice: identical). The owner replay's windows pass rule (a) against
-    Python, so the product route's windows look sound. The player, or core state tied to publish history, is suspect.
-    `coverage_windows.WARMUP_INPUTS["oscilloscope"]` is 0 on that reasoning, unproved against the player. Reproduce:
-    `native_stream_player.py --deliveries D:/Temp/Scratch/SRPSS/fast_proof/deliveries/oscilloscope_human_heavy1_a
-    --apis opengl --windows <one window [300, 310], warmup_inputs 299> --against
-    n5_1_oscilloscope/20261121_rule_b_60s_human_heavy1_a/native_stream_player.json` (evidence
-    `20261121_warmup_probe_*`, `20261121_windows_against_full_human_heavy1_a/`). Until it is understood, offers take
-    full-take player runs (the offers' delivery streams are kept in `D:\Temp\Scratch\SRPSS\fast_proof\deliveries\`).
+  `rendering/quick/visualizer/implementations/oscilloscope.py`, `rendering/gl_programs/oscilloscope_program.py`; follow
+  `Docs/Guides/Native_Port_Playbook.md`, proof under `Docs/Guides/Native_Parity_And_Timing_Proof.md` (section 7's split);
+  harness `native/core/python/oscilloscope_check.py`. Built through ABI 29 (D12 "As built: Oscilloscope", "The pixel
+  tolerance"); rule (a) passes all six 60 s takes and 14 of 15 offers, layer L identical, cost round passed
+  (b8c6c3528). Evidence `n5_1_oscilloscope/` (`20261121_owner_offers_class/`, `20261121_n51_turned_abi29_band/`).
+  Open parity and offer boxes: one line in the Backlog section (Oscilloscope parity and offers).
   - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
     with `tools/quick_frame_cadence.py` on native paths. It needs the registration first: on main the mode is not in
     `native_route.GENERIC_MODE_SETTINGS` and its `renderer_backends` is OpenGL only, so a live run today times the
@@ -777,120 +668,43 @@ the feature (D3D11 is not stated).
     `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
     `outer_origin=(803.0, 517.0)`, dpr 1.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
-- [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
-  Bubble"). Owner rule (a) passes on the 5.5 s replay; on the four 60 s recorded takes, rejudged 21 Nov under today's
-  rule (a), two takes fail three steady frames on the narrowed isolation clause (the box below). `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
-  eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
-  (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: checkpoint audit 8's M1, M2 and lows (boxes below); the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
-  over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
-  (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
-  5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
-  - [ ] Layer T on Vulkan, first runs done (lead, 20 Nov, Display 1, quiet GPU; evidence
-    `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`). Bubble on native Vulkan matches the
-    Python OpenGL control in median and p90 (11.07/12.30-12.47 ms) and in tick-to-publish. Its render-thread
-    recording is 10 times cheaper (0.15 ms median against 1.52). But its tail is heavier: frames over 16.7 ms were
-    27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
-    against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
-    next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
-    - [ ] Root cause, two candidates, neither proved (agent aac773583ad93e2ab, 21 Nov; trace events 79 and 80, merge
-      6020d2977). (1) The PERF HUD's once-a-second text write, from the 20 Nov traces below. (2) The GPU clock: the one
-      clean 21 Nov run, with no game running, showed no once-a-second pattern (15 of 115 clusters). Vulkan had 79 late
-      frames against OpenGL's 8, at 675 MHz median against 1553, so the native path's lighter GPU load may let the
-      card downclock. The A/B adds clock sampling. The 20 Nov reading:
-      Qt begins frames on the visualizer's present requests through its 5 ms update-request timer. About once a
-      second another update source starts that timer early, so the next frame waits for the next publication, at
-      about 6 ms and then 15-17 ms. Bubble's Vulkan late frames that follow such an early frame are 14, 21, 20 and 13
-      per run; the rest, 13, 18, 7 and 7, are in OpenGL's range. Vulkan's frame ends about 0.5 ms after it begins, so
-      the early timer expires just as Bubble's request lands: the publish arrives about 4 ms in, and the route sync
-      takes 1.5-1.9 ms against OpenGL's 0.35. The likely source is the PERF HUD's text rewrite from a queued
-      `frameSwapped` handler (`_update_perf_hud_on_swap`, `rendering/quick/scene_controller.py`), on in every live
-      check (`--perf`), at 1000 + 0-12 ms. Ruled out by measurement: GPU time, acquire and present blocking, and the
-      route re-running on an `afterRendering` edge (0 in 7,686 syncs). Evidence:
-      `.artifacts/evidence/visualizers/bubble/live_check/20261121_layer_t_root_cause/figures.txt`.
+- [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
+  suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
+  follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
+  on Vulkan over the 5.5 s replay only; L indirectly; C at 4K. Not proved: T. Rule (b) passes on the 5.5 s replay;
+  owner rule (a) fails three steady frames on two of the four 60 s takes under today's rule. Remaining, in order:
+  - [ ] Layer T on Vulkan (lead, Display 1): first runs 20 Nov match the Python OpenGL control in median and p90 and
+    in tick-to-publish; the tail is heavier (frames over 16.7 ms 27, 39, 27 against 11, 16, 18), all of it after
+    rendering ends, not sync or recording. Evidence `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`,
+    `.../bubble/live_check/20261121_layer_t_root_cause/figures.txt` (agent aac773583ad93e2ab).
+    - [ ] Root cause, two candidates, neither proved: (1) the PERF HUD's once-a-second text write from a queued
+      `frameSwapped` handler (`_update_perf_hud_on_swap`, `rendering/quick/scene_controller.py`) starting Qt's update
+      timer early; (2) the GPU downclocking under the lighter native load (the A/B adds clock sampling).
       - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
-        back to back, with conditions recorded. If the HUD is the source, Vulkan's late frames after an early frame
-        fall to OpenGL's range.
-    - [ ] Fix, if proved: with a visualizer active, hold the HUD's once-a-second text and write it in
-      `request_visualizer_present` just before `item.update()`, so both share one Qt timer. With no visualizer active,
-      keep writing on swap. Separately, trim Bubble's per-frame route sync on the GUI thread (1.5-1.9 ms against
-      0.35 for OpenGL).
-    - [ ] Fix at the owner if it is ours, then rerun three Vulkan runs and three OpenGL controls back to back. Accept
-      when frames over 16.7 ms on Vulkan fall within the control's spread. If it is the driver's or Qt's, record it
-      in D12 "As built: Bubble" with the figures, and ask the operator.
-    - [ ] Then Bubble's own T tools (its diagnostics guide).
-
-  - [ ] Checkpoint audit 8 M1, what is left (ties joined into groups, the 16 x 16 density bound of 26 for rule (a) and
-    the split-line and dithered-patch controls landed 21 Nov, c432c1359; D12's Bubble line):
-    - [ ] The audit's line split by two exact pixels (65 one-level pixels in a straight line, groups of 22) still
-      passes: a straight line puts 16 pixels in a 16 x 16 window, under the bound. Decide whether it needs its own rule.
-    - [ ] Rule (b)'s density bound: not set. Measured densest window 12 and 13 on the ragdoll and human_heavy1 60 s
-      takes (`fast_proof/20261121_rule_b_60s_*`), 9 on the 5.5 s stream; rule (b)'s own count and tie bounds fail
-      on the long takes (the box below), so the bound waits for that decision.
-    - [ ] Rerun the offers and rule (b)'s 684 frames under the fix. Any newly failing frame is classified, never
-      admitted by a wider bound.
-  - [ ] Bubble's 60 s takes under today's rules (audit 8 M2's rejudge, 20 and 21 Nov; D12's Bubble line;
-    `fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`). Classify and decide;
-    no bound raised.
-  - [ ] Tracked exceptions of the scene-fade double-rounding class (lead, 17 Nov; no bound or class change; D12's
-    Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
-    `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
-    switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
-    `20261117_offer_tie_classes/`). The other 38 runs pass (variants a and b at both placements, the Choice offers at the
-    display placement only; scatter worst 41, group worst 15;
-    the three steady tie frames pass under the lead's narrowed isolation rule, rerun `20261117_offers_steady_rerun/`).
-  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11): still open. 4K is
-    measured (D12 "As built: Bubble", cost).
-  - [ ] Check the 4K cost's ambience-off surface reading higher than ambience-on (0.299 against 0.236 ms on OpenGL at
-    840 x 560; 4.23 against 3.10 ms at the 4K frame): the columns are not swapped in `bubble_check.py` (`COST_RUNS`:
-    on = variant a's frame, off = variant b's), but variant b differs from variant a in many settings beyond the
-    ambience, so the two frames are not a like-for-like ambience toggle. Measure one frame with only the ambience
-    switched.
-  - [ ] For the Bubble GPU optimisation item: native OpenGL is about 5 % slower than the Python renderer at the full
-    4K frame (3.10 against 2.94 ms ambience on, 4.23 against 4.08 ms off; at 840 x 560 0.236 against 0.230 ms).
-  - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
-    and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
-    performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
-    utilisation. First name the measured Bubble-owned GPU pass, CPU/GIL, transfer or allocation problem and its
-    baseline; if nothing significant is attributable to Bubble, record a no-change result and close the gate.
-    Do NOT speculatively optimise the old Python/OpenGL renderer being retired, retune motion or response, or
-    rewrite the 110-body shader on theoretical complexity alone. The relevant owner is the accepted native path,
-    or the surviving Python logical simulation where that owner is independently shown to be costly.
-    - [ ] **Baseline before editing:** freeze two *fully resolved* independent settings cases from the accepted
-      curated **Preset 1 (Deep Sea Abyss)** and **Preset 2 (Going Down)**. Keep the existing
-      `tests/fixtures/visualizer_frozen_settings/bubble.json` and its consumers intact; it has Preset 1-like
-      values but must be checked against the entire current resolved profile before being called exact.
-      Create an immutable versioned Preset 2 fixture, with SHA-256 for both frozen files and resolved models.
-      Preserve the pre-change acceptance and commit/fixture provenance. Never resolve from the mutable Studio
-      state on each run or regenerate baselines from the candidate implementation.
-    - [ ] **Music/event matrix:** normally replay ALL FOUR existing ~60-second schema-2 operator takes with PCM
-      histories, typed events and onsets: `nightsolong_acousticsoft1`,
-      `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`, under EACH frozen preset
-      (eight full replay cases, approximately 43,200 ticks at 90 Hz). THREE full, distinct recordings
-      are the absolute minimum only if one is unavailable and the lead explicitly accepts a documented
-      reason. Validate file SHA-256, actual span and event/onset completeness rather than assuming a filename
-      proves 60 seconds. Do not use a short excerpt, older schema-1 clip or synthetic input as a substitute.
-      Extend existing `tools/visualizer_replay/bubble_parity.py` narrowly for two immutable profiles while
-      retaining its four default clips, per-frame hashes, first difference, and negative controls.
-      Use configured Bubble-band PCM reanalysis for an audio-analysis/input optimisation, not merely the
-      recorder's Sphere-profile post-DSP bands.
-    - [ ] **Exact logical fidelity:** pin seed/timebase/inputs/event consumption and compare the complete
-      canonical bytes at EVERY frame: published logical frame, identity-preserving physics, reactive event
-      consequences, Quick snapshot and renderer payload. Zero differing frames, timestamps, values or event
-      order; even a float last-bit change rejects an output-preserving optimisation. A deliberately perturbed
-      float and a late/missing one-shot event must fail the gate. Byte-parity is about computed results,
-      not proof of on-monitor latency. If the change affects shaders/passes, also retain N5.1's approved
-      Python/native OpenGL and Vulkan/OpenGL pixel oracles; same-device raw RGBA equality where repeatable,
-      otherwise the existing D12 pixel bounds without silently widening tolerance.
-    - [ ] **Independent speed and reactivity proof:** paired measurements of the named CPU/GIL owner or native
-      GPU pass at 2560x1440 and 4K, ambience on/off, GPU median/p90, frame latency p95/p99, resource
-      lifetime/dormancy, source/snapshot age, authored ~90 Hz cadence, event-to-visible attack, loud/quiet
-      elasticity and motion/ghost/tail feel on the installed system (including mixed-display load).
-      Retain the 240-frame ambience-off empty-pass control below. No slowdown, timing regression or
-      fidelity alteration may be excused by matching offline hashes. Lead/operator acceptance or revert;
-      one bounded candidate at a time, then return to the native migration ladder. BTF §24 binds.
-
+        back to back, conditions recorded.
+    - [ ] Fix, if proved: with a visualizer active, write the HUD text in `request_visualizer_present` just before
+      `item.update()` so both share one Qt timer (keep writing on swap with none active); separately trim Bubble's
+      per-frame route sync on the GUI thread.
+    - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
+      Vulkan's late frames fall within the control's spread. If it is the driver's or Qt's, record it in D12 and ask
+      the operator. Then Bubble's own T tools (its diagnostics guide).
+  - [ ] Checkpoint audit 8 M1, what is left (D12's Bubble line):
+    - [ ] A straight line of 65 one-level pixels (groups of 22) still passes the 16 x 16 density bound of 26: decide
+      whether it needs its own rule.
+    - [ ] Rule (b)'s density bound is not set (evidence `fast_proof/20261121_rule_b_60s_*`); it waits for the 60 s decision.
+    - [ ] Rerun the offers and rule (b)'s 684 frames under the fix; classify any newly failing frame, never widen a bound.
+  - [ ] Bubble's 60 s takes under today's rules (audit 8 M2; evidence `fast_proof/20261120_m2_rule_a_60s_*`,
+    `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`): classify and decide; no bound raised.
+  - [ ] Tracked exceptions of the scene-fade double-rounding class (D12's Bubble line; no bound change): the
+    `nightsolong_acousticsoft1` input 22 pair and the `stream_direction=2` and `=6` offer runs at input 337; they
+    disappear when the scene-fade fix lands. Evidence `n5_1_bubble/20261117_offers/`, `20261117_offer_tie_classes/`.
+  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11); 4K is measured (D12).
+  - [ ] Ambience-off reads higher than ambience-on at 4K: variant b differs from variant a in many settings, so measure
+    one frame with only the ambience switched (`bubble_check.py` `COST_RUNS`).
+  - [ ] Native OpenGL is about 5 % slower than the Python renderer at the full 4K frame: input to the optimisation gate.
+  - [ ] Conditional optimisation gate (operator, 16 Nov; after accepted parity and the per-pass cost check, before
+    N5.4 and NF): name the measured Bubble-owned cost and its baseline first; a no-change result closes it. Full
+    text (baseline, music matrix, exact-fidelity and speed proofs) in the Backlog section.
   - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
     Usu wallpaper and a recorded clip, ambience on and off. Deferred 17 Nov: Display 1 was off (`--list-displays`
     showed Display 0 only); run it when Display 1 is on.
@@ -902,44 +716,18 @@ the feature (D3D11 is not stated).
 - [ ] Audit the fast-proof merge 79a5d1fe7 (Opus Medium audit agent a8810319889f3a218, 21 Nov): `tools/pixel_tolerance.py`'s M1 groups
   and density, the cheaper judge's equal-verdict proof, the reference cache key, the native-only and stream-player
   paths, and layer L's coverage of positional members.
-- [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
-  section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
-  - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
-    precedent).
-    Built (20 Nov, commit e0275205c): `tools/visualizer_replay/native_record_identity.py` (`--mode --recording
-    --seconds 60 --out`), test `tests/test_native_record_identity.py` (one-ulp record and dropped-frame controls seen
-    failing at their input). One owner tick; the product's route on the owner's own item with a recording core; per
-    frame record bytes, settings by name and the module's GPU-free blocks against the Python renderer on a null GL.
-    Outside L by declaration: positional members (uMatrix, u_target_px, Spectrum's window maps) and the inherited scene
-    opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
-  - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
-    cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
-    time from `--gpu-pass-timing`. `tools/quick_frame_cadence.py` (frame-cycle intervals outside lifecycle windows) is the
-    reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
-  - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
-    frame recorded (not the first eight); progress written during a run.
-    Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
-    (1) ddb3dc8b2 the judge reads content edges only at ties and flips, and one pass per frame shares one decompress
-    and one delta (same verdicts on synthetic frames and on the 5.5 s replay of all three modes; judge 10 to 13 s
-    against 58 to 61 s); (2) ec0bf3feb no lit mean on native, reference or mask runs, and the console says
-    "not bit-identical ... PASS under tolerance"; (3) 12a688e57 `owner_render_parity --native --references` caches
-    the Python run and its masks (`tools/visualizer_replay/python_references.py`, default
-    `D:\Temp\Scratch\SRPSS\fast_proof\references`, about 2 GB a 60 s take; keyed by the run and the Python drawing
-    code's sources, re-drawn when the native run's logical digests differ); (4a) d0b2e8095 the reference first, then
-    each native frame judged as it is drawn with a progress line, every failing frame kept with its pixels, and
-    `--native-only --against <report>` (no Python, hashes only, every changed frame listed); (4b) 29fc590c0 the
-    Vulkan side is not the owner replay (its hidden host is OpenGL) but the take's delivery stream
-    (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
-    frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
-    own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
-  - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
-    Built (21 Nov, b4cd47802): `tools/visualizer_replay/coverage_windows.py` selects from the take's continuous
-    delivery stream (cold start, switch, a late window in the last 15 s, loudest, quietest, each record field's
-    extremes); warm-up 0 for the landed modes (no GPU history); `native_record_identity.run(window=...)` is
-    byte-identical to the full run's slice and its restart control is caught (`tests/test_coverage_windows.py`);
-    `native_stream_player.py --windows` and `owner_render_parity.py --windows` draw only the windows. Bubble's four
-    takes: 11, 10, 12 and 8 windows, 972, 954, 1,143 and 856 of 5,313 inputs drawn, late windows at 45.1, 43.8,
-    50.6 and 57.1 s, all 14 fields covered (`fast_proof/20261121_coverage_bubble_<take>/`).
+- [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules:
+  `Docs/Guides/Native_Parity_And_Timing_Proof.md` section 7):
+  - [ ] Layer L built (e0275205c): `tools/visualizer_replay/native_record_identity.py`, test
+    `tests/test_native_record_identity.py`; evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
+  - [ ] Layer T on native paths (open): the live check reads cadence from Qt Quick's frame cycles when the native core
+    draws (`frames_per_s` is 0 on Vulkan today) and per-pass GPU time from `--gpu-pass-timing`;
+    `tools/quick_frame_cadence.py` is the reference; prove it gives the Python path's swap-gap figures on an OpenGL run.
+  - [ ] Layer P built (ddb3dc8b2, ec0bf3feb, 12a688e57, d0b2e8095, 29fc590c0): cached references
+    (`tools/visualizer_replay/python_references.py`), native-only `--against`, `native_stream_player.py` for Vulkan
+    (generic modes only; Spectrum's own item is not played yet), `--judge-workers`. Evidence `fast_proof/20261120_*`.
+  - [ ] Coverage selection built (b4cd47802): `tools/visualizer_replay/coverage_windows.py`, test
+    `tests/test_coverage_windows.py`; evidence `fast_proof/20261121_coverage_bubble_<take>/`.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
@@ -3525,6 +3313,155 @@ Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`.
 
 - [~] Studio run on D1 (1B.14 harness), strokes posted by messages, lead review of grabbed frames: the terrain brush
   in the Studio.
+
+## Backlog (parked text moved out of section 1 on 21 Nov; agents are not briefed on this section; the lead promotes an item back by plan box)
+
+### Bubble conditional optimisation gate (moved verbatim from N5.1 Bubble; the plan box keeps a pointer)
+
+  - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
+    and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
+    performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
+    utilisation. First name the measured Bubble-owned GPU pass, CPU/GIL, transfer or allocation problem and its
+    baseline; if nothing significant is attributable to Bubble, record a no-change result and close the gate.
+    Do NOT speculatively optimise the old Python/OpenGL renderer being retired, retune motion or response, or
+    rewrite the 110-body shader on theoretical complexity alone. The relevant owner is the accepted native path,
+    or the surviving Python logical simulation where that owner is independently shown to be costly.
+    - [ ] **Baseline before editing:** freeze two *fully resolved* independent settings cases from the accepted
+      curated **Preset 1 (Deep Sea Abyss)** and **Preset 2 (Going Down)**. Keep the existing
+      `tests/fixtures/visualizer_frozen_settings/bubble.json` and its consumers intact; it has Preset 1-like
+      values but must be checked against the entire current resolved profile before being called exact.
+      Create an immutable versioned Preset 2 fixture, with SHA-256 for both frozen files and resolved models.
+      Preserve the pre-change acceptance and commit/fixture provenance. Never resolve from the mutable Studio
+      state on each run or regenerate baselines from the candidate implementation.
+    - [ ] **Music/event matrix:** normally replay ALL FOUR existing ~60-second schema-2 operator takes with PCM
+      histories, typed events and onsets: `nightsolong_acousticsoft1`,
+      `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`, under EACH frozen preset
+      (eight full replay cases, approximately 43,200 ticks at 90 Hz). THREE full, distinct recordings
+      are the absolute minimum only if one is unavailable and the lead explicitly accepts a documented
+      reason. Validate file SHA-256, actual span and event/onset completeness rather than assuming a filename
+      proves 60 seconds. Do not use a short excerpt, older schema-1 clip or synthetic input as a substitute.
+      Extend existing `tools/visualizer_replay/bubble_parity.py` narrowly for two immutable profiles while
+      retaining its four default clips, per-frame hashes, first difference, and negative controls.
+      Use configured Bubble-band PCM reanalysis for an audio-analysis/input optimisation, not merely the
+      recorder's Sphere-profile post-DSP bands.
+    - [ ] **Exact logical fidelity:** pin seed/timebase/inputs/event consumption and compare the complete
+      canonical bytes at EVERY frame: published logical frame, identity-preserving physics, reactive event
+      consequences, Quick snapshot and renderer payload. Zero differing frames, timestamps, values or event
+      order; even a float last-bit change rejects an output-preserving optimisation. A deliberately perturbed
+      float and a late/missing one-shot event must fail the gate. Byte-parity is about computed results,
+      not proof of on-monitor latency. If the change affects shaders/passes, also retain N5.1's approved
+      Python/native OpenGL and Vulkan/OpenGL pixel oracles; same-device raw RGBA equality where repeatable,
+      otherwise the existing D12 pixel bounds without silently widening tolerance.
+    - [ ] **Independent speed and reactivity proof:** paired measurements of the named CPU/GIL owner or native
+      GPU pass at 2560x1440 and 4K, ambience on/off, GPU median/p90, frame latency p95/p99, resource
+      lifetime/dormancy, source/snapshot age, authored ~90 Hz cadence, event-to-visible attack, loud/quiet
+      elasticity and motion/ghost/tail feel on the installed system (including mixed-display load).
+      Retain the 240-frame ambience-off empty-pass control below. No slowdown, timing regression or
+      fidelity alteration may be excused by matching offline hashes. Lead/operator acceptance or revert;
+      one bounded candidate at a time, then return to the native migration ladder. BTF §24 binds.
+
+### Oscilloscope parity and offers (moved from N5.1 Oscilloscope; operator 21 Nov: the mode is reworked after the flip, no 1:1 polish)
+
+- [ ] Rule (a) for the Choice offers passes 14 of 15 runs; the one miss is nightsolong `oscilloscope_audio_block_size=0`
+  input 1388 (two diagonally touching 2-level pixels in the beam's edge; the lead decides whether it is a class).
+  Rule (b) over the three 60 s takes fails `VULKAN_RULE_B` on isolated edge pixels of 2-6 levels (shape A: saturated
+  core or glow fringe, the composite's dither over float16 bloom; shape B: one pixel held for hundreds of frames,
+  human_heavy1 a (370, 251) and nightsolong b (264, 208); a root cause of B is the open question); no bound is widened.
+  Rule (b) for the offers is not run: the stream player's windows do not reproduce its continuous frames for the
+  Oscilloscope (a window with warm-up 299 never converges; the player or publish-history state is suspect;
+  `coverage_windows.WARMUP_INPUTS["oscilloscope"]` is 0, unproved). Repro: `native_stream_player.py --deliveries
+  D:/Temp/Scratch/SRPSS/fast_proof/deliveries/oscilloscope_human_heavy1_a --apis opengl --windows <one window [300, 310],
+  warmup_inputs 299> --against n5_1_oscilloscope/20261121_rule_b_60s_human_heavy1_a/native_stream_player.json`.
+  Evidence: `n5_1_oscilloscope/20261121_owner_offers_<take>/`, `20261121_offer_windows/`,
+  `20261121_rule_b_60s_<take>_<a|b>/` (`classify_rule_b.json`, crop sheets), `20261121_layer_p_summary/summary.json`,
+  `20261121_warmup_probe_*`, `20261121_windows_against_full_human_heavy1_a/`. Figures per take are in those folders.
+
+### Native core leftovers (moved verbatim from N2.2 to N5.7c; the plan keeps one verdict line each)
+
+- [ ] N2.2 leftovers (proved; `native/core/python/host_check.py`; lifecycle facts J1 to J4 in
+  `Native_Core_N06_N07_Qt_Facts.md`):
+  - [ ] The hidden host's Qt Quick target keeps its contents between frames (defect B). A hidden host with
+    transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
+- [ ] N2.4 leftovers (proved; `native/core/python/composite_check.py`):
+  - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
+    When the card material moves to the core, its grain takes an integer hash exact on every backend (today 2 frosted
+    pixels sit 12 levels apart on Vulkan where the float hash's `fract` wraps near 1.0; accepted 14 Nov).
+- [ ] N2.5 leftovers (merged 14 Nov at ABI 8; the Python renderer retires only after N2.8 passes, in the switch
+  change):
+  - [ ] Studio on Vulkan: Spectrum's Studio preview is the Python renderer in an OpenGL node, so `has_studio` is
+    OpenGL-only (`STUDIO_PREVIEW_BACKENDS`). A native Studio preview (the same native item in the Studio's scene)
+    before the flip (NF) or before Vulkan becomes a default, whichever is first.
+  - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
+    per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
+    widened run set. With audit M3: `spectrum_settings_values` and `QuickSpectrumRenderer.render` share one
+    settings owner (today the guard compares one frozen setup).
+  - [ ] Audit lows: L6 the native pipeline joins the gradual warm-up (`renderer_prepared` is True at once on the
+    native route, `item.py:316-323`); L8 the destruction barrier sees the native objects.
+  - [ ] Side defect (R-214's sibling, low): the activation deadline's fading-out phase has no slow-but-alive
+    extension (cancels the switch after 6 s; only reached at about 270 ms a frame). Same rule as R-214 when the
+    owner is next touched.
+  - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
+    `surface_format` stays a harness-only switch.
+- [ ] N2.9 leftovers (generic mode content landed 14 Nov at ABI 10: a mode is a Python simulation, its product shader
+  and its spec, with no build; README "How a new mode is built", decision D12):
+  - [ ] Samplers are a primitive (N4.a): Bubble's `u_ambient_texture` (binding 0, the water-decoration underlay)
+    and `u_ambient_light` (binding 1, the particles' linear light), both from Bubble's offscreen ambient render.
+  - [ ] The Oscilloscope's port: its Quick renderer draws an instanced beam from a storage buffer with its own scene
+    target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
+- [ ] N2.8 leftovers (the first rehearsal on Display 1 passed 14 Nov for Spectrum, rule (f); the Python renderer
+  retires in the switch change):
+  - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
+    purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as an
+    empty frame. OpenGL unchanged.
+- [ ] N3.8 leftovers (the async job service landed 14 Nov at ABI 14, D9 "As built (N3.8)"; OpenGL stays in-frame by
+  design):
+  - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
+    D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
+    in-frame (Vulkan only; OpenGL runs in-frame).
+  - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
+    gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
+- [ ] N5.7b leftovers (the native backdrop pyramid landed 14 Nov at ABI 16, D7 "as built (N5.7b)"):
+  - [ ] The slower-device fallback (D7 point 3's minimum build interval) is not built; Vulkan follows every layer frame.
+  - [ ] D7 point 7 (glass over the live Visualizer) is not built.
+- [ ] N5.2a leftovers (the seven transitions landed 14 Nov at ABI 15, each drawn on Vulkan from its own product
+  fragment over the background layer):
+  - [ ] The first frame's pipeline build cost when a run switches program, and the 4K cost (not measured).
+  - [ ] Side defect (C++): the core refusing a still for "no card" draws black silently and `content_status`
+    reports no failure, so the layer's fade-out on failure would not trigger; report it and fail closed.
+- [ ] N5.7c leftovers (the D1 rehearsal on Vulkan, 15 Nov, covered wallpaper, cards on all five materials, Spectrum,
+  live Settings changes, a transition and a clean exit):
+  - [ ] Sleep and wake through Windows' console display state (`[DISPLAY_POWER]` off, then on). The operator's power
+    cycle of the TV during the run raised no display-power event and rendering carried on; a real monitor sleep
+    remains unexercised.
+  - [ ] `[STARTUP_REVEAL]` still says "the vulkan backend has no background renderer, so no wallpaper frame is awaited
+    (D10)". Since N5.7a, Vulkan draws the native wallpaper, so the reveal should wait for its first wallpaper frame as
+    OpenGL does. Fix the reveal gate, or show that the first presented frame already holds the wallpaper.
+
+### Test-failure triage (19 Nov; folded in from Docs/testfailures20261119.md, deleted)
+
+Investigate on real Qt before changing anything; none is proof of a production defect or licence to retune visuals,
+relax thresholds or wake the dormant native worker. The runner now balances 32 historical-duration batches, two
+child processes, one GPU/Qt Quick lane; read the last `batch_NN.log` node name before blaming a test. A Windows
+timeout dump (`.dmp`) can hold process memory: inspect before sharing. GPU scheduling is not a cross-worktree lock.
+
+- [ ] `tests/test_settings_input_foreground.py`: both `test_input_roles_follow_current_semantics_across_live_theme_changes`
+  cases fail; an explicit `control.input.text` colour does not reach `QPalette.Text` (a Qt stylesheet precedence issue is
+  plausible; one QLineEdit has its own background-only stylesheet). Prove the displayed colour for QLineEdit, QSpinBox
+  and QComboBox before touching shared theme code.
+- [ ] `tests/test_visualizer_card_clip_contract.py`: `glass` cases fail at 1.0x and 1.25x (Spline Curve, Neon Lake,
+  Extruded Bubble); it also timed out at `extruded_bubble-glass-1.25`. Check stale QSB binaries first
+  (`tools/regen_qrc.py --shaders --check`), then compare captured pixels and clip ancestry; no shader or bound change
+  without that proof.
+- [ ] `tests/test_neon_lake_studio.py` (timeout in `test_engine_owned_edits_change_the_engine_answers_negative_control`),
+  `tests/test_studio_drag_io_churn.py` (the `shockwave_grid` case of
+  `test_no_drag_instrument_writes_while_moving_and_each_release_commits_once`) and
+  `tests/test_visualizer_owner_render_parity.py` (the `extruded_spectrum` worker-path case): 160 s isolated timeouts,
+  not proven deadlocks; collect the last-test log, faulthandler output and a dump, isolate the parametrization, no
+  broad worker rewrite, native worker stays dormant.
+- [ ] `tests/unit/test_policy_compliance.py::TestThreadingPolicyCompliance::test_no_raw_threading_in_production_code`
+  flags the named daemon wake-listener thread at `core/visualizer_engine/packet_mailbox.py:472`; the test file was
+  absent from the transferred archive. Decide whether it is a permitted dormant mailbox mechanism or a real policy
+  violation; do not exempt or refactor it from the missing test alone.
 
 ## Operator execution and evidence rules
 
