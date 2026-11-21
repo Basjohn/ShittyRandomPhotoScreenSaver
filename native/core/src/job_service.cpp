@@ -756,7 +756,9 @@ public:
             *error = QStringLiteral("the job has no pixels");
             return false;
         }
-        const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
+        // ABI 35: a texture with mips holds every level, written past level 0 by the core's box kernel on the render
+        // thread after the import (mode_content.cpp recordTextureChains), never by generateMips here.
+        const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithLoadStore)
                                                   : QRhiTexture::Flags();
         RhiOwned<QRhiTexture> texture(m_rhi->newTexture(modeTextureRhiFormat(job.format), job.size, 1, flags));
         texture->setName(QByteArrayLiteral("srpss core job texture ") + job.name);
@@ -776,8 +778,6 @@ public:
         QRhiResourceUpdateBatch *updates = m_rhi->nextResourceUpdateBatch();
         const QRhiTextureSubresourceUploadDescription level(pixels->pixels); // implicitly shared, no copy
         updates->uploadTexture(texture.get(), QRhiTextureUploadDescription(QRhiTextureUploadEntry(0, 0, level)));
-        if (job.mips)
-            updates->generateMips(texture.get());
         cb->resourceUpdate(updates); // the staging copy, on this thread
         const QRhi::FrameOpResult ended = m_rhi->endOffscreenFrame();
         if (ended != QRhi::FrameOpSuccess) {

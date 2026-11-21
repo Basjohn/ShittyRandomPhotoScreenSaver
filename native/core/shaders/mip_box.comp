@@ -1,10 +1,11 @@
 #version 440
-// The mip chain's box (ABI 33, N5.4; rendering/gl_programs/mip_chain.py MIP_BOX_COMP holds the same text, a test holds
-// them equal): one level from the one above it, each destination texel the exact area average of the source texels it
-// covers (an even side: two taps of 1/2; an odd side 2d + 1: three taps of (d - i), d and (i + 1) over 2d + 1; a side
-// of 1: one tap), separable, summed outer taps first so the result is the same bit for bit whichever way the rows are
-// stored (the core's targets top first, F1; Python's bottom first). Never generateMips: its odd levels are the driver's
-// (anchored at memory row 0 on OpenGL, a linear blit on Vulkan) and differ between the two renderers.
+// The mip chain's box (N5.4: ABI 33, the self-mipped targets; ABI 35, the item textures; rendering/gl_programs/
+// mip_chain.py holds the same texts, a test holds them equal): one level from the one above it, each destination texel
+// the exact area average of the source texels it covers (an even side: two taps of 1/2; an odd side 2d + 1: three taps
+// of (d - i), d and (i + 1) over 2d + 1; a side of 1: one tap), separable, summed outer taps first so the result is the
+// same bit for bit whichever way the rows are stored (the core's targets top first, F1; Python's bottom first). Never
+// generateMips: its odd levels are the driver's (anchored at memory row 0 on OpenGL, a linear blit on Vulkan) and
+// differ between the two renderers. This text's images are rgba16f.
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(binding = 0, rgba16f) readonly uniform image2D u_source;
 layout(binding = 1, rgba16f) writeonly uniform image2D u_dest;

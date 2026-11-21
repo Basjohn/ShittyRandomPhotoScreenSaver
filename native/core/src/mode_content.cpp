@@ -97,6 +97,18 @@ void valueSceneFromTarget(const ModeCard &card, const QSize &target, double *out
 {
     double item[4];
     valueSceneItem(card, target, item);
+    // ABI 35: a scene drawn in the content's orientation (Python's oriented SceneTarget): the surface's pixel to the
+    // window's (window_from_target), turned back into the oriented viewport (the card's scene_from_window: Python's
+    // sceneTexel), less the item's oriented origin (Python's uOrigin). Exact: signed permutations with whole offsets.
+    if (card.valid && (card.quarters & 3) != 0 && card.orientedFrame && card.hasSceneOriented && !bloomAtTargetOrigin()
+        && !sceneFrameSurface()) {
+        const double *s = card.sceneFromWindow + 3 * row;
+        const double *w = card.windowFromTarget;
+        out[0] = s[0] * w[0] + s[1] * w[3];
+        out[1] = s[0] * w[1] + s[1] * w[4];
+        out[2] = s[0] * w[2] + s[1] * w[5] + s[2] - card.sceneOriented[row];
+        return;
+    }
     double window[4];
     sceneWindowRect(card, window);
     const bool turned = card.valid && (card.quarters & 3) != 0 && window[2] > 0.0 && window[3] > 0.0
@@ -169,9 +181,32 @@ bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &
     if (!composite)
         return false;
     const bool turned = (card.quarters & 3) != 0;
-    if (turned && !program.sceneFrameWindow())
+    const bool oriented = program.sceneFrameOriented() && card.hasSceneOriented;
+    if (turned && !program.sceneFrameWindow() && !oriented)
         return false;                         // refused at the pack (M3)
-    if (turned && !sceneFrameSurface()) {
+    if (turned && oriented && !sceneFrameSurface()) {
+        // ABI 35: Python's SceneTarget of the oriented frame (orient_visualizer_scene_frame). The scene's pixel (tx, ty)
+        // (top-first rows, the item's oriented rect at its content's bottom left) is the oriented viewport's
+        // (left + tx, bottom + H - ty), y up; the passes draw unturned there (quarters 0, the oriented item size).
+        const int ow = int(card.sceneOriented[2]);
+        const int oh = int(card.sceneOriented[3]);
+        if (ow <= 0 || oh <= 0)
+            return false;
+        const QSize size(bucketPixels(ow), bucketPixels(oh));
+        const double w[6] = { 1.0, 0.0, card.sceneOriented[0], 0.0, -1.0, card.sceneOriented[1] + double(size.height()) };
+        for (int i = 0; i < 6; ++i)
+            sceneCard->windowFromTarget[i] = w[i];
+        sceneCard->quarters = 0;
+        sceneCard->itemSize[0] = card.orientedSize[0];
+        sceneCard->itemSize[1] = card.orientedSize[1];
+        sceneCard->sceneItem[0] = 0.0;
+        sceneCard->sceneItem[1] = double(size.height() - oh);
+        sceneCard->sceneItem[2] = double(ow);
+        sceneCard->sceneItem[3] = double(oh);
+        *sceneSize = size;
+        return true;
+    }
+    if (turned && !oriented && !sceneFrameSurface()) {
         // ABI 29: Python's SceneTarget of the physical frame. The scene's pixel (tx, ty) (top-first rows, the item's
         // window rect at its content's bottom left) is the window's (left + tx, bottom + H - ty), y up.
         double window[4];
@@ -258,6 +293,7 @@ QAtomicInteger<qint64> g_textureBytes { 0 };
 QAtomicInteger<int> g_liveImages { 0 };
 QAtomicInteger<qint64> g_imageBytes { 0 };
 QAtomicInteger<qint64> g_textureUploads { 0 };
+QAtomicInteger<qint64> g_textureChains { 0 };   // ABI 35
 QAtomicInteger<quint64> g_textureGenerations { 0 };
 
 // N5.7a: a still's schema (mode_content.h, "Stills"): no field, no record. Its program is checked against it exactly as
@@ -2156,7 +2192,8 @@ bool ModeCard::fromJson(const QByteArray &json, ModeCard *out, QString *error)
     const QStringList keys = { QStringLiteral("quarters"), QStringLiteral("item_size"), QStringLiteral("oriented_size"),
                                QStringLiteral("dpr"), QStringLiteral("content_fade"), QStringLiteral("border_width"),
                                QStringLiteral("window_from_target"), QStringLiteral("item_from_window"),
-                               QStringLiteral("scene_item") };
+                               QStringLiteral("scene_item"), QStringLiteral("scene_oriented"),
+                               QStringLiteral("scene_from_window") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown card key '%1' (%2)").arg(it.key(), keys.join(QStringLiteral(", ")));
@@ -2189,6 +2226,38 @@ bool ModeCard::fromJson(const QByteArray &json, ModeCard *out, QString *error)
         }
         c.hasSceneItem = true;
     }
+    // ABI 35: Python's oriented scene frame (both keys, or neither): its rect in whole pixels and its map exact (a signed
+    // permutation with whole offsets: a quarter turn of the output viewport).
+    const bool oriented = o.contains(QStringLiteral("scene_oriented"));
+    if (oriented != o.contains(QStringLiteral("scene_from_window"))) {
+        *error = QStringLiteral("'scene_oriented' and 'scene_from_window' come together (Python's oriented scene frame)");
+        return false;
+    }
+    if (oriented) {
+        if (!readNumbers(o, "scene_oriented", c.sceneOriented, 4, error)
+            || !readNumbers(o, "scene_from_window", c.sceneFromWindow, 6, error))
+            return false;
+        for (int i = 0; i < 4; ++i) {
+            if (c.sceneOriented[i] != std::floor(c.sceneOriented[i]) || (i >= 2 && c.sceneOriented[i] < 1.0)) {
+                *error = QStringLiteral("'scene_oriented' is whole pixels (left, bottom, width, height), its size at "
+                                        "least 1");
+                return false;
+            }
+        }
+        const double *s = c.sceneFromWindow;
+        const bool unit = [&] {
+            for (int i : { 0, 1, 3, 4 }) {
+                if (s[i] != 0.0 && s[i] != 1.0 && s[i] != -1.0)
+                    return false;
+            }
+            return std::abs(s[0] * s[4] - s[1] * s[3]) == 1.0 && s[2] == std::floor(s[2]) && s[5] == std::floor(s[5]);
+        }();
+        if (!unit) {
+            *error = QStringLiteral("'scene_from_window' is a quarter turn: a signed permutation with whole offsets");
+            return false;
+        }
+        c.hasSceneOriented = true;
+    }
     c.valid = true;
     *out = c;
     return true;
@@ -2208,6 +2277,10 @@ QJsonObject ModeCard::toJson() const
     o.insert(QStringLiteral("item_from_window"), numbersJson(itemFromWindow, 6));
     if (hasSceneItem)
         o.insert(QStringLiteral("scene_item"), numbersJson(sceneItem, 4));
+    if (hasSceneOriented) {                   // ABI 35
+        o.insert(QStringLiteral("scene_oriented"), numbersJson(sceneOriented, 4));
+        o.insert(QStringLiteral("scene_from_window"), numbersJson(sceneFromWindow, 6));
+    }
     return o;
 }
 
@@ -2218,7 +2291,10 @@ bool ModeCard::operator==(const ModeCard &o) const
         && std::memcmp(orientedSize, o.orientedSize, sizeof orientedSize) == 0
         && std::memcmp(windowFromTarget, o.windowFromTarget, sizeof windowFromTarget) == 0
         && std::memcmp(itemFromWindow, o.itemFromWindow, sizeof itemFromWindow) == 0
-        && hasSceneItem == o.hasSceneItem && std::memcmp(sceneItem, o.sceneItem, sizeof sceneItem) == 0;
+        && hasSceneItem == o.hasSceneItem && std::memcmp(sceneItem, o.sceneItem, sizeof sceneItem) == 0
+        && hasSceneOriented == o.hasSceneOriented && std::memcmp(sceneOriented, o.sceneOriented, sizeof sceneOriented) == 0
+        && std::memcmp(sceneFromWindow, o.sceneFromWindow, sizeof sceneFromWindow) == 0
+        && orientedFrame == o.orientedFrame;
 }
 
 // ------------------------------------------------------------------------------------------------- blends
@@ -2330,6 +2406,7 @@ ModeTextureCounts modeTextureCounts()
     c.images = g_liveImages.loadRelaxed();
     c.imageBytes = g_imageBytes.loadRelaxed();
     c.uploads = g_textureUploads.loadRelaxed();
+    c.chains = g_textureChains.loadRelaxed();  // ABI 35
     return c;
 }
 
@@ -2511,20 +2588,24 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             const QJsonValue scene = o.value(QStringLiteral("scene"));
             const QJsonValue glow = o.value(QStringLiteral("glow"));
             const bool withGlow = o.contains(QStringLiteral("glow"));
-            // ABI 29: the scene's frame, when declared ("window": Python's scene drawn through Quick's window, unturned).
+            // ABI 29: the scene's frame, when declared ("window": Python's scene drawn through Quick's window, unturned;
+            // ABI 35: "oriented": drawn in the content's orientation, Python's orient_visualizer_scene_frame).
             const bool withFrame = o.contains(QStringLiteral("scene_frame"));
+            const QJsonValue frame = o.value(QStringLiteral("scene_frame"));
             if (!parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form)
                 || o.size() != 3 + (withGlow ? 1 : 0) + (withFrame ? 1 : 0) || !passName(pass.name)
                 || !fragmentPack.isEmpty() || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
                 || withGlow != (form != CompositeForm::Overlay) || (withGlow && !glowOf(glow.toString().toLatin1()))
-                || (withFrame && o.value(QStringLiteral("scene_frame")) != QJsonValue(QStringLiteral("window")))) {
+                || (withFrame && frame != QJsonValue(QStringLiteral("window"))
+                    && frame != QJsonValue(QStringLiteral("oriented")))) {
                 *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow or "
                                         "opaque_glow, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom step>.glow\" "
-                                        "(the glow forms only, a bloom step before it), \"scene_frame\"?: \"window\"} with "
-                                        "an empty pack").arg(i);
+                                        "(the glow forms only, a bloom step before it), \"scene_frame\"?: \"window\" or "
+                                        "\"oriented\"} with an empty pack").arg(i);
                 return false;
             }
-            pass.sceneFrameWindow = withFrame;
+            pass.sceneFrameWindow = withFrame && frame == QJsonValue(QStringLiteral("window"));
+            pass.sceneFrameOriented = withFrame && frame == QJsonValue(QStringLiteral("oriented")); // ABI 35
             coreFragment = compositeShader(form);
             QJsonArray samplers;
             samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uScene") },
@@ -2884,6 +2965,8 @@ QJsonObject ModeProgram::toJson() const
             p.insert(QStringLiteral("composite"), compositeFormName(pass.compositeForm));
         if (pass.sceneFrameWindow)
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("window")); // ABI 29
+        if (pass.sceneFrameOriented)
+            p.insert(QStringLiteral("scene_frame"), QStringLiteral("oriented")); // ABI 35
         p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
         QJsonArray outputs;
         for (const PassOutput &output : pass.outputs)
@@ -3047,10 +3130,31 @@ bool ModeProgram::sceneFrameWindow() const
     return composite;
 }
 
+bool ModeProgram::sceneFrameOriented() const
+{
+    bool composite = false;
+    for (const ModePass &pass : passes) {
+        if (pass.stage != StageKind::Composite)
+            continue;
+        if (!pass.sceneFrameOriented)
+            return false;
+        composite = true;
+    }
+    return composite;
+}
+
 QString ModeProgram::turnedStagesRefusal(const ModeCard &card) const
 {
     if (!card.valid || (card.quarters & 3) == 0 || sceneFrameWindow())
         return QString();
+    if (sceneFrameOriented()) {
+        if (card.hasSceneOriented)
+            return QString();                 // ABI 35: Python's oriented SceneTarget (sceneAnchor)
+        return QStringLiteral("refused: a turned card (quarters %1) of a program drawn in the content's orientation "
+                              "(\"scene_frame\": \"oriented\") carries no scene_oriented and scene_from_window "
+                              "(Python's oriented scene frame, rendering/native/mode.py mode_card; ABI 35)")
+            .arg(card.quarters);
+    }
     for (const ModePass &pass : passes) {
         if (pass.stage == StageKind::Bloom || pass.stage == StageKind::Composite) {
             return QStringLiteral("refused: pass '%1' is a %2 step under a turned card (quarters %3); a turned card's "
@@ -3533,6 +3637,10 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
         *error = turned;                      // M3: fail closed, reported once per run of refusals
         return false;
     }
+    // ABI 35: the surface's passes (the composite) read the card under the program's scene frame (a copy on the stack,
+    // nothing allocated).
+    ModeCard surfaceCard = card;
+    surfaceCard.orientedFrame = sceneFrameOriented();
     if (quint32(record.size()) != schema.recordBytes) {
         *error = QStringLiteral("a %1-byte record is not schema 0x%2's %3").arg(record.size())
                      .arg(schema.schemaId, 0, 16).arg(schema.recordBytes);
@@ -3549,7 +3657,7 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
             continue;
         const QSize target = passTargets && p < passTargets->size() ? passTargets->at(p) : surfaceTarget;
         // ABI 28: a pass into a surface-sized scene target draws under the scene's card (sceneAnchor).
-        const ModeCard &passCard = sceneCard && drawsSurfaceSizedScene(p) ? *sceneCard : card;
+        const ModeCard &passCard = sceneCard && drawsSurfaceSizedScene(p) ? *sceneCard : surfaceCard;
         BlockValues &block = blocks[p];
         for (quint32 i = 0; i < schema.fieldCount; ++i) {
             const fa::Field &field = schema.fields[i];
@@ -4372,7 +4480,7 @@ int ModeContent::liveResources() const
 {
     int textures = 0;
     for (const GpuTexture &texture : m_textures)
-        textures += texture.texture ? 1 : 0;
+        textures += (texture.texture ? 1 : 0) + texture.chain.bindings; // ABI 35: a chain's bindings
     return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live()
         + m_storage.live()                    // N3.3
         + m_post.live();                      // N3.4
@@ -4446,6 +4554,7 @@ void ModeContent::release()
         releaseFront(texture);                // an imported one to the window's retire list
         texture.name.clear();
     }
+    m_textureChains.release();                // ABI 35: the box kernel's pipelines (after the chains that bind them)
     m_texturesLost.clear();
     m_textureFailures.clear();
     m_lostNames.clear();
@@ -4511,6 +4620,8 @@ void ModeContent::releaseFront(GpuTexture &texture)
         return;
     g_liveTextures.fetchAndAddRelaxed(-1);
     g_textureBytes.fetchAndAddRelaxed(-texture.bytes);
+    texture.chain.release();                  // ABI 35: its chain's bindings name it
+    texture.chainPending = false;
     texture.texture.reset();                  // QRhi releases its native object (or its import's view) after the frames
     if (texture.frontService && texture.frontOutput) {
         // The job's output itself: released only once Qt's frames that sampled it completed (D9 as built point 6).
@@ -4607,9 +4718,15 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
     const QString label = QString::fromLatin1(gpu.name);
     const QString failure = QStringLiteral("%1 could not be created at %2 x %3").arg(label)
                                 .arg(image->size.width()).arg(image->size.height());
-    const QRhiTexture::Flags flags = image->mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
+    // ABI 35: a chain is the core's box kernel's (image stores into each level), never generateMips.
+    const QRhiTexture::Flags flags = image->mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithLoadStore)
                                                  : QRhiTexture::Flags();
     const QRhiTexture::Format format = modeTextureRhiFormat(image->format); // ABI 33: RGBA8 or RGBA16F
+    if (image->mips && !rhi->isFeatureSupported(QRhi::Compute)) {
+        m_textureFailures.append(QStringLiteral("%1 has mips, which need QRhi::Compute (the core's box kernel)")
+                                     .arg(label));
+        return false;
+    }
     if (gpu.texture && gpu.frontOutput)
         releaseFront(gpu);                    // an imported job output is never written in the frame: Qt's own instead
     if (!gpu.texture) {
@@ -4642,8 +4759,8 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
     // The pixels are implicitly shared with the batch (no copy); the core's copy goes once the batch is done.
     const QRhiTextureSubresourceUploadDescription level(image->pixels);
     updates->uploadTexture(gpu.texture.get(), QRhiTextureUploadDescription(QRhiTextureUploadEntry(0, 0, level)));
-    if (image->mips)
-        updates->generateMips(gpu.texture.get());
+    gpu.chain.release();                      // ABI 35: its bindings are made again over this object (the chain's record)
+    gpu.chainPending = image->mips;
     gpu.generation = generation;
     ++m_report.uploads;
     ++m_report.inFrameUploads;
@@ -4651,9 +4768,34 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
     return true;
 }
 
+void ModeContent::recordTextureChains(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch **pending)
+{
+    for (GpuTexture &gpu : m_textures) {
+        if (!gpu.chainPending || !gpu.texture)
+            continue;
+        gpu.chainPending = false;
+        QString error;
+        if (!m_textureChains.bind(rhi, gpu.texture.get(), gpu.texture->pixelSize(), &gpu.chain, &error)) {
+            // Fail closed: the front goes (its levels would be undefined), named lost with its reason; a new image
+            // re-arms it.
+            m_textureFailures.append(QStringLiteral("%1 could not make its mip chain: %2")
+                                         .arg(QString::fromLatin1(gpu.name), error));
+            releaseFront(gpu);
+            continue;
+        }
+        if (*pending) {
+            cb->resourceUpdate(*pending);     // its level 0 (and the record's other uploads) before the chain reads it
+            *pending = nullptr;
+        }
+        m_textureChains.record(cb, gpu.chain);
+        g_textureChains.fetchAndAddRelaxed(1);
+    }
+}
+
 RhiOwned<QRhiTexture> ModeContent::importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
 {
-    const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
+    // ABI 35: the job uploads level 0 only; the chain is the box kernel's here, after the import (recordTextureChains).
+    const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithLoadStore)
                                               : QRhiTexture::Flags();
     RhiOwned<QRhiTexture> imported(rhi->newTexture(modeTextureRhiFormat(job.format), job.size, 1, flags)); // ABI 33
     imported->setName(QByteArrayLiteral("srpss core mode texture ") + gpu.name + QByteArrayLiteral(" (job output)"));
@@ -4676,6 +4818,7 @@ void ModeContent::adoptImport(GpuTexture &gpu, RhiOwned<QRhiTexture> imported, c
     gpu.frontService = gpu.jobService;
     gpu.frontOutput = job.outputId;
     gpu.generation = job.generation;
+    gpu.chainPending = job.mips;              // ABI 35: its levels by the box kernel in this record
     gpu.bytes = job.outputBytes;
     g_liveTextures.fetchAndAddRelaxed(1);
     g_textureBytes.fetchAndAddRelaxed(gpu.bytes);
@@ -6765,6 +6908,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                                                     quint32(kSceneTriangle * kTriangleFloats * sizeof(float)));
     const QRhiCommandBuffer::VertexInput quadInput(r.vertices.get(), quint32(kCardQuadFirstFloat * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
+    // ABI 35: the item textures committed with mips this record: their chains before any pass samples them.
+    recordTextureChains(rhi, cb, &pending);
     bool surfaceOpened = false;
     bool cleared[kMaxSceneTargets] = {};
     const int count = draw ? r.passCount : 0;

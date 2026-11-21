@@ -153,7 +153,12 @@
 //   drawn through Quick's window, unturned (a SceneTarget given the physical frame, not orient_visualizer_scene_frame's:
 //   the Oscilloscope, which turns at the vertex), so under a turned card its scene target stays in the window's frame
 //   (sceneAnchor) and the composite turns each surface pixel into it; without it a turned card's bloom or composite is
-//   refused (M3, fail closed: Python's turned Scene3D frame is not built);
+//   refused (M3, fail closed: Python's turned Scene3D frame is not built). ABI 35: "scene_frame": "oriented" says the
+//   mode's Python scene is drawn in the content's orientation (orient_visualizer_scene_frame: Waveform's SceneTarget of
+//   the oriented frame, the composite turning its texels into Quick's window): under a turned card the scene target is
+//   Python's own of the oriented frame (the card's scene_oriented, bucketed) and the composite reads Python's
+//   sceneTexel (the card's scene_from_window through window_from_target, less the oriented origin); a turned card
+//   without the card's oriented rect is refused;
 // - a defocus step ({"name", "defocus": <mips target>, "onto": <scene target>}, an empty pack): the layer's mips, the
 //   clip, the gather and the highlight sprites; its block (u_defocus_radius, u_defocus_highlight, u_defocus_level) filled
 //   by the one rule. The read level is at most post_stages.h defocusReadLevelCap of the layer's allocation (a deeper
@@ -231,6 +236,16 @@ struct ModeCard
     // ABI 28: Python's item_pixel_rect in the target's pixels (left, top, width, height; top-first rows), when given.
     bool hasSceneItem = false;
     double sceneItem[4] = {};
+    // ABI 35: under a turned card, Python's oriented scene frame (orient_visualizer_scene_frame), when given: the item's
+    // cover in the oriented virtual viewport (item_pixel_rect of the oriented frame: left, bottom, width, height; y up),
+    // and the window's pixel (Quick's framebuffer, y up, continuous) to that viewport's (target.py sceneTexel before
+    // uOrigin: the output viewport turned back; rows x, y). Both or neither.
+    bool hasSceneOriented = false;
+    double sceneOriented[4] = {};
+    double sceneFromWindow[6] = {};
+    // Derived, never JSON: the program draws its scene in the content's orientation (its composite steps declare
+    // "scene_frame": "oriented"), set on the card the composite's members are packed under (packFrame).
+    bool orientedFrame = false;
 
     static bool fromJson(const QByteArray &json, ModeCard *out, QString *error);
     QJsonObject toJson() const;
@@ -395,6 +410,7 @@ struct ModePass
     bool coverageAlpha = true;                       // a resolve: alpha ONE (an overlay's coverage), else ZERO (kept)
     CompositeForm compositeForm = CompositeForm::Overlay;
     bool sceneFrameWindow = false;                   // ABI 29: a composite's "scene_frame": "window"
+    bool sceneFrameOriented = false;                 // ABI 35: a composite's "scene_frame": "oriented"
     // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
     QShader sorted;
     QList<PassOutput> sortedOutputs;
@@ -464,10 +480,13 @@ struct ModeProgram
     // ABI 28: whether pass `p` draws into a scene target of the surface's size (sceneAnchor's: its card is the scene's).
     bool drawsSurfaceSizedScene(int p) const;
     // M3 (checkpoint audit 10): a bloom or composite step under a turned card is refused unless the program's scene is
-    // in the window's frame (sceneFrameWindow, ABI 29); the reason, or empty.
+    // in the window's frame (sceneFrameWindow, ABI 29) or in the content's orientation with the card's oriented rect
+    // (sceneFrameOriented, ABI 35); the reason, or empty.
     QString turnedStagesRefusal(const ModeCard &card) const;
     // ABI 29: the program has a composite step and every composite step declares "scene_frame": "window".
     bool sceneFrameWindow() const;
+    // ABI 35: the program has a composite step and every composite step declares "scene_frame": "oriented".
+    bool sceneFrameOriented() const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's,
     // or `scene` when given: sceneAnchor's content) under `targets` (the program's own when null: ModeSource::drawnTargets
     // carries the sizes set since), into `out` in place (audit 2, M5: no new list per frame once its capacity holds the
@@ -488,7 +507,11 @@ int modeContentObjects();
 
 // ABI 33 (N5.4): a mode texture's format: RGBA8 (N4.a: 4 bytes a texel) or RGBA16F (half floats, 8 bytes a texel, in
 // the platform's byte order: Waveform's slope map, baked once with a full chain the GPU makes). Uploaded as given (no
-// conversion), its chain by QRhi's generateMips as an RGBA8 texture's.
+// conversion). ABI 35 (the lead's decision of 21 Nov, N5.4: every level chain a sampler reads is the core's box kernel):
+// a texture with mips has its level 0 uploaded and its chain made by the box kernel (mip_chain.h; the Python renderer
+// runs the same text, rendering/gl_programs/mip_chain.py) in the record that commits it, before any pass samples it,
+// on either route (in the frame, or after a job's output is imported); never QRhi's generateMips, whose odd levels are
+// the driver's. A device without compute refuses such a texture with its reason (a failure, the owner told).
 enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1 };
 bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out);
 QString modeTextureFormatName(ModeTextureFormat format);
@@ -568,6 +591,7 @@ struct ModeTextureCounts
     int images = 0;
     qint64 imageBytes = 0;
     qint64 uploads = 0;
+    qint64 chains = 0;           // ABI 35: item textures' mip chains made by the box kernel
 };
 ModeTextureCounts modeTextureCounts();
 
@@ -765,6 +789,10 @@ private:
         std::shared_ptr<UploadJob> job;      // a job in flight for it
         std::shared_ptr<JobService> jobService;
         QSharedPointer<TextureImage> pixels; // or its pixels, for the in-frame form at the commit
+        // ABI 35: a front with mips: its chain's bindings (made with the front) and whether its levels are still to be
+        // made (the record that committed it makes them, before any pass).
+        MipChain chain;
+        bool chainPending = false;
     };
 
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
@@ -850,6 +878,10 @@ private:
     void adoptImport(GpuTexture &gpu, RhiOwned<QRhiTexture> imported, const UploadJob &job);
     // Every texture the drawn program samples has a front.
     bool texturesReady() const;
+    // ABI 35: the chains of the fronts committed with mips (their uploads submitted first: `pending` is handed to the
+    // command buffer when a chain is made), one compute pass a level, before any pass of the record. A chain that cannot
+    // be made is the texture's failure (its front released, the owner told).
+    void recordTextureChains(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch **pending);
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).
     QByteArray stillSignature(const ColorTarget &target, const float *triangle) const;
     // ABI 27: a bloom step's first downsample's triangle: the target's own (`own`) with its uv moved by the item's place
@@ -876,6 +908,7 @@ private:
     std::unique_ptr<Resources> m_res;
     ContentLatch m_latch;
     GpuTexture m_textures[kMaxModeTextures];
+    MipChainKernel m_textureChains;          // ABI 35: the item textures' box kernel (mip_chain.h)
     quint64 m_textureObjects = 0;            // a texture object created or released: the bindings are rebuilt
     QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
     QStringList m_texturesLost;

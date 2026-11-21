@@ -212,24 +212,30 @@ def test_the_core_sprites_are_pythons() -> None:
 def test_the_defocus_layer_alone_takes_generate_mips() -> None:
     """D17 choice G: QRhi's generateMips for the defocus layer (its two attachments, in the defocus step); ABI 33 (N5.4)
     adds one other scene-target chain, a self-mipped target's read attachments after its run, made by the core's box
-    kernel (shaders/mip_box.comp, the Python reference's text too), not generateMips: never a bloom or HDR chain."""
+    kernel (shaders/mip_box.comp, the Python reference's text too), not generateMips: never a bloom or HDR chain.
+    ABI 35: the item textures' chains are the box kernel's too (the lead's decision of 21 Nov), on both upload routes."""
     content = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
     record = content[content.index("void ModeContent::recordDefocus("):content.index("bool ModeContent::syncTargets(")]
     assert record.count("->generateMips(") == 2
-    # The one other generateMips is N4.a's: an item texture uploaded with its mips (not a scene target's).
-    upload = content[content.index("bool ModeContent::uploadInFrame("):content.index("RhiOwned<QRhiTexture> "
-                                                                                   "ModeContent::importTexture(")]
-    assert content.count("->generateMips(") == 2 + upload.count("->generateMips(")
+    # ABI 35: no other generateMips: an item texture's chain (in the frame, or after a job's import) is the kernel's.
+    assert content.count("->generateMips(") == 2
+    assert "generateMips(" not in (CORE / "src" / "job_service.cpp").read_text(encoding="utf-8")
     assert "generateMips(" not in (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8").replace(
         "never generateMips", "")
     # ABI 33: the scene targets' one chain is generateSelfMips, gated on a self-mipped single-sampled target and an
-    # attachment read at its levels, one box-kernel dispatch a level, called once, after a run of passes on a target.
+    # attachment read at its levels, through the core's one kernel owner (mip_chain.h, ABI 35), called once, after a
+    # run of passes on a target; the kernel dispatches once a level, each level its own compute pass.
     targets = (CORE / "src" / "scene_targets.cpp").read_text(encoding="utf-8")
     own = targets[targets.index("int SceneTargets::generateSelfMips("):
-                  targets.index("void SceneTargets::releaseChainKernel(")]
+                  targets.index("int SceneTargets::Target::chainBindings(")]
     assert "generateMips(" not in targets
-    assert "!t->decl.selfMips" in own and ".mipsRead" in own and "mip_box_comp_qsb" in own
-    assert own.count("cb->dispatch(") == 1 and "imageStore(1, cs, t->colour[c].get(), level)" in own
+    assert "!t->decl.selfMips" in own and ".mipsRead" in own and "m_chainKernel.record(cb, t->chain[c]);" in own
+    kernel = (CORE / "src" / "mip_chain.cpp").read_text(encoding="utf-8")
+    recorded = kernel[kernel.index("void MipChainKernel::record("):kernel.index("void MipChainKernel::release(")]
+    assert recorded.count("cb->dispatch(") == recorded.count("cb->beginComputePass();") == 1
+    assert "for (int level = 1; level < chain.levels; ++level)" in recorded
+    assert "imageStore(1, cs, texture, level)" in kernel and "imageLoad(0, cs, texture, level - 1)" in kernel
+    assert "mip_box_comp_qsb" in kernel and "mip_box_rgba8_comp_qsb" in kernel and "generateMips(" not in kernel
     passes = content[content.index("void ModeContent::recordPasses("):content.index("bool ModeContent::record(")]
     assert content.count("generateSelfMips(") == passes.count("generateSelfMips(") == 1
 

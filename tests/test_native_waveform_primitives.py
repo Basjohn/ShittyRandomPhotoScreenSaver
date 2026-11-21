@@ -184,20 +184,22 @@ def test_a_self_mipped_target_makes_its_chain_after_its_run_and_the_defocus_laye
     assert mode_cpp.count(run) == 1 and not self_mips_are_wired(mode_cpp.replace(run, ""))
 
 
-def box_chain_is_wired(targets_cpp: str, mode_cpp: str, kernel: str) -> bool:
+def box_chain_is_wired(targets_cpp: str, mode_cpp: str, kernel: str, chain_cpp: str = "") -> bool:
     """A self-mipped target's chain is the core's box kernel, one text with the Python reference's
     (``rendering/gl_programs/mip_chain.py``): never QRhi's generateMips, whose GL chain is the driver's (NVIDIA's
     non-power-of-two reduction is anchored at memory row 0, the core's top row and Python's bottom one) and whose
     Vulkan chain is one bilinear tap a texel; the box kernel's odd-size weights are symmetric, so neither the storage
-    orientation nor the driver moves a level."""
+    orientation nor the driver moves a level. ABI 35: through the core's one kernel owner (``mip_chain.cpp``)."""
     from rendering.gl_programs.mip_chain import MIP_BOX_COMP
 
-    if "void SceneTargets::releaseChainKernel(" not in targets_cpp:
-        return False                          # no kernel of the core's own (ABI 33 before the box chain)
-    chain = _function(targets_cpp, "int SceneTargets::generateSelfMips(", "void SceneTargets::releaseChainKernel(")
+    chain_cpp = chain_cpp or _source("mip_chain.cpp")
+    if "int SceneTargets::Target::chainBindings(" not in targets_cpp:
+        return False                          # no kernel owner of the core's own (before ABI 35)
+    chain = _function(targets_cpp, "int SceneTargets::generateSelfMips(", "int SceneTargets::Target::chainBindings(")
     parse = _function(mode_cpp, "bool ModeProgram::fromJson(", "QJsonObject ModeProgram::toJson(")
-    return (kernel == MIP_BOX_COMP and "generateMips(" not in targets_cpp and "mip_box_comp_qsb" in chain
-            and "imageLoad(0, cs, t->colour[c].get(), level - 1)" in chain
+    return (kernel == MIP_BOX_COMP and "generateMips(" not in targets_cpp and "generateMips(" not in chain_cpp
+            and "m_chainKernel.bind(rhi, t->colour[c].get(), t->allocation, &t->chain[c], error)" in chain
+            and "mip_box_comp_qsb" in chain_cpp and "imageLoad(0, cs, texture, level - 1)" in chain_cpp
             and "flags |= QRhiTexture::UsedWithLoadStore;" in targets_cpp
             and "rgba16f attachment only" in parse and "precise vec4" in kernel)
 
@@ -210,10 +212,11 @@ def test_a_self_mipped_targets_chain_is_the_shared_box_kernel():
     # Negative controls: the kernel's text drifting from the reference's, and QRhi's chain in its place, are caught.
     assert not box_chain_is_wired(_source("scene_targets.cpp"), _source("mode_content.cpp"),
                                   kernel.replace("precise vec4 sum", "vec4 sum"))
-    assert not box_chain_is_wired(_source("scene_targets.cpp").replace(
-        "        cb->beginComputePass();\n", "        cb->resourceUpdate(rhi->nextResourceUpdateBatch()); "
-                                         "// generateMips(\n        cb->beginComputePass();\n"),
-        _source("mode_content.cpp"), kernel)
+    assert not box_chain_is_wired(_source("scene_targets.cpp"), _source("mode_content.cpp"), kernel,
+                                  _source("mip_chain.cpp").replace(
+                                      "        cb->beginComputePass();\n",
+                                      "        cb->resourceUpdate(nullptr); // generateMips(\n"
+                                      "        cb->beginComputePass();\n"))
 
 
 def half_float_is_wired(mode_cpp: str, jobs_cpp: str) -> bool:
@@ -251,9 +254,10 @@ def test_a_linear_sampler_over_a_storage_image_is_checked_against_the_device():
         "storageImageLinearFilter(rhi, image->format, &why)", "true"), _source("vulkan_context.cpp"))
 
 
-def test_the_abi_is_33_on_both_sides():
-    assert "#define SRPSS_NATIVE_CORE_ABI 33" in _source("abi.h")
-    assert loader.EXPECTED_ABI == 33
+def test_the_abi_is_35_on_both_sides():
+    # ABI 33's boxes, at ABI 35 since the Waveform port's two core gaps (tests/test_native_waveform_port_core.py).
+    assert "#define SRPSS_NATIVE_CORE_ABI 35" in _source("abi.h")
+    assert loader.EXPECTED_ABI == 35
 
 
 # ------------------------------------------------------------------------------------------- the harness scenes

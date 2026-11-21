@@ -745,6 +745,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mode_texture_images"), textures.images);
     o.insert(QStringLiteral("mode_texture_image_bytes"), double(textures.imageBytes));
     o.insert(QStringLiteral("mode_texture_uploads"), double(textures.uploads));
+    o.insert(QStringLiteral("mode_texture_chains"), double(textures.chains)); // ABI 35: the box kernel's item chains
     // N5.7b: the backdrop items, their pyramids and the pyramids' QRhi objects, and the builds recorded.
     const srpss_core::BackdropCounts backdrops = srpss_core::backdropCounts();
     o.insert(QStringLiteral("backdrop_items"), backdrops.items);

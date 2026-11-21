@@ -184,4 +184,17 @@
 // SAMPLED_IMAGE_FILTER_LINEAR_BIT per storage format) and the compute facts' linear_filter_formats and
 // float32_linear_control; a linear sampler over a storage image this device does not filter linearly fails the
 // content with its reason. Backward compatible for every earlier program and caller.
-#define SRPSS_NATIVE_CORE_ABI 33
+// 34: reserved for another branch (N5.2c with N4.j).
+// 35 (N5.4, the Waveform port's two core gaps): (1) an item texture with mips has its chain made by the core's box kernel
+// (the lead's decision of 21 Nov: every level chain a sampler reads), shaders/mip_box.comp (RGBA16F) and
+// shaders/mip_box_rgba8.comp (RGBA8), the texts rendering/gl_programs/mip_chain.py gives the Python renderer, on both
+// upload routes (in the frame; a job uploads level 0 and the render thread makes the chain after the import), never
+// generateMips; one kernel owner for the textures and the self-mipped targets (mip_chain.h); a device without compute
+// refuses such a texture with its reason; composite_live's mode_texture_chains. (2) A composite step's "scene_frame":
+// "oriented" (Python's orient_visualizer_scene_frame: Waveform's scene drawn in the content's orientation): under a turned
+// card the scene target is Python's SceneTarget of the oriented frame and the composite reads Python's sceneTexel; the
+// card's optional scene_oriented (the item's rect in the oriented viewport) and scene_from_window (the window's pixel to
+// that viewport's), both or neither; a turned card of such a program without them is refused. Item textures with mips
+// may draw differently where a level is made from an odd size (no product mode samples them before Waveform);
+// backward compatible for every other program and caller.
+#define SRPSS_NATIVE_CORE_ABI 35

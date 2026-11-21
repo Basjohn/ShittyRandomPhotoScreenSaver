@@ -497,7 +497,7 @@ def reference_frames(variant: str = "taps") -> dict:
     from OpenGL import GL as gl
 
     from rendering.gl_programs.conventions import conventions_block
-    from rendering.gl_programs.mip_chain import MIP_BOX_COMP, dispatch_mip_chain
+    from rendering.gl_programs.mip_chain import MIP_BOX_COMP, MIP_BOX_RGBA8_COMP, dispatch_mip_chain
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
 
@@ -514,6 +514,7 @@ def reference_frames(variant: str = "taps") -> dict:
                     for name, text in texts().items() if name in ("refl_sky", "refl_light", "prepass", "slope_probe",
                                                                    "floor")}
         box = compile_compute_program(MIP_BOX_COMP, label="n54 mip box")
+        box8 = compile_compute_program(MIP_BOX_RGBA8_COMP, label="n54 mip box rgba8")
         buffers = {}
         conventions = (ctypes.c_uint * 1)()                    # this renderer's conventions (zeros: rows bottom first)
         gl.glCreateBuffers(1, conventions)
@@ -577,15 +578,21 @@ def reference_frames(variant: str = "taps") -> dict:
             return {"array": array[::-1].copy(), "content": (w, h), "size": (w, h), "format": "rgba16f", "samples": 1}
 
         # The item textures: the checker (RGBA8) and the slope map (RGBA16F, or RGBA8 encoded), their chains made.
+        # ABI 35: an item texture's chain is the core's box kernel too (the RGBA8 text for RGBA8); the driver_chain
+        # variant is Python's shipping glGenerateTextureMipmap on every chain (the fact).
         checker = texture(gl.GL_RGBA8, (CHECKER, CHECKER), levels_of((CHECKER, CHECKER)))
         gl.glTextureSubImage2D(checker, 0, 0, 0, CHECKER, CHECKER, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
                                checker_pixels().tobytes())
-        gl.glGenerateTextureMipmap(checker)
         data, fmt = slope_texture(encoded)
         slope = texture(gl.GL_RGBA8 if fmt == "rgba8" else gl.GL_RGBA16F, (SLOPE, SLOPE), levels_of((SLOPE, SLOPE)))
         gl.glTextureSubImage2D(slope, 0, 0, 0, SLOPE, SLOPE, gl.GL_RGBA,
                                gl.GL_UNSIGNED_BYTE if fmt == "rgba8" else gl.GL_HALF_FLOAT, data)
-        gl.glGenerateTextureMipmap(slope)
+        if variant == "driver_chain":
+            gl.glGenerateTextureMipmap(checker)
+            gl.glGenerateTextureMipmap(slope)
+        else:
+            dispatch_mip_chain(box8, checker, (CHECKER, CHECKER), levels_of((CHECKER, CHECKER)), "rgba8")
+            dispatch_mip_chain(box8 if fmt == "rgba8" else box, slope, (SLOPE, SLOPE), levels_of((SLOPE, SLOPE)), fmt)
         hardware = variant == "hardware"
         # The reflection: exact, mipped RGBA16F with a depth; cleared as the core's clearing draw clears it.
         reflection = texture(gl.GL_RGBA16F, REFLECTION, levels_of(REFLECTION))
@@ -655,6 +662,7 @@ def reference_frames(variant: str = "taps") -> dict:
         for program in programs.values():
             delete_program(program)
         delete_program(box)
+        delete_program(box8)
     host.close()
     return frames
 

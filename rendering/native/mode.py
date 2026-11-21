@@ -24,7 +24,8 @@ member, and an unbound, unknown or doubly bound sampler, each with its reason. A
 new pack, new settings or a new record: never C++.
 
 The textures (N4.a, :meth:`NativeMode.texture`): pixels Python holds (RGBA8, rows top first, tight) are copied once
-into the core and uploaded once (mips generated on the GPU when asked), never again at rest; a removed texture is
+into the core and uploaded once (ABI 35: with mips, their chain made by the core's box kernel,
+``rendering.gl_programs.mip_chain``, the text the Python renderer runs), never again at rest; a removed texture is
 released on the render thread. N3.8 (D9): on a Vulkan device with a job service the upload is a job on the job queue,
 and the item's changed textures are drawn together once their jobs are published; elsewhere it is recorded in the
 frame. A texture whose node was made again is lost: the owner's :meth:`NativeMode.on_textures_lost` is called with its
@@ -117,6 +118,10 @@ MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade
                   "item_from_window", "scene_item")
 #: The card's optional keys (ABI 28: ``scene_item``, Python's SceneTarget rect; without it the item covers its target).
 MODE_CARD_OPTIONAL_KEYS = ("scene_item",)
+#: ABI 35: the card's keys under a turned card only, both or neither: Python's oriented scene frame
+#: (``rendering.native.spectrum.oriented_scene_card``; ``ModeCard::fromJson``'s ``scene_oriented`` and
+#: ``scene_from_window``), read by a program whose composite declares ``scene_frame="oriented"``.
+MODE_CARD_ORIENTED_KEYS = ("scene_oriented", "scene_from_window")
 
 
 def schema_table_entry(schema: Any) -> dict:
@@ -147,7 +152,7 @@ def mode_card(presentation: Any, geometry: Any, *, window_size: tuple[float, flo
 
     card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
                                  scene_item=True)
-    values = {key: card[key] for key in MODE_CARD_KEYS if key in card}
+    values = {key: card[key] for key in MODE_CARD_KEYS + MODE_CARD_ORIENTED_KEYS if key in card}
     values["border_width"] = float(getattr(presentation, "border_width", 0.0) or 0.0)
     return values
 
@@ -632,6 +637,8 @@ class CapturePass:
 
 #: N3.4 (D17 point 5): the composite step's forms, and the alpha a transparency resolve writes.
 COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow")
+#: A composite step's scene frames (ABI 29: the window's; ABI 35: the content's orientation; None: the surface's).
+SCENE_FRAMES = (None, "window", "oriented")
 RESOLVE_ALPHAS = ("coverage", "keep")
 #: N3.4: the bloom chain's levels (``post.py`` ``BLOOM_LEVELS``), and the most bloom and defocus steps a program takes.
 BLOOM_LEVELS = 4
@@ -685,8 +692,11 @@ class CompositeStep:
     surface-sized target pairs its first downsample's pixels from there too. ABI 29: ``scene_frame="window"`` says the
     mode's Python scene is drawn through Quick's window, unturned (its ``SceneTarget`` given the physical frame, the
     content turned at the vertex: the Oscilloscope); under a turned card the core then keeps the scene in the window's
-    frame and the composite reads it at Python's texel (``u_scene_from_target``). Without it a turned card's bloom or
-    composite is refused (Python's turned Scene3D frame, ``orient_visualizer_scene_frame``, is not built)."""
+    frame and the composite reads it at Python's texel (``u_scene_from_target``). ABI 35: ``scene_frame="oriented"``
+    says the scene is drawn in the content's orientation (Python's ``orient_visualizer_scene_frame``: Waveform): under a
+    turned card the scene target is Python's SceneTarget of the oriented frame and the composite turns its texels into
+    the window (the card's ``scene_oriented`` and ``scene_from_window``). Without either a turned card's bloom or
+    composite is refused."""
 
     name: str
     form: str
@@ -699,8 +709,8 @@ class CompositeStep:
             raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
         if (self.glow is None) != (self.form == "overlay"):
             raise ValueError("the glow forms read a bloom step's glow; the overlay reads none")
-        if self.scene_frame not in (None, "window"):
-            raise ValueError(f"unknown scene frame {self.scene_frame!r} (the window's, \"window\", or none)")
+        if self.scene_frame not in SCENE_FRAMES:
+            raise ValueError(f"unknown scene frame {self.scene_frame!r} (\"window\", \"oriented\", or none)")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "composite": self.form, "scene": self.scene}
