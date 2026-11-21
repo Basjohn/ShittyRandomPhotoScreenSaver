@@ -165,7 +165,7 @@ Rules:
   (`spectrum_glow_sharpness`, 0 to 1, default 0) reshapes the rim from the long-standing soft ramp (0) to a solid band
   with one feather at 80% of its reach (1). Both are Settings-only shader members: the native core packs them by name
   (`spectrum_settings_values`), the record does not carry them. Their defaults draw the rim exactly as before
-  (`tests/test_spectrum_rim_glow.py`). The bar's side border is one band test on both edges (R-NEW): it used to be two
+  (`tests/test_spectrum_rim_glow.py`). The bar's side border is one band test on both edges (R-213): it used to be two
   units on the left and one on the right, which hid the left rim's brightest columns.
 - Ghost Colour **Bar Fill** makes a ghost a soft, blurred, translucent trail of its own bar: inside the bar's border
   it shows the bar's own surface (Fill Gradient at that height, Rainbow Fill, a pattern or flag sheet, gloss)
