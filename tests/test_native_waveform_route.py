@@ -95,6 +95,27 @@ def test_a_frame_whose_ribbon_is_not_ready_is_held(monkeypatch):
     assert route.waveform_frame_ready(ready)
 
 
+def test_rule_a_single_samples_the_routes_scene_as_pythons():
+    """Rule (a) judges a multisampled scene by its single-sampled form (D8 point 1): inside the owner's
+    ``single_sample_scene_targets`` the route's Waveform program declares one sample, as the Python scene target then
+    takes; outside it, and after it, the product's four (P's first run compared a 4x route scene with Python's one)."""
+    from rendering.quick.scene3d import waveform
+    from rendering.quick.visualizer import native_route as route
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    def scene_samples():
+        program = route.waveform_program(((0.0, 0.0, 0.0),))
+        scene = next(t for t in program["targets"] if t.name == route.WAVEFORM_SCENE)
+        return scene.samples
+
+    product = waveform.SCENE_SAMPLES
+    assert product > 1 and scene_samples() == product
+    with parity.single_sample_scene_targets():
+        assert scene_samples() == 1
+    # Negative control: after the block the product's count is back, so the product never draws single-sampled.
+    assert waveform.SCENE_SAMPLES == product and scene_samples() == product
+
+
 def test_a_variant_program_mode_loads_without_a_fragment_pack():
     """Waveform builds every pass from its variant's packs: loading it reads no single fragment pack (it has none)."""
     import pytest

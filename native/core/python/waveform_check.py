@@ -636,6 +636,144 @@ def round_cost(core, engine, app, api: str, records: list, out: Path) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+#: The readback round's frames: up to this many sampled frames drawing every stage, spread over the run.
+READBACK_FRAMES = 3
+READBACK_WAIT_FRAMES = 16
+
+
+def _readback(scene, card: dict) -> tuple[dict, dict]:
+    """One drawn frame's scene targets (``read_targets``: the reflection, the scene, the glow; rows top first on every
+    backend) and storage (``read_storage``: the fog volumes and steady shares slice by slice, the floor's fields), each
+    name -> (format, size, level, bytes)."""
+    scene.mode.read_targets()
+    scene.read(card)
+    targets = None
+    for _ in range(READBACK_WAIT_FRAMES):
+        targets = scene.mode.target_pixels()
+        if targets is not None:
+            break
+        scene.host.frames(1)
+    scene.mode.read_storage()
+    storage = None
+    for _ in range(READBACK_WAIT_FRAMES):
+        scene.host.frames(1)
+        storage = scene.mode.storage_data()
+        if storage is not None:
+            break
+    if targets is None or storage is None:
+        raise RuntimeError(f"the readback did not complete (targets {targets is not None}, storage "
+                           f"{storage is not None}; {scene.mode.state().get('last_reason')})")
+    return ({f"{t['name']}@{t.get('level', 0)}": (t["format"], tuple(t["size"]), int(t.get("level", 0)),
+                                                  bytes(t["data"])) for t in targets},
+            {s["name"]: (s["format"], tuple(s["size"]), 0, bytes(s["data"])) for s in storage if s["kind"] == "image"})
+
+
+_READ_DTYPES = {"rgba32f": "<f4", "r32f": "<f4", "rgba16f": "<f2", "r16f": "<f2", "rgba8": "<u1", "r8": "<u1"}
+
+
+def _decoded(entry: tuple):
+    """A readback's values as float64, shaped (slices, rows, columns, channels) (one slice for a 2D resource)."""
+    import numpy as np
+
+    fmt, size, _level, data = entry
+    dtype = _READ_DTYPES.get(str(fmt).lower())
+    if dtype is None:
+        return None
+    values = np.frombuffer(data, dtype).astype(np.float64)
+    width, height = int(size[0]), int(size[1])
+    depth = int(size[2]) if len(size) > 2 else 1
+    channels = values.size // max(1, width * height * depth)
+    return values[:width * height * depth * channels].reshape(depth, height, width, channels)
+
+
+def compare_readback(a: dict, b: dict) -> dict:
+    """Each resource of ``a`` (one backend's readback) against ``b`` (the other's): the same names, formats and sizes,
+    the largest and mean absolute difference, and the same difference with ``b``'s rows (and, for a volume, slices)
+    reversed: a backend whose rows or slices ran the other way would differ less reversed (E13/E15's trap)."""
+    import numpy as np
+
+    out: dict = {}
+    for name in sorted(set(a) | set(b)):
+        if name not in a or name not in b:
+            out[name] = {"pass": False, "missing_on": "opengl" if name not in a else "vulkan"}
+            continue
+        if a[name][:2] != b[name][:2]:
+            out[name] = {"pass": False, "formats_sizes": [list(map(str, a[name][:2])), list(map(str, b[name][:2]))]}
+            continue
+        x, y = _decoded(a[name]), _decoded(b[name])
+        if x is None:
+            out[name] = {"pass": a[name][3] == b[name][3], "exact": a[name][3] == b[name][3], "format": a[name][0]}
+            continue
+        delta = np.abs(x - y)
+        row_flip = float(np.abs(x - y[:, ::-1]).mean())
+        slice_flip = float(np.abs(x - y[::-1]).mean()) if x.shape[0] > 1 else None
+        mean = float(delta.mean())
+        spread = float(np.abs(x - x.mean()).mean())          # content that does not vary cannot show an orientation
+        oriented = (mean < row_flip or spread == 0.0) and (slice_flip is None or mean < slice_flip or spread == 0.0)
+        out[name] = {"format": a[name][0], "size": list(a[name][1]), "exact": a[name][3] == b[name][3],
+                     "max_abs": float(delta.max()), "mean_abs": mean, "row_reversed_mean_abs": row_flip,
+                     "slice_reversed_mean_abs": slice_flip, "content_spread": spread, "pass": bool(oriented)}
+    return {"pass": bool(out) and all(r["pass"] for r in out.values()), "resources": out}
+
+
+def round_readback(core, engine, app, api: str, records: list, out: Path) -> dict:
+    """E13 and E15's readback (playbook "Proof"): for sampled frames drawing every stage, at dpr 1, the scene targets
+    (the planar reflection among them) and every storage image (the fog volumes slice by slice) read back on this API;
+    on Vulkan each is judged against the OpenGL child's, name by name (``compare_readback``)."""
+    import pickle
+
+    chosen = [e for e in records if e is not None and e.get("cost_at") and all(e["stages"][:4])]
+    if not chosen:
+        return {"pass": False, "error": "no sampled frame draws every stage"}
+    step = max(1, len(chosen) // READBACK_FRAMES)
+    chosen = chosen[::step][:READBACK_FRAMES]
+    work = out / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    got: dict = {}
+    host = core.hidden_host(*base.HOST_PIXELS)
+    try:
+        for entry in chosen:
+            scene = None
+            stream = base.Stream()
+            try:
+                scene = Scene(core, engine, host)
+                card = scene.place(entry, 1.0, stream)
+                stream.publish(entry["record"], 0.0)
+                scene.mode.update()
+                scene.read(card)
+                stream.publish(entry["record"], 1.0)
+                scene.mode.update()
+                got[f"{entry['key']}#{entry['index']}"] = _readback(scene, card)
+            finally:
+                stream.close()
+                if scene is not None:
+                    scene.close(app)
+                host.frames(2)
+                base.host_check._flush_deletes(app)
+    finally:
+        host.close()
+        base.host_check._flush_deletes(app)
+    with open(work / f"readback_{api}.pkl", "wb") as handle:
+        pickle.dump(got, handle)
+    listed = {frame: {"targets": sorted(t), "storage": sorted(s)} for frame, (t, s) in got.items()}
+    if api == "opengl":
+        return {"pass": all(t and s for t, s in got.values()), "frames": listed}
+    reference = work / "readback_opengl.pkl"
+    if not reference.is_file():
+        return {"pass": False, "error": "no OpenGL readback to judge against", "frames": listed}
+    with open(reference, "rb") as handle:
+        opengl = pickle.load(handle)
+    judged = {}
+    for frame, (targets, storage) in got.items():
+        if frame not in opengl:
+            judged[frame] = {"pass": False, "error": "frame missing on OpenGL"}
+            continue
+        judged[frame] = {"targets": compare_readback(opengl[frame][0], targets),
+                         "storage": compare_readback(opengl[frame][1], storage)}
+        judged[frame]["pass"] = judged[frame]["targets"]["pass"] and judged[frame]["storage"]["pass"]
+    return {"pass": bool(judged) and all(j["pass"] for j in judged.values()), "frames": judged}
+
+
 # --------------------------------------------------------------------------------------------------------- the child
 
 _child = base.child
@@ -659,7 +797,7 @@ base.use_mode(MODE_ID=MODE_ID, _schema=_schema, _passes=_passes, Scene=Scene,
               ITEM_RECORD_FIELD=ITEM_RECORD_FIELD, item_reshaped=item_reshaped, VULKAN_RULE_B=VULKAN_RULE_B,
               SCRIPT=Path(__file__).resolve(), EVIDENCE_TOPIC="n5_4_waveform", DEFAULT_LABEL="n54_waveform",
               CONTROLS=CONTROLS, child=child, _save=_saved,
-              EXTRA_ROUNDS={"cost": round_cost}, REFERENCE_MARGIN=REFERENCE_MARGIN)
+              EXTRA_ROUNDS={"cost": round_cost, "readback": round_readback}, REFERENCE_MARGIN=REFERENCE_MARGIN)
 vulkan_against_opengl = base.vulkan_against_opengl
 api_verdict = base.api_verdict
 

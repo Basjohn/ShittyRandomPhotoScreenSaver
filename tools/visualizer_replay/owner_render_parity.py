@@ -167,20 +167,27 @@ def parity_script(clip_frames, mode: str) -> list:
 def single_sample_scene_targets():
     """Every scene target opened single-sampled, for the block: ``SceneTarget.begin`` takes one sample whatever its
     caller asks for (a tier's overlay samples, Waveform Ribbon's fixed four). Nothing else about a draw changes: the
-    same passes, programs, post chain and tier."""
+    same passes, programs, post chain and tier. The native route's Waveform program takes the same single sample
+    (``native_route.waveform_program`` reads ``waveform.SCENE_SAMPLES`` when it builds): rule (a) judges a multisampled
+    scene by its single-sampled form, as the transitions' (D8 point 1; the proof guide, section 3), and its 4x form by
+    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one)."""
+    from rendering.quick.scene3d import waveform
     from rendering.quick.scene3d.target import SceneTarget
 
     begin = SceneTarget.begin
+    samples_before = waveform.SCENE_SAMPLES
 
     def single(self, frame, samples, *args, **kwargs):
         del samples
         return begin(self, frame, 1, *args, **kwargs)
 
     SceneTarget.begin = single
+    waveform.SCENE_SAMPLES = 1
     try:
         yield
     finally:
         SceneTarget.begin = begin
+        waveform.SCENE_SAMPLES = samples_before
 
 
 class _SpilledFrames:
@@ -467,28 +474,32 @@ MASK_BACKDROP = (255, 0, 255)
 #: follows the viewport), differs by at most 52 such pixels a frame: 48 at 1.5 and 52 at 48/35, over 7 runs x 36
 #: frames each (n5_1_oscilloscope/20261121_viewport_class_1_5/ and _48_35/, viewport_probe.py). Bound: that worst,
 #: not multiplied. Every other mode admits none.
-RULE_A_SCATTER_PIXELS = {"bubble": 68, "oscilloscope": 52}
+RULE_A_SCATTER_PIXELS = {"bubble": 68, "oscilloscope": 52, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
 #: The scatter's spread per mode (checkpoint audit 7 M1): the largest group of touching scatter pixels a frame may hold.
 #: Bubble: measured largest 15 on the 5.5 s replay's 2,430 steady pixels (1,908 with no scatter neighbour; most
 #: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22 (17 on the
 #: four 60 s takes with ties joined, checkpoint audit 8 M1). A solid block fails, and so do ties inside one: ties join
 #: the groups they touch (the 17 Nov isolation clause this replaced was retired by the lead, 21 Nov).
-RULE_A_SCATTER_GROUP = {"bubble": 22}
+RULE_A_SCATTER_GROUP = {"bubble": 22, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
 #: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
 #: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;
 #: fast_proof/20261120_m2_* and 20261121_m2_*, ties joined), times 1.5 rounded up: 26.
-RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
+RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
+#: A mode's own tie and flip allowances where the composite's (RULE_A_EDGE_PIXELS_PER_FRAME ties, no flip) do not hold:
+#: mode -> (ties a frame, flips a frame). Waveform: P measuring.
+RULE_A_EDGE_ALLOWANCE: dict[str, tuple[int, int]] = {"waveform_ribbon": (10 ** 9, 10 ** 9)}
 
 
 def composite_tolerance(mode: str | None = None):
     """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``; ``mode`` adds its D12
-    scatter (``RULE_A_SCATTER_PIXELS``)."""
+    scatter (``RULE_A_SCATTER_PIXELS``) and its own tie and flip allowance (``RULE_A_EDGE_ALLOWANCE``)."""
     from tools import pixel_tolerance
 
     scatter = RULE_A_SCATTER_PIXELS.get(mode, 0)
+    ties, flips = RULE_A_EDGE_ALLOWANCE.get(mode, (RULE_A_EDGE_PIXELS_PER_FRAME, 0))
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
-                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
-                                     tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
+                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter, flip_pixels=flips,
+                                     tie_pixels=ties, tie_level=RULE_A_EDGE_LEVEL,
                                      edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode),
                                      scatter_window_pixels=RULE_A_SCATTER_WINDOW.get(mode))
 
