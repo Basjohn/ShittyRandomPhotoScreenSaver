@@ -13,7 +13,9 @@
 //   the QRhi starts empty (QRhi checks its own blob's header again and ignores a mismatch the same way);
 // - loaded when the job QRhi is created, saved at its orderly teardown (never after a device loss, as Qt does), through
 //   QSaveFile: written to a temporary file and renamed over the old one, so two windows or processes never leave a torn
-//   file; the last writer wins, as with Qt's. A rename that loses to a reader holding the file keeps the earlier file.
+//   file. Some writer wins, not necessarily the last (checkpoint audit 11 L3: on Windows a rename over a file another
+//   reader holds open fails): such a commit keeps the earlier writer's whole file and is reported as a skip
+//   (save_failed), never an error.
 // Today the job QRhi builds no pipeline (uploads and blitted mips only), so its blob is empty and nothing is written;
 // the warm-up jobs (D9 point 2, consumer (b)) are the first producer. Any thread; no state but the harness's directory.
 #pragma once
