@@ -123,17 +123,6 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
-- [ ] Widget consistency with the Feed/Games You Follow tile treatment (agent a46843a7773612d34, Sonnet Medium; operator, 21 Nov; pattern: 8b5bf3454, Games You
-  Follow's tile = Feed's ink wash + header hairline, no opaque slab, no tile shadow):
-  - [ ] System Stats: its four stat tiles (CPU, Memory, Uptime, Network) draw the extra opaque slab, and keep a
-    (pink, accent) border even with Borderless on.
-  - [ ] Friend Pulse: its friend tiles draw the extra opaque slab.
-  - [ ] Abandonment Issues: the "BACKLOG n/m" badge has a semantically poor fill (pink-red), a border, and off-centre
-    text; give it a proper semantic role colour like the other header badges, no border, text centred.
-  - [ ] Abandonment Issues: the "LAST VISIT" box draws the extra slab; its artwork under Borderless shows stray lines
-    around it; artwork behaves exactly like Achievement Pulse's and Games You Follow's.
-  - [ ] Renders before/after on a real wallpaper, dark and light theme, Borderless off and on, each beside Feed; tests
-    with controls.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
@@ -1674,6 +1663,8 @@ follow-ups with their evidence folders).
 
 - [ ] **M4 Unified Appearance Theme (operator, 16 Nov):** after 1B.8 M3 / 1.7b material-border rendering and its proof, and **before SMP M0**. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
   - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
+  - [ ] Retire roles left unused by the 22 Nov tile unification (System Stats' `metric_surface_color` and its theme role;
+    tiles now take `tile_wash`) when the themes are regenerated here.
   - [ ] **Semantic completeness audit alongside unification (operator, 18 Nov):** inventory presently hardcoded colours, alpha, tint and *reasonably independent* material surfaces across Settings, ordinary widgets and fullscreen overlays; give missing eligible elements typed roles **where the element genuinely has an authored surface/ink purpose**, especially the Media Control Bar (distinct from the Media card), volume child, branded headers, seekbar track/fill and overlay controls. Seed every new role with the **effective visual value the element renders today**, including existing style overrides, so the default unified theme is visually unchanged unless the operator explicitly requests a change. Preserve fullscreen Now Playing’s two fill-opacity biases as neutral-zero adjustments on the resolved Normal semantic alpha, not new standalone colour authority or preset metadata. Preserve shared renderer/semantic ownership and per-element inheritance/Normal overrides; avoid indiscriminate material passes for decorative lines, tiny fills or already-correct surfaces. Prove baseline parity with before/after pixels before re-authoring aesthetics.
   - [ ] **Media application-volume child border thickness becomes semantic at M4 (operator, 19 Nov):** introduce an authored, typed `media.volume.outline.width` thickness role shared by both the vertical track and its filled-level outline, and use the current **2.5 logical px** as the unified-theme baseline. The Widgets → Media → Volume Control **Outline Width** setting, added before M4, must then become an explicit override of that role; an untouched/default value must inherit the theme instead of freezing all users at 2.5 px. Preserve non-default user-authored widths across migration, including zero (intentional no outline). Keep the material-border 20% alpha adjustment and the single-stroke clipping behavior independent of thickness. Confirm round-trip, theme switch/reset, DPI scaling, both alignment sides, Normal/material states and no new renderer or capture.
   - [ ] **Hierarchical sub-semantics (operator, 20 Nov), if architecture and cost allow.** Each role (for example
