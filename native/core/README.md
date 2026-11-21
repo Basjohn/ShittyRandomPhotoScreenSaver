@@ -102,6 +102,13 @@ build selection; current host and composite proof lives here.
     window has been resized since (round 2, L1 and M3; the route waits on the window's `afterSynchronizing`).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick; since N3.8 the
     device's second queue of Qt's graphics family and its job service, stopped first by the device's destruction.
+    N3.6, the device loss: Qt's recovery re-adopts the device it was given, so the host's `sceneGraphInvalidated` slot
+    (the render thread, the lost QRhi still alive) logs the lost device's `VK_EXT_device_fault` detail once, makes a new
+    device and gives it to the window (`giveDeviceTo`, `setGraphicsDevice`) before Qt's next QRhi; the lost one is
+    destroyed once Qt's QRhi on it is gone (a window: its next `sceneGraphInitialized`; the hidden host: in its own lost
+    path, `HiddenHost::State::recover`, which also rebuilds Qt's QRhi through `QQuickRenderControlPrivate::resetRhi`).
+    Every core object is made again by its owner (the items' nodes and their streams' last records, textures and
+    meshes through the lost edges). The proof: `python/device_loss_check.py` through the harness-only forced loss.
   - `job_service.*` (N3.8, D9 "As built (N3.8)"): the async job service, one per Vulkan device: a thread and a QRhi on
     the job queue made at the first job, parked on a wait condition at rest; upload jobs that own their pixels; the
     ticket latch (published by compare-and-set, then a queued frame request to the item); cancellation; outputs released

@@ -825,6 +825,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     out->m_physicalDevice = quint64(reinterpret_cast<quintptr>(physDev));
     out->m_family = family;
     out->m_queues = queueCount;
+    out->m_deviceFault = extensions.contains(QByteArrayLiteral("VK_EXT_device_fault")) && fault.deviceFault == VK_TRUE;
     out->m_name = QString::fromUtf8(props.deviceName);
     if (queueCount >= 2) {
         // The job service (N3.8): an object now; its thread and its QRhi at the first job.
@@ -862,6 +863,87 @@ void VulkanDevice::applyTo(QQuickWindow *window) const
     window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(
         reinterpret_cast<VkPhysicalDevice>(quintptr(m_physicalDevice)), reinterpret_cast<VkDevice>(quintptr(m_device)),
         int(m_family), 0));
+}
+
+void VulkanDevice::giveDeviceTo(QQuickWindow *window) const
+{
+    if (!window || !m_device)
+        return;
+    window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(
+        reinterpret_cast<VkPhysicalDevice>(quintptr(m_physicalDevice)), reinterpret_cast<VkDevice>(quintptr(m_device)),
+        int(m_family), 0));
+}
+
+QJsonObject VulkanDevice::faultReport() const
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("vk_device"), QString::number(m_device));
+    if (!m_device || !g_instance) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("no device"));
+        return o;
+    }
+    if (!m_deviceFault) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("VK_EXT_device_fault (or its deviceFault feature) is not "
+                                                       "enabled on this device"));
+        return o;
+    }
+    const VkDevice device = reinterpret_cast<VkDevice>(quintptr(m_device));
+    auto getDeviceProcAddr = g_instance->loader.get<PFN_vkGetDeviceProcAddr>(g_instance->instance,
+                                                                            "vkGetDeviceProcAddr");
+    auto getFault = getDeviceProcAddr ? reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(
+                                            getDeviceProcAddr(device, "vkGetDeviceFaultInfoEXT"))
+                                      : nullptr;
+    if (!getFault) {
+        o.insert(QStringLiteral("queried"), false);
+        o.insert(QStringLiteral("why"), QStringLiteral("vkGetDeviceFaultInfoEXT did not resolve"));
+        return o;
+    }
+    VkDeviceFaultCountsEXT counts = {};
+    counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+    VkResult result = getFault(device, &counts, nullptr);
+    o.insert(QStringLiteral("queried"), true);
+    o.insert(QStringLiteral("counts_result"), int(result));
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+        return o;
+    QList<VkDeviceFaultAddressInfoEXT> addresses;
+    addresses.resize(qsizetype(counts.addressInfoCount));
+    QList<VkDeviceFaultVendorInfoEXT> vendors;
+    vendors.resize(qsizetype(counts.vendorInfoCount));
+    counts.vendorBinarySize = 0; // the vendor's binary crash dump is not read (its format is the vendor's own)
+    VkDeviceFaultInfoEXT info = {};
+    info.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT;
+    info.pAddressInfos = addresses.isEmpty() ? nullptr : addresses.data();
+    info.pVendorInfos = vendors.isEmpty() ? nullptr : vendors.data();
+    info.pVendorBinaryData = nullptr;
+    result = getFault(device, &counts, &info);
+    o.insert(QStringLiteral("info_result"), int(result));
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE)
+        return o;
+    o.insert(QStringLiteral("description"), QString::fromUtf8(info.description));
+    QJsonArray addressList;
+    for (uint32_t i = 0; i < counts.addressInfoCount && i < uint32_t(addresses.size()); ++i) {
+        QJsonObject a;
+        a.insert(QStringLiteral("type"), int(addresses[qsizetype(i)].addressType));
+        a.insert(QStringLiteral("address"),
+                 QStringLiteral("0x%1").arg(qulonglong(addresses[qsizetype(i)].reportedAddress), 0, 16));
+        a.insert(QStringLiteral("precision"), double(addresses[qsizetype(i)].addressPrecision));
+        addressList.append(a);
+    }
+    o.insert(QStringLiteral("addresses"), addressList);
+    QJsonArray vendorList;
+    for (uint32_t i = 0; i < counts.vendorInfoCount && i < uint32_t(vendors.size()); ++i) {
+        QJsonObject v;
+        v.insert(QStringLiteral("description"), QString::fromUtf8(vendors[qsizetype(i)].description));
+        v.insert(QStringLiteral("code"), QStringLiteral("0x%1").arg(qulonglong(vendors[qsizetype(i)].vendorFaultCode),
+                                                                  0, 16));
+        v.insert(QStringLiteral("data"), QStringLiteral("0x%1").arg(qulonglong(vendors[qsizetype(i)].vendorFaultData),
+                                                                  0, 16));
+        vendorList.append(v);
+    }
+    o.insert(QStringLiteral("vendor_faults"), vendorList);
+    return o;
 }
 
 QJsonObject vulkanDeviceFacts(quint64 device)

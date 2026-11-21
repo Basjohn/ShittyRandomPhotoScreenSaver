@@ -149,4 +149,8 @@
 // pixel to the scene's texel; the surface's own, as at ABI 28, for an unturned card). A turned card's bloom or composite
 // without the declaration is still refused. stage_control's scene_frame_surface (the negative control: the turned scene
 // anchored in the surface's frame). Unchanged for an unturned card.
-#define SRPSS_NATIVE_CORE_ABI 29
+// 30 (N3.6, lifetime: the device loss): host_force_device_lost (harness: the hidden host's next frame takes the lost
+// path, swap_device False its control); the host states' device_losses and lost_device_alive, the hidden host's
+// loss_forced_pending and vulkan_live_devices, the device facts' device_fault. A window host replaces a lost Vulkan
+// device itself (no call). Backward compatible for every earlier caller.
+#define SRPSS_NATIVE_CORE_ABI 30

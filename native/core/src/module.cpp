@@ -363,6 +363,21 @@ PyObject *host_invalidate_scene_graph(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+PyObject *host_force_device_lost(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int swapDevice = 1;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &swapDevice))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    if (!host->forceDeviceLoss(swapDevice != 0, &error))
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
 PyObject *host_set_dpr(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -2835,6 +2850,9 @@ PyMethodDef methods[] = {
     { "host_frames", host_frames, METH_VARARGS, "(handle, count=1) -> None: the hidden host renders frames." },
     { "host_invalidate_scene_graph", host_invalidate_scene_graph, METH_VARARGS,
       "(handle) -> None: harness; invalidate the hidden host's actual scene graph on its render thread; close next." },
+    { "host_force_device_lost", host_force_device_lost, METH_VARARGS,
+      "(handle, swap_device=True) -> None: harness (N3.6); the hidden host's next frame takes the lost path (a new "
+      "device, Qt's QRhi and every core object made again); swap_device False keeps the device (the control)." },
     { "host_close", host_close, METH_VARARGS,
       "(handle) -> JSON str: detaches; a hidden host also tears down its window and device." },
     { "host_probe", host_probe, METH_VARARGS,

@@ -26,7 +26,9 @@ if(CORE_VULKAN_INCLUDE)
     set(Vulkan_INCLUDE_DIR "${CORE_VULKAN_INCLUDE}" CACHE PATH "" FORCE)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui GuiPrivate Qml Quick)
+# QuickPrivate (N3.6): the hidden host's rebuild after a device loss destroys its render control's QRhi
+# (QQuickRenderControlPrivate::resetRhi); its private headers need the Core and Qml private modules as well.
+find_package(Qt6 REQUIRED COMPONENTS Core CorePrivate Gui GuiPrivate Qml QmlPrivate Quick QuickPrivate)
 if(NOT Qt6_VERSION VERSION_EQUAL CORE_QT_VERSION)
     message(FATAL_ERROR "Qt SDK ${Qt6_VERSION} != PySide6's Qt ${CORE_QT_VERSION}")
 endif()
@@ -117,7 +119,8 @@ target_include_directories(_srpss_native_core PRIVATE "${_gen}" "${CORE_VULKAN_I
 target_compile_definitions(_srpss_native_core PRIVATE
     QT_NO_KEYWORDS
     SRPSS_NATIVE_CORE_VERSION="${PROJECT_VERSION}")
-target_link_libraries(_srpss_native_core PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick)
+target_link_libraries(_srpss_native_core PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick
+                      Qt6::QuickPrivate)
 if(MSVC)
     target_compile_options(_srpss_native_core PRIVATE /W4 /permissive- /Zc:__cplusplus /utf-8)
     # No FH4 exception handler (compile /d2FH4-, link /d2:-FH4-): the module then imports nothing from
