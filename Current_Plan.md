@@ -78,7 +78,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): N3.6 (agent ab5da4c3c451f82c5), then Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
+- [ ] High (Opus High, core-critical C++): N3.6 is merged (ABI 30); audit 11's fixes (agent a8797a6d7c59d45af), then
+  Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
   layer L go to a Medium. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
 - [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
@@ -572,7 +573,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     at that edge, outside any frame; never mid-frame, which blanked Vulkan presentation in d1_run on 14 Nov.
     Raw Vulkan objects go to a deferred-delete queue keyed to their frame slot's fence, drained at device idle on
     teardown.
-  Checkpoint audit 11 (21 Nov, `Docs/Future_Work/Checkpoint_Audits_Nov21.md`; the branch at ebfe0944a is safe to merge):
+  Checkpoint audit 11 (21 Nov, `Docs/Future_Work/Checkpoint_Audits_Nov21.md`; N3.6 merged at ABI 30, b056a212c; M1-M3,
+  L1-L4 with Opus High agent a8797a6d7c59d45af):
   - [ ] M1: a harness-only real loss: Qt's own QRhi must report `isDeviceLost()`. For example, the hidden host's
     device-function table answers `vkQueueSubmit` with `VK_ERROR_DEVICE_LOST` once, with no environment flag. Then rerun
     the rebuild round with `qrhi_lost` true and `faultReport` present. Or the lead records the window record's loss slots
