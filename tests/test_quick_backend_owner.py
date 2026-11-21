@@ -563,6 +563,7 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/bubble_check.py",               # its cost round's 4K host
     "native/core/python/bubble_cost_matrix.py",         # its 4K-class cost hosts (one per card shape and ratio)
     "native/core/python/oscilloscope_check.py",         # its cost round's 1440p and 4K hosts
+    "native/core/python/device_loss_check.py",          # N3.6: its forced losses rebuild a host's own QRhi and device
     "native/core/python/scene_target_check.py",
     "native/core/python/mesh_buffer_check.py",
     "tools/visualizer_replay/native_stream_player.py",  # rule (b) harness: replays a take's delivery stream on each backend

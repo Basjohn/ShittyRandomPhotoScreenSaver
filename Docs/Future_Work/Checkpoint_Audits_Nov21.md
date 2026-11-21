@@ -198,3 +198,121 @@ control seen failing, and the R number at merge.
   Glow crossing 0 always changes the settings (`u_hdr_exposure` only above 0), so the edge is never missed.
 - `bloomTriangle` and the composite's glow read agree: the glow's uv is offset by the item's place in the source, and
   the composite reads it at the item-relative texel, which lands on the surface pixel (and the probes above hold it).
+
+## Checkpoint audit 11 (N3.6 Lifetime)
+
+Scope: branch `worktree-agent-ab5da4c3c451f82c5` at ebfe0944a merged into the audit worktree (Opus High), on its ABI 30
+module (GitHub build of e21923f1c; ebfe0944a changes only `device_loss_check.py`). Read first: `host_adapter.cpp` (the
+window record's loss slots, `HiddenHost::State::recover`), `vulkan_context.cpp` (device creation and destruction off
+the GUI thread, the raw deferred queue, `faultReport`), `rhi_owned.h` and its 119 sites, `frame_driver.cpp`,
+`gpu_timer.cpp`, `job_service.cpp`, `pipeline_cache.cpp`; Qt 6.12.0's own sources for what the branch relies on
+(`qsgthreadedrenderloop.cpp`, `qquickrendercontrol.cpp`, `qsgrhisupport.cpp`, `qvulkaninstance.cpp`, `qrhivulkan.cpp`,
+`qrhi_p.h`) and the local 6.11.2 SDK's `qquickrendercontrol_p.h`. One heavy process at a time, no visible window.
+Evidence: `.artifacts/evidence/native_core/n3_6/20261121_n36_audit_rerun/` (the agent's full proof, rerun) and
+`20261121_audit11_controls/` (child records and the probe scripts, run from the repository root).
+
+Verdict: safe to merge. What the proofs claim, they show, and the controls I ran fail where they should. But every
+proof is a forced loss on the hidden host, so the product's real-loss path has never run (M1). Two gaps would show only
+at a user's GPU reset: a failed `vkCreateDevice` leaves the window black for good (M2), and only one scene is ever
+rebuilt (M3).
+
+### Medium
+
+**M1. No real loss and no window host has ever run the loss path.** In every loss record, the agent's
+(`20261121_n36_lifetime_final`) and my rerun's, `qrhi_lost` is false: a forced loss leaves the device alive. So these
+never execute: the window record's `sceneGraphInvalidated`/`sceneGraphInitialized` slots on Qt's threaded loop (the
+product's whole loss path, `host_adapter.cpp` `WindowHost::create`), `faultReport` (the `VK_EXT_device_fault` query;
+`device_fault` is true on this machine, so the query would run), the `isDeviceLost()` guards (the frame driver's skipped
+finish, the job teardown's skipped save), and the job service's stop on a lost device. `device_loss_check.py` lists
+this under "Not proved here". Failure scenario: a defect in any of these ships unseen and fires only during a user's
+TDR, the one event the box exists for. I read the window slots against Qt 6.12's `teardownGraphics`: it cleans up the
+nodes, invalidates the scene graph (the signal fires with `wd->rhi` still set), releases the swapchain, destroys the
+QRhi, then sets `wd->rhi = nullptr`. `ensureRhi` makes the new QRhi through `createRhi(window, ...)`, which reads the
+stored device, and then emits `sceneGraphInitialized`. The slots' order matches; that is a reading, not a run. Fix: a
+harness-only real loss, so Qt's own QRhi reports `isDeviceLost()`. For example, the hidden host's device-function
+table answers `vkQueueSubmit` with `VK_ERROR_DEVICE_LOST` once (Qt's `QVulkanDeviceFunctions` table, GuiPrivate is
+already linked), with no environment flag. Then rerun the rebuild round with `qrhi_lost` true and the fault report
+present. Or the lead records the window-slot path as accepted unproven.
+
+**M2. A failed `vkCreateDevice` at the invalidation leaves the window black until restart.** `replaceDevice`
+(`host_adapter.cpp:278`) keeps the lost device when no new device can be made ("the window stays without frames"), and
+nothing retries. Qt 6.12's `ensureRhi` retries `createRhi` every frame on the stored device, which is still the lost
+one. If that QRhi cannot be made, no invalidation follows and the slot never runs again. If it is made and fails, the
+slot runs at the next loss. Failure scenario: the first slot runs while the driver is still resetting after a TDR,
+`vkCreateDevice` fails once, and that display shows nothing for the rest of the session (a vanish, against the
+fade-never-vanish rule). Source reading only; cannot be run without M1's injection. Fix: retry the replacement where
+Qt retries (for example, at the record's next frame edge or expose while `device_swapped` is false), with M1's
+injection plus a forced create failure as its proof.
+
+**M3. The rebuild is proven for one scene only.** The rebuild round draws N4.a's Crossfade (one pass, two job
+textures). The plan says every core object is made again. These owners never cross a loss in any run: scene targets,
+post stages (bloom, defocus), mode storage with its compute kernels, meshes, Spectrum, the background layer with its
+backdrop pyramid, the load and probe passes, the GPU timer. The hidden host's new QRhi may take the old one's address.
+Several owners decide "same QRhi, keep my objects" by pointer (`surfaces.cpp:186`, `backdrop.cpp:264`,
+`post_stages.cpp:654`, `scene_targets.cpp:825`, `compute_passes.cpp:886`). They are correct only because every one is
+destroyed with its node at the invalidation. An owner that outlives the node would reuse dead objects on the new QRhi,
+and this round could not see it. Fix: the rebuild round also runs a mode program with storage, a scene target, bloom
+and meshes (`generic_mode_check.py`'s), Spectrum, and the background layer with a backdrop. Each frame after the loss
+must equal the frame before it.
+
+### Low
+
+- **L1. `RhiOwned` turns "a never-created resource outlives its QRhi" from safe into a use-after-free.** In Qt 6.12,
+  `registerResource` runs in each backend's `create()`, not at construction (`QVkBuffer::create` ends with it), and
+  `~QRhiImplementation` nulls `m_rhi` only for registered resources. `deleteLater()` calls `m_rhi->addDeleteLater`.
+  So a wrapper that was never created, or whose `create()` failed (the "failed partial builds kept until retirement"),
+  dereferences a freed QRhi when it is retired after that QRhi. Before, a plain `delete` was safe: `destroy()` returns
+  before touching the QRhi when it holds no native object. Latent today, because owners release with their nodes.
+  The holders that can outlive their QRhi are the harness's left-behind lists, matched by QRhi pointer
+  (`compute_passes.cpp:601`, `post_stages.cpp:90`), and the "another QRhi" branches of M3. Fix: state the contract in
+  `rhi_owned.h` (retired before its QRhi, always). Then prove it: no wrapper of a core owner is live after
+  `sceneGraphInvalidated` (a count in `device_loss_check.py`).
+- **L2. The job teardown's guard against saving after a loss is the job thread's own observation.** `m_deviceLost` is
+  set only when a job met the loss. At rest the job thread is parked, so a window-side loss leaves it false, and
+  `tearDown` (`job_service.cpp:828`) saves the lost device's `pipelineCacheData()` over the good file. Dormant: the job
+  QRhi builds no pipeline, so the blob is empty. Fix: the device's destruction tells its service that the device was
+  lost (`replaceDevice` knows: `reallyLost`) before `stop()`.
+- **L3. The cache file's "last writer wins" is "some writer wins", and the real save path is unexercised.** In
+  `pipeline_cache_self_test`, run three times (`audit11_controls/cache_selftest.py`), 31 to 41 of each writer's 60 saves
+  fail (on Windows a rename over a file a reader holds open fails) and 12 to 21 reads cannot open the file. There are
+  never torn reads, and the final file is always one writer's. The test requires only `saved > 0`. Meanwhile
+  `job_service_check`'s `pipeline_cache_by_rule` counts `save_failed` as red, so two windows tearing down at once would
+  red the harness on acceptable behaviour. No real QRhi blob has ever been written or loaded through
+  `setPipelineCacheData`. Fix: treat a failed commit as a reported skip, not red, and make the plan's wording match;
+  run the real-blob round trip when the first pipeline on the job QRhi or the first raw `VkPipelineCache` exists.
+- **L4. The release round's stated negative control never ran.** The docstring says "Its negative control is the ABI
+  29 module, whose in-frame release waited for the queue". The agent's journal says this was not run (ABI 29 has no
+  in-frame detach). On Vulkan, `pool_deferred_not_destroyed` carries the round. On OpenGL, `no_wait_inside_the_frame`
+  is vacuous, since OpenGL never waits. The proof itself does have teeth: Qt 6.12's `endOffscreenFrame` waits only
+  when readbacks are scheduled, so the round's frames really overlap (two in flight) and validation would see a pool
+  destroyed early. Fix: correct the docstring, and drop the OpenGL check or say it is informational.
+- **L5. Qt-private fragility, contained.** `QQuickRenderControlPrivate::resetRhi(const QQuickGraphicsConfiguration &)`
+  is the same in the 6.11.2 header and the 6.12.0 source. The build pins PySide6's Qt, and the module refuses a
+  different runtime Qt (`module.cpp:3177`), so an upgrade forces a rebuild that fails to compile if the signature
+  changes. `resetRhi` deletes the owned QRhi and the offscreen surface but does not clear `QQuickWindowPrivate::rhi`;
+  `initialize()` reassigns it. If `initialize()` fails in `recover`, `window->rhi()` dangles. The hidden host stops
+  rendering then, and its frame source reads `control->rhi()`, so this is contained. Recheck both facts against Qt
+  source at each Qt upgrade (with N3.4's `beginExternal` box).
+- **L6. The parent box's other parts are not on this branch.** Lazy creation, release at retirement and at a mode
+  switch, pipelines built ahead and warmed gradually, and the P2 audit's working-set and GPU-memory rerun are untouched.
+  The `VK_EXT_device_fault` log exists but has never executed (M1). These are plan bookkeeping, not defects.
+
+### Held (controls run, all as expected)
+
+- The agent's proof rerun on ABI 30 (`20261121_n36_audit_rerun/`): rebuild, control and release PASS on both APIs.
+  Validation was loaded with no unexplained messages (10 errors, all the recorded Qt defect A). Both forced losses
+  gave a frame equal to the frame before (0 differing pixels), and each lost device's teardown ran in order (job
+  service stopped, `vkDeviceWaitIdle`, `vkDestroyDevice`, `resetDeviceFunctions`). The children's stderr was empty
+  (no Qt warnings) for OpenGL and Vulkan.
+- The rebuild round's power: a harness copy whose lost edge does not send the pictures again
+  (`make_controls.py`, `ctl_vk.json`) fails `frame_equals_the_one_before` on both losses (230,400 pixels, up to 254
+  levels) and `resent_through_the_devices_jobs`. The control round's records judged as a swap (`show_child.py ... judge`)
+  fail five checks (`device_swapped`, `qrhi_rebuilt_on_new_device`, `host_reports_new_device`, `lost_device_destroyed`,
+  `qrhi_before_on_old_device`). So the slot's `setGraphicsDevice` is what moves Qt's rebuild.
+- Threading I checked against Qt 6.12 and found safe: `QVulkanInstance::deviceFunctions` and `resetDeviceFunctions` take
+  `deviceFuncsMutex`, so devices made and destroyed on a render thread do not race other windows' or job threads'
+  lookups. `setGraphicsDevice` is a plain store, read on the same render thread by `createRhi`. The raw queue's
+  release, at stamp + FramesInFlight inside the frame after `beginFrame` waited for that slot, is correct, and its
+  entries drain before `vkDestroyDevice`.
+- Tests: `test_native_core_device_loss.py`, `test_native_core_pipeline_cache.py` (on the module),
+  `test_native_core_release_timing.py`, `test_native_post_stages.py`, `test_quick_backend_owner.py`: 60 passed.

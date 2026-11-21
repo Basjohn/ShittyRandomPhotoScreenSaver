@@ -29,6 +29,8 @@
 // Render thread only, but the declarations (any thread) and the process-wide counts (any thread).
 #pragma once
 
+#include "rhi_owned.h"
+
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>
@@ -245,8 +247,8 @@ public:
         quint32 vertexCount = 0;
         quint32 instanceCount = 0;
         bool storage = false;         // N3.3: its vertices are also a StorageBuffer (compute reads them)
-        std::unique_ptr<QRhiBuffer> vertices;
-        std::unique_ptr<QRhiBuffer> instances;
+        RhiOwned<QRhiBuffer> vertices;
+        RhiOwned<QRhiBuffer> instances;
         qint64 bytes = 0;
     };
 
@@ -291,7 +293,7 @@ public:
         StreamDeclaration decl;
         const frame_abi::Field *field = nullptr; // into the schema the streams hold (m_schema: audit 4 H1)
         const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4), the same
-        std::unique_ptr<QRhiBuffer> buffer;
+        RhiOwned<QRhiBuffer> buffer;
         QByteArray staging;                       // a storage stream's bytes, kept across records (D15 point 4)
         quint32 used = 0;                         // bytes written by the last record (an instance stream's draw)
     };
@@ -328,8 +330,8 @@ public:
 private:
     QList<Stream *> m_streams;  // owned (Qt containers only)
     QSharedPointer<const RuntimeSchema> m_schema; // the schema they were built from (audit 4 H1)
-    std::unique_ptr<QRhiBuffer> m_arena;
-    std::unique_ptr<QRhiBuffer> m_batchCommands;
+    RhiOwned<QRhiBuffer> m_arena;
+    RhiOwned<QRhiBuffer> m_batchCommands;
     quint32 m_arenaBytes = 0;
     quint64 m_generation = 0;
 };

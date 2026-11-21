@@ -16,7 +16,13 @@
 //   extensions' structures, robustBufferAccess off; facts A6.2).
 // - Teardown (facts A7): windows first (their QRhi is gone), then each device (vkDeviceWaitIdle, vkDestroyDevice,
 //   resetDeviceFunctions), then the instance (the adopting QVulkanInstance, our messenger, vkDestroyInstance).
-// Every function here runs on the GUI thread except the messenger callback, which any thread may call.
+// - Device loss (N3.6, Current_Plan.md item 8b; research N3 section 11): Qt's recovery re-adopts the device it was given,
+//   so after a loss the host makes a new device here and hands it to the window (giveDeviceTo) from the window's
+//   sceneGraphInvalidated, on the render thread, before Qt's next QRhi; the lost one is destroyed once Qt's QRhi on it is
+//   gone. faultReport() reads VK_EXT_device_fault's detail of a lost device (logged once per lost device).
+// Every function here runs on the GUI thread except the messenger callback, which any thread may call, and the device
+// loss path (create, giveDeviceTo, faultReport, destroy), which the render thread runs while the window's frame is
+// stopped (host_adapter.cpp).
 #pragma once
 
 #include <QtCore/QByteArray>
@@ -27,6 +33,7 @@
 #include <memory>
 
 class QQuickWindow;
+class QVulkanDeviceFunctions;
 class QVulkanInstance;
 
 namespace srpss_core {
@@ -57,6 +64,33 @@ QJsonObject vulkanDeviceFacts(quint64 device);
 void setDeviceWithoutIndependentBlend(bool without);
 bool deviceWithoutIndependentBlend();
 
+// N3.6, release timing (research N3 section 12): a raw Vulkan object the core made itself (never QRhi's, whose deferred
+// release QRhi runs), retired while a frame in flight may still use it. QRhi's own rule applied by the core: the object
+// is stamped with the window's frame edge of its retirement and destroyed at the first frame edge at least
+// FramesInFlight later (Qt's beginFrame of that frame waited for its slot's fence, so the GPU is done with it), or at
+// once after its device's queue is idle (QRhi::finish outside a frame, the device's vkDeviceWaitIdle at teardown).
+// Never a wait inside a frame. One device per window (D6), so a device's stamps are its window's edges.
+enum class RawVulkanKind {
+    QueryPool = 0, // the GPU timer's timestamp pool (gpu_timer.cpp)
+};
+struct RawVulkanObject
+{
+    quint64 device = 0;                        // VkDevice
+    QVulkanDeviceFunctions *functions = nullptr; // the adopting instance's for that device
+    RawVulkanKind kind = RawVulkanKind::QueryPool;
+    quint64 handle = 0;                        // the object (a non-dispatchable handle)
+};
+// Any thread: queued, to go at the window edge `retiredAtEdge + framesInFlight` or at the device's idle.
+void deferRawVulkanDestroy(const RawVulkanObject &object, qint64 retiredAtEdge);
+// Render thread, at the frame edge `edge` of the device's window: the entries whose frames completed go. Returns how many.
+int releaseRawVulkan(quint64 device, qint64 edge, int framesInFlight);
+// After the device's queues are idle (QRhi::finish() outside a frame, vkDeviceWaitIdle): every entry of the device goes.
+int releaseAllRawVulkan(quint64 device);
+// One atomic: whether any entry waits (the frame edge's test at rest).
+bool rawVulkanPending();
+// The process's counts: deferred, released at edges, released at idle, pending.
+QJsonObject rawVulkanCountsJson();
+
 // One VkDevice for one Qt Quick window, on the process instance.
 class VulkanDevice
 {
@@ -70,6 +104,13 @@ public:
     // Before the window's scene graph is initialised: our QVulkanInstance and this device
     // (QQuickGraphicsDevice::fromDeviceObjects, family, queue 0); with validation, Qt's QRhi names its objects.
     void applyTo(QQuickWindow *window) const;
+    // N3.6, after a device loss: only this device for the window's next QRhi (QQuickWindow::setGraphicsDevice, a plain
+    // store Qt reads when it creates its QRhi again). The render thread, from the window's sceneGraphInvalidated.
+    void giveDeviceTo(QQuickWindow *window) const;
+    // N3.6: VK_EXT_device_fault's detail (the description, each fault address and vendor fault code) of this device,
+    // for a device that was lost; {"queried": false, "why": ...} without the extension or its feature. Any thread.
+    QJsonObject faultReport() const;
+    bool deviceFaultEnabled() const { return m_deviceFault; }
     // vkDeviceWaitIdle, vkDestroyDevice, resetDeviceFunctions (idempotent). Only after every QRhi on the device is gone.
     QStringList destroy();
 
@@ -88,6 +129,7 @@ private:
     quint64 m_physicalDevice = 0; // VkPhysicalDevice
     quint32 m_family = 0;
     quint32 m_queues = 1;
+    bool m_deviceFault = false;   // VK_EXT_device_fault and its deviceFault feature enabled
     QString m_name;
     std::shared_ptr<JobService> m_jobs;
 };

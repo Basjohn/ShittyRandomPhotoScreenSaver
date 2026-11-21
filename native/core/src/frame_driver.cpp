@@ -2,12 +2,27 @@
 
 #include "backdrop.h"
 #include "surfaces.h"
+#include "vulkan_context.h" // N3.6: the device's deferred raw Vulkan objects
 
 #include <rhi/qrhi.h>
+#include <rhi/qrhi_platform.h>
 
 #include <QtQuick/QQuickWindow>
 
 namespace srpss_core {
+
+namespace {
+
+// The VkDevice a QRhi runs on (0 when it is not Vulkan).
+quint64 rhiVulkanDevice(QRhi *rhi)
+{
+    if (!rhi || rhi->backend() != QRhi::Vulkan)
+        return 0;
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    return handles ? quint64(reinterpret_cast<quintptr>(handles->dev)) : 0;
+}
+
+} // namespace
 
 FrameDriver::FrameDriver(std::shared_ptr<const HostFrameSource> source)
     : m_source(std::move(source)), m_samples(std::make_shared<GpuSampleQueue>())
@@ -159,7 +174,7 @@ void FrameDriver::releaseLoadAndTimer(QRhi *rhi, bool outsideFrame)
         load->release(); // QRhi releases the native objects once the frames that use them completed
     if (m_timer) {
         QMutexLocker lock(&m_timerMutex);
-        m_timer->release(rhi, outsideFrame);
+        m_timer->release(rhi, outsideFrame, windowEdge()); // N3.6: deferred inside a frame, never waited for there
         m_lastTimerState = m_timer->stateJson();
         m_timer.reset();
     }
@@ -202,7 +217,7 @@ void FrameDriver::applyPassChanges(QRhi *rhi, qint64 edge)
     if (timerConfig.enabled) {
         QMutexLocker lock(&m_timerMutex);
         if (m_timer && m_timer->stopped()) {
-            m_timer->release(rhi, false);
+            m_timer->release(rhi, false, windowEdge());
             m_lastTimerState = m_timer->stateJson();
             m_timer.reset();
         }
@@ -281,6 +296,10 @@ void FrameDriver::onBeforeRendering()
         if (m_surfaces->retiring() && rhi)
             m_retiredReleased.fetchAndAddRelaxed(
                 m_surfaces->releaseRetired(windowEdge, rhi->resourceLimit(QRhi::FramesInFlight)));
+        // N3.6: the device's raw Vulkan objects whose frames completed (none at rest: one atomic).
+        if (rawVulkanPending() && rhi)
+            m_rawReleased.fetchAndAddRelaxed(
+                releaseRawVulkan(rhiVulkanDevice(rhi), windowEdge, rhi->resourceLimit(QRhi::FramesInFlight)));
     }
     if (m_detach.loadAcquire()) {
         m_edgesAfterDetach.fetchAndAddRelaxed(1);
@@ -317,7 +336,7 @@ void FrameDriver::onBeforeRendering()
         m_timer->beginFrame(rhi, cb, edge);
         m_timerEdges.fetchAndAddRelaxed(1);
         if (m_timer->stopped() && !m_timer->config().keepWhenOff && m_timer->drained(rhi, edge)) {
-            m_timer->release(rhi, false);
+            m_timer->release(rhi, false, windowEdge());
             m_lastTimerState = m_timer->stateJson();
             m_timer.reset();
         }
@@ -447,7 +466,22 @@ bool FrameDriver::recordBackdropPyramids(QRhi *rhi, QRhiCommandBuffer *cb)
 void FrameDriver::onSceneGraphInvalidated()
 {
     // Render thread, outside any frame, the QRhi still alive: everything the core holds on it goes now.
-    releaseOutsideFrame(m_source->rhi(), QStringLiteral("scene graph invalidated"));
+    QRhi *rhi = m_source->rhi();
+    releaseOutsideFrame(rhi, QStringLiteral("scene graph invalidated"));
+    // N3.6, release timing (rhi_owned.h): no frame of this QRhi follows its scene graph's invalidation (a window retired
+    // or hidden, the saver's exit, a lost path), so what the core and Qt Quick's nodes retired goes at this edge, outside
+    // any frame: QRhi::finish() (its queue idle, then its deferred releases), then the device's raw objects. Never inside
+    // a frame (a finish mid-frame blanked Vulkan presentation in d1_run, 14 Nov), never on a lost device.
+    if (rhi && !rhi->isRecordingFrame() && !rhi->isDeviceLost()) {
+        rhi->finish();
+        m_noFrameFinishes.fetchAndAddRelaxed(1);
+        m_rawReleased.fetchAndAddRelaxed(releaseAllRawVulkan(rhiVulkanDevice(rhi)));
+    }
+}
+
+qint64 FrameDriver::windowEdge() const
+{
+    return m_surfaces ? m_surfaces->edges() : -1;
 }
 
 QJsonObject FrameDriver::stateJson() const
@@ -472,6 +506,8 @@ QJsonObject FrameDriver::stateJson() const
     o.insert(QStringLiteral("gpu_samples_appended"), m_samples->appended());
     o.insert(QStringLiteral("gpu_samples_dropped"), m_samples->dropped());
     o.insert(QStringLiteral("retired_outputs_released"), m_retiredReleased.loadRelaxed());
+    o.insert(QStringLiteral("raw_vulkan_released"), m_rawReleased.loadRelaxed());     // N3.6
+    o.insert(QStringLiteral("no_frame_finishes"), m_noFrameFinishes.loadRelaxed());   // N3.6
     o.insert(QStringLiteral("backdrop_builds"), m_backdropBuilds.loadRelaxed());
     o.insert(QStringLiteral("window_backdrops"), m_surfaces ? int(m_surfaces->backdrops().size()) : 0);
     o.insert(QStringLiteral("window_edges"), m_surfaces ? m_surfaces->edges() : 0);

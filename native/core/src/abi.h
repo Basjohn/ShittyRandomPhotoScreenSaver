@@ -149,4 +149,13 @@
 // pixel to the scene's texel; the surface's own, as at ABI 28, for an unturned card). A turned card's bloom or composite
 // without the declaration is still refused. stage_control's scene_frame_surface (the negative control: the turned scene
 // anchored in the surface's frame). Unchanged for an unturned card.
-#define SRPSS_NATIVE_CORE_ABI 29
+// 30 (N3.6, lifetime: the device loss): host_force_device_lost (harness: the hidden host's next frame takes the lost
+// path, swap_device False its control); the host states' device_losses and lost_device_alive, the hidden host's
+// loss_forced_pending and vulkan_live_devices, the device facts' device_fault. A window host replaces a lost Vulkan
+// device itself (no call). Backward compatible for every earlier caller. Within 30 (N3.6's pipeline cache, the same
+// unbuilt round): pipeline_cache_self_test (GPU-free) and pipeline_cache_directory (the harness's directory of the
+// core's file); the job service's stop record's pipeline_cache_load and pipeline_cache_save. Within 30 (N3.6's release
+// timing): host_detach's at_frame_edge (harness, a hidden host), raw_vulkan_counts, the frame driver state's
+// raw_vulkan_released and no_frame_finishes, the GPU timer state's deferred_releases; every QRhi resource is retired by
+// deleteLater (rhi_owned.h), the GPU timer's pool retired inside a frame goes to the device's deferred queue.
+#define SRPSS_NATIVE_CORE_ABI 30

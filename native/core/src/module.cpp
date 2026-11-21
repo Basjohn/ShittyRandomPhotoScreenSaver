@@ -30,6 +30,7 @@
 #include "mode_content.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
+#include "pipeline_cache.h"
 #include "process_counters.h"
 #include "scene_targets.h"
 #include "spectrum.h"
@@ -280,19 +281,27 @@ PyObject *host_reattach(PyObject *, PyObject *args)
 PyObject *host_detach(PyObject *, PyObject *args)
 {
     long long handle = 0;
-    if (!PyArg_ParseTuple(args, "L", &handle))
+    int atFrameEdge = 0;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &atFrameEdge))
         return nullptr;
     srpss_core::Host *host = hostOf(handle);
     if (!host)
         return nullptr;
+    auto *hidden = dynamic_cast<srpss_core::HiddenHost *>(host);
     QString error;
     bool ok = false;
     Py_BEGIN_ALLOW_THREADS // the hidden host waits for its render thread
-    ok = host->detach(&error);
+    // N3.6: at the frame edge is how a window host always releases; on a hidden host it is the harness's in-frame path.
+    ok = (atFrameEdge && hidden) ? hidden->detachAtFrameEdge(&error) : host->detach(&error);
     Py_END_ALLOW_THREADS
     if (!ok)
         return runtimeError(error);
     Py_RETURN_NONE;
+}
+
+PyObject *raw_vulkan_counts(PyObject *, PyObject *)
+{
+    return pyJson(srpss_core::rawVulkanCountsJson());
 }
 
 PyObject *host_state(PyObject *, PyObject *args)
@@ -359,6 +368,21 @@ PyObject *host_invalidate_scene_graph(PyObject *, PyObject *args)
     ok = host->invalidateSceneGraph(&error);
     Py_END_ALLOW_THREADS
     if (!ok)
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
+PyObject *host_force_device_lost(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int swapDevice = 1;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &swapDevice))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    if (!host->forceDeviceLoss(swapDevice != 0, &error))
         return runtimeError(error);
     Py_RETURN_NONE;
 }
@@ -1397,6 +1421,31 @@ PyObject *job_service_self_test(PyObject *, PyObject *args)
     result = srpss_core::jobServiceSelfTestJson(scriptJson);
     Py_END_ALLOW_THREADS
     return pyJson(result);
+}
+
+// ---------------------------------------------------------------- N3.6: the core's pipeline cache file
+
+PyObject *pipeline_cache_self_test(PyObject *, PyObject *args)
+{
+    const char *directory = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &directory))
+        return nullptr;
+    const QString dir = QString::fromUtf8(directory);
+    QByteArray result;
+    Py_BEGIN_ALLOW_THREADS // its two writer threads replace the file while it reads
+    result = srpss_core::pipelineCacheSelfTestJson(dir);
+    Py_END_ALLOW_THREADS
+    return pyJson(result);
+}
+
+PyObject *pipeline_cache_directory(PyObject *, PyObject *args)
+{
+    const char *directory = nullptr;
+    if (!PyArg_ParseTuple(args, "|z", &directory))
+        return nullptr;
+    if (directory)
+        srpss_core::setPipelineCacheDirectory(QString::fromUtf8(directory));
+    return pyStr(srpss_core::pipelineCacheDirectory());
 }
 
 PyObject *composite_mode_texture_remove(PyObject *, PyObject *args)
@@ -2828,13 +2877,20 @@ PyMethodDef methods[] = {
       "y_up_in_framebuffer, frame)." },
     { "host_reattach", host_reattach, METH_VARARGS, "(handle) -> None: a new frame driver on the host's window." },
     { "host_detach", host_detach, METH_VARARGS,
-      "(handle) -> None: the frame driver stops and releases on the render thread." },
+      "(handle, at_frame_edge=False) -> None: the frame driver stops and releases on the render thread; at_frame_edge "
+      "(N3.6, harness, a hidden host) releases inside its next frame as a window host does." },
+    { "raw_vulkan_counts", raw_vulkan_counts, METH_NOARGS,
+      "() -> JSON str: N3.6's deferred raw Vulkan objects: deferred, released at frame edges, released at idle, "
+      "pending." },
     { "host_state", host_state, METH_VARARGS, "(handle) -> JSON str: the host and its frame drivers." },
     { "host_set_content", host_set_content, METH_VARARGS,
       "(handle, quick_item_address) -> None: the hidden host renders this item (0: none)." },
     { "host_frames", host_frames, METH_VARARGS, "(handle, count=1) -> None: the hidden host renders frames." },
     { "host_invalidate_scene_graph", host_invalidate_scene_graph, METH_VARARGS,
       "(handle) -> None: harness; invalidate the hidden host's actual scene graph on its render thread; close next." },
+    { "host_force_device_lost", host_force_device_lost, METH_VARARGS,
+      "(handle, swap_device=True) -> None: harness (N3.6); the hidden host's next frame takes the lost path (a new "
+      "device, Qt's QRhi and every core object made again); swap_device False keeps the device (the control)." },
     { "host_close", host_close, METH_VARARGS,
       "(handle) -> JSON str: detaches; a hidden host also tears down its window and device." },
     { "host_probe", host_probe, METH_VARARGS,
@@ -2940,6 +2996,13 @@ PyMethodDef methods[] = {
     { "job_service_self_test", job_service_self_test, METH_VARARGS,
       "(script_json) -> JSON str: N3.8's GPU-free test of the job service's thread, latch, cancellation and teardown "
       "under a scripted backend (tests/test_native_core_jobs.py)." },
+    { "pipeline_cache_self_test", pipeline_cache_self_test, METH_VARARGS,
+      "(directory) -> JSON str: N3.6's GPU-free test of the core's pipeline cache file (the format's accept and every "
+      "refusal, the round trip, two writers replacing it while it is read) in directory "
+      "(tests/test_native_core_pipeline_cache.py)." },
+    { "pipeline_cache_directory", pipeline_cache_directory, METH_VARARGS,
+      "(directory=None) -> str: the core's pipeline cache directory for devices made afterwards; a directory (harness "
+      "only) replaces it, an empty string restores Qt Quick's own (<CacheLocation>/qtpipelinecache-<abi>)." },
     { "mode_core_members", mode_core_members, METH_NOARGS,
       "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
     { "mode_core_values", mode_core_values, METH_VARARGS,

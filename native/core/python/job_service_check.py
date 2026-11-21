@@ -340,7 +340,37 @@ def round_swap(core, engine, app, api: str, folder: Path, out: Path, photo_paths
     if tiles:
         _sheet(out / f"job_service_{api}.png", tiles)
     facts["drawn_hashes"] = drawn if "drawn" in locals() else {}
+    if vulkan:
+        # N3.6: the job QRhi loaded the core's pipeline cache file at its creation and kept its rule at the device's
+        # orderly teardown (the run's own directory: child() points the module at it).
+        facts["pipeline_cache"] = pipeline_cache_records(facts.get("host_close"))
+        checks["pipeline_cache_loaded_and_saved_by_rule"] = pipeline_cache_by_rule(facts["pipeline_cache"])
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def pipeline_cache_records(host_close) -> list[dict]:
+    """The job services' stop records in a closed host's device teardown (``job service stopped: <json>``)."""
+    prefix = "job service stopped: "
+    records = []
+    for step in (host_close or {}).get("device_teardown") or []:
+        if isinstance(step, str) and step.startswith(prefix):
+            try:
+                records.append(json.loads(step[len(prefix):]))
+            except ValueError:
+                records.append({})
+    return records
+
+
+def pipeline_cache_by_rule(records: list[dict]) -> bool:
+    """One service whose QRhi read the core's file at its creation (absent in a fresh directory, else accepted or
+    refused with its reason) and, at the orderly teardown, wrote its blob or had nothing to write."""
+    if len(records) != 1:
+        return False
+    load = records[0].get("pipeline_cache_load") or {}
+    save = records[0].get("pipeline_cache_save") or {}
+    loaded = str(load.get("result", "")).startswith(("absent", "accepted", "rejected: "))
+    saved = float(save.get("saved_bytes", 0)) > 0 or str(save.get("save", "")).startswith("nothing to save")
+    return loaded and saved
 
 
 def round_lifetime(core, engine, app, api: str, folder: Path, photo_paths) -> dict:
@@ -439,6 +469,9 @@ def child(args) -> dict:
     engine = QQmlEngine()
     with tempfile.TemporaryDirectory(prefix="srpss_n38_") as scratch:
         folder = Path(scratch)
+        if vulkan:
+            # N3.6: the job QRhi's pipeline cache file in the run's own directory, never the user's cache.
+            record["pipeline_cache_directory"] = core.pipeline_cache_directory(folder / "pipeline_cache")
         try:
             for name in args.rounds:
                 if vulkan:

@@ -8,6 +8,8 @@
 // Render thread only (the QRhi's thread).
 #pragma once
 
+#include "rhi_owned.h"
+
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
 #include <QtCore/QSize>
@@ -29,10 +31,10 @@ namespace srpss_core {
 struct ColorTarget
 {
     // Destroyed in reverse order: the render target, its pass descriptor, the depth-stencil buffer, then the texture.
-    std::unique_ptr<QRhiTexture> texture;
-    std::unique_ptr<QRhiRenderBuffer> depthStencil; // only a Qt Quick target's (createColorTarget's withDepthStencil)
-    std::unique_ptr<QRhiRenderPassDescriptor> renderPass;
-    std::unique_ptr<QRhiTextureRenderTarget> renderTarget;
+    RhiOwned<QRhiTexture> texture;
+    RhiOwned<QRhiRenderBuffer> depthStencil; // only a Qt Quick target's (createColorTarget's withDepthStencil)
+    RhiOwned<QRhiRenderPassDescriptor> renderPass;
+    RhiOwned<QRhiTextureRenderTarget> renderTarget;
 
     ColorTarget();
     ~ColorTarget();

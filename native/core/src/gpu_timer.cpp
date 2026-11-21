@@ -1,5 +1,7 @@
 #include "gpu_timer.h"
 
+#include "vulkan_context.h" // N3.6: the raw pool's deferred destruction
+
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
 
@@ -573,20 +575,35 @@ bool GpuTimer::drained(QRhi *rhi, qint64 edge) const
     return !pending || since > kRingFrames;
 }
 
-void GpuTimer::release(QRhi *rhi, bool outsideFrame)
+void GpuTimer::release(QRhi *rhi, bool outsideFrame, qint64 windowEdge)
 {
     if (m_vk) {
         if (m_vk->pool != VK_NULL_HANDLE) {
+            bool deferred = false;
             if (m_lastWriteEdge >= 0) {
                 if (outsideFrame && rhi) {
                     rhi->finish(); // the frames that wrote the pool complete first
                 } else if (!outsideFrame && m_edge - m_lastWriteEdge <= m_framesInFlight) {
-                    // A detach inside a frame: the earlier frames may still use the pool. Once, at teardown only.
-                    m_vk->df->vkQueueWaitIdle(m_vk->queue);
-                    ++m_releaseWaits;
+                    // A detach inside a frame: the earlier frames may still use the pool (this frame has not written
+                    // it). N3.6: the device's deferred queue destroys it once Qt's frames waited for them; a wait inside
+                    // the frame only without the window's edge.
+                    if (windowEdge >= 0) {
+                        RawVulkanObject object;
+                        object.device = quint64(reinterpret_cast<quintptr>(m_vk->device));
+                        object.functions = m_vk->df;
+                        object.kind = RawVulkanKind::QueryPool;
+                        object.handle = quint64(reinterpret_cast<quintptr>(m_vk->pool));
+                        deferRawVulkanDestroy(object, windowEdge);
+                        ++m_deferredReleases;
+                        deferred = true;
+                    } else {
+                        m_vk->df->vkQueueWaitIdle(m_vk->queue);
+                        ++m_releaseWaits;
+                    }
                 }
             }
-            m_vk->df->vkDestroyQueryPool(m_vk->device, m_vk->pool, nullptr);
+            if (!deferred)
+                m_vk->df->vkDestroyQueryPool(m_vk->device, m_vk->pool, nullptr);
             m_vk->pool = VK_NULL_HANDLE;
         }
         m_vk.reset();
@@ -632,6 +649,7 @@ QJsonObject GpuTimer::stateJson() const
     o.insert(QStringLiteral("abandoned_slots"), m_abandonedSlots);
     o.insert(QStringLiteral("over_capacity"), m_overCapacity);
     o.insert(QStringLiteral("release_waits"), m_releaseWaits);
+    o.insert(QStringLiteral("deferred_releases"), m_deferredReleases);
     o.insert(QStringLiteral("resolve_ns_max"), m_resolveNsMax);
     o.insert(QStringLiteral("resolve_ns_total"), m_resolveNsTotal);
     o.insert(QStringLiteral("latency_min"), m_latencyMin);

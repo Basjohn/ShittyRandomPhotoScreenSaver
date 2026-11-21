@@ -566,6 +566,31 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     at that edge, outside any frame; never mid-frame, which blanked Vulkan presentation in d1_run on 14 Nov.
     Raw Vulkan objects go to a deferred-delete queue keyed to their frame slot's fence, drained at device idle on
     teardown.
+  Checkpoint audit 11 (21 Nov, `Docs/Future_Work/Checkpoint_Audits_Nov21.md`; the branch at ebfe0944a is safe to merge):
+  - [ ] M1: a harness-only real loss: Qt's own QRhi must report `isDeviceLost()`. For example, the hidden host's
+    device-function table answers `vkQueueSubmit` with `VK_ERROR_DEVICE_LOST` once, with no environment flag. Then rerun
+    the rebuild round with `qrhi_lost` true and `faultReport` present. Or the lead records the window record's loss slots
+    (Qt's threaded loop) as accepted unproven.
+  - [ ] M2: a failed `vkCreateDevice` in `replaceDevice` is retried (for example, at the record's next frame edge or
+    expose while `device_swapped` is false) instead of leaving the window black. Proof: M1's injection plus a forced
+    create failure.
+  - [ ] M3: the rebuild round also crosses a loss with a mode program that has storage, a scene target, bloom and
+    meshes, with Spectrum, and with the background layer and a backdrop. Each frame after the loss equals the frame
+    before it.
+  - [ ] L1: `rhi_owned.h` states that a wrapper is retired before its QRhi, always: `deleteLater` on a never-created
+    wrapper after its QRhi went is a use-after-free in Qt 6.12. `device_loss_check.py` proves that no core wrapper is
+    live after `sceneGraphInvalidated`.
+  - [ ] L2: a lost device's destruction tells its job service that the device was lost before `stop()`, so the job
+    teardown never saves a lost device's cache (today it trusts the job thread's own observation).
+  - [ ] L3: a failed cache-file commit is a reported skip, not red in `pipeline_cache_by_rule`, and the plan's "last
+    writer wins" says "some writer wins". Run the real-blob round trip when the job QRhi's first pipeline, or the first
+    raw `VkPipelineCache`, exists.
+  - [ ] L4: `device_loss_check.py`'s release docstring drops the ABI 29 control it never ran; the OpenGL
+    `no_wait_inside_the_frame` check is dropped or marked informational.
+  - [ ] L5: at each Qt upgrade, recheck `QQuickRenderControlPrivate::resetRhi` against Qt source: its signature, and
+    that `initialize()` reassigns `QQuickWindowPrivate::rhi`.
+  - [ ] L6: the parent box's lazy creation, mode-switch release, pre-built and gradually warmed pipelines, and P2
+    working-set/GPU-memory rerun are still open. They are not on the audited branch.
 - [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the composite) and the
   Expanded Visualizer's display-size targets at 4K (the M6 budget).
 - [ ] N3.9 A display move keeps a mode's GPU-held history (1C.2, plan 01 M3c "Display moves retarget the live

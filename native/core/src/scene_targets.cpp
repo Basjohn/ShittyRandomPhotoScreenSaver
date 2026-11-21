@@ -1,5 +1,6 @@
 // Scene targets (N3.1, D14): scene_targets.h has the contract.
 #include "scene_targets.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QJsonValue>
 
@@ -106,7 +107,7 @@ void countTargetObjects(SceneTargets::Target &t)
 {
     qint64 bytes = 0;
     int textures = 0;
-    const auto add = [&](const std::unique_ptr<QRhiTexture> &texture) {
+    const auto add = [&](const RhiOwned<QRhiTexture> &texture) {
         if (texture) {
             ++textures;
             bytes += textureBytes(texture.get());
@@ -989,7 +990,7 @@ bool SceneTargets::step(Target &t, int index, QString *error)
     const QByteArray label = QByteArrayLiteral("srpss core scene target ") + t.decl.name;
     const int colourCount = int(t.decl.colour.size());
     const int k = t.stepsDone;
-    const auto make = [&](std::unique_ptr<QRhiTexture> &texture, QRhiTexture::Format format, int samples,
+    const auto make = [&](RhiOwned<QRhiTexture> &texture, QRhiTexture::Format format, int samples,
                           QRhiTexture::Flags flags, const QByteArray &name) {
         if (!t.newLayout && texture) {
             texture->setPixelSize(t.allocation);

@@ -46,7 +46,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 29
+EXPECTED_ABI = 30
 HOST_KINDS = ("window", "hidden")
 
 
@@ -311,6 +311,24 @@ class NativeCore:
     def job_service_self_test(self, script: list[dict]) -> dict:
         """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
         return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
+
+    def raw_vulkan_counts(self) -> dict:
+        """N3.6: the raw Vulkan objects the core retired inside a frame (``vulkan_context.h``): ``raw_vulkan_deferred``,
+        ``raw_vulkan_released_at_edges``, ``raw_vulkan_released_at_idle`` and ``raw_vulkan_pending``."""
+        return json.loads(self.module.raw_vulkan_counts())
+
+    def pipeline_cache_self_test(self, directory: str | Path) -> dict:
+        """N3.6, GPU-free: the core's pipeline cache file (``pipeline_cache.h``) in ``directory``: the format's accept
+        and every refusal, the round trip, and two writer threads replacing the file while it is read."""
+        return json.loads(self.module.pipeline_cache_self_test(str(directory)))
+
+    def pipeline_cache_directory(self, directory: str | Path | None = None) -> str:
+        """N3.6: the directory of the core's pipeline cache file for devices made afterwards (Qt Quick's own,
+        ``<CacheLocation>/qtpipelinecache-<abi>``). A ``directory`` (harness only, so a run never touches the user's
+        cache) replaces it; ``""`` restores Qt's."""
+        if directory is None:
+            return str(self.module.pipeline_cache_directory())
+        return str(self.module.pipeline_cache_directory(str(directory)))
 
     #: The work a runtime destruction barrier waits for (audit N38 M3): only work in flight, which ends by itself (a job
     #: queued or running, a release queued to its job thread, a replaced output waiting for the frames that sampled it,

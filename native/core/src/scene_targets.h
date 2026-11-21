@@ -47,6 +47,7 @@
 #pragma once
 
 #include "targets.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
@@ -258,19 +259,19 @@ public:
         QSize content;        // the needed size (the surface's or the declared)
         QSize allocation;
         int samples = 1;      // effective (clamped)
-        std::unique_ptr<QRhiTexture> colour[kMaxTargetColour];
-        std::unique_ptr<QRhiTexture> resolve[kMaxTargetColour]; // QRhi's average, or a nearest attachment's R32F
-        std::unique_ptr<QRhiTexture> depth;
-        std::unique_ptr<QRhiTexture> depthNearest;              // the depth's nearest resolve (R32F window depth)
-        std::unique_ptr<QRhiRenderPassDescriptor> renderPass;
-        std::unique_ptr<QRhiTextureRenderTarget> renderTarget;
+        RhiOwned<QRhiTexture> colour[kMaxTargetColour];
+        RhiOwned<QRhiTexture> resolve[kMaxTargetColour]; // QRhi's average, or a nearest attachment's R32F
+        RhiOwned<QRhiTexture> depth;
+        RhiOwned<QRhiTexture> depthNearest;              // the depth's nearest resolve (R32F window depth)
+        RhiOwned<QRhiRenderPassDescriptor> renderPass;
+        RhiOwned<QRhiTextureRenderTarget> renderTarget;
         // The nearest resolves' render targets (slot: a colour attachment, or kNearestDepthSlot).
-        std::unique_ptr<QRhiRenderPassDescriptor> nearestRenderPass[kNearestSlots];
-        std::unique_ptr<QRhiTextureRenderTarget> nearestTarget[kNearestSlots];
-        std::unique_ptr<QRhiTexture> captureColour;
-        std::unique_ptr<QRhiTexture> captureDepth;
-        std::unique_ptr<QRhiRenderPassDescriptor> captureRenderPass;
-        std::unique_ptr<QRhiTextureRenderTarget> captureTarget;
+        RhiOwned<QRhiRenderPassDescriptor> nearestRenderPass[kNearestSlots];
+        RhiOwned<QRhiTextureRenderTarget> nearestTarget[kNearestSlots];
+        RhiOwned<QRhiTexture> captureColour;
+        RhiOwned<QRhiTexture> captureDepth;
+        RhiOwned<QRhiRenderPassDescriptor> captureRenderPass;
+        RhiOwned<QRhiTextureRenderTarget> captureTarget;
         int stepsDone = 0;
         int stepsTotal = 0;
         bool newLayout = true; // the next steps make new objects (else re-create the same at the new size)
