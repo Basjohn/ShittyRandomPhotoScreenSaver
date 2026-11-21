@@ -1019,6 +1019,13 @@ the feature (D3D11 is not stated).
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
+  - [ ] First, before any port reference is recorded (operator, 21 Nov): the terrain's sharp, block-like judder. On
+    Preset 1, terrain near the camera jumps up or down suddenly instead of moving smoothly. Likely visual, not design.
+    Root-cause on the Python side (where the height steps: the published field, its interpolation between frames, the
+    grid sampling), then smooth the motion there without smoothing the audio or deadening reactivity: the same peaks
+    and troughs, reached less sharply. Prove it with `neon_lake_music_response.py` before and after on a recorded take
+    (peak and trough heights kept, frame-to-frame height steps reduced) and a focused test with a control on the old
+    code; then the port's references are taken.
   - Reading (reference; Sonnet agent ac4e1a1c9d1ad93c4, 21 Nov, merged), as Waveform's and Extruded Bubble's readings: the
     record per frame and per Settings or card change, stream size rules, every pass with its targets and formats, how
     it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
@@ -3526,7 +3533,6 @@ Never Remove This Box. Restore It If Removed. Only Remove Contents As you place 
 ####################
 Reactivity Issues:
 1. WaveForm - Travel Direction for the overall mesh has no reactivity option to control its speed. It should have a range slider controlling speed from min-max depending on overall instensity. Quick Attack, Slow Decay but adding these as options is best. There also might be missing a overall base speed and idle speed of the mesh setting. Check, add what's missing and audit these controls so they don't conflict but complement each other. Default setting in all presets will be what it currently is as is our usual methodology.
-2. Neon Lake. Generally very much improved and still has work in plan but there is a lot of sharp movement on terrain currently. Sudden massive judder up or down that feels sharp blocklike instead of smooth. This is likely a visual issue not a design one. Preset 1 shows this easily, especially on terrain closer to the camera. Needs to be smoothed without smoothing the audio or deadening reactivity. Same peaks and bottoms but we get there less sharply.
 General Issues:
 Clicking a link in MC profiles/mode completely kills the cursor halo now.
 ###################
