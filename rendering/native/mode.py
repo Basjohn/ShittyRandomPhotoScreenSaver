@@ -227,9 +227,9 @@ class ModeTarget:
     previous_frame: bool = False
     #: N3.4 (D17 point 6): a mipped target (the defocus layer): single-sampled, surface-sized, without depth; its mips
     #: are QRhi's generateMips when a :class:`DefocusStep` reads it (D17 choice G). ABI 33 (N5.4): a mipped target no
-    #: defocus step reads is drawn like any target (a depth and an explicit size allowed) and its read attachments'
-    #: chains are generated after each run of passes on it (Python's glGenerateTextureMipmap); a :class:`PassSampler`
-    #: with ``mips`` reads its levels.
+    #: defocus step reads is drawn like any target (a depth and an explicit size allowed); a :class:`PassSampler` with
+    #: ``mips`` reads the levels of its RGBA16F attachments, whose chain the core's box kernel makes after each run
+    #: (``rendering.gl_programs.mip_chain``, the text the Python renderer runs; never the driver's generateMips).
     mips: bool = False
     #: ABI 33 (N5.4): ``"exact"``: allocated at the content's exact size (no bucket: the coarse levels and the 1x1 mean
     #: hold the content alone, Python's reflection target's), ``"bucket"``: D14 point 2's 64 px buckets.
@@ -477,17 +477,11 @@ class ModePass:
     #: N3.4 (D17 choice D): a pass on a :class:`TransparencyTarget` ships its sorted pack, what a device the gate does not
     #: admit draws into the owner (premultiplied over); it binds what ``pack`` binds and writes the owner's attachments.
     sorted_pack: bytes | None = None
-    #: ABI 33 (N5.4): ``"discard"``: the fragment may write locations past its scene target's attachments, which are
-    #: discarded (Waveform's light shaders write colour and emission into the one-attachment reflection, as Python's
-    #: one-attachment framebuffer takes them). Without it every output must land on an attachment.
-    extra_outputs: str | None = None
 
     def __post_init__(self) -> None:
         _blend_declaration(self.blend)
         if self.depth_test is not None and self.depth_test not in DEPTH_TESTS:
             raise ValueError(f"unknown depth test {self.depth_test!r} (the tests are {', '.join(DEPTH_TESTS)})")
-        if self.extra_outputs is not None and (self.extra_outputs != "discard" or self.target is None):
-            raise ValueError("extra_outputs is 'discard', on a pass into a scene target")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "blend": _blend_declaration(self.blend)}
@@ -499,8 +493,6 @@ class ModePass:
             entry["samplers"] = [s.declaration() for s in self.samplers]
         if self.target is not None:
             entry["target"] = self.target
-        if self.extra_outputs is not None:
-            entry["extra_outputs"] = self.extra_outputs
         if self.outputs:
             entry["attachments"] = [o.declaration() for o in self.outputs]
             if self.sorted_pack is not None:

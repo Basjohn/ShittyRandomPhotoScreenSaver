@@ -175,9 +175,9 @@
 // mode's harness on both APIs, Bubble variant a on one take).
 // 33 (N5.4, Waveform's five C++ boxes): a target's "allocation": "exact" (the content's exact
 // size, no bucket) and a drawable mipped target (a mipped target no defocus step reads: a depth and an explicit size
-// allowed, its read attachments' chains generated after each run on it, a sampler reading its levels with "mips"; the
-// layout JSON's targets carry "self_mips" and "allocation"; composite_live's scene_target_mips); a pass's
-// "extra_outputs": "discard" (outputs past its scene target's attachments, discarded); composite_mode_texture's
+// allowed; a sampler reading an RGBA16F attachment's levels with "mips", whose chain the core's box kernel makes after
+// each run on it, shaders/mip_box.comp, never generateMips; the layout JSON's targets carry "self_mips" and
+// "allocation", their attachments "mips_read"; composite_live's scene_target_mips); composite_mode_texture's
 // seventh argument half_float (an RGBA16F item texture, its chain generated on the GPU; the textures' state "format");
 // kMaxModePasses 28 (16 before) and kMaxStorageImages 9 (8 before); compute_control's no_float32_linear (harness: a
 // device without linear filtering of 32-bit floats), the device facts' linear_filter_formats (Vulkan's

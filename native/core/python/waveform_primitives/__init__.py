@@ -4,9 +4,11 @@ frame. Run by ``native/core/python/scene_target_check.py --rounds waveform`` (th
 
 The floor scene (boxes 1 to 3), Waveform's shape at odd sizes:
 - ``reflection``: an explicit-size, exact, mipped RGBA16F target with a depth (the planar reflection): ``refl_sky``
-  (replace, depth always, ``gl_FragDepth``) and ``refl_light`` (ONE, ONE, depth less), each writing colour AND emission
-  at location 1 into its one attachment (Waveform's light shaders: ``"extra_outputs": "discard"``); its chain is the
-  core's after the run, Python's ``glGenerateTextureMipmap``.
+  (replace, depth always, ``gl_FragDepth``) and ``refl_light`` (ONE, ONE, depth less). Their text writes colour AND
+  emission (Waveform's light shaders); the core draws its one-output variant (``ONE_OUTPUT``: the same text with
+  ``WAVE_ONE_OUTPUT`` defined, as the port's wrapper file will), Python the text itself into its one attachment. Its
+  chain is the shared box kernel's after the run (``rendering.gl_programs.mip_chain``) in both renderers;
+  ``reference_frames("driver_chain")`` is Python's shipping ``glGenerateTextureMipmap`` (a fact, never the oracle).
 - ``prepass``: an explicit-size, exact RGBA16F target (the floor's reduced pre-pass), one pass.
 - ``slope_levels``: every level of the item texture ``slope`` (RGBA16F with mips made on the GPU, Waveform's slope map
   baked from a height map) laid side by side by ``texelFetch``: the levels as the GPU made them.
@@ -38,7 +40,7 @@ REFLECTION = (333, 187)        # odd on both axes: every level past 0 is made fr
 PREPASS = (251, 141)
 FLOOR = (480, 270)
 CHECKER = 512                  # the RGBA8 floor map (power of two: its levels are exact halves on every backend)
-SLOPE = 96                     # the RGBA16F slope map (96, 48, 24, 12, 6, 3, 1: one odd step)
+SLOPE = 128                    # the RGBA16F slope map (a power of two: its levels are exact halves on both backends)
 WAVEFORM_ANISOTROPY = {"maps": 8.0, "reflection": 16.0}   # Python's: waveform.py's 8x, reflection.py's 16x
 
 
@@ -56,9 +58,11 @@ def slope_levels_size() -> tuple[int, int]:
 _HEADER = "#version 440\nlayout(location = 0) in vec2 vUv;\n"
 
 REFL_SKY = _HEADER + """// N5.4's harness: the reflected sky into the one-attachment reflection, with the emission Waveform's light
-// shaders write at location 1 (discarded: the target has one attachment).
+// shaders write at location 1 (Python's one-attachment framebuffer drops it; the core draws the one-output variant).
 layout(location = 0) out vec4 colour;
+#ifndef WAVE_ONE_OUTPUT
 layout(location = 1) out vec4 emission;
+#endif
 layout(std140, binding = 18) uniform WaveReflSky {
     vec4 u_sky_low;
     vec4 u_sky_high;
@@ -69,14 +73,18 @@ void main()
     vec3 sky = mix(u_sky_low.rgb, u_sky_high.rgb, vUv.y);
     float band = 0.5 + 0.5 * sin(vUv.x * 91.0) * sin(vUv.y * 57.0);
     colour = vec4(sky * (0.6 + 0.8 * band), 0.25 + 0.5 * vUv.x);
+#ifndef WAVE_ONE_OUTPUT
     emission = vec4(1.0, 0.0, 1.0, 1.0);
+#endif
     gl_FragDepth = u_sky_depth;
 }
 """
 
 REFL_LIGHT = _HEADER + """// N5.4's harness: the ribbon light added into the reflection (ONE, ONE, depth less), light past white.
 layout(location = 0) out vec4 colour;
+#ifndef WAVE_ONE_OUTPUT
 layout(location = 1) out vec4 emission;
+#endif
 layout(std140, binding = 18) uniform WaveReflLight {
     vec4 u_light_colour;
     float u_light_depth;
@@ -86,7 +94,9 @@ void main()
     vec2 d = (vUv - vec2(0.62, 0.41)) * vec2(1.7, 1.0);
     float glow = exp(-dot(d, d) * 60.0);
     colour = vec4(u_light_colour.rgb * (3.0 * glow), 0.5 * glow);
+#ifndef WAVE_ONE_OUTPUT
     emission = vec4(glow);
+#endif
     gl_FragDepth = u_light_depth;
 }
 """
@@ -129,8 +139,20 @@ void main()
 """
 
 
+def one_output(text: str) -> str:
+    """The one-output variant of a light shader (the port's wrapper file: ``#define WAVE_ONE_OUTPUT`` then the same
+    text), what the core draws into a one-attachment target."""
+    head, rest = text.split("\n", 1)
+    return head + "\n#define WAVE_ONE_OUTPUT\n" + rest
+
+
+#: The passes the core draws as their one-output variant.
+ONE_OUTPUT = ("refl_sky", "refl_light")
+
+
 def floor_text() -> str:
     from rendering.gl_programs.anisotropic import ANISOTROPIC_GLSL
+    from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
 
     return _HEADER + """// N5.4's harness: Waveform's floor reads on a grazing plane, one attachment each (read back apart).
 layout(location = 0) out vec4 checker_out;
@@ -151,7 +173,10 @@ layout(binding = 1) uniform sampler2D u_checker;
 layout(binding = 2) uniform sampler2D u_reflection;
 layout(binding = 3) uniform sampler2D u_slope;
 layout(binding = 4) uniform sampler2D u_prepass;
-""" + ANISOTROPIC_GLSL + """
+""" + SRPSS_CONVENTIONS_GLSL + ANISOTROPIC_GLSL + """
+// A scene target's image uv as each renderer stores it: the core's targets are top first (F1; their conventions' z is
+// 1), Python's bottom first (0). Item textures are rows top first in both (no flip).
+vec2 targetUv(vec2 uv) { return srpssConventions.z > 0.5 ? vec2(uv.x, 1.0 - uv.y) : uv; }
 void main()
 {
     vec2 p = vUv * 2.0 - 1.0;
@@ -163,7 +188,7 @@ void main()
     vec4 checker = u_taps > 0.5 ? srpssAnisotropic(u_checker, floorUv, dx, dy, u_aniso_maps)
                                 : texture(u_checker, floorUv);
     checker_out = vec4(checker.rgb * below, below);
-    vec2 reflUv = clamp(vec2(vUv.x + 0.03 * sin(floorUv.y * 5.0), 1.0 - vUv.y), 0.0, 1.0);
+    vec2 reflUv = targetUv(clamp(vec2(vUv.x + 0.03 * sin(floorUv.y * 5.0), 1.0 - vUv.y), 0.0, 1.0));
     vec2 rdx = dFdx(reflUv) * u_footprint;
     vec2 rdy = dFdy(reflUv) * u_footprint;
     vec4 reflection = u_taps > 0.5 ? srpssAnisotropic(u_reflection, reflUv, rdx, rdy, u_aniso_reflection)
@@ -182,7 +207,7 @@ void main()
     vec3 v = normalize(vec3(-p.x, h, 1.0));
     float diffuse = max(dot(n, l), 0.0);
     float specular = pow(max(dot(reflect(-l, n), v), 0.0), 48.0);
-    vec4 prepass = texture(u_prepass, vUv);
+    vec4 prepass = texture(u_prepass, targetUv(vUv));
     relief_out = vec4(vec3(diffuse, specular, slope.z) * below, prepass.g);
     ivec2 size = textureSize(u_reflection, 0);
     float top = floor(log2(float(max(size.x, size.y))));
@@ -211,7 +236,8 @@ void main()
 
 
 def texts() -> dict[str, str]:
-    return {"refl_sky": REFL_SKY, "refl_light": REFL_LIGHT, "prepass": PREPASS_FRAG, "slope_probe": SLOPE_PROBE,
+    return {"refl_sky": REFL_SKY, "refl_light": REFL_LIGHT, "refl_sky_two_outputs": REFL_SKY,
+            "prepass": PREPASS_FRAG, "slope_probe": SLOPE_PROBE,
             "floor": floor_text(), "show": SHOW, "filtered_field": FILTERED_FIELD, **shape_texts()}
 
 
@@ -255,8 +281,9 @@ def std140(layout, values: dict) -> bytes:
 def bake_all(folder: Path) -> dict[str, bytes]:
     import probe_rings
 
-    return {name: probe_rings.bake(text, f"wave_{name}.frag" if not name.startswith("shape_comp")
-                                   else f"wave_{name}.comp", folder)
+    return {name: probe_rings.bake(one_output(text) if name in ONE_OUTPUT else text,
+                                   f"wave_{name}.frag" if not name.startswith("shape_comp") else f"wave_{name}.comp",
+                                   folder)
             for name, text in texts().items()}
 
 
@@ -298,7 +325,7 @@ def slope_texture(encoded: bool):
 
 # ------------------------------------------------------------------------------------------------------- the programs
 
-def floor_program(packs: dict, *, reflection_allocation: str = "exact", extra_outputs: bool = True):
+def floor_program(packs: dict, *, reflection_allocation: str = "exact"):
     """(passes, targets) of the floor scene; ``reflection_allocation`` "bucket" is the exact box's negative control."""
     from rendering.native.mode import ModePass, ModeTarget, PassOutput, PassSampler, TargetAttachment
 
@@ -310,12 +337,9 @@ def floor_program(packs: dict, *, reflection_allocation: str = "exact", extra_ou
     floor = ModeTarget("floor", tuple(TargetAttachment(name, "rgba16f")
                                       for name in ("checker", "reflection", "relief", "mean")),
                        size=FLOOR, allocation="exact")
-    discard = "discard" if extra_outputs else None
     passes = (
-        ModePass("refl_sky", packs["refl_sky"], "replace", target="reflection", depth_test="always", depth_write=True,
-                 extra_outputs=discard),
-        ModePass("refl_light", packs["refl_light"], "additive", target="reflection", depth_test="less",
-                 extra_outputs=discard),
+        ModePass("refl_sky", packs["refl_sky"], "replace", target="reflection", depth_test="always", depth_write=True),
+        ModePass("refl_light", packs["refl_light"], "additive", target="reflection", depth_test="less"),
         ModePass("prepass", packs["prepass"], "replace", target="prepass"),
         ModePass("slope_probe", packs["slope_probe"], "replace", target="slope_levels",
                  samplers=(PassSampler("u_slope", "slope", "nearest", "clamp", "nearest"),)),
@@ -423,7 +447,7 @@ def shape_program(packs: dict, layer_packs: dict, *, extra_pass: bool = False, e
                                   bindings=tuple(ComputeBinding(f"u_{name}", name, "image", "write") for name in written),
                                   over=written[0]))
     for name in SHAPE_REFLECTION_DRAWS:
-        passes.append(ModePass(name, packs["shape_out2"], "additive", target="reflection", extra_outputs="discard"))
+        passes.append(ModePass(name, packs["shape_out1"], "additive", target="reflection"))
     passes.append(ModePass("prepass", packs["shape_out1"], "replace", target="prepass"))
     two = (PassOutput(True, "replace"), PassOutput(True, "additive"))
     for name in SHAPE_SCENE_DRAWS:
@@ -459,7 +483,7 @@ void main()
 #: The reference's variants: the anisotropic taps with the hardware's anisotropy off (the means chosen, both renderers);
 #: one read with Python's hardware anisotropy (what the Python renderer ships today: 8x maps, 16x reflection); one
 #: plain read at 1x; the taps over the slope stored as RGBA8 (the half-float box's control, Python's side of it).
-REFERENCE_VARIANTS = ("taps", "hardware", "plain", "taps_slope_rgba8")
+REFERENCE_VARIANTS = ("taps", "hardware", "plain", "taps_slope_rgba8", "driver_chain")
 _GL_TEXTURE_MAX_ANISOTROPY = 0x84FE
 
 
@@ -472,12 +496,14 @@ def reference_frames(variant: str = "taps") -> dict:
     import numpy as np
     from OpenGL import GL as gl
 
+    from rendering.gl_programs.conventions import conventions_block
+    from rendering.gl_programs.mip_chain import MIP_BOX_COMP, dispatch_mip_chain
     from rendering.quick.offscreen_target import OffscreenRenderTarget
-    from rendering.quick.render.gl_resources import compile_program, delete_program
+    from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
 
     if variant not in REFERENCE_VARIANTS:
         raise ValueError(f"unknown reference variant {variant!r}")
-    taps = variant.startswith("taps")
+    taps = variant.startswith("taps") or variant == "driver_chain"
     encoded = variant == "taps_slope_rgba8"
     settings = dict(SETTINGS, u_taps=1.0 if taps else 0.0, u_slope_encoded=1.0 if encoded else 0.0)
     probe_size = slope_levels_size()
@@ -487,7 +513,13 @@ def reference_frames(variant: str = "taps") -> dict:
         programs = {name: compile_program(REFERENCE_VERTEX, text, label=f"n54 {name}")
                     for name, text in texts().items() if name in ("refl_sky", "refl_light", "prepass", "slope_probe",
                                                                    "floor")}
+        box = compile_compute_program(MIP_BOX_COMP, label="n54 mip box")
         buffers = {}
+        conventions = (ctypes.c_uint * 1)()                    # this renderer's conventions (zeros: rows bottom first)
+        gl.glCreateBuffers(1, conventions)
+        zeros = conventions_block()
+        gl.glNamedBufferData(int(conventions[0]), len(zeros), zeros, gl.GL_STATIC_DRAW)
+        buffers["_conventions"] = int(conventions[0])
         for name, block in BLOCKS.items():
             values = dict(settings, u_target_px=[float(probe_size[0]), float(probe_size[1])])
             data = std140(LAYOUTS[block], values)
@@ -577,7 +609,10 @@ def reference_frames(variant: str = "taps") -> dict:
         gl.glDisable(gl.GL_BLEND)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_TRUE)
-        gl.glGenerateTextureMipmap(reflection)            # Python's reflection.py: the chain from what was drawn
+        if variant == "driver_chain":
+            gl.glGenerateTextureMipmap(reflection)        # Python's shipping reflection.py (the fact)
+        else:
+            dispatch_mip_chain(box, reflection, REFLECTION, levels_of(REFLECTION))   # the shared box kernel
         # The pre-pass and the slope probe.
         prepass = texture(gl.GL_RGBA16F, PREPASS, 1)
         pre_fbo = framebuffer([prepass])
@@ -602,6 +637,7 @@ def reference_frames(variant: str = "taps") -> dict:
         sampler_state(prepass, linear=True, wrap=gl.GL_CLAMP_TO_EDGE, mips="none")
         for unit, name in ((1, checker), (2, reflection), (3, slope), (4, prepass)):
             gl.glBindTextureUnit(unit, name)
+        gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, 17, buffers["_conventions"])
         draw("floor", FLOOR)
         gl.glFinish()
         for level in range(levels_of(REFLECTION)):
@@ -618,6 +654,7 @@ def reference_frames(variant: str = "taps") -> dict:
             gl.glDeleteBuffers(1, [buffer])
         for program in programs.values():
             delete_program(program)
+        delete_program(box)
     host.close()
     return frames
 

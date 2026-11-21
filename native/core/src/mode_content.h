@@ -355,7 +355,6 @@ struct ModePass
     DepthTest depthTest = DepthTest::None;
     bool depthWrite = false;
     bool fragDepth = false;   // the fragment writes gl_FragDepth
-    bool discardOutputs = false; // ABI 33: "extra_outputs": "discard" (outputs past its target's attachments)
     // N3.2 (D15): its own vertex stage and geometry (mode_content.h's header, mesh_buffers.h).
     bool customBlend = false;                        // "blend" was a full declaration
     QRhiGraphicsPipeline::TargetBlend blendState;    // its state (customBlend)

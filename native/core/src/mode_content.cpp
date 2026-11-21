@@ -814,21 +814,15 @@ bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, c
         }
     } else {
         // N3.1: location n is the target's attachment n, every attachment written once (a pass that leaves one alone
-        // masks it with "write": false). ABI 33 (N5.4): a pass declaring "extra_outputs": "discard" may also write
-        // locations past the target's attachments (Waveform's light shaders write colour and emission into the
-        // one-attachment reflection, as Python's one-attachment framebuffer takes them): those values are discarded (no
-        // attachment, no blend state); each still a float vector, each location once.
+        // masks it with "write": false). ABI 33 (N5.4): an output past the target's attachments is refused too (Vulkan's
+        // validation names every such pipeline, Undefined-Value-ShaderOutputNotConsumed): Waveform's light shaders,
+        // which write colour and emission, reach the one-attachment reflection as a one-output variant of the same file
+        // (a wrapper that defines the variant and includes it), while Python's one-attachment framebuffer takes both.
         const int expected = int(target->colour.size());
         bool seen[kMaxTargetColour] = {};
-        bool seenPast[kMaxTargetColour] = {};
         for (const QShaderDescription::InOutVariable &output : outputs) {
             const bool vector = output.type == QShaderDescription::Float || output.type == QShaderDescription::Vec2
                 || output.type == QShaderDescription::Vec3 || output.type == QShaderDescription::Vec4;
-            if (pass.discardOutputs && vector && output.location >= expected && output.location < kMaxTargetColour
-                && !seenPast[output.location]) {
-                seenPast[output.location] = true;
-                continue;
-            }
             if (output.location < 0 || output.location >= expected || !vector || seen[output.location]) {
                 *error = QStringLiteral("pass '%1' writes '%2' at location %3: a pass on target '%4' writes one float "
                                         "vector at each of the locations 0 to %5, one per colour attachment")
@@ -2619,8 +2613,7 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                  QStringLiteral("cull"), QStringLiteral("front_face"),
                                                  QStringLiteral("indirect"), QStringLiteral("draw_count"),
                                                  QStringLiteral("batches"), QStringLiteral("batch_count"),
-                                                 QStringLiteral("sorted"), // N3.4: a transparent pass's
-                                                 QStringLiteral("extra_outputs") }; // ABI 33
+                                                 QStringLiteral("sorted") }; // N3.4: a transparent pass's
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
@@ -2639,16 +2632,6 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                  .arg(QString::fromLatin1(pass.name), o.value(QStringLiteral("target")).toString());
                     return false;
                 }
-            }
-            if (o.contains(QStringLiteral("extra_outputs"))) {
-                // ABI 33: outputs past a scene target's attachments, discarded (checkPassOutputs).
-                if (o.value(QStringLiteral("extra_outputs")) != QJsonValue(QStringLiteral("discard"))
-                    || pass.target < 0) {
-                    *error = QStringLiteral("pass '%1': \"extra_outputs\" is \"discard\", on a pass into a scene target")
-                                 .arg(QString::fromLatin1(pass.name));
-                    return false;
-                }
-                pass.discardOutputs = true;
             }
             if (!parseGeometry(o, pass, vertex, error) // N3.2, before the outputs take the pass's blend
                 || !parseSamplers(o.value(QStringLiteral("samplers")), pass, error)
@@ -2758,6 +2741,23 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                                        QString::fromLatin1(program.targets.at(t).name));
                 return false;
             }
+            if (t < 0) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3', which has none")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                  QString::fromLatin1(s.texture));
+                return false;                 // a bloom step's glow is one level
+            }
+            // ABI 33: the attachment's chain is the core's box kernel's (RGBA16F images: scene_targets.h).
+            TargetDeclaration &read = program.targets[t];
+            const int colour = read.colourIndex(s.texture.mid(s.texture.indexOf('.') + 1));
+            if (colour < 0 || read.colour.at(colour).format != TargetFormat::RGBA16F) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3': a self-mipped target's levels "
+                                        "are made for an rgba16f attachment only (the core's box kernel)")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                  QString::fromLatin1(s.texture));
+                return false;
+            }
+            read.colour[colour].mipsRead = true;
         }
     }
     // N3.1: a capture is read only after a capture step of its target made it in the same record.
@@ -2893,8 +2893,6 @@ QJsonObject ModeProgram::toJson() const
         p.insert(QStringLiteral("depth"), QJsonObject { { QStringLiteral("test"), depthTestName(pass.depthTest) },
                                                         { QStringLiteral("write"), pass.depthWrite } });
         p.insert(QStringLiteral("frag_depth"), pass.fragDepth);
-        p.insert(QStringLiteral("extra_outputs"), pass.discardOutputs ? QJsonValue(QStringLiteral("discard"))
-                                                                      : QJsonValue());                    // ABI 33
         if (pass.customBlend)
             p.insert(QStringLiteral("blend_state"), blendJson(pass.blendState)); // N3.2
         if (pass.ownVertex()) {
@@ -6022,6 +6020,18 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         *error = QStringLiteral("the mode has no program");
         return false;
     }
+    // ABI 33 (N5.4): a self-mipped target's chain is the core's box kernel, a compute pass a level: refused, with the
+    // reason, where the device has no compute (never assumed).
+    for (const TargetDeclaration &declared : program.targets) {
+        bool chain = false;
+        for (const TargetAttachment &a : declared.colour)
+            chain = chain || a.mipsRead;
+        if (declared.selfMips && chain && !rhi->isFeatureSupported(QRhi::Compute)) {
+            *error = QStringLiteral("target '%1': a sampler reads its levels, whose chain is a compute kernel, and this "
+                                    "device does not report QRhi::Compute").arg(QString::fromLatin1(declared.name));
+            return false;
+        }
+    }
     // Audit 4 L4: D15 point 3's and 6's device limits, refused with the reason (none is reached on this machine's
     // devices): a block within the device's uniform range, an indirect draw only where QRhi reports DrawIndirect.
     const int uniformRange = rhi->resourceLimit(QRhi::MaxUniformBufferRange);
@@ -6873,9 +6883,14 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 drawPass(rhi, cb, k, viewport, input, v); // N3.2
             cb->endPass();
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
-            // ABI 33 (N5.4): a self-mipped target's chains from what this run drew (Python's glGenerateTextureMipmap
-            // after the reflection's passes), before any later pass reads its levels.
-            m_targets.generateSelfMips(rhi, cb, runTarget);
+            // ABI 33 (N5.4): a self-mipped target's chains from what this run drew (the core's box kernel, the text the
+            // Python renderer runs after the reflection's passes), before any later pass reads its levels. Its kernel
+            // is checked at the build (compute on the device), so a failure here is a binding the driver refused.
+            bool chained = true;
+            QString chainError;
+            m_targets.generateSelfMips(rhi, cb, runTarget, &chained, &chainError);
+            if (!chained)
+                m_reason = chainError;
         }
         i = last + 1;
     }

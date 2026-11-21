@@ -1903,15 +1903,16 @@ def bucket_pixels_pair(size: tuple[int, int]) -> tuple[int, int]:
 
 
 def _wave_floor_refusals(core, engine, app, host, packs: dict) -> dict:
-    """What the core refuses of the new declarations: two outputs into one attachment without "extra_outputs"; mips of
-    a target without mips; an unknown allocation."""
+    """What the core refuses of the new declarations: two outputs into a one-attachment target (the light shader's
+    own text: the core draws its one-output variant); mips of a target without mips; an unknown allocation."""
     from rendering.native.mode import ModePass, ModeTarget
 
     wp = _wave_module()
     passes, targets = wp.floor_program(packs)
     cases = {}
-    no_discard, _ = wp.floor_program(packs, extra_outputs=False)
-    cases["two_outputs_into_one_attachment"] = (no_discard, targets)
+    two = dict(packs, refl_sky=packs["refl_sky_two_outputs"])
+    two_passes, _ = wp.floor_program(two)
+    cases["two_outputs_into_one_attachment"] = (two_passes, targets)
     flat = tuple(ModeTarget(t.name, t.colour, size=t.size, depth=t.depth, allocation="exact")
                  if t.name == "reflection" else t for t in targets)
     cases["mips_of_a_target_without_mips"] = (passes, flat)
@@ -1954,6 +1955,31 @@ WAVE_JUDGED = ("floor.checker", "floor.reflection", "floor.relief", "floor.mean"
 #: Each control's textures that must leave rule (a)'s bound (the box's negative control), against the taps reference.
 WAVE_CONTROLS = {"plain": ("floor.checker", "floor.reflection"), "bucket": ("floor.mean",),
                  "slope_rgba8": ("floor.relief", "slope_levels.colour")}
+#: The floor's filtered reads (derivative-driven: trilinear levels and the taps' weights), judged in 8-bit levels, what
+#: a frame shows, over every pixel: the core rasterises its targets top first (F1), mirrored from Python, so vUv and
+#: its derivatives differ in their last bits (prepass.colour, no filter: 185 texels a float16 ulp apart). Measured on
+#: the ABI 33 build (21 Nov, the target reads through the conventions, the continuous taps): floor.checker 191 and
+#: floor.relief 141 pixels at 1 level, none past it, on both APIs (with the first, discrete tap count: one pixel at 4
+#: levels where the count flipped); the bound is that: 1 level everywhere, no tie, no flip. The float textures that
+#: are no filter's output (the levels, the mean, the pre-pass, the slope's levels) keep SCENE_RULE_A.
+WAVE_FILTERED = ("floor.checker", "floor.reflection", "floor.relief")
+WAVE_FILTERED_RULE = pt.Tolerance("the floor's filtered reads (8-bit), rule (a)", masked_level=1)
+
+
+def wave_judged(name: str, candidate: dict, reference: dict) -> dict:
+    """One texture of the floor scene against the reference: a filtered read in 8-bit levels (WAVE_FILTERED_RULE,
+    every pixel in the mask), anything else by ``judged`` with SCENE_RULE_A."""
+    import numpy as np
+
+    if name not in WAVE_FILTERED:
+        return judged(candidate, reference, SCENE_RULE_A)
+    x, y = candidate["array"], reference["array"]
+    if x.shape != y.shape:
+        return {"pass": False, "reasons": ["shapes differ"], "differing": -1}
+    quantised = [np.rint(np.clip(a.astype(np.float64), 0.0, 1.0) * 255.0).astype(np.uint8) for a in (x, y)]
+    result = pt.judge(quantised[0], quantised[1], WAVE_FILTERED_RULE, mask=np.ones(x.shape[:2], bool))
+    result.setdefault("differing", int((quantised[0] != quantised[1]).any(axis=-1).sum()))
+    return result
 
 
 def wave_verdict(out: Path, apis) -> dict:
@@ -1976,7 +2002,7 @@ def wave_verdict(out: Path, apis) -> dict:
             continue
         record: dict = {"rule_a": {}, "levels": {}, "controls": {}}
         for name in WAVE_JUDGED:
-            judged_result = judged(native["taps"][name], taps[name], SCENE_RULE_A)
+            judged_result = wave_judged(name, native["taps"][name], taps[name])
             record["rule_a"][name] = {k: judged_result.get(k) for k in ("pass", "differing", "reasons")}
             if not judged_result.get("pass"):
                 result["pass"] = False
@@ -1990,14 +2016,14 @@ def wave_verdict(out: Path, apis) -> dict:
             record["levels"][name] = {"pass": judged_result.get("pass"), "differing": judged_result.get("differing"),
                                       "max_abs": float(diff.max()),
                                       "made_from_odd": level > 0 and (parent[0] % 2 == 1 or parent[1] % 2 == 1)}
-        if api == "opengl":
-            failed_levels = [n for n, v in record["levels"].items() if not v["pass"]]
-            if failed_levels:
-                result["pass"] = False
-                result["reasons"].append(f"opengl levels {failed_levels}: Python's own call should match")
+        # Every level on both APIs: the core's box kernel is the reference's text (never the driver's chain).
+        failed_levels = [n for n, v in record["levels"].items() if not v["pass"]]
+        if failed_levels:
+            result["pass"] = False
+            result["reasons"].append(f"{api} levels {failed_levels}: the shared box chain should match")
         for variant, names in WAVE_CONTROLS.items():
             for name in names:
-                judged_result = judged(native[variant][name], taps[name], SCENE_RULE_A)
+                judged_result = wave_judged(name, native[variant][name], taps[name])
                 record["controls"][f"{variant}:{name}"] = {"fails_the_bound": not judged_result.get("pass"),
                                                            "differing": judged_result.get("differing")}
                 if judged_result.get("pass"):
@@ -2014,6 +2040,19 @@ def wave_verdict(out: Path, apis) -> dict:
         facts[name] = {"inside_rule_a": judged_result.get("pass"), "differing": judged_result.get("differing"),
                        "mean_abs": float(diff.mean()), "max_abs": float(diff.max())}
     result["taps_against_pythons_hardware_anisotropy"] = facts
+    # Python's shipping chain (glGenerateTextureMipmap, the driver's odd levels) against the shared box chain: what the
+    # Python renderer's reflection changes by when the port takes the box kernel (a fact).
+    chain = {}
+    for level in range(1 + int(math.floor(math.log2(max(wp.REFLECTION))))):
+        name = "reflection.colour" + (f"@{level}" if level else "")
+        diff = np.abs(reference["driver_chain"][name]["array"].astype(np.float64)
+                      - reference["taps"][name]["array"].astype(np.float64))
+        chain[name] = {"max_abs": float(diff.max()), "mean_abs": float(diff.mean())}
+    for name in ("floor.reflection", "floor.mean"):
+        diff = np.abs(reference["driver_chain"][name]["array"].astype(np.float64)
+                      - reference["taps"][name]["array"].astype(np.float64))
+        chain[name] = {"max_abs": float(diff.max()), "mean_abs": float(diff.mean())}
+    result["pythons_driver_chain_against_the_box_chain"] = chain
     return result
 
 

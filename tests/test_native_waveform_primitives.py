@@ -1,13 +1,14 @@
 """N5.4 (ABI 33): Waveform's five C++ boxes, GPU-free (Current_Plan.md N5.4; ``native/core/src/abi.h`` 33).
 
 - The face and the core agree on the new limits (passes, storage images, targets) and they hold Waveform's counts.
-- A drawable mipped target: ``allocation`` ``"exact"``, a depth and an explicit size on a mipped target; a pass's
-  ``extra_outputs`` ``"discard"``; an RGBA16F item texture sent with its flag; the face refuses what the core would.
-- The core's sources: the exact allocation, the self-mipped chain after a run, the defocus layer kept to D17 G and H,
-  the discarded outputs, the half-float upload on both routes, the linear-filter check (its Vulkan fact and its
-  harness control); the harness scenes bake for every shipped target.
-- On the built module (skipped without ``release/native_module`` at ABI 33): the admission and every refusal one
-  past a limit, with its reason.
+- A drawable mipped target: ``allocation`` ``"exact"``, a depth and an explicit size on a mipped target; an RGBA16F
+  item texture sent with its flag; the face refuses what the core would.
+- The core's sources: the exact allocation, the self-mipped chain after a run made by the core's box kernel (one text
+  with the Python reference's, an RGBA16F attachment read at its levels only), the defocus layer kept to D17 G and H,
+  the half-float upload on both routes, the linear-filter check (its Vulkan fact and its harness control); the
+  shader-side anisotropy's continuous lattice; the harness scenes bake for every shipped target.
+- On the built module (skipped without ``release/native_module`` at ABI 33): the admission, a light shader's two
+  outputs refused on the one-attachment reflection, and every refusal one past a limit, with its reason.
 
 The drawn proofs are ``native/core/python/scene_target_check.py --rounds wave_floor wave_limits wave_filter`` (hidden
 hosts, both APIs, the Python reference).
@@ -15,6 +16,7 @@ hosts, both APIs, the Python reference).
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -106,16 +108,20 @@ def test_a_drawable_mipped_target_declares_its_exact_allocation():
         ModeTarget("x", colour, mips=True, previous_frame=True)
 
 
-def test_a_pass_discards_outputs_past_its_scene_target_only_when_declared():
-    from rendering.native.mode import ModePass
+def test_the_light_shaders_reach_the_one_attachment_reflection_as_their_one_output_variant():
+    """Vulkan names a pipeline whose shader writes past its target's attachments (Undefined-Value-
+    ShaderOutputNotConsumed), so the core refuses it: Waveform's light shaders, which write colour and emission, are
+    drawn into the reflection as the same text with ``WAVE_ONE_OUTPUT`` defined (the port's wrapper file)."""
+    import waveform_primitives as wp
 
-    light = ModePass("refl_light", b"P", "additive", target="reflection", extra_outputs="discard")
-    assert light.declaration()["extra_outputs"] == "discard"
-    assert "extra_outputs" not in ModePass("plain", b"P", target="reflection").declaration()
-    with pytest.raises(ValueError):
-        ModePass("surface", b"P", extra_outputs="discard")            # the surface has one attachment: nothing past
-    with pytest.raises(ValueError):
-        ModePass("x", b"P", target="reflection", extra_outputs="keep")
+    sky = wp.one_output(wp.texts()["refl_sky"])
+    assert sky.splitlines()[0].startswith("#version") and "\n#define WAVE_ONE_OUTPUT\n" in sky
+    assert sky.replace("\n#define WAVE_ONE_OUTPUT", "") == wp.texts()["refl_sky"]
+    assert set(wp.ONE_OUTPUT) == {"refl_sky", "refl_light"}
+    for name in wp.ONE_OUTPUT:
+        assert "#ifndef WAVE_ONE_OUTPUT" in wp.texts()[name]
+    # Negative control: the refusal round's text is the two-output file itself.
+    assert "#define WAVE_ONE_OUTPUT" not in wp.texts()["refl_sky_two_outputs"]
 
 
 def test_a_half_float_texture_is_sent_with_its_flag_and_rgba8_as_before():
@@ -161,8 +167,9 @@ def self_mips_are_wired(mode_cpp: str) -> bool:
     parse = _function(mode_cpp, "bool ModeProgram::fromJson(", "QJsonObject ModeProgram::toJson(")
     passes = _function(mode_cpp, "void ModeContent::recordPasses(", "bool ModeContent::record(")
     run = passes[passes.index("recordNearest(cb, runTarget, last, readback);"):]
-    return ("target.selfMips = target.mips && !layer;" in parse and "generateSelfMips(" in run
-            and run.index("generateSelfMips(") < run.index("i = last + 1;"))
+    return ("target.selfMips = target.mips && !layer;" in parse and "read.colour[colour].mipsRead = true;" in parse
+            and "generateSelfMips(" in run and run.index("generateSelfMips(") < run.index("i = last + 1;")
+            and "m_reason = chainError;" in run)
 
 
 def test_a_self_mipped_target_makes_its_chain_after_its_run_and_the_defocus_layer_keeps_d17():
@@ -173,15 +180,40 @@ def test_a_self_mipped_target_makes_its_chain_after_its_run_and_the_defocus_laye
     sampler = _function(mode_cpp, "bool checkTargetSampler(", "int inputComponents(")
     assert "!t.mips || capture" in sampler                       # mips of a target without them are refused
     # Negative control: the chain dropped from the run is caught.
-    assert not self_mips_are_wired(mode_cpp.replace("m_targets.generateSelfMips(rhi, cb, runTarget);", ""))
+    run = "m_targets.generateSelfMips(rhi, cb, runTarget, &chained, &chainError);"
+    assert mode_cpp.count(run) == 1 and not self_mips_are_wired(mode_cpp.replace(run, ""))
 
 
-def test_extra_outputs_are_discarded_only_past_the_targets_attachments():
-    outputs = _function(_source("mode_content.cpp"), "bool checkPassOutputs(ModePass &pass", "QRhiGraphicsPipeline"
-                                                                                           "::TargetBlend targetBlend(")
-    assert "pass.discardOutputs && vector && output.location >= expected" in outputs
-    # The attachments' own locations are still each written once (the check after the discarded ones).
-    assert "output.location >= expected || !vector || seen[output.location]" in outputs
+def box_chain_is_wired(targets_cpp: str, mode_cpp: str, kernel: str) -> bool:
+    """A self-mipped target's chain is the core's box kernel, one text with the Python reference's
+    (``rendering/gl_programs/mip_chain.py``): never QRhi's generateMips, whose GL chain is the driver's (NVIDIA's
+    non-power-of-two reduction is anchored at memory row 0, the core's top row and Python's bottom one) and whose
+    Vulkan chain is one bilinear tap a texel; the box kernel's odd-size weights are symmetric, so neither the storage
+    orientation nor the driver moves a level."""
+    from rendering.gl_programs.mip_chain import MIP_BOX_COMP
+
+    if "void SceneTargets::releaseChainKernel(" not in targets_cpp:
+        return False                          # no kernel of the core's own (ABI 33 before the box chain)
+    chain = _function(targets_cpp, "int SceneTargets::generateSelfMips(", "void SceneTargets::releaseChainKernel(")
+    parse = _function(mode_cpp, "bool ModeProgram::fromJson(", "QJsonObject ModeProgram::toJson(")
+    return (kernel == MIP_BOX_COMP and "generateMips(" not in targets_cpp and "mip_box_comp_qsb" in chain
+            and "imageLoad(0, cs, t->colour[c].get(), level - 1)" in chain
+            and "flags |= QRhiTexture::UsedWithLoadStore;" in targets_cpp
+            and "rgba16f attachment only" in parse and "precise vec4" in kernel)
+
+
+def test_a_self_mipped_targets_chain_is_the_shared_box_kernel():
+    kernel = (ROOT / "native" / "core" / "shaders" / "mip_box.comp").read_text(encoding="utf-8")
+    assert box_chain_is_wired(_source("scene_targets.cpp"), _source("mode_content.cpp"), kernel)
+    # The odd-size weights: three taps (d - i, d, i + 1) / (2d + 1), symmetric under a flip of the source.
+    assert "vec3(float(d - i), float(d), float(i + 1)) / float(s)" in kernel
+    # Negative controls: the kernel's text drifting from the reference's, and QRhi's chain in its place, are caught.
+    assert not box_chain_is_wired(_source("scene_targets.cpp"), _source("mode_content.cpp"),
+                                  kernel.replace("precise vec4 sum", "vec4 sum"))
+    assert not box_chain_is_wired(_source("scene_targets.cpp").replace(
+        "        cb->beginComputePass();\n", "        cb->resourceUpdate(rhi->nextResourceUpdateBatch()); "
+                                         "// generateMips(\n        cb->beginComputePass();\n"),
+        _source("mode_content.cpp"), kernel)
 
 
 def half_float_is_wired(mode_cpp: str, jobs_cpp: str) -> bool:
@@ -237,15 +269,32 @@ def test_the_harness_scenes_bake_for_every_shipped_target(tmp_path):
     assert ANISOTROPIC_GLSL in wp.floor_text()
 
 
-def test_the_anisotropic_taps_follow_the_extension_model():
-    """N = min(ceil(Pmax / Pmin), max) taps along the major axis, symmetric about the coordinate, each at the minor
-    axis's footprint (so the gradients' signs, which differ between backends, change nothing)."""
+def anisotropy_is_continuous(text: str) -> bool:
+    """The footprint's ratio r = Pmax / Pmin (up to the maximum) covered by taps on a fixed lattice one minor width
+    apart, symmetric about the coordinate, each weighted by its overlap with [-r/2, r/2] and filtered at the minor
+    axis's footprint: continuous in the gradients (no tap count jumping at an integer ratio, which moved pixels by
+    several levels between the two renderers) and blind to the gradients' signs, which differ between backends."""
+    return ("float r = clamp(pMax / max(pMin, 1e-8), 1.0, min(maxAnisotropy," in text
+            and "float w = max(0.0, min(t + 0.5, 0.5 * r) - max(t - 0.5, -0.5 * r));" in text
+            and "textureGrad(tex, uv + stepUv * t, stepUv, minor)" in text and "return sum / r;" in text
+            and "ceil(pMax" not in text)
+
+
+def test_the_anisotropic_taps_are_continuous_in_the_footprint():
     from rendering.gl_programs.anisotropic import ANISOTROPIC_GLSL, ANISOTROPIC_MAX_TAPS
 
-    assert "ceil(pMax / max(pMin, 1e-8))" in ANISOTROPIC_GLSL
+    assert anisotropy_is_continuous(ANISOTROPIC_GLSL)
     assert f"min(maxAnisotropy, {ANISOTROPIC_MAX_TAPS}.0)" in ANISOTROPIC_GLSL
-    assert "(float(i) + 0.5) / n - 0.5" in ANISOTROPIC_GLSL        # symmetric taps
-    assert "textureGrad(tex, uv + major * t, stepUv, minor)" in ANISOTROPIC_GLSL
+    reach = (ANISOTROPIC_MAX_TAPS - 1) // 2
+    assert f"for (int j = -{reach}; j <= {reach}; ++j)" in ANISOTROPIC_GLSL
+    # The weights cover the footprint exactly: they sum to r for every ratio the clamp admits.
+    for r in (1.0, 1.3, 2.0, 2.5, 7.99, float(ANISOTROPIC_MAX_TAPS)):
+        reach_r = math.ceil((r - 1.0) * 0.5)
+        total = sum(max(0.0, min(t + 0.5, 0.5 * r) - max(t - 0.5, -0.5 * r)) for t in range(-reach_r, reach_r + 1))
+        assert total == pytest.approx(r)
+    # Negative control: the integer tap count in its place is caught.
+    assert not anisotropy_is_continuous(ANISOTROPIC_GLSL.replace(
+        "int reach = int(ceil((r - 1.0) * 0.5));", "float n = ceil(pMax / max(pMin, 1e-8));"))
 
 
 # ------------------------------------------------------------------------------------------- the built module
@@ -286,11 +335,11 @@ def test_the_built_core_admits_the_floor_scene_with_its_self_mipped_exact_reflec
     layout = _layout(core, passes, targets)
     reflection = layout["targets"][0]
     assert reflection["self_mips"] is True and reflection["allocation"] == "exact" and reflection["depth"] is True
-    assert layout["passes"][0]["extra_outputs"] == "discard"
-    # Negative control: the same passes without "extra_outputs" are refused (two outputs into one attachment).
-    bare, _ = wp.floor_program(packs, extra_outputs=False)
+    assert reflection["colour"][0]["mips_read"] is True
+    # Negative control: the light shader's two-output file on the one-attachment reflection is refused.
+    two, _ = wp.floor_program(dict(packs, refl_sky=packs["refl_sky_two_outputs"]))
     with pytest.raises(ValueError, match="location 1"):
-        _layout(core, bare, targets)
+        _layout(core, two, targets)
 
 
 def test_the_built_core_admits_waveforms_shape_and_refuses_one_past_each_limit(core, packs, tmp_path):
