@@ -211,6 +211,39 @@ def test_a_mesh_layout_holds_the_glass_shards_sixteen_attributes():
     assert len(GLASS_ATTRIBUTES) > 8 and len(CRUMBLE_CHUNK_ATTRIBUTES) > 8
 
 
+# ------------------------------------------------------------------------------------------- the Python conversions
+
+_OUTPUT = re.compile(r"layout\s*\(\s*location\s*=\s*(\d+)\s*\)\s*out\s+vec4\s+(\w+)\s*;")
+
+
+def test_a_motion_fragment_writes_x_and_y_at_one_and_y_at_two_and_a_ghost_its_colour_only():
+    """Checklist 16 (N5.2d): the native velocity is two R16F attachments, so the motion variants write y again at
+    location 2 (Python's RG16F at 1 keeps (x, y); its location 2 has no draw buffer); a ghost writes FragColor alone
+    (the core refuses outputs past its one-attachment ghost target). Stills before and after: byte-identical
+    (evidence native_core/n5_2d)."""
+    from rendering.gl_programs import blockspin_program, crumble_program, glass_shatter_program, pixel_accretion_program
+    from rendering.gl_programs import exploding_tiles_program
+    from rendering.gl_programs.scene3d import scene3d_ghost_fragment
+
+    motions = (blockspin_program.BLOCK_SPIN_MOTION_FRAGMENT_SOURCE, crumble_program.CRUMBLE_MOTION_FRAGMENT,
+               crumble_program.DEBRIS_MOTION_FRAGMENT, glass_shatter_program.GLASS_MOTION_FRAGMENT,
+               pixel_accretion_program.PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE)
+    ghosts = (blockspin_program.BLOCK_SPIN_GHOST_FRAGMENT_SOURCE, crumble_program.CRUMBLE_GHOST_FRAGMENT,
+              crumble_program.DEBRIS_GHOST_FRAGMENT, glass_shatter_program.GLASS_GHOST_FRAGMENT,
+              pixel_accretion_program.PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
+              exploding_tiles_program.EXPLODING_TILES_GHOST_FRAGMENT_SOURCE)
+    for text in motions:
+        assert sorted(_OUTPUT.findall(text)) == [("0", "FragColor"), ("1", "SceneMotion"), ("2", "SceneMotionY")]
+        assert "SceneMotionY = vec4(motion.y, 0.0, 0.0, 1.0);" in text
+    for text in ghosts:
+        assert _OUTPUT.findall(text) == [("0", "FragColor")]
+    # Negative controls: a ghost keeping the motion outputs (the ABI 36 ghost kept SceneMotion) fails the check, and a
+    # source without a motion output is refused rather than passed through.
+    assert _OUTPUT.findall(motions[0]) != [("0", "FragColor")]
+    with pytest.raises(ValueError, match="SceneMotion output once"):
+        scene3d_ghost_fragment(motions[0].replace("layout(location = 1) out vec4 SceneMotion;", "vec4 SceneMotion;"))
+
+
 def test_the_abi_is_37_or_later():
     from rendering.native import loader
 
