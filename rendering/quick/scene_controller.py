@@ -551,6 +551,10 @@ class QuickSceneController(QObject):
         # by Qt and the display pacer already owns cadence.  We only aggregate
         # counters here and update two tiny text labels twice per second.
         self._perf_hud_enabled = bool(is_perf_metrics_enabled())
+        # The HUD's texts held while the visualizer presents (written at its next present request), and whether a
+        # present request came since the last swap (Layer T: the HUD never begins a frame of its own).
+        self._perf_hud_pending: tuple[str, str] | None = None
+        self._perf_hud_visualizer_presenting = False
         self._frame_trace = current_frame_trace()
         # Explicit --frame-trace-only Qt render-cycle sequence. QQuickWindow's
         # direct scenegraph signals all execute on the render thread; keeping the
@@ -3080,6 +3084,10 @@ class QuickSceneController(QObject):
         item = self._visualizer_item
         if item is None:
             return False
+        if self._perf_hud_enabled:
+            # The PERF HUD's held texts ride this request (one Qt update timer for both, never a frame of their own).
+            self._perf_hud_visualizer_presenting = True
+            self._write_perf_hud_text()
         item.update()
         if self._transition_frames_active:
             root = self._scene_root
@@ -3467,9 +3475,32 @@ class QuickSceneController(QObject):
         )
         self._trace_surface_event("scene_graph_initialized", probe_frames=3)
 
+    def _write_perf_hud_text(self) -> None:
+        """Write the held PERF HUD texts (GUI thread). Each write is an update request of the scene: Qt starts its
+        update-request timer on the first one of a frame, so a write of its own between two visualizer frames begins a
+        frame early and the next one waits for the next publication (Layer T, Current_Plan.md 8b N5.1 Bubble)."""
+        pending, self._perf_hud_pending = self._perf_hud_pending, None
+        if pending is None:
+            return
+        scene_text, visualizer_text = pending
+        if self._frame_trace is not None:
+            self._frame_trace.record(FrameTraceEvent.GUI_PERF_HUD_UPDATE,
+                                     screen_index=int(self._window.screen_index))
+        root = self._scene_root
+        if root is not None:
+            root.setProperty("perfHudText", scene_text)
+        visualizer_root = self._visualizer_root
+        if visualizer_root is not None:
+            visualizer_root.setProperty("perfHudText", visualizer_text)
+
     def _update_perf_hud_on_swap(self) -> None:
         if not self._perf_hud_enabled:
             return
+        # While the visualizer presents (a present request since the last swap), the HUD's texts ride its next request
+        # (``request_visualizer_present``), never an update request of their own; otherwise they are written here.
+        presenting, self._perf_hud_visualizer_presenting = self._perf_hud_visualizer_presenting, False
+        if not presenting:
+            self._write_perf_hud_text()
         now_ns = time.perf_counter_ns()
         if self._perf_last_swap_ns > 0:
             dt_ms = (now_ns - self._perf_last_swap_ns) / 1_000_000.0
@@ -3526,19 +3557,13 @@ class QuickSceneController(QObject):
                 f"{elapsed_transition_ms:.0f}/{target_transition_ms:.0f}ms"
             )
 
-        root = self._scene_root
-        if self._frame_trace is not None:
-            self._frame_trace.record(FrameTraceEvent.GUI_PERF_HUD_UPDATE,
-                                     screen_index=int(self._window.screen_index))
-        if root is not None:
-            root.setProperty(
-                "perfHudText",
-                f"D{self._window.screen_index} scene {scene_fps:5.1f} fps "
-                f"dtmax {self._perf_window_dt_max_ms:5.1f}ms\n"
-                f"pacer {target_hz:5.1f}Hz native "
-                f"{native_update_request_hz:5.1f}/{native_tick_hz:5.1f}Hz | "
-                f"{transition_text}",
-            )
+        scene_text = (
+            f"D{self._window.screen_index} scene {scene_fps:5.1f} fps "
+            f"dtmax {self._perf_window_dt_max_ms:5.1f}ms\n"
+            f"pacer {target_hz:5.1f}Hz native "
+            f"{native_update_request_hz:5.1f}/{native_tick_hz:5.1f}Hz | "
+            f"{transition_text}"
+        )
 
         visualizer = self._visualizer_telemetry.snapshot()
         draw_delta = max(0, visualizer.draw_count - self._perf_last_visualizer_draw_count)
@@ -3552,19 +3577,19 @@ class QuickSceneController(QObject):
         age_ms = -1.0
         if visualizer.last_logical_timestamp > 0.0:
             age_ms = max(0.0, (authored_now() - visualizer.last_logical_timestamp) * 1000.0)
-        visualizer_root = self._visualizer_root
         mismatch_count = (
             0
             if self._visualizer_bridge is None
             else self._visualizer_bridge.presentation_mismatch_count
         )
-        if visualizer_root is not None:
-            age_text = "n/a" if age_ms < 0.0 else f"{age_ms:.0f}ms"
-            visualizer_root.setProperty(
-                "perfHudText",
-                f"{visualizer.drawn_mode_id or '-'} draw {draw_fps:5.1f} fps\n"
-                f"rev {revision_rate:5.1f}/s age {age_text} geom! {mismatch_count}",
-            )
+        age_text = "n/a" if age_ms < 0.0 else f"{age_ms:.0f}ms"
+        self._perf_hud_pending = (
+            scene_text,
+            f"{visualizer.drawn_mode_id or '-'} draw {draw_fps:5.1f} fps\n"
+            f"rev {revision_rate:5.1f}/s age {age_text} geom! {mismatch_count}",
+        )
+        if not presenting:
+            self._write_perf_hud_text()
 
         logger.info(
             "[PERF] [PERF_HUD] screen=%d scene_fps=%.2f dt_max_ms=%.2f "

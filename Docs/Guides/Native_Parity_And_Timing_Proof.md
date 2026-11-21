@@ -58,6 +58,11 @@ four layers, scaled as in section 3.
   state, temporal buffers), stated per mode in section 5.
 - **Proof of coverage:** a coverage report showing that every record field's observed range is covered gates
   acceptance.
+- **Positional members are P's, not L's:** the members that place a draw in its window or target (the quad matrix,
+  fragPixel's target, Spectrum's window maps) are outside L. Rule (a)'s pixels prove them on OpenGL at the display and
+  overscan placements (and Spectrum's mapping control its maps); the stream player's rule (b) proves Vulkan at the
+  harness's one placement only, so a Vulkan-only error at a fractional product placement is covered by no layer
+  (checkpoint audit 9 L4).
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
 
@@ -180,7 +185,8 @@ decision, recorded with its reason.
   - layer T on native paths: on Vulkan the native core draws inside Qt's frame and writes no Python draw or swap
     records, so `visualizer_live_check.py` reports `frames_per_s 0` and no render or swap figures (20 Nov, Bubble).
     It must derive presentation cadence from Qt Quick's frame-cycle events (`quick_before_frame_begin` intervals,
-    lifecycle windows excluded), and per-pass GPU time from `--gpu-pass-timing`;
+    lifecycle windows excluded; `tools/quick_frame_cadence.py` computes them today), and per-pass GPU time from
+    `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
 - **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
   (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies

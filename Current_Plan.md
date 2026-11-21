@@ -66,6 +66,16 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
+**Resume here (lead, 21 Nov, usage cut):**
+- [ ] Merge the fast-proof branch `worktree-agent-a6257c36aeee45f10` (head b3f8b51c6 fixes the worker-path identity
+  test; its tests passed) after rerunning `tests/test_visualizer_owner_render_parity.py` on the merge. Its heavy runs
+  wait for quiet CPU: the method proof, the rule (a) reruns, the Oscilloscope partner control.
+- [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
+- [ ] The smoke-host branch `worktree-agent-ad927a7c14bbc5053`: run both smoke tools, review the sheets, merge.
+- [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
+  identical counts before the HUD fix; order-dependent bubble-normal failures too). The protected clip commits rule
+  applies: root cause first, never retune production to satisfy the oracle.
+
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
 - [ ] High (Opus High): the Oscilloscope port (step 4), then N3.6. Defects between N steps: 1D.6 (design note
@@ -157,7 +167,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
+- [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
   blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
   `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
@@ -637,7 +647,13 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov). Python oracle:
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov).
+  - [ ] Next (lead, 21 Nov; 5-hour window at 95 %, so after the reset): an Opus High audit of branch
+    `worktree-agent-a652d2d5a77e690ff` before merge. Its ABI 26/27 C++ touches core code every bloom consumer will use:
+    `u_scene_item`, the item-anchored bloom triangle, the three composites, and `StreamSource::syncStream` clearing an
+    old stream's frame. Then merge, build main at ABI 27, run the quiet-machine cost round (the lead), and layer T
+    (the lead). The owner smoke's remaining failure is the replay judging Bubble's partner frames under the
+    Oscilloscope's bounds, a tool fix routed to the fast-proof agent. The stale-stream fix gets an R number at merge. Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
   the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
   overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
@@ -825,8 +841,8 @@ the feature (D3D11 is not stated).
     opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
     cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
-    time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
-    windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
+    time from `--gpu-pass-timing`. `tools/quick_frame_cadence.py` (frame-cycle intervals outside lifecycle windows) is the
+    reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
     Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
@@ -843,9 +859,36 @@ the feature (D3D11 is not stated).
     (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
     frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
     own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
+  - [ ] Checkpoint audit 9 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov21.md`): the cached reference's key
+    (`python_references._source_files`) misses `rendering/gl_programs/conventions.py` (spliced into every composed
+    shader), the composer `widgets/spotify_visualizer/shaders/__init__.py`, `rendering/gl_programs/*`, the QML shaders
+    and the mask and capture code (`rule_a_masks`, `content_backdrop`, `SceneMirror`,
+    `pixel_tolerance.translucent_by_backgrounds`). Key on the composed sources of every shader the renderer compiles,
+    a declared module list and the mask code; the conventions change (seen not changing the key) becomes the test's
+    control.
+  - [ ] Checkpoint audit 9 M2: the stale-reference path dies on Windows (WinError 32: `store` removes the folder whose
+    `frames.bin` the loaded `StoredFrames` still holds open), leaving the stale reference so every later run dies
+    too. Close the stored frames (or store aside and swap), rewrite the progress file from the rejudge with the
+    run's `--judge-workers`, and test the stale path end to end.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
+    Built (21 Nov, b4cd47802): `tools/visualizer_replay/coverage_windows.py` selects from the take's continuous
+    delivery stream (cold start, switch, a late window in the last 15 s, loudest, quietest, each record field's
+    extremes); warm-up 0 for the landed modes (no GPU history); `native_record_identity.run(window=...)` is
+    byte-identical to the full run's slice and its restart control is caught (`tests/test_coverage_windows.py`);
+    `native_stream_player.py --windows` and `owner_render_parity.py --windows` draw only the windows. Bubble's four
+    takes: 11, 10, 12 and 8 windows, 972, 954, 1,143 and 856 of 5,313 inputs drawn, late windows at 45.1, 43.8,
+    50.6 and 57.1 s, all 14 fields covered (`fast_proof/20261121_coverage_bubble_<take>/`).
   - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
     one-ulp shader change.
+    Controls built (WIP 503784340): `owner_render_parity --native-control shift`, `native_stream_player
+    --shader-control ulp_gradient`. Not run yet (held for the layer T agent's quiet CPU). The runs: nightsolong
+    `--references --windows` (input 22 in the cold-start window); the 5.5 s offers `stream_direction=2` and `=6` with
+    5.5 s windows (input 337); one take with `--native-control shift`; the player `--windows --shader-control
+    ulp_gradient --apis opengl --against` a full-run report.
+  - [ ] Rule (a) reruns of human_heavy1 and nightsolong under today's rule (isolation clause retired 270313a62): the
+    M2 frames 2182, 2223 and 2128 must pass and input 22 still fail; store their references (`--references`).
+  - [ ] The partner-bounds control on real frames: the Oscilloscope 5.5 s smoke's Bubble frames (inputs 390-418) pass
+    under Bubble's bounds (5608f58db) and fail under the Oscilloscope's.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).

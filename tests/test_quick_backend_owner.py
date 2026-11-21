@@ -563,6 +563,7 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/bubble_check.py",               # its cost round's 4K host
     "native/core/python/scene_target_check.py",
     "native/core/python/mesh_buffer_check.py",
+    "tools/visualizer_replay/native_stream_player.py",  # rule (b) harness: replays a take's delivery stream on each backend
     "native/core/python/post_stage_check.py",
 })
 _SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})

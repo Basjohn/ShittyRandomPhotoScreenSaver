@@ -32,23 +32,61 @@ FORMAT = 1
 ROOT = Path(__file__).resolve().parents[2]
 
 
+#: The shader stages the Python renderers compile (composed with their includes and the conventions spliced in).
+_STAGES = (".frag", ".vert", ".comp")
+
+
 def _source_files() -> list[Path]:
+    """The Python drawing code's files, hashed by their bytes: the Quick visualizer package, the GL program helpers
+    (``rendering/gl_programs``, the conventions' owner), the shader composer, the scene's QML and its QML shaders (their
+    sources and packs)."""
     from rendering.quick.bootstrap import quick_qml_root
 
     files = sorted((ROOT / "rendering" / "quick" / "visualizer").rglob("*.py"))
-    shaders = ROOT / "widgets" / "spotify_visualizer" / "shaders"
-    files += sorted(p for p in shaders.rglob("*") if p.is_file() and p.suffix in (".frag", ".vert", ".glsl", ".comp"))
+    files += sorted((ROOT / "rendering" / "gl_programs").rglob("*.py"))
+    files.append(ROOT / "widgets" / "spotify_visualizer" / "shaders" / "__init__.py")
     files += sorted(quick_qml_root().rglob("*.qml"))
+    files += sorted(p for p in (quick_qml_root() / "shaders").rglob("*") if p.is_file())
     return files
 
 
+def _composed_shaders() -> list[tuple[str, str]]:
+    """(name, the text it compiles as) of every shader the Python renderers compile: the composer's own output, so the
+    includes and the conventions it splices (``rendering/gl_programs/conventions.py``) are in the key as compiled."""
+    from widgets.spotify_visualizer import shaders
+
+    folder = Path(shaders.__file__).resolve().parent
+    return [(p.name, shaders.compose_shader_source(p)) for p in sorted(folder.iterdir())
+            if p.is_file() and p.suffix in _STAGES]
+
+
+def _harness_sources() -> list[tuple[str, str]]:
+    """The harness code that draws, masks and captures a reference (its sources, not its whole modules, so a judge
+    change keeps the cache)."""
+    import inspect
+
+    import tools.expanded_visualizer_evidence as evidence
+    from tools import pixel_tolerance
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    pieces = [parity.SceneMirror, parity._SpilledFrames, parity.drawn_run, parity._python_mappings_run,
+              parity._python_reference, parity._python_masks, parity.content_backdrop, parity.rule_a_masks,
+              parity.single_sample_scene_targets, parity.card_placement, parity.parity_script,
+              pixel_tolerance.translucent_by_backgrounds, evidence.HiddenDisplayHost]
+    return [(f"{piece.__module__}.{piece.__qualname__}", inspect.getsource(piece)) for piece in pieces]
+
+
 def renderer_source_hash() -> str:
-    """A digest of the Python drawing code: every file of ``_source_files`` by its path and bytes."""
+    """A digest of everything that makes a Python reference (audit 9 M1): the drawing code's files
+    (``_source_files``), the composed text of every shader the renderers compile (``_composed_shaders``) and the
+    harness's drawing, mask and capture code (``_harness_sources``)."""
     digest = hashlib.sha256()
     for path in _source_files():
         digest.update(str(path.relative_to(ROOT)).replace("\\", "/").encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
+    for name, text in _composed_shaders() + _harness_sources():
+        digest.update(name.encode() + b"\0" + text.encode() + b"\0")
     return digest.hexdigest()
 
 
@@ -90,6 +128,21 @@ class StoredFrames:
     def __iter__(self):
         return (self[index] for index in range(len(self)))
 
+    def close(self) -> None:
+        """The frames file's handle released (before the reference is replaced: Windows keeps an open file)."""
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+
+
+def release(loaded: tuple | None) -> None:
+    """Close what a loaded reference holds open (``load``'s result)."""
+    if loaded is None:
+        return
+    frames = loaded[0].get("frames")
+    if hasattr(frames, "close"):
+        frames.close()
+
 
 class StoredMasks(Mapping):
     """A stored run's masks by input (bool arrays), decoded on demand."""
@@ -116,7 +169,7 @@ class StoredMasks(Mapping):
 
 
 #: The Python run's report keys a reference keeps (besides its frames).
-_KEPT = ("pixels", "digests", "inputs", "final_mode", "phase", "phases", "on_worker", "worker", "mode")
+_KEPT = ("pixels", "digests", "inputs", "final_mode", "phase", "phases", "on_worker", "worker", "mode", "modes")
 
 
 def store(folder: Path, made_of: dict, python: dict, masks: Mapping, mappings: list,
@@ -142,11 +195,18 @@ def store(folder: Path, made_of: dict, python: dict, masks: Mapping, mappings: l
     index = {"made_of": made_of, "frames": entries, "masks": mask_entries, "mappings": mappings,
              "backdrop_frames": int(backdrop_frames), "run": {k: python.get(k) for k in _KEPT if k in python}}
     (partial / "reference.json").write_text(json.dumps(index, default=str), encoding="utf-8")
-    if folder.exists():
-        import shutil
+    import shutil
 
-        shutil.rmtree(folder)
+    # Swap: the old reference aside, the new one into place, then the old one removed (a failure leaves one whole
+    # reference at the key, never none).
+    old = folder.with_name(folder.name + ".old")
+    if old.exists():
+        shutil.rmtree(old)
+    if folder.exists():
+        folder.rename(old)
     partial.rename(folder)
+    if old.exists():
+        shutil.rmtree(old)
 
 
 def load(folder: Path, made_of: dict) -> tuple[dict, Mapping, list, int] | None:

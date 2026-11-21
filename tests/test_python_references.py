@@ -45,6 +45,30 @@ def test_a_reference_reads_back_exactly_what_was_stored(tmp_path):
     assert refs.load(tmp_path / "other_key", made_of) is None
 
 
+def test_a_read_reference_can_be_replaced_once_released(tmp_path):
+    # Audit 9 M2: the stale path replaces a reference whose frames were read. Released, the store swaps the new one
+    # into place; the old one's frames are gone and the new ones read back.
+    import sys
+
+    import pytest
+
+    made_of = {"mode": "bubble"}
+    folder = tmp_path / "bubble_key"
+    refs.store(folder, made_of, _python(), {}, [], backdrop_frames=5)
+    loaded = refs.load(folder, made_of)
+    loaded[0]["frames"][0]                                   # a frame read: its file is open
+    if sys.platform == "win32":
+        # Control: not released, the old frames file cannot be removed (the run died here before the fix).
+        with pytest.raises(PermissionError):
+            refs.store(folder, made_of, _python(count=3), {}, [], backdrop_frames=3)
+    refs.release(loaded)
+    refs.store(folder, made_of, _python(count=3), {}, [], backdrop_frames=3)
+    again = refs.load(folder, made_of)
+    assert again is not None and again[3] == 3 and len(again[0]["frames"]) == 3
+    assert not (tmp_path / "bubble_key.old").exists() and not (tmp_path / "bubble_key.partial").exists()
+    refs.release(again)
+
+
 def test_the_key_follows_the_run_and_the_drawing_code(monkeypatch):
     frames = ["frame 0", "frame 1"]
     key, made_of = refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)
@@ -59,8 +83,21 @@ def test_the_key_follows_the_run_and_the_drawing_code(monkeypatch):
         assert refs.reference_key(*changed)[0] != key
     # The drawing code: one source file's bytes changed makes another key.
     files = refs._source_files()
-    assert any(p.suffix == ".py" for p in files) and any(p.suffix == ".frag" for p in files)
-    assert any(p.suffix == ".qml" for p in files)
+    assert any(p.suffix == ".py" for p in files) and any(p.suffix == ".qml" for p in files)
+    assert any(p.parent.name == "gl_programs" for p in files)
+    # Audit 9 M1's control: one GLSL comment added to the conventions every composed shader carries changes the key.
+    from rendering.gl_programs import conventions
+
+    monkeypatch.setattr(conventions, "SRPSS_CONVENTIONS_GLSL", conventions.SRPSS_CONVENTIONS_GLSL + "\n// audit 9\n")
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] != key
+    monkeypatch.undo()
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] == key
+    # And the harness's mask code.
+    from tools import pixel_tolerance
+
+    monkeypatch.setattr(pixel_tolerance, "translucent_by_backgrounds", lambda *a: None)
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] != key
+    monkeypatch.undo()
     original = type(files[0]).read_bytes
     monkeypatch.setattr(type(files[0]), "read_bytes",
                         lambda self: original(self) + (b"x" if self == files[0] else b""))
