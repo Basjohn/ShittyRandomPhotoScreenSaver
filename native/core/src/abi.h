@@ -158,4 +158,13 @@
 // timing): host_detach's at_frame_edge (harness, a hidden host), raw_vulkan_counts, the frame driver state's
 // raw_vulkan_released and no_frame_finishes, the GPU timer state's deferred_releases; every QRhi resource is retired by
 // deleteLater (rhi_owned.h), the GPU timer's pool retired inside a frame goes to the device's deferred queue.
-#define SRPSS_NATIVE_CORE_ABI 30
+// 31 (N3.6, checkpoint audit 11): host_inject_device_lost (harness, Vulkan: Qt's queue answers its next submit, or
+// every one with sticky, with VK_ERROR_DEVICE_LOST, so Qt's own QRhi reports the loss; M1), vulkan_device_create_failures
+// (harness: forced device creation failures, and the injection's counts; M2), rhi_owned_counts (L1). The hidden host
+// retries a replacement device it could not make at each next frame (its frames fail with the reason until then) and its
+// state's replacement_pending, device_lost_marked and core_wrappers_live; a loss record's replacement_attempts,
+// replacement_failures, device_already_lost, replacement_pending, retried_at_frame, core_wrappers_live_before and
+// core_wrappers_live_after_invalidation; the hidden host's close record's core_wrappers_live_after_invalidation; the job
+// service's stop record's told_device_lost and device_lost and its self-test's device_was_lost step (L2). RhiOwned is a
+// class (rhi_owned.h). Backward compatible for every earlier caller.
+#define SRPSS_NATIVE_CORE_ABI 31

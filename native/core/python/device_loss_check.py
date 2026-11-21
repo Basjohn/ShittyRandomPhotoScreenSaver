@@ -38,17 +38,30 @@ Rounds (one child process per API):
             once a loss); "spectrum", the native Spectrum on a frame the Python renderer drew (captured by the OpenGL
             child, spectrum_check's capture, shared with the Vulkan child); "background", the background layer with a
             backdrop pyramid and material cards over it (the layer sends its photo again through its own lost edge).
+  lost      (Vulkan; checkpoint audit 11 M1) the rebuild round's LOSSES losses, each a real one Qt's own QRhi reports
+            (``HiddenHost.inject_device_loss``: Qt's queue answers its next ``vkQueueSubmit`` with
+            ``VK_ERROR_DEVICE_LOST``, harness only): the frame after the injected submit takes the lost path by itself
+            (reason "lost", ``qrhi_lost``), the ``VK_EXT_device_fault`` report runs once for the lost device, the frame
+            driver skips its finish on the lost QRhi, and the lost device's job service is told before its stop (L2:
+            ``told_device_lost``, its cache save skipped); every check of the rebuild round holds too.
+  retry     (Vulkan; M2) a sticky injected loss (every submit lost, as a really lost device's) with RETRY_FAILURES
+            forced device creation failures: each frame until the replacement is made fails with its reason (the host
+            stays open, the lost device never handed to Qt again), then the replacement is made, the lost device goes
+            (its job service told), and the frame after the re-send equals the frame before the loss.
+Every round with a loss also checks L1: no core wrapper (``rhi_owned.h``) is live on the old QRhi right after its scene
+graph's invalidation (``core_wrappers_live_after_invalidation``), where it held some before.
 On Vulkan the instance has the Khronos validation layer with synchronisation validation (``--layer-path``); every message
 is attributed (``vk_validation.py``).
 
-Not proved here: a real ``VK_ERROR_DEVICE_LOST`` (the fault report's query runs only on a really lost device), Qt's
-threaded render loop's own recovery on a shown window (the window host's slots, ``WindowHost::create``), and OpenGL's
-real loss (a failed ``makeCurrent``).
+Not proved here: a TDR itself (the injected submit leaves the device alive; the queue is let idle first, since a lost
+device runs nothing), Qt's threaded render loop's own recovery on a shown window (the window host's slots,
+``WindowHost::create``; no window is shown here), and OpenGL's real loss (a failed ``makeCurrent``).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/device_loss_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds rebuild control release] [--photos A.png B.png] [--label n36_device_loss]
+  [--apis opengl vulkan] [--rounds rebuild control release scenes lost retry] [--scenes program spectrum background]
+  [--photos A.png B.png] [--label n36_device_loss]
 Evidence: .artifacts/evidence/native_core/n3_6/<date>_<label>/ (summary.json; one PNG sheet per API: the frame before
 each loss, the lost frame, the frame after). Exit 0 whenever the harness ran; the verdict is the last printed line
 ("N36 LOSS VERDICT PASS" or "N36 LOSS VERDICT FAIL: ...").
@@ -69,7 +82,9 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("rebuild", "control", "release", "scenes")
+ROUNDS = ("rebuild", "control", "release", "scenes", "lost", "retry")
+VULKAN_ONLY = ("control", "lost", "retry")
+RETRY_FAILURES = 2      # the retry round's forced device creation failures (frames refused before the replacement)
 CHILD_TIMEOUT_S = 900
 LOSSES = 2              # in a row on one host: a second loss proves the first rebuild left a host that can lose again
 TIMED_FRAMES = 8        # the release round's frames with the timer writing its pool
@@ -108,19 +123,52 @@ def resent_through_jobs(services: dict, device, count: int) -> bool:
             and float(service.get("published", 0)) >= count)
 
 
-def judge_loss(loss: dict, state: dict, *, vulkan: bool, swap: bool) -> dict:
+def job_stop_record(steps) -> dict | None:
+    """The job service's stop record in a destroyed device's steps (``job service stopped: <json>``), or None."""
+    prefix = "job service stopped: "
+    for step in steps or []:
+        if isinstance(step, str) and step.startswith(prefix):
+            try:
+                return json.loads(step[len(prefix):])
+            except ValueError:
+                return {}
+    return None
+
+
+def judge_loss(loss: dict, state: dict, *, vulkan: bool, swap: bool, reason: str = "forced") -> dict:
     """One loss record (``state["device_losses"][-1]``) and the host's state after its rebuild, judged. GPU-free (the
-    tests hold every check against a record with that one fact changed)."""
+    tests hold every check against a record with that one fact changed). ``reason``: "forced" (the harness's forced
+    path, the device alive) or "lost" (a loss Qt's own QRhi reported: checkpoint audit 11 M1)."""
     checks = {
-        "forced": loss.get("reason") == "forced",
         "qrhi_recreated": loss.get("qrhi_recreated") is True and not loss.get("error"),
         "invalidated_on_render_thread": loss.get("invalidated_on_render_thread") is True
         and loss.get("invalidated_on_gui_thread") is False,
         "no_lost_device_left": state.get("lost_device_alive") is False,
+        # Audit 11 L1: every core wrapper on the old QRhi retired by its scene graph's invalidation (there were some).
+        "no_core_wrapper_outlives_the_invalidation": loss.get("core_wrappers_live_after_invalidation") == 0
+        and int(loss.get("core_wrappers_live_before") or 0) > 0,
     }
+    if reason == "forced":
+        checks["forced"] = loss.get("reason") == "forced"
+    else:
+        checks["lost_reported_by_qrhi"] = loss.get("reason") == "lost" and loss.get("qrhi_lost") is True
     if not vulkan:
         checks["no_device_of_ours"] = "device_swapped" not in loss and not state.get("device_alive")
         return checks
+    if reason == "lost":
+        # The fault detail of the lost device, read once (a replacement retried later meets the same device again).
+        fault = loss.get("fault") or {}
+        checks["fault_reported"] = fault.get("queried") is True or (
+            "fault" in loss and not (state.get("device") or {}).get("device_fault"))
+    if swap:
+        # Audit 11 L2: the lost device's job service is told whether the device was lost before its stop, and a lost
+        # device's teardown saves nothing of it.
+        stop = job_stop_record(loss.get("lost_device_teardown"))
+        really = loss.get("qrhi_lost") is True
+        told = stop is not None and stop.get("told_device_lost") is really and stop.get("device_lost") is really
+        if told and really and "pipeline_cache_save" in stop:
+            told = str((stop["pipeline_cache_save"] or {}).get("save", "")).startswith("skipped")
+        checks["job_service_told_whether_the_device_was_lost"] = told
     old, new = loss.get("old_device"), loss.get("new_device")
     before, after = loss.get("qrhi_device_before"), loss.get("qrhi_device")
     checks["one_device_live"] = state.get("vulkan_live_devices") == 1 and state.get("device_alive") is True
@@ -153,11 +201,50 @@ def _sheet(path: Path, tiles) -> None:
     sheet.save(path)
 
 
-def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap: bool, tiles: list) -> dict:
+def take_lost_path(core, host, mode: str, swap: bool) -> dict:
+    """Sends the host down its lost path: "forced" (the harness's forced path), "lost" (M1: Qt's queue answers its next
+    submit with VK_ERROR_DEVICE_LOST, and that frame is drawn), "retry" (M2: every submit lost, RETRY_FAILURES device
+    creations failing; the frames until the replacement is made are refused). Returns the refused frames' reasons."""
+    if mode == "forced":
+        host.force_device_loss(swap_device=swap)
+        return {}
+    if mode == "lost":
+        host.inject_device_loss()
+        host.frames(1)                          # the frame whose submit meets the loss
+        return {}
+    core.device_create_failures(RETRY_FAILURES)
+    host.inject_device_loss(sticky=True)
+    host.frames(1)
+    refused = []
+    for _ in range(RETRY_FAILURES):             # each frame retries the replacement; each creation fails, forced
+        try:
+            host.frames(1)
+        except RuntimeError as exc:
+            refused.append(str(exc))
+    return {"refused": refused}
+
+
+def judge_retry(loss: dict, state: dict, refused: list, remaining: int) -> dict:
+    """M2's loss record: the frames refused while the replacement could not be made, each with its reason, then the
+    replacement made (the rebuild round's checks hold the rest), the fault reported only at the first attempt."""
+    failures = loss.get("replacement_failures") or []
+    return {
+        "frames_refused_until_replaced": len(refused) == RETRY_FAILURES
+        and all("no new device" in r and "forced" in r for r in refused),
+        "replacement_retried_until_made": loss.get("replacement_attempts") == RETRY_FAILURES + 1
+        and len(failures) == RETRY_FAILURES and loss.get("device_swapped") is True
+        and loss.get("replacement_pending") is False,
+        "fault_not_reported_again": "fault" in loss and loss.get("device_already_lost") is True,
+        "host_not_pending": state.get("replacement_pending") is False and remaining == 0,
+    }
+
+
+def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap: bool, tiles: list,
+                 mode: str = "forced") -> dict:
     fsc = _fsc()
     vulkan = api == "vulkan"
     checks: dict = {}
-    facts: dict = {"losses": []}
+    facts: dict = {"losses": [], "mode": mode}
     images = fsc.photos(photo_paths, fsc.CARD)
     host = core.hidden_host(fsc.CARD[0] + 2 * fsc.MARGIN, fsc.CARD[1] + 2 * fsc.MARGIN)
     scene = None
@@ -182,8 +269,9 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
         scene.mode.on_textures_lost(lost)
         published = scene.stream.step
         for index in range(LOSSES):
-            edges_before = int((host.state().get("driver") or {}).get("edges", 0))
-            host.force_device_loss(swap_device=swap)
+            driver_before = host.state().get("driver") or {}
+            edges_before = int(driver_before.get("edges", 0))
+            met = take_lost_path(core, host, mode, swap)
             lost_frame = scene.read()               # the lost path at this frame's start; nothing is published
             for _ in range(LOST_EDGE_FRAMES):       # the lost edge reaches the owner on the GUI thread (queued)
                 app.processEvents()
@@ -199,8 +287,18 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
             loss = losses[-1] if losses else {}
             prefix = f"loss_{index}_"
             checks[prefix + "recorded"] = len(losses) == index + 1
-            for key, ok in judge_loss(loss, state, vulkan=vulkan, swap=swap).items():
+            reason = "forced" if mode == "forced" else "lost"
+            for key, ok in judge_loss(loss, state, vulkan=vulkan, swap=swap, reason=reason).items():
                 checks[prefix + key] = ok
+            if mode != "forced":
+                # The frame driver met a QRhi that reports its device lost: no finish at its invalidation.
+                driver_now = state.get("driver") or {}
+                checks[prefix + "frame_driver_skipped_its_finish"] = (
+                    driver_now.get("no_frame_finishes") == driver_before.get("no_frame_finishes"))
+            if mode == "retry":
+                remaining = int(core.device_create_failures().get("remaining", -1))
+                for key, ok in judge_retry(loss, state, met.get("refused") or [], remaining).items():
+                    checks[prefix + key] = ok
             checks[prefix + "lost_frame_draws_nothing_stale"] = float(lost_frame[..., :3].max()) == 0.0
             checks[prefix + "owner_called_once"] = len(calls) == index + 1 and calls[-1] == ["new", "old"]
             comparison = fsc.compare(after, before)
@@ -215,7 +313,8 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
                 checks[prefix + "one_job_service"] = core.job_counts().get("job_services") == 1
                 checks[prefix + "resent_through_the_devices_jobs"] = resent_through_jobs(
                     services, loss.get("qrhi_device"), len(images))
-            facts["losses"].append({"loss": loss, "comparison": comparison, "texture_jobs": jobs_after,
+            facts["losses"].append({"loss": loss, "comparison": comparison, "texture_jobs": jobs_after, "met": met,
+                                    "injection": core.device_create_failures() if vulkan else None,
                                     "driver": {k: driver.get(k) for k in ("released", "error", "edges",
                                                                           "frames_recorded", "detach_requested")},
                                     "edges_before": edges_before,
@@ -228,6 +327,8 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
         if vulkan:
             facts["job_services"] = core.job_services_state()
     finally:
+        if vulkan:
+            core.device_create_failures(0)
         if scene is not None:
             scene.close(app)
         host.frames(1)
@@ -235,6 +336,9 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
         core.wait_jobs_idle(20000)
         facts["host_close"] = host.close()
         _flush(app)
+    # L1 at the close too: nothing of the core's outlived the closing invalidation.
+    checks["no_core_wrapper_outlives_the_close"] = (facts["host_close"] or {}).get(
+        "core_wrappers_live_after_invalidation") == 0
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -642,7 +746,7 @@ def child(args) -> dict:
     root = host_check._root(args.repo)
     out = Path(args.out_dir)
     photo_paths = tuple(Path(p) for p in args.photos)
-    rounds = [r for r in args.rounds if r != "control" or args.api == "vulkan"]
+    rounds = [r for r in args.rounds if r not in VULKAN_ONLY or args.api == "vulkan"]
     record: dict = {"api": args.api, "rounds": rounds, "module_loaded": False, "instance_created": False,
                     "photos": [p.name for p in photo_paths]}
     if args.api == "opengl":
@@ -696,7 +800,8 @@ def child(args) -> dict:
                                                     args.scenes)
                     else:
                         record[name] = round_losses(core, engine, app, args.api, folder, photo_paths,
-                                                    swap=name == "rebuild", tiles=tiles)
+                                                    swap=name != "control", tiles=tiles,
+                                                    mode=name if name in ("lost", "retry") else "forced")
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:

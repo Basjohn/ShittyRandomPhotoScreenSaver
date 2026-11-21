@@ -46,7 +46,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 30
+EXPECTED_ABI = 31
 HOST_KINDS = ("window", "hidden")
 
 
@@ -316,6 +316,16 @@ class NativeCore:
         """N3.6: the raw Vulkan objects the core retired inside a frame (``vulkan_context.h``): ``raw_vulkan_deferred``,
         ``raw_vulkan_released_at_edges``, ``raw_vulkan_released_at_idle`` and ``raw_vulkan_pending``."""
         return json.loads(self.module.raw_vulkan_counts())
+
+    def device_create_failures(self, count: int | None = None) -> dict:
+        """N3.6, checkpoint audit 11 M2, harness only: the next ``count`` Vulkan device creations fail as a failed
+        ``vkCreateDevice`` does (0 stops; None only reads). Returns ``remaining``, ``forced`` and ``submit_loss`` (the
+        lost-submit injection's counts: ``armed``, ``sticky``, ``injected``, ``forwarded``)."""
+        return json.loads(self.module.vulkan_device_create_failures(-1 if count is None else int(count)))
+
+    def rhi_owned_counts(self) -> dict:
+        """N3.6, checkpoint audit 11 L1: the core's QRhi resource wrappers live (``live_total``; ``rhi_owned.h``)."""
+        return json.loads(self.module.rhi_owned_counts())
 
     def pipeline_cache_self_test(self, directory: str | Path) -> dict:
         """N3.6, GPU-free: the core's pipeline cache file (``pipeline_cache.h``) in ``directory``: the format's accept

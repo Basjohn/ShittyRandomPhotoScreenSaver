@@ -1018,6 +1018,7 @@ QMutex g_lossMutex;
 quint64 g_lossDevice = 0;                    // under g_lossMutex
 PFN_vkVoidFunction *g_lossSlot = nullptr;    // the table's vkQueueSubmit entry (under g_lossMutex)
 PFN_vkQueueSubmit g_lossOriginal = nullptr;  // the driver's (the entry's value before it was exchanged)
+PFN_vkQueueWaitIdle g_lossWaitIdle = nullptr; // the driver's, for the queue the loss answers
 QAtomicInteger<quintptr> g_lossQueue { 0 };   // Qt's queue (VkQueue)
 QAtomicInt g_lossArmed { 0 };                // 0 off, 1 the next submit, 2 every submit (sticky)
 QAtomicInt g_lossSticky { 0 };
@@ -1031,6 +1032,10 @@ VKAPI_ATTR VkResult VKAPI_CALL lossQueueSubmit(VkQueue queue, uint32_t submitCou
         const int armed = g_lossArmed.loadAcquire();
         if (armed == 2 || (armed == 1 && g_lossArmed.testAndSetOrdered(1, 0))) {
             g_lossInjected.fetchAndAddRelaxed(1);
+            // A lost device has no work left; this one is alive, and QRhi skips its waits after a loss, so the queue's
+            // earlier frames are let finish here (the submitting thread holds the queue) before Qt tears them down.
+            if (g_lossWaitIdle)
+                g_lossWaitIdle(queue);
             return VK_ERROR_DEVICE_LOST; // nothing submitted, as the driver does for a lost device
         }
     }
@@ -1104,6 +1109,7 @@ bool injectSubmitLoss(quint64 device, quint32 family, bool sticky, QString *erro
         VkQueue queue = VK_NULL_HANDLE;
         df->vkGetDeviceQueue(dev, family, 0, &queue);
         g_lossOriginal = reinterpret_cast<PFN_vkQueueSubmit>(real);
+        g_lossWaitIdle = reinterpret_cast<PFN_vkQueueWaitIdle>(f->vkGetDeviceProcAddr(dev, "vkQueueWaitIdle"));
         g_lossQueue.storeRelease(reinterpret_cast<quintptr>(queue));
         g_lossSlot = slot;
         g_lossDevice = device;
