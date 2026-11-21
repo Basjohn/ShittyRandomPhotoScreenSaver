@@ -195,3 +195,23 @@ def test_four_settings_grips_are_invisible_with_native_resize_hit_targets(dialog
     import inspect
     assert 'painter.drawLine' not in inspect.getsource(CornerSizeGrip.paintEvent)
     assert len({grip.objectName() for grip in grips.values()}) == 4
+
+
+def _bar_colours(view):
+    """The handle colour a list's own stylesheet gives its vertical scrollbar, or None when it styles none."""
+    match = re.search(r"QScrollBar::handle:vertical:hover[^{]*\{[^}]*background:\s*([^;]+);", view.styleSheet())
+    return match.group(1).strip() if match else None
+
+
+def test_the_content_lists_and_the_filter_popup_scrollbars_are_the_themes_not_the_platforms(dialog):
+    """1B.11 / 1C.9: a list's bar is the shared style's themed bar (the platform's native bar ignores the theme)."""
+    from ui.widgets.theme_filter import ThemedCompleterPopup
+    sources = _tab(dialog, "sources")
+    themes = _tab(dialog, "themes")
+    popup = ThemedCompleterPopup()
+    owners = (sources.rss_list, sources.folder_list, themes.theme_list, themes.widget_theme_list, popup)
+    from ui.settings_theme_qss import render_qss_color
+    accent = render_qss_color(get_active_settings_theme().color("control.list.selected_accent"))
+    for view in owners:
+        assert accent in (_bar_colours(view) or ""), view
+        assert "QScrollBar:vertical" in view.styleSheet(), view
