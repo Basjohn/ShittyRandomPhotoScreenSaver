@@ -172,12 +172,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Defect in the shipped Python Sphere (found by N5.3's source reading, 21 Nov; lead confirmed by reading; Sonnet agent af51e5a7d68bc5725):
-  `rendering/quick/visualizer/implementations/sphere_voxel.py:955` sets `uFade` to `scene_fade *
-  content_fade`, but the render owner already folds the scene opacity into `content_fade` (`render_contract.
-  scene_faded_snapshot`, R-242; before R-242 the node folded Qt's inherited opacity the same way), so Sphere's scene fade
-  is squared and has been since September (49086dbf4). Not an R-242 regression. Fix: `uFade` is the content fade alone;
-  a test whose control is a snapshot at scene fade 0.5 (old code gives 0.25); render a fade-in pair for the lead.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
