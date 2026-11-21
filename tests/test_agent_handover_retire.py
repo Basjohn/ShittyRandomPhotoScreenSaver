@@ -94,3 +94,70 @@ def test_retire_refuses_to_remove_when_an_evidence_file_fails_to_copy(tmp_path, 
     assert os.path.lexists(str(worktree))
     assert "frame.png" in capsys.readouterr().out
 
+
+
+def _seed_keep_case(worktree: Path) -> None:
+    for name in ("keepme/a.png", "keepme/sub/b.png", "dropme/c.png", "one.txt"):
+        target = worktree / ".artifacts" / "evidence" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(name)
+
+
+def _arrived(repo: Path) -> set[str]:
+    base = agent_handover._long(str(repo / ".artifacts" / "evidence"))
+    return {os.path.relpath(os.path.join(folder, name), base).replace("\\", "/")
+            for folder, _dirs, names in os.walk(base) for name in names}
+
+
+def _retire_keep(repo: Path, worktree: Path, keep, monkeypatch) -> int:
+    monkeypatch.setattr(agent_handover, "ROOT", repo)
+    monkeypatch.setattr(agent_handover, "running_from", lambda _worktree: [])
+    return agent_handover.retire(worktree, keep)
+
+
+def test_retire_keep_copies_only_the_listed_paths(tmp_path, monkeypatch):
+    repo, worktree, _outside = _make_case(tmp_path)
+    _seed_keep_case(worktree)
+    listing = tmp_path / "keep.txt"
+    listing.write_text("# comment\nevidence/keepme\n\nevidence/one.txt\n", encoding="utf-8")
+    keep = agent_handover.read_keep_list(listing)
+    assert _retire_keep(repo, worktree, keep, monkeypatch) == 0
+    assert _arrived(repo) == {"keepme/a.png", "keepme/sub/b.png", "one.txt"}
+    assert not os.path.lexists(str(worktree))
+
+
+def test_retire_keep_refuses_a_missing_path_and_touches_nothing(tmp_path, monkeypatch, capsys):
+    repo, worktree, _outside = _make_case(tmp_path)
+    _seed_keep_case(worktree)
+    assert _retire_keep(repo, worktree, ["evidence/keepme", "evidence/not_there"], monkeypatch) == 1
+    assert "not_there" in capsys.readouterr().out
+    assert os.path.lexists(str(worktree))
+    assert not (repo / ".artifacts" / "evidence").exists()
+
+
+def test_retire_keep_still_refuses_when_a_listed_file_fails_to_copy(tmp_path, monkeypatch):
+    repo, worktree, _outside = _make_case(tmp_path)
+    _seed_keep_case(worktree)
+
+    def broken(_path, _destination):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(agent_handover, "_copy_file", broken)
+    assert _retire_keep(repo, worktree, ["evidence/keepme"], monkeypatch) == 1
+    assert os.path.lexists(str(worktree))
+
+
+def test_keep_list_refuses_paths_outside_artifacts(tmp_path):
+    listing = tmp_path / "keep.txt"
+    for bad in ("../x", "evidence/../../x", "C:/x", "/x"):
+        listing.write_text(bad + "\n", encoding="utf-8")
+        with pytest.raises(ValueError):
+            agent_handover.read_keep_list(listing)
+
+
+def test_control_retire_without_keep_copies_everything(tmp_path, monkeypatch):
+    """The negative control: the same worktree retired with no list also copies the unlisted files."""
+    repo, worktree, _outside = _make_case(tmp_path)
+    _seed_keep_case(worktree)
+    assert _retire_keep(repo, worktree, None, monkeypatch) == 0
+    assert "dropme/c.png" in _arrived(repo)

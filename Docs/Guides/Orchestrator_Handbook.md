@@ -155,7 +155,8 @@ From the main checkout, on `main`:
     .venv/Scripts/python tools/agent_handover.py --retire agent-<id>
 
 `--retire` copies the worktree's whole evidence tree into the main checkout (never overwriting), refuses an unmerged
-branch, uncommitted work or a live process, and only then removes the worktree and the branch. Before recording a branch as merged with `git merge -s ours`, run `git log --oneline main..<branch>`: it must list only
+branch, uncommitted work or a live process, and only then removes the worktree and the branch.
+`--retire agent-<id> --keep <paths file>` copies only the paths the file lists (one per line, relative to the worktree's `.artifacts`; a missing path refuses the retire), so the report-cited keep group is copied and the rest never lands here. Before recording a branch as merged with `git merge -s ours`, run `git log --oneline main..<branch>`: it must list only
 that branch's own commits, whose content is already on main. If it lists another branch's commits (an agent merged a
 work-in-progress branch), never use `-s ours`: git would then treat those commits as merged and silently drop them
 from the later real merge. Never remove an agent
