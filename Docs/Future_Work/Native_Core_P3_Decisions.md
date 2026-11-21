@@ -35,8 +35,8 @@ The scopes overlap and must not be added.
 | Full admitted pre-SMP native/compositor/primitive programme | 20–35% | 65–80% |
 
 The foundation already supplies hosts, frame/packet services, generic programs, compositing, targets, mesh/buffer,
-compute, post stages and async jobs. Spectrum, Spline Curve and Bubble use native routes (Bubble registered and
-offered on Vulkan since 17 Nov; its live run and long-take proofs remain, plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
+compute, post stages and async jobs. Spectrum, Spline Curve, Bubble and the Oscilloscope use native routes (Bubble registered and
+offered on Vulkan since 17 Nov, its live run and long-take proofs remain; the Oscilloscope since 21 Nov; plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
 Studio/tools migration and installed acceptance remain. The full scope additionally includes admitted N6 high-potential
 primitives and compositor/material work before SMP. Conditional mesh-shader work and low-potential primitives
 without a consumer are not an indefinite blocker. `Current_Plan.md` owns admission and ordering; the actual routes
@@ -799,7 +799,7 @@ stays selectable in Settings as the fallback.
 - Facts J1 in the owner: `native_hidden_host` creates the process's one hidden host at the first request, keeps it,
   refuses another size, and closes it at the application's quit (a process ending with it alive did not exit).
 - Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
-  family), every Visualizer mode but Spectrum (N2.5, 14 Nov: `renderer_backends` `("opengl", "vulkan")`, drawn by
+  family), every Visualizer mode but Spectrum, Spline Curve, Bubble and the Oscilloscope (Spectrum N2.5, 14 Nov: `renderer_backends` `("opengl", "vulkan")`, drawn by
   the native core's item through `rendering/quick/visualizer/native_route.py`), and every mode's Studio: its preview
   is the mode's Python renderer in an OpenGL render node, so `has_studio` answers False on a backend outside
   `STUDIO_PREVIEW_BACKENDS` (`ui/studio/registry.py`, OpenGL only) until a native preview exists. Settings' Visualizers page keeps every mode listed (a selection there is a
@@ -995,8 +995,8 @@ empty pair (two passes into the 64 x 64 target, no instance; its cost does not d
 OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
 p90s in the evidence.
 
-**As built: Oscilloscope (N5.1, ABI 27: Glow 0's unread field at 26, the item-anchored bloom at 27; not yet
-registered).** The first consumer of
+**As built: Oscilloscope (N5.1, ABI 29: Glow 0's unread field at 26, the item-anchored bloom at 27, the scene's
+Python geometry at 28, the turned card's window-frame scene at 29; registered and offered on Vulkan, 21 Nov).** The first consumer of
 N3.4's bloom and composite, and the first instanced pass over a storage stream in a product mode. Its record is a
 runtime schema (`core/visualizer_engine/oscilloscope_native_schema.py`, 49,376 bytes, version 1; field names follow the
 core's identifier rule, lowercase): what follows the music, from the logical frame alone (`oscilloscope_frame_values`:
@@ -1108,6 +1108,16 @@ With the mask taken from both frames (pixels either frame lights) every frame pa
 `n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`). *The lead's decision (21
 Nov): rule (b) compares two peer APIs, neither the reference, so its mask is the union over both frames, for every
 mode* ("The pixel tolerance", rule (b)'s mask).
+*Registered (21 Nov).* The operator accepted the mode for the route without more 1:1 polish (it is reworked after the
+flip, plan item 9): `GENERIC_MODE_SETTINGS["oscilloscope"]` and `renderer_backends` `("opengl", "vulkan")`, playbook
+checklist 18. Verdicts: owner rule (a) passes all six 60 s recorded takes and 14 of the 15 offers; layer L identical;
+layer C passed on a quiet machine with validation on (the whole surface on Vulkan under OpenGL's at 1440p and at a 4K
+frame's pixel count, clear, bloom and composite most of it); layer T on Display 1, 90 s of recorded music, no load: Vulkan
+keeps frame times level with the OpenGL control and no frame over 16.7 ms. Not matched, recorded in the plan's
+Backlog (Oscilloscope parity and offers) and not owed a slot: rule (b)'s 60 s misses (2 to 6 levels, isolated, on edges)
+and the one offer input that fails. Its Studio preview is not offered on Vulkan (the Studio is OpenGL only until N5.8).
+Evidence: `n5_1_oscilloscope/` (cost `20261121_n51_oscilloscope_cost_quiet/`), `visualizers/oscilloscope/live_check/
+20261121_osc_layer_t_{vulkan,opengl}/`; the figures are in the commit messages of b8c6c3528 and 4572f7e88.
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the

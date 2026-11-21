@@ -96,6 +96,7 @@ build selection; current host and composite proof lives here.
   - The product modes on it: Spline Curve (`devcurve`, N5.1; its record `core/visualizer_engine/devcurve_native_schema.py`,
     its settings `devcurve_settings_values`), drawn through the Visualizer's route (`native_route.py`
     `GENERIC_MODE_SETTINGS`: one generic item per Visualizer item, its program retargeted by mode).
+    Bubble (N5.1, D12 "As built: Bubble") and the Oscilloscope (N5.1, D12 "As built: Oscilloscope") are on it too.
   - Python faces: `rendering/native/mode.py` (`NativeMode`), `rendering/native/spectrum.py`; a composite item hides
     and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
     (`window_pixels`), as its own synchronisation read it on the render thread: nothing before it, nothing while the
@@ -373,8 +374,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    "unread"?})`): the route builds the variant's program at the bind and again only at the Settings edge that changes
    it. One record serves every variant: a variant that leaves a stage out names the record fields only that stage reads
    in `"unread"` (ABI 26; any other record field no pass reads is still refused). Its harness is
-   `oscilloscope_check.py`; until its registration, its owner rule (a) runs through `oscilloscope_check.py owner`, the
-   route's registration process-local.
+   `oscilloscope_check.py`; the mode is registered on the route and offered on Vulkan (21 Nov), its owner rule (a) run
+   through `owner_render_parity.py --native --mode oscilloscope`.
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 
