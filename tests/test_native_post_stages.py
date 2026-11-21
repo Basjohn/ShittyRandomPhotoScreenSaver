@@ -238,6 +238,15 @@ def test_the_defocus_layer_alone_takes_generate_mips() -> None:
     assert "mip_box_comp_qsb" in kernel and "mip_box_rgba8_comp_qsb" in kernel and "generateMips(" not in kernel
     passes = content[content.index("void ModeContent::recordPasses("):content.index("bool ModeContent::record(")]
     assert content.count("generateSelfMips(") == passes.count("generateSelfMips(") == 1
+    # ABI 36 (N5.2c): the photo environment's copy gets its levels from the same kernel, after its copy pass, its
+    # bindings made with its texture (MipMapped | UsedWithLoadStore).
+    stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    environment = stages[stages.index("bool PostStages::recordEnvironment("):]
+    environment = environment[:environment.index("\n}\n")]
+    assert environment.index("cb->endPass();") < environment.index("m_environmentChains.record(cb, e->chain);")
+    synced = stages[stages.index("bool PostStages::syncEnvironments("):stages.index("bool PostStages::environmentBindings(")]
+    assert "m_environmentChains.bind(rhi, e.texture.get(), spec.size, &e.chain," in synced
+    assert "QRhiTexture::UsedWithLoadStore" in synced and "UsedWithGenerateMips" not in synced
 
 
 # --------------------------------------------------------------------------- the composite and the HDR resolve (point 5)

@@ -751,7 +751,8 @@ MAX_ENVIRONMENT_SIDE = 4096
 class EnvironmentStep:
     """N5.2c (N4.j's ``PhotoEnvironment``, ``rendering/quick/scene3d/environment.py``): the item texture ``source``
     box-filtered into an RGBA8 copy of ``size`` with a full mip chain (the core's ``shaders/environment.frag``, Python's
-    16-tap ``_COPY_FRAGMENT``; mips by ``generateMips``, Python's ``glGenerateTextureMipmap``), drawn once per photo; a
+    16-tap ``_COPY_FRAGMENT``; its levels by the core's RGBA8 box kernel, the text Python's ``PhotoEnvironment``
+    dispatches, ``rendering.gl_programs.mip_chain``), drawn once per photo; a
     later sampler reads ``"<name>.environment"`` with mips. ``size`` is ``environment_size``'s (its one owner)."""
 
     name: str

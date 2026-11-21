@@ -254,10 +254,13 @@ def test_a_linear_sampler_over_a_storage_image_is_checked_against_the_device():
         "storageImageLinearFilter(rhi, image->format, &why)", "true"), _source("vulkan_context.cpp"))
 
 
-def test_the_abi_is_35_on_both_sides():
-    # ABI 33's boxes, at ABI 35 since the Waveform port's two core gaps (tests/test_native_waveform_port_core.py).
-    assert "#define SRPSS_NATIVE_CORE_ABI 35" in _source("abi.h")
-    assert loader.EXPECTED_ABI == 35
+def test_the_abi_is_35_or_later_on_both_sides():
+    # ABI 33's boxes, at ABI 35 since the Waveform port's two core gaps (tests/test_native_waveform_port_core.py), kept
+    # by a later ABI (36: N5.2c).
+    import re
+
+    defined = int(re.search(r"#define SRPSS_NATIVE_CORE_ABI (\d+)", _source("abi.h")).group(1))
+    assert defined >= 35 and loader.EXPECTED_ABI == defined
 
 
 # ------------------------------------------------------------------------------------------- the harness scenes

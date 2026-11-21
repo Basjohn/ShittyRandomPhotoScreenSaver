@@ -686,6 +686,7 @@ void PostStages::releaseEnvironmentPipelines(Environment &e)
 void PostStages::releaseEnvironment(Environment &e)
 {
     releaseEnvironmentPipelines(e);
+    e.chain.release();                        // ABI 36: its bindings name the texture
     e.target.reset();
     e.pass.reset();
     const bool held = e.texture != nullptr;
@@ -703,7 +704,7 @@ void PostStages::releaseEnvironment(Environment &e)
 
 int PostStages::allocationObjects(const Environment &e)
 {
-    return (e.texture ? 1 : 0) + (e.target ? 1 : 0) + (e.pass ? 1 : 0);
+    return (e.texture ? 1 : 0) + (e.target ? 1 : 0) + (e.pass ? 1 : 0) + e.chain.bindings; // ABI 36: the chain's
 }
 
 bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs, const QList<QRhiTexture *> &photos,
@@ -741,10 +742,11 @@ bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs
             continue;
         const QByteArray label = QByteArrayLiteral("srpss core environment ") + spec.name;
         if (!e.texture) {
-            // Python's copy: RGBA8, a full mip chain (max(size).bit_length() levels), its mips generated on the GPU.
+            // Python's copy: RGBA8, a full mip chain (max(size).bit_length() levels); ABI 36: its levels the box
+            // kernel's image stores (mip_chain.h), never generateMips.
             e.texture.reset(rhi->newTexture(QRhiTexture::RGBA8, spec.size, 1,
                                             QRhiTexture::RenderTarget | QRhiTexture::MipMapped
-                                                | QRhiTexture::UsedWithGenerateMips
+                                                | QRhiTexture::UsedWithLoadStore
                                                 | QRhiTexture::UsedAsTransferSource));
             e.texture->setName(label);
             count(1, 0, 0, 0);                // the owned wrapper survives a failed create until release
@@ -763,6 +765,14 @@ bool PostStages::syncEnvironments(QRhi *rhi, const QList<EnvironmentSpec> &specs
         if (!ready) {
             *error = QStringLiteral("environment step '%1': its texture could not be created at %2 x %3")
                          .arg(QString::fromLatin1(spec.name)).arg(spec.size.width()).arg(spec.size.height());
+            return false;
+        }
+        // ABI 36: the chain's bindings over this texture (made again with it; the old ones released first by bind).
+        QString chainError;
+        if (!m_environmentChains.bind(rhi, e.texture.get(), spec.size, &e.chain, &chainError)) {
+            *error = QStringLiteral("environment step '%1': its mip chain could not be made: %2")
+                         .arg(QString::fromLatin1(spec.name), chainError);
+            e.chain.release();
             return false;
         }
         if (!e.target) {
@@ -809,7 +819,7 @@ bool PostStages::recordEnvironment(QRhi *rhi, QRhiCommandBuffer *cb, int pass,
         if (m_environments[i] && m_environments[i]->spec.pass == pass)
             e = m_environments[i].get();
     }
-    if (!e || !e->pipeline || !e->bindings || !e->target || !e->photo || !e->size.isValid())
+    if (!e || !e->pipeline || !e->bindings || !e->target || !e->photo || !e->size.isValid() || e->chain.levels == 0)
         return false;
     if (e->drawn && e->drawnPhoto == e->photo && e->drawnGeneration == photoGeneration)
         return false;                         // once per photo: nothing is drawn again at a later record
@@ -829,11 +839,9 @@ bool PostStages::recordEnvironment(QRhi *rhi, QRhiCommandBuffer *cb, int pass,
     cb->setVertexInput(0, 1, &triangle);
     cb->draw(3);
     cb->endPass();
-    // Python's glGenerateTextureMipmap on the owned copy only (the photograph itself never gets mip levels).
-    QRhiResourceUpdateBatch *mips = rhi->nextResourceUpdateBatch();
-    mips->generateMips(e->texture.get());
-    cb->resourceUpdate(mips);
-    countGeneratedMips(1);
+    // ABI 36: the owned copy's levels by the box kernel, one compute pass a level (Python's PhotoEnvironment dispatches
+    // the same text, rendering/gl_programs/mip_chain.py); the photograph itself never gets mip levels here.
+    m_environmentChains.record(cb, e->chain);
     e->drawn = true;
     e->drawnPhoto = e->photo;
     e->drawnGeneration = photoGeneration;
@@ -1413,6 +1421,7 @@ void PostStages::release()
         }
     }
     m_environmentCount = 0;
+    m_environmentChains.release();            // ABI 36: its pipelines (per QRhi)
     m_bloomCount = 0;
     m_defocusCount = 0;
     m_rhi = nullptr;

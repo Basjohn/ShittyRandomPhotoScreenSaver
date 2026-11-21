@@ -20,7 +20,8 @@ from rendering.gl_programs.depth_cascade_program import (
 from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEP_VECTORS
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.quick.scene3d.resources import (UNDERLAY_PROGRAM, MeshResources, bind_frame, pack_floats, warm_programs,
                                                warm_pass_blocks)
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
@@ -146,7 +147,7 @@ class QuickDepthCascadeRenderer(NativeScenePasses):
         depth_cascade_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "cards", CASCADE_VERTEX_SOURCE, CASCADE_FRAGMENT_SOURCE),
                    (r, "shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE)]
         if samples:

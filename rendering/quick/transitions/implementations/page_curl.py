@@ -26,7 +26,8 @@ from rendering.gl_programs.scene3d import (
     scene3d_grid_vertices,
     scene3d_request_samples,
 )
-from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
+from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
+                                                 PhotoEnvironment)
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.grid import draw_grid
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -99,7 +100,7 @@ class QuickPageCurlRenderer:
         _gloss, _size, detail = page_curl_parameters(parameters)
         samples = scene3d_request_samples(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
                    (r, "backdrop", PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE),
                    (r, "page", PAGE_CURL_VERTEX_SOURCE, PAGE_CURL_FRAGMENT_SOURCE)]
         if samples:

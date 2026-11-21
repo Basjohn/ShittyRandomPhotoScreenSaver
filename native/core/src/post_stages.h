@@ -30,8 +30,9 @@
 // - The photo environment (N5.2c, N4.j's PhotoEnvironment: rendering/quick/scene3d/environment.py): a step
 //   {"name", "environment": <an item texture>, "size": [w, h]} draws the texture, box-filtered by the core's
 //   shaders/environment.frag (Python's _COPY_FRAGMENT: 16 bilinear taps a quarter copy texel apart), into an RGBA8
-//   texture of that size with a full mip chain, then QRhi's generateMips (Python's glGenerateTextureMipmap); a later
-//   sampler reads it as "<step>.environment", with mips. It is drawn only when the texture's front changed (a new image
+//   texture of that size with a full mip chain, its levels then made by the core's box kernel (mip_chain.h, ABI 36:
+//   Python's PhotoEnvironment the same kernel's text, never generateMips); a later sampler reads it as
+//   "<step>.environment", with mips. It is drawn only when the texture's front changed (a new image
 //   committed, a texture object made again) or its own texture was made again: once per photo, never per record.
 //   Python gives the size (environment_size, its one owner) in the declaration.
 //
@@ -39,6 +40,7 @@
 #pragma once
 
 #include "scene_targets.h"
+#include "mip_chain.h"
 #include "rhi_owned.h"
 
 #include <QtCore/QByteArray>
@@ -278,7 +280,7 @@ public:
     int environmentCount() const { return m_environmentCount; }
     // The texture of the environment step `step` ("<step>.environment"); null when there is none.
     QRhiTexture *environment(const QByteArray &step) const;
-    // Record (outside any pass): the environment step `pass`'s copy and its mips, only when its photo's front
+    // Record (outside any pass): the environment step `pass`'s copy and its box chain, only when its photo's front
     // (`photoGeneration`, the item texture's image) or its own texture changed since it was last drawn; `pending` the
     // record's uploads (the photo's among them), handed to its pass and nulled. Returns whether it drew.
     bool recordEnvironment(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
@@ -333,6 +335,7 @@ private:
         RhiOwned<QRhiTexture> texture;
         RhiOwned<QRhiRenderPassDescriptor> pass;
         RhiOwned<QRhiTextureRenderTarget> target;
+        MipChain chain;                  // ABI 36: its levels' box-kernel bindings (made with the texture)
         QRhiTexture *photo = nullptr;    // the item texture's front it copies (the item's, never owned here)
         RhiOwned<QRhiBuffer> block;      // its uStep (Python's 0.25 / size), written once per size
         RhiOwned<QRhiSampler> sampler;   // the photo's: linear, clamped, no mips (Python's lent texture)
@@ -387,6 +390,7 @@ private:
     int m_defocusCount = 0;
     std::unique_ptr<Environment> m_environments[kMaxEnvironmentStages]; // N5.2c
     int m_environmentCount = 0;
+    MipChainKernel m_environmentChains; // ABI 36: the environments' box kernel (mip_chain.h)
     QRhiBuffer *m_arena = nullptr;       // the content's block arena (the defocus bindings name it)
     quint32 m_conventionsBytes = 0;
     quint32 m_defocusBlockBytes = 0;

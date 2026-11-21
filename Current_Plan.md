@@ -1409,7 +1409,7 @@ whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a 
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw. Dispatched 21 Nov with N4.j
-  (agent a77d7d16afb481093, Opus High), ABI 34 reserved.
+  (agent a77d7d16afb481093, Opus High), ABI 36 (34 retired unused).
   - Reading (Opus High agent, worktree agent-a77d7d16afb481093, 21 Nov; no Python pixel touched). Files under
     `rendering/quick/transitions/implementations/`: `ct.py` cube_turn, `bl.py` blinds, `dc.py` depth_cascade, `jg.py`
     jigsaw; under `rendering/gl_programs/`: `ctp.py` cube_turn_program, `bsp.py` blinds_slats_program, `dcp.py`
@@ -1435,12 +1435,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       identity, size; `env.py:73-103`) the lent destination photograph (only ever sampled, `env.py:168`) is drawn into an
       owned RGBA8 texture whose longer side is `SCENE3D_ENVIRONMENT_SIZE` 512 (`env.py:49-53`, `s3d.py:157`; 512 x 288 for
       every 16:9 display) by the fullscreen triangle with a 16-tap bilinear box (`env.py:32-46`, taps a quarter copy
-      texel apart, `uStep` from Python, `env.py:169`), then `glGenerateTextureMipmap` makes the full chain
-      (`max(size).bit_length()` levels, linear-mipmap-linear, clamped; `env.py:105-129,172`). Released at `park()`
+      texel apart, `uStep` from Python, `env.py:169`), then the full chain (`max(size).bit_length()` levels,
+      linear-mipmap-linear, clamped; `env.py:105-129`), made since change (1) by the shared RGBA8 box kernel
+      (`dispatch_mip_chain`, the core's `mip_box_rgba8.comp`), formerly `glGenerateTextureMipmap`. Released at `park()`
       (`ct.py:94-97`). Read with `textureLod` at roughness x 7 (`s3d.py:158,319-322`), roughness clamped from the
       materials' 0.2 to 0.7 (`s3d.py:350-352,422-427`; `ctp.py:89`, `bsp.py:128`, `dcp.py:147`, `jgp.py:251`), and at
       lod 5 by Cube Turn's backdrop (`ctp.py:103`): levels 0 to 5 only, which at 512 x 288 (288, 144, 72, 36, 18, 9) are
-      each made from an even-sized level, the levels both backends' `generateMips` make alike (`ps.h:171-174`).
+      each made from an even-sized level (the kernel's chain is the same on both backends at any size).
       `BackdropEnvironment` (`env.py:210-335`) is not used by these four.
     - **Cube Turn.** Per run: axis and sign from the direction (`ct.py:52`, `ctp.py:24-29`), gloss (`ct.py:28-33`), the
       environment (`ct.py:63`), the box: 36 vertices of position and normal, 864 B, static (`ct.py:87-88`,
@@ -1480,7 +1481,7 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       passes (`mc.h:193`; these need at most 5), 8 textures (`mc.h:279`; these need 2), array members (Surface Tension's
       pools, N5.2b), stills drawing stages (`mc.cpp:6956-6959`), and the photo itself at the ends: the layer's own
       background program on either slot (`native_background.py:79-85,329-348`).
-    - **What it lacks (C++, ABI 34).** (1) The photo environment: an explicit-size mipped RGBA8 copy of an item texture,
+    - **What it lacks (C++, ABI 36).** (1) The photo environment: an explicit-size mipped RGBA8 copy of an item texture,
       drawn once per image and read with mips. A mipped target is surface-sized, its mips made only for a defocus step,
       and a target's sampler has no mips (`mode.py:222-232`, `ps.h:26-29`, `mc.h:94-96`). (2) An opaque composite without
       a glow: the forms are overlay, overlay_glow and opaque_glow, and opaque_glow needs a bloom step's glow
