@@ -255,6 +255,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         shared_bar_appearance=False,
         prepared_reveal=True,
         supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
+        # N5.1: the native core draws it on Vulkan as generic mode content, its Glow a program variant
+        # (rendering.quick.visualizer.native_route, D12), accepted by the operator 21 Nov (Current_Plan.md item 8b).
+        renderer_backends=("opengl", "vulkan"),
     ),
     VisualizerModeDescriptor(
         "bubble",

@@ -223,6 +223,7 @@ def oscilloscope_program(glow: bool) -> dict:
 GENERIC_MODE_SETTINGS: dict[str, Callable[[Any, dict], dict]] = {
     "devcurve": _devcurve_settings,
     "bubble": _bubble_settings,
+    "oscilloscope": _oscilloscope_settings,
 }
 #: Bubble's settings function by name (its diagnostics and tests call it directly).
 BUBBLE_SETTINGS = _bubble_settings

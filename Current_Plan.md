@@ -78,8 +78,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
   it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
   (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
-  not to a slot; the player-window gap is a tool note. Cost round passed (b8c6c3528). Left: registration (playbook
-  checklist 18), then the lead's layer T (unattended live runs), then its docs.
+  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered 21 Nov.
+  Left: its docs.
 - [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
   - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
     generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
@@ -642,17 +642,13 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (unregistered on main at ABI 29; N3.4 bloom's first consumer). Python oracle:
+- [ ] N5.1 Oscilloscope (registered on the route and offered on Vulkan, 21 Nov; N3.4 bloom's first consumer). Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`, `rendering/gl_programs/oscilloscope_program.py`; follow
   `Docs/Guides/Native_Port_Playbook.md`, proof under `Docs/Guides/Native_Parity_And_Timing_Proof.md` (section 7's split);
   harness `native/core/python/oscilloscope_check.py`. Built through ABI 29 (D12 "As built: Oscilloscope", "The pixel
   tolerance"); rule (a) passes all six 60 s takes and 14 of 15 offers, layer L identical, cost round passed
   (b8c6c3528). Evidence `n5_1_oscilloscope/` (`20261121_owner_offers_class/`, `20261121_n51_turned_abi29_band/`).
   Open parity and offer boxes: one line in the Backlog section (Oscilloscope parity and offers).
-  - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
-    with `tools/quick_frame_cadence.py` on native paths. It needs the registration first: on main the mode is not in
-    `native_route.GENERIC_MODE_SETTINGS` and its `renderer_backends` is OpenGL only, so a live run today times the
-    Python path (and Vulkan does not offer the mode). Register, then run unattended and read the results.
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
@@ -667,7 +663,7 @@ the feature (D3D11 is not stated).
     so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
     `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
     `outer_origin=(803.0, 517.0)`, dpr 1.
-  - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
+  - [ ] Docs: D12 "As built: Oscilloscope", Primitives, README (registered 21 Nov after layer T).
 - [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
   suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
   follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
