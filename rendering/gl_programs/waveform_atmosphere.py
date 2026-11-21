@@ -6,6 +6,7 @@ from rendering.gl_programs.ribbon import (RIBBON_GRADE_FIELDS, RIBBON_GRADE_FUNC
                                           RIBBON_GRADE_HEAD)
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 from rendering.gl_programs.mist import MIST_GLSL
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
 from rendering.gl_programs.fog_volume import FOG_FULLSCREEN_VERTEX
 
 FIELD_RIBBONS=RIBBON_CAPACITY
@@ -177,7 +178,7 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
 '''
 
 SKY_VERTEX=FOG_FULLSCREEN_VERTEX
-SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\nuniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
+SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\n'+SCENE_EMISSION_OUTPUT_GLSL+'uniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
 void main(){vec4 fog=textureLod(uFogVolume,vec3(ndcToUv(vNdc),1.0),0.0);
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}

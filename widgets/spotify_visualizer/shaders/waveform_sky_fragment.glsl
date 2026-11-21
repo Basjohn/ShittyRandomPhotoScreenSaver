@@ -9,7 +9,11 @@ layout(std140, binding = 18) uniform WaveformSky {
 };
 layout(location = 0) in vec2 vNdc;
 layout(location=0) out vec4 FragColor;
+#ifdef SRPSS_NO_EMISSION
+vec4 Emission;
+#else
 layout(location=1) out vec4 Emission;
+#endif
 
 
 

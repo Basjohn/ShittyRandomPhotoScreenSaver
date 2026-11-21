@@ -2,6 +2,7 @@
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT, MIST_GLSL
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.ribbon import RIBBON_GRADE_GLSL
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
 
 # As authored for OpenGL; ``VERTEX`` and ``FRAGMENT`` below are their portable form (N1.6).
 _VERTEX="""
@@ -49,8 +50,7 @@ flat in float vLight;
 flat in float vGlow;
 flat in float vCore;
 layout(location=0) out vec4 FragColor;
-layout(location=1) out vec4 Emission;
-"""+MIST_GLSL+RIBBON_GRADE_GLSL+"""
+"""+SCENE_EMISSION_OUTPUT_GLSL+MIST_GLSL+RIBBON_GRADE_GLSL+"""
 void main() {
     float r=dot(vUv,vUv);
     if(r>1.0) discard;

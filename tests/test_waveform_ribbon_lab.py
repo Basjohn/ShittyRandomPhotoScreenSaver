@@ -70,10 +70,12 @@ def test_render_admits_its_context_before_allocating_and_restores_the_caller(lab
         foreign.close()
 
 
-@pytest.mark.parametrize('missing,allocated', [('roughness',1),('height',2)])
-def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path, missing, allocated):
+@pytest.mark.parametrize('missing', ['roughness', 'height'])
+def test_missing_floor_map_allocates_nothing_and_a_failed_upload_retires_preceding_textures(lab, monkeypatch, tmp_path,
+                                                                                            missing):
     from dataclasses import replace
     from OpenGL import GL as gl
+    import rendering.quick.scene3d.waveform as scene
     created=[]
     create=gl.glCreateTextures
     def record(*args):
@@ -87,11 +89,21 @@ def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path
         # The maps' chains are the box kernel's (N5.4): its programs by format, as the scene's resources hold them.
         chains={fmt:compile_compute_program(text,label=f'lab {fmt} chain') for fmt,text in MIP_BOX_TEXTS.items()}
         try:
+            # Every map is read (``waveform_plan.floor_images``) before any texture is made: a missing one makes none.
             with pytest.raises(FileNotFoundError):
                 lab_module.load_floor_textures(replace(lab.recipe.floor,**{missing:str(tmp_path/'missing.png')}),chains)
+            assert created==[]
+            # A map whose upload fails retires the textures made before it (the slope, after albedo and roughness).
+            upload=scene._map_texture
+            def failing(pixels,size,fmt,chains_):
+                if fmt=='rgba16f':raise RuntimeError('upload failed')
+                return upload(pixels,size,fmt,chains_)
+            monkeypatch.setattr(scene,'_map_texture',failing)
+            with pytest.raises(RuntimeError):
+                scene.load_floor_textures(lab.recipe.floor,chains)
         finally:
             for program in chains.values():delete_program(program)
-        assert len(created)==allocated and all(not gl.glIsTexture(name) for name in created)
+        assert len(created)==2 and all(not gl.glIsTexture(name) for name in created)
 
 
 

@@ -468,6 +468,17 @@ class RibbonPrimitive:
             finally:self._held_packet=self._lease=None
 
     @contextmanager
+    def packet_bound_at(self,binding):
+        """Inside ``packet_scope``: the scene's packet also at storage ``binding`` for the scope (a program reading it
+        there: the floor, whose samplers hold binding 0 on the native core's one binding space); unbound after."""
+        if self._lease is None:
+            yield
+            return
+        self._lease.rebind(binding)
+        try:yield
+        finally:gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,int(binding),0)
+
+    @contextmanager
     def _packet_bound(self,packet):
         if self._held_packet is not None:
             if packet is not self._held_packet:raise RuntimeError('Different packet inside the active ribbon scene scope')

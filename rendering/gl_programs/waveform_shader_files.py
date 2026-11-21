@@ -27,8 +27,11 @@ _VERSION = "#version 460 core\n"
 
 def member_name(pass_id: str, member: str) -> str:
     """A block member's name in a pass file: its pass's prefix (``member_name("ribbon", "uMvp")`` -> ``ribbon_uMvp``),
-    the name the native record or settings fill."""
-    return f"{pass_id}_{member}"
+    the name the native record or settings fill; a pass drawing another's values names them as that pass does (the
+    floor's pre-pass: ``waveform_native_names.member_name``, the rule's owner)."""
+    from core.visualizer_engine.waveform_native_names import member_name as named
+
+    return named(pass_id, member)
 
 
 #: The sorted pack's transparent write (D17 choice D: on a device the order-independent gate does not admit, the core
@@ -139,6 +142,17 @@ def block_numbers(text: str) -> dict[str, int]:
     return {name: _COMPONENTS[kind] * (int(size) if size else 1) for kind, name, size in _MEMBER.findall(_own_block(text))}
 
 
+def block_types(text: str) -> dict[str, str]:
+    """Each member of the body's own block and its GLSL type (``vec4[6]`` for an array)."""
+    return {name: kind + (f"[{size}]" if size else "") for kind, name, size in _MEMBER.findall(_own_block(text))}
+
+
+def pass_types() -> dict[str, dict[str, str]]:
+    """Each pass id's members (unprefixed) and their GLSL types, in block order."""
+    bodies = _bodies()
+    return {pass_id: block_types(bodies[body]) for _name, body, pass_id in PASS_FILES}
+
+
 def pass_numbers() -> dict[str, dict[str, int]]:
     """Each pass id's members (unprefixed) and their numbers, in block order."""
     bodies = _bodies()
@@ -152,11 +166,24 @@ def body_text(text: str) -> str:
     return text[len(_VERSION):]
 
 
-def wrapper_text(body: str, pass_id: str, members: tuple[str, ...]) -> str:
-    """A pass file: the version line, the pass's member names and the body's include."""
+#: The defines of the pass files drawn into a target with fewer attachments than the scene's (the native core requires a
+#: program to write exactly its target's attachments; OpenGL drops the rest, so the Python renderer draws either form
+#: alike): ``SRPSS_NO_EMISSION`` for one without emission (the planar reflection, the floor's pre-pass: the write
+#: lands in a plain variable, ``target.SCENE_EMISSION_OUTPUT_GLSL``), ``SRPSS_NO_DEPTH`` for one without depth (the
+#: pre-pass: the floor leaves ``gl_FragDepth`` unwritten).
+FILE_DEFINES = {name: ("SRPSS_NO_EMISSION",) for name in (
+    "waveform_ribbon_light_mirror.frag", "waveform_strays_mirror.frag", "waveform_bursts_mirror.frag",
+    "waveform_sky_mirror.frag")}
+FILE_DEFINES["waveform_floor_prepass.frag"] = ("SRPSS_NO_EMISSION", "SRPSS_NO_DEPTH")
+
+
+def wrapper_text(body: str, pass_id: str, members: tuple[str, ...], *, defines: tuple[str, ...] = ()) -> str:
+    """A pass file: the version line, its target's ``defines`` (``FILE_DEFINES``), the pass's member names and the
+    body's include."""
     lines = [_VERSION.rstrip("\n"),
              f"// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): {body} for the {pass_id} pass, its "
              "block's members named for it (the arithmetic the body's)"]
+    lines += [f"#define {name}" for name in defines]
     lines += [f"#define {member} {member_name(pass_id, member)}" for member in members]
     lines.append(f'#include "{body}.glsl"')
     return "\n".join(lines) + "\n"
@@ -181,15 +208,17 @@ MEMBERS_MODULE = "core/visualizer_engine/waveform_native_members.py"
 def members_module_text() -> str:
     """The text of ``MEMBERS_MODULE``: every pass's block members and their numbers, in pass and block order."""
     lines = ['"""Waveform Ribbon\'s pass members for its native schema (``core.visualizer_engine.waveform_native_schema``):',
-             "each pass file's block members (unprefixed) and how many numbers each takes, in pass and block order.",
+             "each pass file's block members (unprefixed), how many numbers each takes and its GLSL type, in pass and",
+             "block order.",
              "",
              "Written by ``tools/waveform_shader_files.py --write`` from ``rendering.gl_programs.waveform_shader_files``",
              '(``pass_numbers``); ``tests/test_waveform_shader_files.py`` holds it equal. Never edit by hand."""',
              "",
              "PASS_MEMBERS = ("]
+    types = pass_types()
     for pass_id, members in pass_numbers().items():
         lines.append(f"    ({pass_id!r}, (")
-        lines += [f"        ({member!r}, {numbers}),"for member, numbers in members.items()]
+        lines += [f"        ({member!r}, {numbers}, {types[pass_id][member]!r}),"for member, numbers in members.items()]
         lines.append("    )),")
     lines.append(")")
     return "\n".join(lines) + "\n"
@@ -199,7 +228,8 @@ def waveform_shader_files() -> dict[str, str]:
     """Every Waveform shader file's name and text: the bodies (``.glsl``) and the pass files."""
     bodies = _bodies()
     files = {f"{name}.glsl": body_text(text) for name, text in bodies.items()}
-    files.update({name: wrapper_text(body, pass_id, block_members(bodies[body])) for name, body, pass_id in PASS_FILES})
+    files.update({name: wrapper_text(body, pass_id, block_members(bodies[body]), defines=FILE_DEFINES.get(name, ()))
+                  for name, body, pass_id in PASS_FILES})
     return files
 
 

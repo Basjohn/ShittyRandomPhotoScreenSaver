@@ -94,7 +94,8 @@ class LMode:
     bytes in ``recorder.stream_uploads``. ``drawn``: (decoded native record) -> whether the native program draws any
     pass this frame (None: whenever shown), for a mode whose Python renderer draws nothing on some shown frames.
     ``register``: () -> a context manager registering a mode the product's route does not draw yet, for the run only
-    (the port's registration is its last step)."""
+    (the port's registration is its last step). ``python``: the Python side's class in place of ``RecordingPython``
+    (Waveform's: its renderer on a real offscreen context, ``WaveformPython``)."""
     mode_id: str
     python_modules: tuple[str, ...]
     passes: dict[str, str | tuple[str, ...]]
@@ -107,6 +108,7 @@ class LMode:
     stand_ins: Callable[[Any, Any], None] | None = None
     drawn: Callable[[dict], bool] | None = None
     register: Callable[[], Any] | None = None
+    python: Callable[[Any], Any] | None = None
 
 
 _IMPL = "rendering.quick.visualizer.implementations"
@@ -225,6 +227,183 @@ def _oscilloscope_registered():
         route.GENERIC_MODE_SETTINGS, route.NATIVE_MODE_IDS = saved
 
 
+#: Waveform's native passes by the Python pack they compare with (``PYTHON_PACK_ORDER``; the light draw packs as
+#: ``ribbon``), and its stream rings' labels by the record's stream.
+_WAVEFORM_PACKS = {"ribbon_light": "ribbon"}
+_WAVEFORM_RINGS = {"ribbon knots": "ribbon_knots", "ribbon strand cohorts": "ribbon_cohorts",
+                   "ribbon event sparks": "ribbon_bursts"}
+
+
+def _waveform_layouts() -> dict:
+    from rendering.quick.visualizer.implementations.waveform_ribbon import PYTHON_PACK_ORDER, pass_layout
+
+    names = [{"ribbon": "ribbon_light"}.get(name, name) for name in PYTHON_PACK_ORDER]
+    return {name: pass_layout(_WAVEFORM_PACKS.get(name, name)) for name in names}
+
+
+def _waveform_spans(pass_name, member, size, record, logical):
+    """The body draw reads none of the light's Pulse Rim members (its Python pack leaves them 0)."""
+    if pass_name == "ribbon_body" and member in ("uPulseRim", "uPulseRimShape"):
+        return []
+    return None
+
+
+class WaveformPython:
+    """Waveform's Python side of layer L: its real renderer drawing the frame on a real offscreen OpenGL 4.6 context
+    (its scene, compute, reflection and fog run as in the product; nothing is read back), with what that draw used
+    captured: every block it packed (``Scene3DBlockLayout.pack``) by pass, the stream rings' and the Pulse Rim field's
+    uploads by stream, the card-decided members it drew with (``SETTINGS_MEMBERS``, read from its packs) and its record
+    (the frame with the framed view of the card it drew). A null GL cannot stand in for this renderer: its scene target,
+    reflection and fog volumes read GL state back."""
+
+    def __init__(self, declaration: LMode) -> None:
+        self.declaration = declaration
+        self._context: Any = None
+        self._surface: Any = None
+        self._host: Any = None
+        self._target: tuple | None = None
+
+    def _current(self, width: int, height: int) -> None:
+        from OpenGL import GL as gl
+        from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+
+        if self._context is None:
+            from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+
+            fmt = QSurfaceFormat()
+            fmt.setRenderableType(QSurfaceFormat.OpenGL)
+            fmt.setProfile(QSurfaceFormat.CoreProfile)
+            fmt.setVersion(4, 6)
+            self._context = QOpenGLContext()
+            self._context.setFormat(fmt)
+            if not self._context.create():
+                raise RuntimeError("no OpenGL 4.6 context for Waveform's Python side")
+            self._surface = QOffscreenSurface()
+            self._surface.setFormat(fmt)
+            self._surface.create()
+            if not self._context.makeCurrent(self._surface):
+                raise RuntimeError("Waveform's Python context is not current")
+            self._host = QuickVisualizerRenderHost()
+        elif not self._context.makeCurrent(self._surface):
+            raise RuntimeError("Waveform's Python context is not current")
+        if self._target is None or self._target[2:] != (width, height):
+            self._drop_target()
+            colour = gl.glGenTextures(1)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, colour)
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+            fbo = gl.glGenFramebuffers(1)
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, colour, 0)
+            self._target = (int(fbo), int(colour), width, height)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._target[0])
+
+    def _drop_target(self) -> None:
+        if self._target is None:
+            return
+        from OpenGL import GL as gl
+
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+        gl.glDeleteFramebuffers(1, [self._target[0]])
+        gl.glDeleteTextures([self._target[1]])
+        self._target = None
+
+    def draw(self, frame) -> dict:
+        import dataclasses
+
+        from OpenGL import GL as gl
+
+        from core.visualizer_engine.waveform_native_schema import SCHEMA, SETTINGS_MEMBERS, member_name
+        from rendering.gl_programs.waveform_shader_files import pass_members
+        from rendering.gl_programs import scene3d
+        from rendering.quick.scene3d import pulse_rim, stream
+        from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
+        from rendering.quick.visualizer.framed_view import framed_view_of_frame
+        from rendering.quick.visualizer.implementations import waveform_ribbon as python_waveform
+        from rendering.quick.visualizer.native_route import waveform_stages
+
+        width, height = int(frame.viewport[2]), int(frame.viewport[3])
+        self._current(width, height)
+        gl.glViewport(0, 0, width, height)
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        packed: list = []
+        uploads: dict = {}
+        drawn: list = []
+        pack, bound, update = scene3d.Scene3DBlockLayout.pack, stream.StreamRing.bound, pulse_rim.PulseRimField.update
+        render = python_waveform.QuickWaveformRibbonRenderer.render
+
+        def packing(layout, values):
+            block = pack(layout, values)
+            packed.append((layout.name, bytes(block)))
+            return block
+
+        def binding(ring, target, index, data, **kwargs):
+            if ring.label in _WAVEFORM_RINGS:
+                uploads[_WAVEFORM_RINGS[ring.label]] = bytes(data)
+            return bound(ring, target, index, data, **kwargs)
+
+        def updating(field_, payload, strength):
+            uploads["ribbon_pulse"] = bytes(payload or b"")
+            return update(field_, payload, strength)
+
+        def rendering(renderer, render_frame):
+            drawn.append(render_frame)
+            return render(renderer, render_frame)
+
+        scene3d.Scene3DBlockLayout.pack = packing
+        stream.StreamRing.bound = binding
+        pulse_rim.PulseRimField.update = updating
+        python_waveform.QuickWaveformRibbonRenderer.render = rendering
+        try:
+            self._host.render(snapshot=frame.snapshot, viewport=tuple(frame.viewport),
+                              logical_size=tuple(frame.logical_size), matrix_values=tuple(frame.matrix_values))
+        finally:
+            scene3d.Scene3DBlockLayout.pack = pack
+            stream.StreamRing.bound = bound
+            pulse_rim.PulseRimField.update = update
+            python_waveform.QuickWaveformRibbonRenderer.render = render
+        packs = [block for block in packed if not block[0].startswith("Scene")]
+        view = framed_view_of_frame(drawn[0]) if drawn else None
+        if not packs or view is None:
+            return {"blocks": {}, "uploads": {}, "values": {}}
+        snapshot = frame.snapshot
+        _x, _y, scene_w, scene_h = item_pixel_rect(orient_visualizer_scene_frame(drawn[0]))
+        named = python_waveform.named_packs(packs, waveform_stages(snapshot, (int(scene_w), int(scene_h))))
+        if named is None:
+            raise RuntimeError(f"Waveform's Python packs are not its variant's sequence: {[p[0] for p in packs]}")
+        blocks = {{"ribbon": "ribbon_light"}.get(name, name): block for name, block in named.items()}
+        values: dict = {}
+        owners = {member_name(pass_id, member): (pass_id, member)
+                  for pass_id, members in pass_members().items() for member in members}
+        for name in SETTINGS_MEMBERS:
+            pass_id, member = owners[name]
+            pass_name = {"ribbon": "ribbon_light"}.get(pass_id, pass_id)
+            if pass_name not in blocks:
+                continue
+            layout = python_waveform.pass_layout(_WAVEFORM_PACKS.get(pass_name, pass_name))
+            offset, glsl_type = dict(zip((f[0] for f in layout.fields), zip(layout.offsets,
+                                                                             (f[1] for f in layout.fields))))[member]
+            if glsl_type == "vec2":
+                values[name] = list(struct.unpack_from("<2f", blocks[pass_name], offset))
+            else:
+                values[name] = float(struct.unpack_from("<i" if glsl_type == "int" else "<f", blocks[pass_name],
+                                                        offset)[0])
+        state = dataclasses.replace(snapshot.logical.mode_state, framed_view=tuple(float(v) for v in view))
+        record = SCHEMA.encode(dataclasses.replace(snapshot.logical, mode_state=state))
+        return {"blocks": blocks, "uploads": uploads, "values": values, "record": record,
+                "scene_pixels": (int(scene_w), int(scene_h))}
+
+    def close(self) -> None:
+        if self._context is not None and self._context.makeCurrent(self._surface):
+            self._drop_target()
+            if self._host is not None:
+                self._host.release_resources()
+            self._context.doneCurrent()
+        if self._surface is not None:
+            self._surface.destroy()
+        self._context = self._surface = self._host = None
+
+
 MODES: dict[str, LMode] = {
     "spectrum": LMode(
         "spectrum", (f"{_IMPL}.spectrum",), {"Quick Spectrum pass blocks": "spectrum"}, _spectrum_layouts,
@@ -256,7 +435,24 @@ MODES: dict[str, LMode] = {
         streams={"osc_points": ("osc_point_floats", (), "")}, ulp_field="u_widen",
         stand_ins=_oscilloscope_stand_ins, drawn=lambda record: int(record["osc_segments"]) > 0,
         register=_oscilloscope_registered),
+    # Every pass of the one program (its stages' passes draw nothing while off); its scene targets, bloom and composite
+    # are the core's own steps (layer P's pixels). Its Python side draws for real (``WaveformPython``).
+    "waveform_ribbon": LMode(
+        "waveform_ribbon", (),
+        {"Waveform scene packs (Scene3DBlockLayout.pack, in PYTHON_PACK_ORDER)": (
+            "give_section", "give_blur", "field", "medium", "integrate", "medium_mirror", "integrate_mirror",
+            "sky_mirror", "ribbon_mirror", "strays_mirror", "bursts_mirror", "sky", "floor_prepass", "floor",
+            "ribbon_body", "ribbon_light", "strays", "bursts")}, _waveform_layouts, read_spans=_waveform_spans,
+        streams={"ribbon_knots": ("ribbon_knot_floats", (), ""), "ribbon_cohorts": ("ribbon_cohort_floats", (), ""),
+                 "ribbon_bursts": ("ribbon_burst_floats", (), ""), "ribbon_pulse": ("ribbon_pulse_floats", (), "")},
+        ulp_field="ribbon_u_mvp", register=lambda: _waveform_registered(), python=lambda d: WaveformPython(d)),
 }
+
+
+def _waveform_registered():
+    from rendering.quick.visualizer import native_route
+
+    return native_route.waveform_registered()
 
 
 # ------------------------------------------------------------------------------------------- the recording GL
@@ -481,6 +677,7 @@ class _Item:
         self.card_values: dict | None = None
         self.sizes: dict = {}
         self.program_args: Any = None
+        self.resources: dict = {}                            # meshes and textures sent, counted by name
 
     # Spectrum's item
     def program(self, *args, **kwargs) -> None:
@@ -508,6 +705,18 @@ class _Item:
 
     def target_size(self, name, size) -> None:
         self.sizes[name] = tuple(int(v) for v in size)
+
+    def image_size(self, name, size) -> None:
+        self.sizes[name] = tuple(int(v) for v in size)
+
+    def mesh(self, name, *args, **kwargs) -> None:
+        self.resources[f"mesh:{name}"] = self.resources.get(f"mesh:{name}", 0) + 1
+
+    def texture(self, name, *args, **kwargs) -> None:
+        self.resources[f"texture:{name}"] = self.resources.get(f"texture:{name}", 0) + 1
+
+    def on_textures_lost(self, _callback) -> None:
+        pass
 
     def drop_retained_frame(self) -> None:
         pass
@@ -681,7 +890,7 @@ class Comparator:
             else:
                 program = build(mode_fragment_pack(mode), dict(sizes))
             declared, packs = program_json(program["passes"], program["targets"], program["streams"],
-                                           unread=program.get("unread", ()))
+                                           images=program.get("images", ()), unread=program.get("unread", ()))
             table = json.dumps(dict(schema_table_entry(self.schema)))
             cached = self._program_cache[key] = (program, declared, packs, table)
         program, declared, packs, table = cached
@@ -698,9 +907,13 @@ class Comparator:
             if stream_name:
                 stream = next(s for s in program["streams"] if s.name == stream_name)
                 drawn = int(decoded.get(stream.used, 0)) > 0
-            for count in (getattr(geometry, "vertices", None), getattr(geometry, "instances", None)):
-                if isinstance(count, str):                 # a count the record carries: 0 draws nothing
-                    drawn = drawn and int(decoded.get(count, 0)) > 0
+            counts = [getattr(geometry, "vertices", None), getattr(geometry, "instances", None)]
+            counts += list(getattr(ps, "groups", None) or ())     # a compute entry's groups
+            for count in counts:
+                if isinstance(count, str) and count != "mesh":
+                    # A count the record or the settings carry: 0 draws (or dispatches) nothing.
+                    value = decoded[count] if count in decoded else settings.get(count, 0)
+                    drawn = drawn and int(value) > 0
             blocks[ps.name] = bytes(block) if drawn else None
             for member, source in (facts["passes"][index].get("sources") or {}).items():
                 sources.setdefault(member, source)
@@ -882,7 +1095,7 @@ class IdentityMirror:
                  controls: tuple[tuple[str, int], ...] = ()) -> None:
         self.declaration = declaration
         self.comparator = Comparator(declaration, core)
-        self.python = RecordingPython(declaration)
+        self.python = (declaration.python or RecordingPython)(declaration)
         self.switch_input = int(switch_input)
         self.out = out
         self.controls = dict((kind, at) for kind, at in controls)

@@ -43,7 +43,8 @@ from tools import artifact_paths  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 #: mode id -> the generic mode harness module whose ``Scene``, ``Stream`` and ``program_item`` place its item.
-MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check", "oscilloscope": "oscilloscope_check"}
+MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check", "oscilloscope": "oscilloscope_check",
+         "waveform_ribbon": "waveform_check"}
 CHILD_TIMEOUT_S = 7200
 #: The method proof's shader controls (guide section 7: the selected windows must catch a one-ulp shader change):
 #: mode -> name -> (shader file, the line, its replacement). ``ulp_ring``: every bubble outline's coverage one float
@@ -69,7 +70,7 @@ def _harness(mode: str):
 
     module = importlib.import_module(MODES[mode])
     base = getattr(module, "base", module)
-    if mode in ("bubble", "oscilloscope"):
+    if mode in ("bubble", "oscilloscope", "waveform_ribbon"):
         base.use_mode(SLOT_BYTES=module._slot_bytes())
     return module, base
 

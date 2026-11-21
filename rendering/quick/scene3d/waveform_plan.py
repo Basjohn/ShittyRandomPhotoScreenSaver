@@ -28,6 +28,39 @@ HISTORY_X_MIRROR = np.diag((-1., 1., 1., 1.))
 HISTORY_X_MIRROR.setflags(write=False)
 
 
+def floor_images(floor) -> dict:
+    """The floor's maps as both renderers upload them, rows top first: ``albedo`` and ``roughness`` RGBA8 (colour
+    sRGB-encoded, decoded by the floor shader), and ``slope`` RGBA16F, the height's slope per uv unit by periodic
+    central differences (r, g; b 0, a 1), baked once so the floor fetches two values instead of eight. Each entry:
+    (pixels as a numpy array, (width, height), format). The level chains are each renderer's box kernel. Missing
+    assets fail."""
+    from pathlib import Path
+
+    from PIL import Image
+
+    root = Path(__file__).resolve().parents[3]
+    images = {}
+    for key, path in (("albedo", floor.albedo), ("roughness", floor.roughness), ("height", floor.height)):
+        with Image.open(root / path) as source:
+            pixels = np.ascontiguousarray(np.asarray(source.convert("RGBA"), np.uint8))
+        size = (int(pixels.shape[1]), int(pixels.shape[0]))
+        if key != "height":
+            images[key] = (pixels, size, "rgba8")
+            continue
+        images["slope"] = (slope_pixels(pixels[:, :, 0].astype(np.float32) / 255.), size, "rgba16f")
+    return images
+
+
+def slope_pixels(height: np.ndarray) -> np.ndarray:
+    """A height map's slope per uv unit (periodic central differences) as RGBA16F rows: (d/du, d/dv, 0, 1)."""
+    rows, columns = height.shape
+    slope = np.zeros((rows, columns, 4), np.float32)
+    slope[..., 0] = (np.roll(height, -1, 1) - np.roll(height, 1, 1)) * np.float32(columns / 2)
+    slope[..., 1] = (np.roll(height, -1, 0) - np.roll(height, 1, 0)) * np.float32(rows / 2)
+    slope[..., 3] = 1.
+    return np.ascontiguousarray(slope.astype(np.float16))
+
+
 def capped(size, scale: float, max_height: int) -> tuple[float, float]:
     """A reduced-resolution target: ``scale`` of the viewport, but never taller than ``max_height`` (same aspect).
     Detail per screen fraction stays that of the approved look; cost stops growing with display resolution."""

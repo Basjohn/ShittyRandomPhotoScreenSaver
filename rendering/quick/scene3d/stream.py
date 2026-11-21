@@ -50,12 +50,14 @@ class _StreamLease:
         self.offset,self.size=offset,size
         self.active=True
 
-    def rebind(self):
+    def rebind(self, binding=None):
+        """The leased range bound again, at its own binding or at ``binding`` (a program that reads it elsewhere)."""
         if not self.active or self.owner._depth<=0:
             raise RuntimeError('Stream lease outlived its bound scope')
         owner=self.owner
         owner._names[0],owner._offsets[0],owner._sizes[0]=owner._buffer,self.offset,self.size
-        _gl44.glBindBuffersRange(self.target,self.binding,1,owner._names,owner._offsets,owner._sizes)
+        _gl44.glBindBuffersRange(self.target,self.binding if binding is None else int(binding),1,owner._names,
+                                 owner._offsets,owner._sizes)
 
 
 class StreamRing:

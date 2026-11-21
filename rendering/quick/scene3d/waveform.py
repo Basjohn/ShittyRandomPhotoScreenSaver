@@ -5,14 +5,14 @@ from pathlib import Path
 from dataclasses import replace
 from contextlib import contextmanager, nullcontext
 import numpy as np
-from PIL import Image
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 from rendering.quick import gl_query
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Floor, Recipe, SPEC, FLOOR_CONTACT
-from rendering.gl_programs.waveform_ribbon import (FLOOR_BLOCK, FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT)
+from rendering.gl_programs.waveform_ribbon import (FLOOR_BLOCK, FLOOR_PATHS_BINDING, FLOOR_VERTEX, FLOOR_FRAGMENT,
+                                                   FLAT)
 from rendering.gl_programs.waveform_atmosphere import (BODY_FIELD_UNIT, MEDIUM_BLOCK, MEDIUM_INJECT_SOURCE, SKY_BLOCK,
                                                        SKY_VERTEX, SKY_FRAGMENT)
 from rendering.gl_programs.portable import pack_block
@@ -44,9 +44,9 @@ OWNED = dict(restore=False)
 
 # The frame's values are the plan's (GL-free, shared with the native record): ``rendering.quick.scene3d.waveform_plan``.
 from rendering.quick.scene3d.waveform_plan import (capped, field_receiver_values, floor_prepass,  # noqa: E402,F401
-                                                   floor_prepass_size, floor_values, fog_focus, fog_grid,
+                                                   floor_images, floor_prepass_size, floor_values, fog_focus, fog_grid,
                                                    frame_geometry, history_mist, history_mvp, medium_values,
-                                                   reflection_size, sky_values)
+                                                   reflection_size, sky_values, slope_pixels)
 from rendering.quick.scene3d.pulse_rim import pulse_rim_values  # noqa: E402
 from rendering.quick.scene3d.floor_give import floor_give_values  # noqa: E402
 
@@ -102,56 +102,52 @@ def _chained(texture: int, size: tuple[int, int], fmt: str, chains: dict) -> Non
     dispatch_mip_chain(chains[fmt], texture, size, mip_levels(size), fmt)
 
 
-def _slope_texture(height: np.ndarray, chains: dict) -> int:
-    """Height slope per uv unit (periodic central differences), baked once: two fetches instead of eight per pixel."""
-    size = np.asarray(height.shape[::-1], np.float32)
-    slope = np.stack(((np.roll(height, -1, 1) - np.roll(height, 1, 1))*size[0]/2,
-                      (np.roll(height, -1, 0) - np.roll(height, 1, 0))*size[1]/2), axis=-1).astype(np.float32)
-    name = (gl.GLuint*1)()
-    gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
-    texture = int(name[0])
-    # RGBA16F (N1.7: QRhi has no RG16F); the GL_RG upload leaves b = 0, a = 1, and the floor reads .rg.
-    size = (slope.shape[1], slope.shape[0])
-    gl.glTextureStorage2D(texture, mip_levels(size), gl.GL_RGBA16F, *size)
-    gl.glTextureSubImage2D(texture, 0, 0, 0, slope.shape[1], slope.shape[0], gl.GL_RG, gl.GL_FLOAT,
-                           np.ascontiguousarray(slope))
-    _chained(texture, size, "rgba16f", chains)
-    gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
-    gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-    for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-        gl.glTextureParameteri(texture, wrap, gl.GL_REPEAT)
-    return texture
-
-
 def load_floor_textures(floor: Floor, chains: dict) -> dict:
-    """Saved maps: colour stays sRGB-encoded in plain RGBA8 and the floor shader decodes it (``srgbToLinear``, N0.3
-    decision F4: Qt's OpenGL backend ignores the sRGB texture flag, so no backend relies on it; the GPU filters and
-    mips the encoded values); roughness and height are linear data. Missing assets fail. ``chains``: the box kernel's
+    """The floor's maps (``waveform_plan.floor_images``, the native core's same bytes): colour stays sRGB-encoded in
+    plain RGBA8 and the floor shader decodes it (``srgbToLinear``, N0.3 decision F4: Qt's OpenGL backend ignores the
+    sRGB texture flag, so no backend relies on it; the GPU filters and mips the encoded values); roughness is linear
+    data; the slope is RGBA16F (N1.7: QRhi has no RG16F), uploaded as its half floats. ``chains``: the box kernel's
     program by format (``FLOOR_CHAIN_PROGRAMS``); the floor's anisotropy is its shader's taps (no hardware anisotropy:
     the native core's sampler has none)."""
     textures={}
     try:
-        for key,path,storage in (('albedo',floor.albedo,gl.GL_RGBA8),('roughness',floor.roughness,gl.GL_RGBA8),
-                                 ('height',floor.height,gl.GL_RGBA8)):
-            with Image.open(ROOT/path) as source:
-                image=source.convert('RGBA')
-            name = (gl.GLuint*1)()
-            gl.glCreateTextures(gl.GL_TEXTURE_2D,1,name)
-            texture=textures[key]=int(name[0])
-            gl.glTextureStorage2D(texture,mip_levels(image.size),storage,*image.size)
-            gl.glTextureSubImage2D(texture,0,0,0,*image.size,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,np.asarray(image,np.uint8))
-            _chained(texture,tuple(image.size),"rgba8",chains)
-            gl.glTextureParameteri(texture,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR_MIPMAP_LINEAR)
-            gl.glTextureParameteri(texture,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
-            for wrap in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):
-                gl.glTextureParameteri(texture,wrap,gl.GL_REPEAT)
-            if key == 'height':
-                textures['slope'] = _slope_texture(np.asarray(image, np.float32)[:, :, 0]/255., chains)
+        for key, (pixels, size, fmt) in floor_images(floor).items():
+            textures[key] = _map_texture(pixels, size, fmt, chains)
         return textures
     except Exception:
         if textures:
             gl.glDeleteTextures(len(textures),list(textures.values()))
         raise
+
+
+def _map_texture(pixels: np.ndarray, size: tuple[int, int], fmt: str, chains: dict) -> int:
+    """One floor map: ``pixels`` (rows top first, RGBA8 or RGBA16F half floats) with its box-kernel chain, trilinear,
+    repeating."""
+    name = (gl.GLuint*1)()
+    gl.glCreateTextures(gl.GL_TEXTURE_2D,1,name)
+    texture = int(name[0])
+    half = fmt == "rgba16f"
+    gl.glTextureStorage2D(texture,mip_levels(size),gl.GL_RGBA16F if half else gl.GL_RGBA8,*size)
+    gl.glTextureSubImage2D(texture,0,0,0,*size,gl.GL_RGBA,gl.GL_HALF_FLOAT if half else gl.GL_UNSIGNED_BYTE,pixels)
+    _chained(texture,size,fmt,chains)
+    gl.glTextureParameteri(texture,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR_MIPMAP_LINEAR)
+    gl.glTextureParameteri(texture,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
+    for wrap in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):
+        gl.glTextureParameteri(texture,wrap,gl.GL_REPEAT)
+    return texture
+
+
+def _slope_texture(height: np.ndarray) -> int:
+    """The slope map of a height map (``waveform_plan.slope_pixels``) as the floor reads it, its chain by a box-kernel
+    program made for the call (``tools/compute_pass_identity.py``'s slope pass)."""
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
+
+    program = compile_compute_program(MIP_BOX_TEXTS["rgba16f"], label="waveform slope chain")
+    try:
+        return _map_texture(slope_pixels(height), (int(height.shape[1]), int(height.shape[0])), "rgba16f",
+                            {"rgba16f": program})
+    finally:
+        delete_program(program)
 
 
 
@@ -448,6 +444,14 @@ class WaveformScene:
                          give_span=None if give is None else give[1], field=self._field_values() if lit else None,
                          fog_uniforms=self.fog.uniforms if lit and not mist_off else None, mist_off=mist_off)
         gl.glBindVertexArray(vao)
+        with self.ribbons.packet_bound_at(FLOOR_PATHS_BINDING):
+            self._floor_draws(u, count, size, flat, drawing_to)
+        for unit in (0, 1, 2, 3, 4, 14) if give is None else (0, 1, 2, 3, 4, 14, FLOOR_GIVE_UNIT):
+            gl.glBindTextureUnit(unit, 0)
+
+    def _floor_draws(self, u, count, size, flat, drawing_to):
+        """The floor's draws (its pre-pass first past the pre-pass height) with its program, textures and mesh bound."""
+        floor = self.recipe.floor
         # The reflection term (column taps) holds no detail finer than its reflection target, so on
         # large displays it is evaluated at a capped height and read back by the full-resolution pass.
         prepass = None if flat else floor_prepass_size(size, floor)
@@ -475,8 +479,6 @@ class WaveformScene:
                 rebind(pack_block(FLOOR_BLOCK, u))
                 gl.glBindTextureUnit(4, texture)
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-        for unit in (0, 1, 2, 3, 4, 14) if give is None else (0, 1, 2, 3, 4, 14, FLOOR_GIVE_UNIT):
-            gl.glBindTextureUnit(unit, 0)
 
 
     def _specular_target(self, size):

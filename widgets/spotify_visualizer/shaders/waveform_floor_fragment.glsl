@@ -126,7 +126,11 @@ layout(binding = 4) uniform sampler2D uSpecular;
 
  // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
+#ifdef SRPSS_NO_EMISSION
+vec4 Emission;
+#else
 layout(location=1) out vec4 Emission;
+#endif
 
 #define SRPSS_CONVENTIONS_FRAGMENT
 #ifndef SRPSS_CONVENTIONS_MAPPING
@@ -163,7 +167,7 @@ vec2 fragUv(vec2 targetSize) { return fragPixel(targetSize) / targetSize; }
 
 struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
 struct Path {vec4 meta;vec4 extra;vec4 colourA;vec4 colourB;Knot knots[256];};
-layout(std430,binding=0) readonly buffer Paths {Path paths[];};
+layout(std430,binding=5) readonly buffer Paths {Path paths[];};
  // packet origin+scroll, ribbon count
    // Travel Direction: -1 maps world x to the history axis mirrored (0/unset: +1)
 
@@ -589,7 +593,9 @@ void main() {
     vec2 dScreenUvdx=dFdx(screenUv), dScreenUvdy=dFdy(screenUv);
     mat2 dWorldXz=mat2(dFdx(vWorldPos.xz),dFdy(vWorldPos.xz));
     if(!hit)discard;
-    gl_FragDepth=groundDepth;
+#ifndef SRPSS_NO_DEPTH
+    gl_FragDepth=groundDepth;  // the pre-pass's target has no depth: its program is compiled without this write
+#endif
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     vec3 giveNormal=vec3(0.0,1.0,0.0);
     if(uFloorGive.y>0.0) { vec2 g=floorGiveGradient(vWorldPos.xz); giveNormal=normalize(vec3(g.x,1.0,g.y)); }

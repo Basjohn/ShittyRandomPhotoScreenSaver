@@ -85,6 +85,57 @@ def create_visualizer_renderer():return QuickWaveformRibbonRenderer()
 
 #: The ribbons' history capacity the renderer draws with (``_draw``'s ``capacity``).
 HISTORY_CAPACITY=256
+#: The Python scene's pack order of a frame (``WaveformScene._render_packet``): the yielding floor, the field, each
+#: camera's medium and volume, the reflection's sky, light, strays and sparks, then the scene's sky, floor (pre-pass
+#: first), ribbon body and light, strays and sparks. Each name is a pass id (``waveform_shader_files.PASS_FILES``) but
+#: ``ribbon_body``, the body draw of the ``ribbon`` pass's members.
+PYTHON_PACK_ORDER=("give_section","give_blur","field","medium","integrate","medium_mirror","integrate_mirror",
+                   "sky_mirror","ribbon_mirror","strays_mirror","bursts_mirror","sky","floor_prepass","floor",
+                   "ribbon_body","ribbon","strays","bursts")
+
+
+def pass_layout(name):
+    """The Python block layout a pass (a ``PYTHON_PACK_ORDER`` name) is packed with."""
+    from rendering.gl_programs.fog_volume import FOG_VOLUME_BLOCK
+    from rendering.gl_programs.ribbon import RIBBON_BLOCK, RIBBON_COHORT_STRAY_BLOCK
+    from rendering.gl_programs.ribbon_bursts import BURSTS_BLOCK
+    from rendering.gl_programs.waveform_atmosphere import FIELD_BLOCK, MEDIUM_BLOCK, SKY_BLOCK
+    from rendering.gl_programs.waveform_floor_give import FLOOR_GIVE_BLUR_BLOCK, FLOOR_GIVE_SECTION_BLOCK
+    from rendering.gl_programs.waveform_ribbon import FLOOR_BLOCK
+    layouts={"give_section":FLOOR_GIVE_SECTION_BLOCK,"give_blur":FLOOR_GIVE_BLUR_BLOCK,"field":FIELD_BLOCK,
+             "medium":MEDIUM_BLOCK,"integrate":FOG_VOLUME_BLOCK,"sky":SKY_BLOCK,"ribbon":RIBBON_BLOCK,
+             "strays":RIBBON_COHORT_STRAY_BLOCK,"bursts":BURSTS_BLOCK,"floor":FLOOR_BLOCK}
+    return layouts[name.replace("_mirror","").replace("_prepass","").replace("ribbon_body","ribbon")]
+
+
+def named_packs(packs,variant):
+    """The Python scene's packs of one frame (``(layout name, bytes)`` in pack order, its scene target's aside) by pass
+    name (``PYTHON_PACK_ORDER``), for the program ``variant`` it drew (``native_route.waveform_variant``: the mist, the
+    strays, the sparks, the yielding floor, the pre-pass); None when they are not that variant's sequence (the ribbons'
+    and strays' packs are left out of a frame with no drawn range)."""
+    fog,strays,sparks,give,prepass=(bool(v) for v in tuple(variant)[:5])
+    stage={"give_section":give,"give_blur":give,"field":fog,"medium":fog,"integrate":fog,"medium_mirror":fog,
+           "integrate_mirror":fog,"sky_mirror":fog,"sky":fog,"strays_mirror":strays,"strays":strays,
+           "bursts_mirror":sparks,"bursts":sparks,"floor_prepass":prepass}
+    named,at={},0
+    for name in PYTHON_PACK_ORDER:
+        if at<len(packs) and stage.get(name,True) and packs[at][0]==pass_layout(name).name:
+            named[name]=bytes(packs[at][1]);at+=1
+    return named if at==len(packs) else None
+
+
+def python_packs(passes):
+    """The packs ``passes`` (``waveform_pass_values``'s) stand for, in the Python scene's order: (name, bytes). The
+    body draw leaves the light's Pulse Rim members unset (it reads none)."""
+    from rendering.gl_programs.portable import pack_block
+    packs=[]
+    for name in PYTHON_PACK_ORDER:
+        key="ribbon" if name=="ribbon_body" else name
+        if key not in passes:continue
+        values=passes[key]
+        if name=="ribbon_body":values={**values,"uPulseRim":(0.,0.,0.,0.),"uPulseRimShape":(0.,0.)}
+        packs.append((name,pack_block(pass_layout(name),values)))
+    return packs
 
 
 def waveform_camera(state):

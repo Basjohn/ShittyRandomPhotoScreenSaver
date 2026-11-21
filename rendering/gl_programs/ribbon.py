@@ -16,7 +16,7 @@ to their average density once sub-pixel to limit crawling under slow motion.
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from core.waveform_ribbon_dynamics import PULSE_GRID
 from rendering.gl_programs.mist import MIST_GLSL
-from rendering.quick.scene3d.target import SCENE_OIT_GLSL
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL, SCENE_OIT_GLSL
 
 # The grade in three parts so a compute program can carry its two uniforms in a block (``RIBBON_GRADE_FIELDS``) while
 # the draws keep ``RIBBON_GRADE_GLSL`` as it is.
@@ -630,7 +630,7 @@ RIBBON_COHORT_STRAY_VERTEX = RIBBON_STRAY_VERTEX.replace(
 ).replace('uStrayLook.x','cohortLook.x'
 ).replace('uStrayLook.y*k.side.w','cohortLook.y*(0.8+0.4*max(k.side.w,0.0)/(1.0+max(k.side.w,0.0)))')
 
-RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
+RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n" + SCENE_EMISSION_OUTPUT_GLSL +
                          "in vec3 vWorld;\nin float vAlong;\nin float vAcross;\nin float vBright;\nin float vSeed;\n"
                          "flat in vec3 vColour;\nuniform vec3 uMistOrigin;\nuniform vec4 uStrayLook;\n"
                          "uniform vec2 uStrayGlow;  // soft halo around the filament, share sent to the bloom\n"
@@ -831,8 +831,8 @@ float pulseRimResponse(float x) {
 """
 # The one line the light pass gains; without it (or with uPulseRim.z 0) the rims are exactly today's.
 PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*pulseRimResponse(vWorld.x+uMistOrigin.x);\n"
-RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n"
-                         "layout(location=1) out vec4 Emission;\n" + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
+RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n" +
+                         SCENE_EMISSION_OUTPUT_GLSL + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
 void main() {
     float across=acrossClamped();
     float x=ribbonStrandCoordinate(across,vPhase,uStrands.w,uBody.w,uTone.z)*uStrands.x;

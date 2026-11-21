@@ -35,15 +35,6 @@ MODE_ID = "waveform_ribbon"
 VERSION = 1
 SCHEMA_ID = native_schema_id(MODE_CODES[MODE_ID], VERSION)
 
-#: The members the card decides: the route's settings fill them (the pass's own target size, and whether the floor
-#: reads its pre-pass), never the record.
-SETTINGS_MEMBERS = frozenset({
-    *(f"{pass_id}_uViewport" for pass_id in ("ribbon", "ribbon_mirror", "strays", "strays_mirror", "bursts",
-                                             "bursts_mirror", "floor", "floor_prepass")),
-    "floor_uSpecMode", "floor_prepass_uSpecMode",
-})
-
-
 def _capacities() -> dict[str, int]:
     from core.ribbon_bursts import CAPACITY, STRIDE
     from core.ribbon_frames import MAX_STRIP_STATIONS
@@ -70,9 +61,32 @@ def _capacities() -> dict[str, int]:
 CAPACITIES = _capacities()
 
 
-def member_name(pass_id: str, member: str) -> str:
-    """A pass file's member name (``rendering.gl_programs.waveform_shader_files.member_name``)."""
-    return f"{pass_id}_{member}"
+from core.visualizer_engine.waveform_native_names import SHARED_MEMBERS, member_name  # noqa: E402,F401  (the rule's owner)
+
+
+#: The members the card decides: the route's settings fill them (the pass's own target size, and whether the floor
+#: reads its pre-pass), never the record.
+SETTINGS_MEMBERS = frozenset({
+    *(member_name(pass_id, "uViewport") for pass_id in ("ribbon", "ribbon_mirror", "strays", "strays_mirror", "bursts",
+                                                        "bursts_mirror", "floor", "floor_prepass")),
+    member_name("floor", "uSpecMode"), member_name("floor_prepass", "uSpecMode"),
+})
+
+
+#: The most an int member's u32 field holds (the core fills an int only under a range rule within int32).
+INT_LIMIT = 2147483647
+
+
+def field_kind(glsl_type: str, numbers: int) -> tuple[str, int]:
+    """A member's record field (kind, count) by its GLSL type: a vec4 (or an array of them) ``f64x4`` per vec4, an
+    int or int vector ``u32`` per number (under ``INT_LIMIT``), any other float member ``f64`` per number (ABI 36: the
+    core fills a vec2, vec3 or mat4 from an f64 sequence)."""
+    base = glsl_type.split("[")[0]
+    if base == "vec4":
+        return "f64x4", numbers // 4
+    if base in ("int", "ivec2", "ivec3", "ivec4", "uint", "bool"):
+        return "u32", numbers
+    return "f64", numbers
 
 
 def _member_entries() -> tuple[tuple[str, str, int], ...]:
@@ -80,12 +94,12 @@ def _member_entries() -> tuple[tuple[str, str, int], ...]:
 
     entries, seen = [], set()
     for pass_id, members in PASS_MEMBERS:
-        for member, numbers in members:
+        for member, numbers, glsl_type in members:
             name = member_name(pass_id, member)
             if name in seen or name in SETTINGS_MEMBERS:
                 continue
             seen.add(name)
-            entries.append((name, "f64", numbers))
+            entries.append((name, *field_kind(glsl_type, numbers)))
     return tuple(entries)
 
 
@@ -113,7 +127,8 @@ COUNT_ENTRIES: tuple[tuple[str, str, int], ...] = (
 _ENTRIES = MEMBER_ENTRIES + STREAM_ENTRIES + COUNT_ENTRIES
 LAYOUT = NativeLayout.build(_ENTRIES)
 FIELD_NAMES = tuple(name for name, _kind, _count in _ENTRIES)
-FIELD_CHECKS: tuple[tuple[str, str, int], ...] = (
+FIELD_CHECKS: tuple[tuple[str, str, int], ...] = tuple(
+    (name, "at_most", INT_LIMIT) for name, kind, _count in MEMBER_ENTRIES if kind == "u32") + (
     ("ribbon_knot_floats", "at_most", CAPACITIES["knot_floats"]),
     ("ribbon_cohort_floats", "at_most", CAPACITIES["cohort_floats"]),
     ("ribbon_burst_floats", "at_most", CAPACITIES["burst_floats"]),
@@ -162,12 +177,17 @@ def project(frame: Any) -> dict[str, object]:
     values: dict[str, object] = {}
     filled = {member_name(pass_id, member): value for pass_id, members in passes.items()
               for member, value in members.items()}
-    for name, _kind, count in MEMBER_ENTRIES:
+    for name, kind, count in MEMBER_ENTRIES:
         value = filled.get(name)
-        numbers = (0.0,) * count if value is None else flat_numbers(value)
-        if len(numbers) != count or not all(math.isfinite(v) for v in numbers):
-            raise NativeSchemaError(f"{name} is not {count} finite numbers")
-        values[name] = numbers if count > 1 else numbers[0]
+        expected = 4 * count if kind == "f64x4" else count
+        numbers = (0.0,) * expected if value is None else flat_numbers(value)
+        if len(numbers) != expected or not all(math.isfinite(v) for v in numbers):
+            raise NativeSchemaError(f"{name} is not {expected} finite numbers")
+        if kind == "u32":
+            if not all(0 <= v <= INT_LIMIT and v == int(v) for v in numbers):
+                raise NativeSchemaError(f"{name} is not {expected} whole numbers from 0 to {INT_LIMIT}")
+            numbers = tuple(int(v) for v in numbers)
+        values[name] = numbers if expected > 1 else numbers[0]
     recipe = state.scene
     values["u_bloom_strength"] = float(recipe.bloom)
     values["u_hdr_exposure"] = float(recipe.exposure)

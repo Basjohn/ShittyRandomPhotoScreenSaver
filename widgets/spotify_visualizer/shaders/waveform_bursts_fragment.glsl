@@ -17,7 +17,11 @@ layout(location = 3) flat in float vLight;
 layout(location = 4) flat in float vGlow;
 layout(location = 5) flat in float vCore;
 layout(location=0) out vec4 FragColor;
+#ifdef SRPSS_NO_EMISSION
+vec4 Emission;
+#else
 layout(location=1) out vec4 Emission;
+#endif
 
         // clear-air centre x, centre z, radius x, radius z (world units)
    // falloff (radii beyond the edge per e-fold), floor thickening, thickening height, low glow

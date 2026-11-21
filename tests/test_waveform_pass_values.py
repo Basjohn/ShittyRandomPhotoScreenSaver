@@ -9,42 +9,11 @@ import pytest
 
 from tests.test_waveform_pulse_rim import Renders, _settled, _state
 
-#: The Python scene's pack order of a frame (``WaveformScene._render_packet``): the yielding floor, the field, each
-#: camera's medium and volume, the reflection's sky, light, strays and sparks, then the scene's sky, floor (pre-pass
-#: first), ribbon body and light, strays and sparks.
-ORDER = ("give_section", "give_blur", "field", "medium", "integrate", "medium_mirror", "integrate_mirror", "sky_mirror",
-         "ribbon_mirror", "strays_mirror", "bursts_mirror", "sky", "floor_prepass", "floor", "ribbon_body", "ribbon",
-         "strays", "bursts")
-
-
-def _layouts():
-    from rendering.gl_programs.fog_volume import FOG_VOLUME_BLOCK
-    from rendering.gl_programs.ribbon import RIBBON_BLOCK, RIBBON_COHORT_STRAY_BLOCK
-    from rendering.gl_programs.ribbon_bursts import BURSTS_BLOCK
-    from rendering.gl_programs.waveform_atmosphere import FIELD_BLOCK, MEDIUM_BLOCK, SKY_BLOCK
-    from rendering.gl_programs.waveform_floor_give import FLOOR_GIVE_BLUR_BLOCK, FLOOR_GIVE_SECTION_BLOCK
-    from rendering.gl_programs.waveform_ribbon import FLOOR_BLOCK
-
-    return {"give_section": FLOOR_GIVE_SECTION_BLOCK, "give_blur": FLOOR_GIVE_BLUR_BLOCK, "field": FIELD_BLOCK,
-            "medium": MEDIUM_BLOCK, "integrate": FOG_VOLUME_BLOCK, "sky": SKY_BLOCK, "ribbon": RIBBON_BLOCK,
-            "strays": RIBBON_COHORT_STRAY_BLOCK, "bursts": BURSTS_BLOCK, "floor": FLOOR_BLOCK}
-
-
 def expected_packs(passes) -> list[tuple[str, bytes]]:
     """The packs ``passes`` (``waveform_pass_values``'s) stand for, in the Python scene's order: (block, bytes)."""
-    from rendering.gl_programs.portable import pack_block
+    from rendering.quick.visualizer.implementations.waveform_ribbon import pass_layout, python_packs
 
-    layouts, packs = _layouts(), []
-    for name in ORDER:
-        key = "ribbon" if name == "ribbon_body" else name
-        if key not in passes:
-            continue
-        values = passes[key]
-        if name == "ribbon_body":   # the body pass leaves the light's Pulse Rim members unset (it reads none)
-            values = {**values, "uPulseRim": (0., 0., 0., 0.), "uPulseRimShape": (0., 0.)}
-        layout = layouts[key.replace("_mirror", "").replace("_prepass", "")]
-        packs.append((layout.name, pack_block(layout, values)))
-    return packs
+    return [(pass_layout(name).name, block) for name, block in python_packs(passes)]
 
 
 def _python_packs(renders, state):
@@ -90,3 +59,42 @@ def test_the_pass_values_are_the_python_renderers_packs(qt_app, size):
     other, _ = waveform_pass_values(replace(state, framed_view=(state.framed_view[0] * 1.1, *state.framed_view[1:])),
                                     (size[0] + 40, size[1]))
     assert expected_packs(other) != python
+
+
+@pytest.mark.parametrize("size", [(320, 200), (420, 1260), (3875, 1450)], ids=["inline", "prepass", "wide"])
+def test_the_routes_card_values_are_the_pass_values(size):
+    """The route's settings and sizes (``waveform_settings_values``, ``waveform_sizes``: computed from the card alone,
+    never per frame) are the card-decided members and sizes ``waveform_pass_values`` draws with."""
+    from types import SimpleNamespace
+
+    from core.visualizer_engine.waveform_native_schema import SETTINGS_MEMBERS
+    from rendering.gl_programs.waveform_shader_files import member_name
+    from rendering.quick.visualizer.implementations.waveform_ribbon import waveform_pass_values
+    from rendering.quick.visualizer.native_route import waveform_settings_values, waveform_sizes
+
+    values, configuration, _model, snapshot = _settled(floor_give=.6, strands_enabled=True)
+    state = replace(_state(values, configuration, snapshot), framed_view=(1.5, 1.0, 1.0))
+    drawn = SimpleNamespace(logical=SimpleNamespace(mode_state=state))
+    passes, counts = waveform_pass_values(state, size)
+    settings = waveform_settings_values(drawn, size)
+    decided = {member_name(pass_id, member): value for pass_id, members in passes.items()
+               for member, value in members.items() if member_name(pass_id, member) in SETTINGS_MEMBERS}
+    assert decided and {name: settings[name] for name in decided} == {
+        name: [float(v) for v in value] if isinstance(value, tuple) else float(value) for name, value in decided.items()}
+    # A member the frame's passes leave out belongs to a pass the one program holds while it draws nothing (the
+    # sparks before one is born, the pre-pass of a short scene, a stage turned off).
+    owners = {member_name(pass_id, member): pass_id for pass_id, members in passes.items() for member in members}
+    owners.update({member_name(pass_id, "uViewport"): pass_id for pass_id in
+                   ("bursts", "bursts_mirror", "strays", "strays_mirror", "floor_prepass")})
+    owners[member_name("floor_prepass", "uSpecMode")] = "floor_prepass"
+    extra = {owners[name] for name in set(settings) - set(decided) if name in SETTINGS_MEMBERS}
+    assert extra <= {"bursts", "bursts_mirror", "strays", "strays_mirror", "floor_prepass"}
+    sizes = waveform_sizes(drawn, size)
+    assert sizes["reflection"] == tuple(counts["reflection_size"])
+    assert sizes["prepass"] == tuple(counts["prepass_size"] or (1, 1))
+    assert sizes["fog_volume"] == tuple(counts["fog_grid"]) and sizes["fog_volume_mirror"] == tuple(counts["fog_grid_mirror"])
+    for camera in ("", "_mirror"):
+        grid = counts["fog_grid" + camera]
+        assert [settings[f"medium{camera}_groups_{axis}"] for axis in "xyz"] == [float(-(-v // 4)) for v in grid]
+    # Negative control: another card's values are not this one's.
+    assert waveform_settings_values(drawn, (size[0] + 40, size[1])) != settings

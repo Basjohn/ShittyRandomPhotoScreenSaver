@@ -3,6 +3,7 @@ and each pass file renames only its block's members: it compiles, and every memb
 (the Python renderer packs by those)."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -49,9 +50,16 @@ def test_every_file_is_its_python_text(monkeypatch):
 
     for wrapper, body, pass_id in files.PASS_FILES:
         lines = compose_shader_source(_folder() / wrapper).split("\n")
-        defines = [line for line in lines if line.startswith("#define ") and f" {pass_id}_" in line]
-        assert len(defines) == len(files.block_members(files._bodies()[body])), wrapper
-        kept = [line for line in lines if line not in defines and not line.startswith("// Waveform Ribbon")]
+        members = files.block_members(files._bodies()[body])
+        named = {files.member_name(pass_id, member) for member in members}
+        defines = [line for line in lines if line.startswith("#define ") and line.split()[-1] in named
+                   and len(line.split()) == 3]
+        assert len(defines) == len(members), wrapper
+        # A pass into a target with fewer attachments than the scene's defines exactly its FILE_DEFINES.
+        own = [f"#define {name}" for name in files.FILE_DEFINES.get(wrapper, ())]
+        assert [line for line in lines if line.startswith("#define SRPSS_NO_")] == own, wrapper
+        kept = [line for line in lines if line not in defines and not line.startswith("// Waveform Ribbon")
+                and line not in own]
         assert "\n".join(kept) == files._bodies()[body], wrapper
     # Negative control: a text that moved is reported.
     original = files._bodies
@@ -65,10 +73,23 @@ def test_every_file_is_its_python_text(monkeypatch):
 
 
 def test_every_pass_names_each_member_once_across_the_program():
+    from core.visualizer_engine.waveform_native_schema import SHARED_MEMBERS
     from rendering.gl_programs.waveform_shader_files import member_name, pass_members
 
-    names = [member_name(pass_id, member) for pass_id, members in pass_members().items() for member in members]
-    assert len(names) == len(set(names))
+    every = [(pass_id, member, member_name(pass_id, member)) for pass_id, members in pass_members().items()
+             for member in members]
+    own = [name for pass_id, _member, name in every if name.startswith(f"{pass_id}_")]
+    assert len(own) == len(set(own))
+    # A shared pass (the floor's pre-pass) names exactly its shared pass's own members, and keeps the rest its own.
+    shared = [(pass_id, member, name) for pass_id, member, name in every if not name.startswith(f"{pass_id}_")]
+    assert {pass_id for pass_id, _m, _n in shared} == set(SHARED_MEMBERS)
+    for pass_id, member, name in shared:
+        owner, kept = SHARED_MEMBERS[pass_id]
+        assert member not in kept and name == member_name(owner, member) and name in own
+    assert all(member_name(pass_id, member) in own for pass_id, (_owner, kept) in SHARED_MEMBERS.items()
+               for member in kept)
+    # Every name is a field name the core admits: lower case words, at most 64 characters.
+    assert all(re.fullmatch(r"[a-z0-9_]{1,64}", name) for _p, _m, name in every)
     # Negative control: without the prefix the passes' members collide (the reason for the pass files).
     bare = [member for members in pass_members().values() for member in members]
     assert len(bare) > len(set(bare))
@@ -121,11 +142,14 @@ def test_every_pass_program_compiles_and_keeps_the_python_texts_offsets(qt_app):
                 files, texts = _offsets(program), _offsets(python)
                 delete_program(program)
                 delete_program(python)
-                prefix = f"{pass_id}_"
-                own = {name[len(prefix):]: offset for name, offset in files.items() if name.startswith(prefix)}
-                conventions = {name: offset for name, offset in files.items() if not name.startswith(prefix)}
-                assert own and {**own, **conventions} == texts, program_files
-                assert not set(conventions) & set(own), program_files
+                from rendering.gl_programs.waveform_shader_files import member_name
+
+                # Each Python member under its pass file's name (its own, or a shared pass's), at the same offset;
+                # the conventions block's members as they are.
+                renamed = {(member_name(pass_id, name) if member_name(pass_id, name) in files else name): offset
+                           for name, offset in texts.items()}
+                assert renamed == files, program_files
+                assert set(renamed) != set(texts), program_files
                 checked += 1
     finally:
         target.close()

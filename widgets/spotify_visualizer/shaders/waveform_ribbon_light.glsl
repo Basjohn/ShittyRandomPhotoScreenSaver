@@ -35,7 +35,11 @@ layout(std140, binding = 18) uniform RibbonDraw {
     vec2 uPulseRimShape;
 };
 layout(location=0) out vec4 FragColor;
+#ifdef SRPSS_NO_EMISSION
+vec4 Emission;
+#else
 layout(location=1) out vec4 Emission;
+#endif
 
 layout(location = 0) in vec3 vWorld;
 layout(location = 1) in vec3 vNormal;

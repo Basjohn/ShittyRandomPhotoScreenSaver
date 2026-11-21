@@ -5,6 +5,16 @@ from rendering.gl_programs.reflection import PLANAR_REFLECTION_UNIFORMS
 from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
 from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
 
+#: The storage binding the floor reads the scene's packet at: its samplers hold bindings 0 to 4, and the native core's
+#: programs have one binding space (OpenGL's storage and texture units are separate, QRhi's are not).
+FLOOR_PATHS_BINDING = 5
+_PATHS_AT_0 = "layout(std430,binding=0) readonly buffer Paths"
+if WORLD_FIELD_GLSL.count(_PATHS_AT_0) != 1:
+    raise RuntimeError("the world field reads the packet at storage binding 0 once")
+_FLOOR_WORLD_FIELD_GLSL = WORLD_FIELD_GLSL.replace(
+    _PATHS_AT_0, f"layout(std430,binding={FLOOR_PATHS_BINDING}) readonly buffer Paths")
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
+
 FLOOR_VERTEX = """#version 460 core
 layout(location=0) in vec3 aPosition;
 out vec2 vFloorNdc;
@@ -90,8 +100,7 @@ uniform sampler2D uSpecular;
 uniform vec3 uForward;
 uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
-layout(location=1) out vec4 Emission;
-""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
+""" + SCENE_EMISSION_OUTPUT_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + _FLOOR_WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
 const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
 // The maps' and the reflection's anisotropy (N5.4: the shader's taps, rendering/gl_programs/anisotropic.py, in both
 // renderers; the samplers at 1x, as the native core's are): the maps' former hardware 8x, the reflection's 16x.
@@ -185,7 +194,9 @@ void main() {
     vec2 dScreenUvdx=dFdx(screenUv), dScreenUvdy=dFdy(screenUv);
     mat2 dWorldXz=mat2(dFdx(vWorldPos.xz),dFdy(vWorldPos.xz));
     if(!hit)discard;
-    gl_FragDepth=groundDepth;
+#ifndef SRPSS_NO_DEPTH
+    gl_FragDepth=groundDepth;  // the pre-pass's target has no depth: its program is compiled without this write
+#endif
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     vec3 giveNormal=vec3(0.0,1.0,0.0);
     if(uFloorGive.y>0.0) { vec2 g=floorGiveGradient(vWorldPos.xz); giveNormal=normalize(vec3(g.x,1.0,g.y)); }

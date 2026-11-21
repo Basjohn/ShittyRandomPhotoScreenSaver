@@ -27,9 +27,20 @@ def test_the_fields_are_the_pass_files_members_but_the_cards():
 
     expected = {member_name(pass_id, member): numbers for pass_id, members in pass_numbers().items()
                 for member, numbers in members.items()}
-    record = {name: count for name, _kind, count in schema.MEMBER_ENTRIES}
+    # Each field holds its member's numbers: an f64x4 field four per element, an f64 or u32 field one.
+    record = {name: count * (4 if kind == "f64x4" else 1) for name, kind, count in schema.MEMBER_ENTRIES}
     assert set(record) == set(expected) - schema.SETTINGS_MEMBERS
     assert all(record[name] == expected[name] for name in record)
+    # The kinds follow the member types the core fills (an int member u32 under its range rule).
+    from rendering.gl_programs.waveform_shader_files import pass_types
+
+    types = {member_name(pass_id, member): kind for pass_id, members in pass_types().items()
+             for member, kind in members.items()}
+    kinds = {name: kind for name, kind, _count in schema.MEMBER_ENTRIES}
+    assert all((kinds[name] == "f64x4") == types[name].startswith("vec4") for name in kinds)
+    assert all((kinds[name] == "u32") == types[name].startswith(("int", "ivec")) for name in kinds)
+    checked = {name for name, rule, _limit in schema.FIELD_CHECKS if rule == "at_most"}
+    assert {name for name, kind in kinds.items() if kind == "u32"} <= checked
     assert schema.SETTINGS_MEMBERS <= set(expected)
     assert schema.LAYOUT.size % 16 == 0 and schema.LAYOUT.size <= (1 << 21)
 
@@ -50,7 +61,7 @@ def test_the_record_holds_the_pass_values_streams_and_counts():
             name = member_name(pass_id, member)
             if name in schema.SETTINGS_MEMBERS or member not in blocks[pass_id]:
                 continue                 # a card member, or a sampler's unit the Python draw sets beside its block
-            got = np.atleast_1d(np.asarray(decoded[name], float))
+            got = np.atleast_1d(np.asarray(decoded[name], float)).ravel()
             want = np.asarray(schema.flat_numbers(value), float)
             np.testing.assert_array_equal(got, want, err_msg=name)
     assert decoded["ribbon_knots"][:len(state.packet.payload)] == state.packet.payload
@@ -62,7 +73,8 @@ def test_the_record_holds_the_pass_values_streams_and_counts():
     assert decoded["u_hdr_exposure"] == state.scene.exposure
     # Negative control: another frame's record differs in its per-frame members.
     later = replace(state, time=state.time + .5)
-    assert schema.decode(schema.encode(_logical(later)))["ribbon_uAge"] != decoded["ribbon_uAge"]
+    age = member_name("ribbon", "uAge")
+    assert schema.decode(schema.encode(_logical(later)))[age] != decoded[age]
 
 
 def test_a_frame_without_its_framed_view_is_refused():

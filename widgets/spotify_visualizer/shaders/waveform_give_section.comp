@@ -1,9 +1,9 @@
 #version 460 core
 // Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_give_section for the give_section pass, its block's members named for it (the arithmetic the body's)
-#define uFieldOrigin give_section_uFieldOrigin
-#define uFieldSide give_section_uFieldSide
-#define uGradeStops give_section_uGradeStops
-#define uGrade give_section_uGrade
-#define uGiveSpan give_section_uGiveSpan
-#define uGiveShape give_section_uGiveShape
+#define uFieldOrigin give_section_u_field_origin
+#define uFieldSide give_section_u_field_side
+#define uGradeStops give_section_u_grade_stops
+#define uGrade give_section_u_grade
+#define uGiveSpan give_section_u_give_span
+#define uGiveShape give_section_u_give_shape
 #include "waveform_give_section.glsl"
