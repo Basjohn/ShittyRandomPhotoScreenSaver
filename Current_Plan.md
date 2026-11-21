@@ -93,7 +93,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
 - [ ] High (Opus High, core-critical C++): Waveform's five C++ boxes (N5.4) in one branch at ABI 33 (32 is the card
-  quad's), one GitHub build (dispatched 21 Nov). Defects between N steps: 1D.6 (design note first), then 1C.10.
+  quad's), one GitHub build (agent a6688ad0cd2ae360a, Opus High). Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -657,7 +657,8 @@ the feature (D3D11 is not stated).
     so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
     `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
     `outer_origin=(803.0, 517.0)`, dpr 1.
-  - [ ] Docs: D12 "As built: Oscilloscope", Primitives, README (registered 21 Nov after layer T).
+  - [ ] Docs: D12 "As built: Oscilloscope", Primitives, README (registered 21 Nov after layer T). Agent
+    a69ea5aa89a54b5f3 (Sonnet Medium).
 - [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
   suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
   follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
@@ -861,7 +862,7 @@ the feature (D3D11 is not stated).
     - Lead decision (21 Nov): Python keeps HDR and the tone map at strength 0 (bloom's contribution fades to 0, the
       composite path never switches), which removes the pop (fade, never vanish) and needs no per-record C++ switch.
       Not a C++ box any more: a Python change with its proof (a recorded crossing of 0 with no pop; control: the old
-      switch, which pops). Sonnet agent, dispatched 21 Nov.
+      switch, which pops). Agent a0b1ebd0ddd73bb98 (Sonnet Medium).
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
