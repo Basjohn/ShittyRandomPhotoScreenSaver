@@ -133,18 +133,12 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   lost that way before, R-memory) and remove the D: targets of a retired worktree. Tests with controls (a worktree
   write lands on D:; retire copies the keep group and nothing is lost; a junction target outside D: is refused). Do
   it when no agent is mid-run in a worktree.
-- [ ] Fast-proof storage at sane size, nothing lost (operator, 22 Nov): the cached Python references
-  (`D:\Temp\Scratch\SRPSS\fast_proof\references`, 50 GB, ~680 MB each as raw `frames.bin`) and the accepted
-  `native_render_parity.json` hashes are the long-term control (proof guide sections 6 and 7): never deleted by any
-  cleanup. Keep their method, shrink the storage:
-  - [ ] Store reference frames losslessly compressed per frame (e.g. zstd), read back byte-identical (a test: every
-    frame's hash equal before and after conversion), converting the existing cache in place with a dry run first.
-  - [ ] List and prune only references whose cache key no longer matches the current sources (superseded keys),
-    dry run first; any key an accepted json or a live port names is kept.
-  - [ ] Native runs keep hashes per frame and images only for failing frames (the guide's rule); a guard writes no
-    lossless full-take frame folders (Bubble's guard wrote 26 GB on 22 Nov).
-  - [ ] `tools/artifact_paths.py prune-scratch` and the Harness Index name the references and accepted hashes as
-    protected. Do it when no agent is mid-run against the cache.
+- [ ] Fast-proof data protected, guard output lean (operator, 22 Nov; the references' size on D: is fine): the cached
+  Python references (`D:\Temp\Scratch\SRPSSast_proofeferences`) and the accepted `native_render_parity.json`
+  hashes are the long-term control (proof guide sections 6 and 7) and are never deleted by any cleanup:
+  `tools/artifact_paths.py prune-scratch` and the Harness Index name them as protected. Native guard runs keep hashes
+  per frame and images only for failing frames, never lossless full-take frame folders (Bubble's guard wrote 26 GB on
+  F: on 22 Nov). With the worktree-artifacts box above.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
