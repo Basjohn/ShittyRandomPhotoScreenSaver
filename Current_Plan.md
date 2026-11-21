@@ -1065,6 +1065,12 @@ the feature (D3D11 is not stated).
       program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
+  - [ ] Source reading first (Sonnet, research only, no code), as Waveform's reading above: the record per frame and
+    per Settings or card change, each stream's size rule, every pass with its targets, formats and attachments (the
+    drift compute, transparency/OIT, HDR, the depth texture and background capture, the probe, defocus, impostors and
+    optics), how it turns, and its clear; then what the port needs that the ABI 28 core lacks beyond Waveform's six C++
+    boxes (one box each, with what its proof must show), and which of Waveform's boxes it shares. File:line for every
+    claim. Extruded Bubble is its own mode: never read the original Bubble as its oracle.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
