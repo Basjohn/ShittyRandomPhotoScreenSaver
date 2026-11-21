@@ -67,14 +67,22 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
-**Resume here (lead, 21 Nov, usage cut):**
-- [ ] The fast proof is complete (8578ae50f): full-take native runs against cached references, `--accepted` keeping
-  unchanged frames' verdicts (a 60 s Bubble take in 57.6 s against 399 s). Next under it (Medium): the 60 s reruns the
-  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b; Opus Medium agent a40f1b6d7aec65276).
-  Bubble's rule (b) passes all four 60 s takes on both APIs under its re-measured bound and the union mask.
-- [ ] The Oscilloscope at ABI 29 is merged (main built a4e59ccb): every display passes the 5.5 s owner smoke, turned
-  cards pass at quarters 0-3. Before registration: its 60 s takes under the split, layer L, the lead's layer T and
-  cost round, the legacy shader, the item_pixel_rect side defect.
+**Resume here (lead, 21 Nov ~09:30 UTC; spend stopped: weekly 39 %, 5-hour 97 %; start a fresh lead session):**
+- [ ] Efficiency first (operator, 21 Nov: the day spent too much, a Spline residual chase above all): critical path only
+  (the Oscilloscope's blockers, the core features the ports need, then Waveform); no slot for non-blocking residuals of
+  accepted modes; key cached Python references on what draws them (shaders, renderer, settings), not on judge or tool
+  code, so tool merges stop forcing slow redraws; one reference build per change, shared; `--accepted` by default; one
+  C++ build per batch; fresh agents instead of resuming ones with huge contexts.
+- [ ] Two built, unmerged C++ branches both at ABI 31 (renumber the second merged to 32, rebuild main after each):
+  - `worktree-agent-a8797a6d7c59d45af` (audit 11's fixes for N3.6, built 87f8c4974): run `device_loss_check.py` all
+    rounds and `make_controls.py` controls, then merge.
+  - `worktree-agent-aea35d28be699535f` (the card quad, built 55433ebff; agent stopped by the lead): Spline Curve 23
+    failing frames down to 6 touching one-level pairs (backlog), the card_triangle control reproduces the 21 Nov
+    failures on three takes. Still to run before merge: the content harnesses on both APIs, Spectrum hash identity,
+    Bubble variant a on one take. Smallest path: run those, merge if clean; otherwise park it.
+- [ ] The Oscilloscope (unregistered, ABI 29+): rule (b) fails on every 60 s take (constant offsets on fixed pixels,
+  systematic: root cause, no bound); offer nightsolong block size 0 input 1388; the stream player's windows do not
+  reproduce its continuous frames; then the lead's layer T and cost round, registration.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
