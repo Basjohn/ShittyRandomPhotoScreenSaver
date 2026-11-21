@@ -65,11 +65,44 @@ def display_wide_world(card: tuple[float, float], display: tuple[float, float]) 
     return tuple(float(v) for v in drawn_presentations(card, display)[1].viewport_extent)
 
 
-def observe(clip, card, *, preset: int, drawn_world=None, snapshots_at=(), snapshots=None):
+def candidate_world_resolver(exponent: float):
+    """A CANDIDATE capacity zoom (tool only, never product): ``resolve_bubble_world`` with the zoom
+    ``(needed / capacity) ** exponent`` instead of its square root (0.5 is production: density by area; a larger
+    exponent zooms further, so fewer, larger heroes). Everything else is the production resolver's arithmetic."""
+    from widgets.spotify_visualizer import bubble_viewport_profile as profile
+
+    def resolve(viewport_extent, *, authored_population, baseline_viewport_size=(
+            profile.CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)):
+        world = profile.resolve_bubble_world(viewport_extent, authored_population=authored_population,
+                                             baseline_viewport_size=baseline_viewport_size)
+        if world.world_scale == 1.0:
+            return world
+        baseline_w, baseline_h = (float(v) for v in baseline_viewport_size)
+        cards_w, cards_h = world.width / baseline_w, world.height / baseline_h
+        zoom = (world.world_scale ** 2) ** float(exponent)       # (needed / capacity) ** exponent
+        domain_w, domain_h = cards_w / zoom, cards_h / zoom
+        return profile.BubbleWorld(width=world.width, height=world.height, domain_w=domain_w, domain_h=domain_h,
+                                   world_scale=zoom, population_scale=domain_w * domain_h)
+
+    return resolve
+
+
+def observe(clip, card, *, preset: int, drawn_world=None, snapshots_at=(), snapshots=None, zoom_exponent=None):
     """One record per published Bubble snapshot: shape-invariance samples plus nominal radii for breathing.
-    ``snapshots``: a dict that receives the published Quick snapshots of the frames in ``snapshots_at``."""
+    ``snapshots``: a dict that receives the published Quick snapshots of the frames in ``snapshots_at``.
+    ``zoom_exponent``: replay with ``candidate_world_resolver(zoom_exponent)`` (a candidate, never product)."""
+    from contextlib import ExitStack
+
+    from widgets.spotify_visualizer import bubble_simulation
     from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
     from . import driver
+
+    if zoom_exponent is not None:
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(bubble_simulation, "resolve_bubble_world",
+                                             candidate_world_resolver(zoom_exponent)))
+            return observe(clip, card, preset=preset, drawn_world=drawn_world, snapshots_at=snapshots_at,
+                           snapshots=snapshots)
 
     frames, identities, resolved = [], {}, {}
     snapshot = BubbleSimulation.snapshot
@@ -237,6 +270,73 @@ def drawn_radii(snapshots, frames, times, presentation, frame_dir: Path | None =
     return rows
 
 
+def drawn_frames(snapshots, presentation, *, width: int):
+    """Each snapshot (index order) on its drawn card through the production render host, offscreen, downscaled to
+    ``width`` pixels across (for motion sheets)."""
+    from dataclasses import replace
+
+    from PIL import Image
+
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tools.extruded_bubble_capture import _draw
+    from tools.transition_contact_sheet import TransitionCapture
+
+    _x, _y, outer_w, outer_h = presentation.outer_rect
+    size = (int(round(outer_w)), int(round(outer_h)))
+    dpr = float(presentation.dpr)
+    target = TransitionCapture(int(round(outer_w * dpr)), int(round(outer_h * dpr)))
+    host = QuickVisualizerRenderHost()
+    images = []
+    try:
+        for index in sorted(snapshots):
+            rgba, _ms = _draw(host, target, replace(snapshots[index], presentation=presentation), size, size)
+            image = Image.fromarray(rgba).convert("RGB")
+            images.append(image.resize((width, round(image.height * width / image.width)), Image.LANCZOS))
+    finally:
+        host.release_resources()
+        target.close()
+    return images
+
+
+def moment_sheet(output: Path, sampled, stamps, moments, names, exponent) -> None:
+    """One column per moment (the nearest drawn frame): each run's kept frame stacked at one width."""
+    from PIL import Image
+
+    labels = {"card": "card", "display_wide": "fullscreen now (area zoom, exponent 0.5)",
+              "candidate": f"fullscreen candidate (exponent {exponent})"}
+    width, columns = 1280, []
+    for moment in moments:
+        index = min(sampled, key=lambda i: abs(stamps[i] - moment))
+        tiles = []
+        for name in names:
+            image = Image.open(output / f"frames_{name}" / f"frame_{index:05d}.png").convert("RGB")
+            image = image.resize((width, round(image.height * width / image.width)), Image.LANCZOS)
+            tiles.append(_labelled(image, f"{labels.get(name, name)}  t={stamps[index]:.1f}s"))
+        column = Image.new("RGB", (width, sum(t.height for t in tiles) + 8 * (len(tiles) - 1)), (0, 0, 0))
+        y = 0
+        for tile in tiles:
+            column.paste(tile, (0, y))
+            y += tile.height + 8
+        columns.append(column)
+    sheet = Image.new("RGB", (sum(c.width for c in columns) + 12 * (len(columns) - 1),
+                              max(c.height for c in columns)), (0, 0, 0))
+    x = 0
+    for column in columns:
+        sheet.paste(column, (x, 0))
+        x += column.width + 12
+    sheet.save(output / "moments.png")
+
+
+def _labelled(image, text):
+    from PIL import ImageDraw
+
+    out = image.copy()
+    draw = ImageDraw.Draw(out)
+    draw.rectangle((0, 0, 8 + 7 * len(text), 18), fill=(0, 0, 0))
+    draw.text((4, 3), text, fill=(240, 240, 240))
+    return out
+
+
 def _p10_p90(values):
     ordered = sorted(values)
     return ordered[int(0.1 * (len(ordered) - 1))], ordered[int(0.9 * (len(ordered) - 1))]
@@ -278,7 +378,8 @@ def plot(path: Path, music, curves: dict, ratios: dict, title: str, drawn: dict 
     from PIL import Image, ImageDraw
 
     width, panel, pad = 1600, 220, 60
-    colours = {"card": (80, 170, 255), "display_wide": (255, 170, 60), "before": (230, 70, 70)}
+    colours = {"card": (80, 170, 255), "display_wide": (255, 170, 60), "before": (230, 70, 70),
+               "candidate": (120, 220, 120)}
     panels = 4 if drawn else 3
     image = Image.new("RGB", (width, pad + panels * (panel + pad)), (18, 20, 24))
     draw = ImageDraw.Draw(image)
@@ -330,8 +431,18 @@ def main() -> None:
                              "measure the big heroes' drawn radii in device pixels (0: logical frames only)")
     parser.add_argument("--card-scale", type=float, default=1.0, help="the card's uniform visual scale (drawn only)")
     parser.add_argument("--dpr", type=float, default=1.0, help="the display's device pixel ratio (drawn only)")
+    parser.add_argument("--candidate-exponent", type=float, default=None,
+                        help="also replay display-wide with a CANDIDATE capacity zoom (needed/capacity)**P "
+                             "(production: 0.5); a tool-only comparison, never product")
+    parser.add_argument("--moments", default="", help="seconds of the take, comma-separated: a sheet of the card, "
+                                                      "display-wide and the candidate at each (needs --render-fps)")
+    parser.add_argument("--motion", default="", help="START,SECONDS: an animated WebP of display-wide beside the "
+                                                     "candidate over that span of the take")
+    parser.add_argument("--motion-fps", type=float, default=24.0)
     args = parser.parse_args()
-    if args.render_fps > 0.0:
+    if args.motion and args.candidate_exponent is None:
+        parser.error("--motion compares display-wide with the candidate: give --candidate-exponent")
+    if args.render_fps > 0.0 or args.motion:
         from PySide6.QtGui import QGuiApplication
         QCoreApplication.instance() or QGuiApplication([])
     else:
@@ -341,21 +452,35 @@ def main() -> None:
     wide = tuple(float(v) for v in wide_drawn.viewport_extent)
     clip = load_clip(args.clip, args.seconds)
     args.output.mkdir(parents=True, exist_ok=False)
-    sampled = []
-    if args.render_fps > 0.0:
-        stamps = [(frame.timestamp_us - clip.frames[0].timestamp_us) / 1e6 for frame in clip.frames]
-        step, next_t = 1.0 / args.render_fps, 2.0   # past the cold start
+    stamps = [(frame.timestamp_us - clip.frames[0].timestamp_us) / 1e6 for frame in clip.frames]
+
+    def every(start, stop, fps):
+        out, next_t = [], start
         for index, t in enumerate(stamps):
-            if t >= next_t:
-                sampled.append(index)
-                next_t += step
-    card_snaps, wide_snaps = {}, {}
+            if start <= t < stop and t >= next_t:
+                out.append(index)
+                next_t += 1.0 / fps
+        return out
+
+    sampled = every(2.0, float("inf"), args.render_fps) if args.render_fps > 0.0 else []   # past the cold start
+    motion = []
+    if args.motion:
+        start, span = (float(v) for v in args.motion.split(","))
+        motion = every(start, start + span, args.motion_fps)
+    card_snaps, wide_snaps, cand_snaps = {}, {}, {}
     card_frames, times, resolved = observe(clip, card, preset=args.preset, snapshots_at=sampled, snapshots=card_snaps)
-    wide_frames, wide_times, _ = observe(clip, card, preset=args.preset, drawn_world=wide, snapshots_at=sampled,
-                                         snapshots=wide_snaps)
+    wide_frames, wide_times, _ = observe(clip, card, preset=args.preset, drawn_world=wide,
+                                         snapshots_at=sorted({*sampled, *motion}), snapshots=wide_snaps)
     if wide_times != times:
         raise RuntimeError("the two replays published different frame times")
     runs = {"card": (card_frames, card), "display_wide": (wide_frames, wide), "before": (card_frames, wide)}
+    if args.candidate_exponent is not None:
+        cand_frames, cand_times, _ = observe(clip, card, preset=args.preset, drawn_world=wide,
+                                             snapshots_at=sorted({*sampled, *motion}), snapshots=cand_snaps,
+                                             zoom_exponent=args.candidate_exponent)
+        if cand_times != times:
+            raise RuntimeError("the candidate replay published different frame times")
+        runs["candidate"] = (cand_frames, wide)
     report = {"clip": str(args.clip), "seconds": args.seconds, "preset": args.preset, "card": card,
               "display": display, "display_wide_world": wide, "stream": resolved.get("stream"),
               "drift": resolved.get("drift"), "runs": {}}
@@ -369,7 +494,10 @@ def main() -> None:
         report["runs"][name] = stats
         curves[name] = speed_series(frames, times, extent)
     base = report["runs"]["card"]
-    for name in ("display_wide", "before"):
+    report["candidate_exponent"] = args.candidate_exponent
+    for name in ("display_wide", "before", "candidate"):
+        if name not in report["runs"]:
+            continue
         row = report["runs"][name]
         report["runs"][name]["relative_to_card"] = {
             key: row[key] / base[key] - 1.0 for key in ("speed_median", "speed_x_median", "speed_y_median",
@@ -378,17 +506,37 @@ def main() -> None:
             if base[key] and math.isfinite(base[key]) and math.isfinite(row[key])}
     drawn_series = {}
     if sampled:
-        for name, snaps, frames, presentation in (("card", card_snaps, card_frames, ordinary_drawn),
-                                                  ("display_wide", wide_snaps, wide_frames, wide_drawn)):
+        drawn_runs = [("card", card_snaps, card_frames, ordinary_drawn),
+                      ("display_wide", wide_snaps, wide_frames, wide_drawn)]
+        if "candidate" in runs:
+            drawn_runs.append(("candidate", cand_snaps, runs["candidate"][0], wide_drawn))
+        for name, snaps, frames, presentation in drawn_runs:
             frame_dir = args.output / f"frames_{name}"
             frame_dir.mkdir()
-            rows = drawn_radii(snaps, frames, times, presentation, frame_dir)
+            rows = drawn_radii({i: snaps[i] for i in sampled}, frames, times, presentation, frame_dir)
             report["runs"][name]["drawn"] = drawn_summary(rows)
             (args.output / f"drawn_{name}.json").write_text(json.dumps(rows) + "\n", encoding="utf-8")
             per_t: dict[float, list] = {}
             for row in rows:
                 per_t.setdefault(row["t"], []).append(row["drawn_px"] / row["nominal_px"])
             drawn_series[name] = [(t, median(v)) for t, v in sorted(per_t.items())]
+        if args.moments:
+            moment_sheet(args.output, sampled, stamps, [float(v) for v in args.moments.split(",")],
+                         [name for name, *_rest in drawn_runs], args.candidate_exponent)
+    if motion:
+        from PIL import Image
+
+        width = 800
+        left =drawn_frames({i: wide_snaps[i] for i in motion}, wide_drawn, width=width)
+        right = drawn_frames({i: cand_snaps[i] for i in motion}, wide_drawn, width=width)
+        pictures = []
+        for a, b in zip(left, right):
+            frame = Image.new("RGB", (2 * width + 8, a.height), (0, 0, 0))
+            frame.paste(_labelled(a, "fullscreen now (area zoom, exponent 0.5)"), (0, 0))
+            frame.paste(_labelled(b, f"candidate (exponent {args.candidate_exponent:g})"), (width + 8, 0))
+            pictures.append(frame)
+        pictures[0].save(args.output / "motion_current_vs_candidate.webp", save_all=True, append_images=pictures[1:],
+                         duration=round(1000 / args.motion_fps), loop=0, quality=80, method=4)
     (args.output / "report.json").write_text(json.dumps(report, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     music = music_envelope(clip)
     plot(args.output / "response.png", music, curves, ratios,
