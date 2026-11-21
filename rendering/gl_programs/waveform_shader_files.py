@@ -31,6 +31,28 @@ def member_name(pass_id: str, member: str) -> str:
     return f"{pass_id}_{member}"
 
 
+#: The sorted pack's transparent write (D17 choice D: on a device the order-independent gate does not admit, the core
+#: draws a transparent pass premultiplied over its owner): ``SCENE_OIT_GLSL``'s function, writing the owner's colour.
+SORTED_GLSL = """
+layout(location = 0) out vec4 SceneColour;
+void sceneTransparent(vec3 premultiplied, float alpha, float viewDepth) {
+    SceneColour = vec4(premultiplied, alpha);
+}
+"""
+
+
+def sorted_body(body: str) -> str:
+    """The ribbon body's sorted pack text: its order-independent outputs replaced by ``SORTED_GLSL`` and its emission
+    moved to location 1 (the owner's emission attachment), nothing else changed. The Python renderer always draws the
+    order-independent form; the native core draws this only where its gate refuses order independence."""
+    from rendering.quick.scene3d.target import SCENE_OIT_GLSL
+
+    if body.count(SCENE_OIT_GLSL) != 1 or body.count("layout(location=2) out vec4 Emission;") != 1:
+        raise ValueError("the ribbon body holds SCENE_OIT_GLSL once and its emission at location 2")
+    return body.replace(SCENE_OIT_GLSL, SORTED_GLSL).replace("layout(location=2) out vec4 Emission;",
+                                                             "layout(location=1) out vec4 Emission;")
+
+
 def _bodies() -> dict[str, str]:
     """Body name -> the converted text the Python renderer compiles (its version line first)."""
     from rendering.gl_programs import ribbon, ribbon_bursts, waveform_atmosphere, waveform_floor_give, waveform_ribbon
@@ -39,6 +61,7 @@ def _bodies() -> dict[str, str]:
     return {
         "waveform_ribbon_vertex": ribbon.RIBBON_CONTINUOUS_VERTEX,
         "waveform_ribbon_body": ribbon.RIBBON_BODY_FRAGMENT,
+        "waveform_ribbon_body_sorted": sorted_body(ribbon.RIBBON_BODY_FRAGMENT),
         "waveform_ribbon_light": ribbon.RIBBON_LIGHT_FRAGMENT,
         "waveform_strays_vertex": ribbon.RIBBON_COHORT_STRAY_VERTEX,
         "waveform_strays_fragment": ribbon.RIBBON_COHORT_STRAY_FRAGMENT,
@@ -62,6 +85,7 @@ PASS_FILES = (
     ("waveform_ribbon.vert", "waveform_ribbon_vertex", "ribbon"),
     ("waveform_ribbon_mirror.vert", "waveform_ribbon_vertex", "ribbon_mirror"),
     ("waveform_ribbon_body.frag", "waveform_ribbon_body", "ribbon"),
+    ("waveform_ribbon_body_sorted.frag", "waveform_ribbon_body_sorted", "ribbon"),
     ("waveform_ribbon_light.frag", "waveform_ribbon_light", "ribbon"),
     ("waveform_ribbon_light_mirror.frag", "waveform_ribbon_light", "ribbon_mirror"),
     ("waveform_strays.vert", "waveform_strays_vertex", "strays"),

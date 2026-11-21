@@ -217,6 +217,260 @@ def oscilloscope_program(glow: bool) -> dict:
     return program
 
 
+def waveform_card_size(presentation: Any) -> tuple[int, int]:
+    """The device pixels Waveform's scene is drawn at for ``presentation``: the oriented card's ``item_pixel_rect``,
+    as the Python renderer reads it (``QuickWaveformRibbonRenderer._draw``)."""
+    from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
+    from rendering.quick.visualizer.framed_view import drawn_card_frame
+
+    _x, _y, width, height = item_pixel_rect(orient_visualizer_scene_frame(drawn_card_frame(presentation)))
+    return max(1, int(width)), max(1, int(height))
+
+
+#: Waveform's scene targets (N5.4): the HDR scene (colour, emission, depth; 4 samples), its transparency (the ribbon
+#: body), the planar reflection (exact size, its box chain read by the floor) and the floor's reduced pre-pass.
+WAVEFORM_SCENE, WAVEFORM_OIT, WAVEFORM_REFLECTION, WAVEFORM_PREPASS = "scene", "scene_oit", "reflection", "prepass"
+#: A pass the variant draws nothing into keeps its targets and images at one texel (bound, never read).
+_WAVEFORM_IDLE = (1, 1)
+
+
+def waveform_variant(snapshot: Any) -> tuple:
+    """The stages Waveform's program carries for the drawn snapshot, chosen at the Settings and card edges (D17
+    choice E), never per frame: (mist, strays, sparks, the yielding floor, the floor's pre-pass, the clear backdrop)."""
+    from rendering.quick.scene3d.waveform_plan import floor_prepass_size
+
+    recipe = snapshot.logical.mode_state.scene
+    size = waveform_card_size(snapshot.presentation)
+    return (recipe.fog is not None, recipe.strays is not None, recipe.sparks is not None, recipe.floor.give > 0.,
+            floor_prepass_size(size, recipe.floor) is not None, tuple(float(c) for c in recipe.environment.backdrop))
+
+
+def waveform_program(variant: tuple) -> dict:
+    """Waveform's program (N5.4) for ``variant`` (``waveform_variant``): the yielding floor's and the fog's compute
+    entries, the planar reflection (the mirrored sky, ribbon light, strays and sparks, added), then the scene: the sky,
+    the floor (its pre-pass first), the ribbon body through the transparency target (resolved), its light, strays and
+    sparks added, the emission's bloom and the overlay composite with the glow in the content's orientation. Each pass
+    draws its pass file (``rendering.gl_programs.waveform_shader_files``), its members named for it; the scene clears
+    to the backdrop x .35 (declared once: the lead's decision of 21 Nov)."""
+    from rendering.gl_programs.waveform_shader_files import PASS_FILES, member_name, pass_numbers
+    from rendering.native.mode import (
+        BlendState,
+        BloomStep,
+        ComputeBinding,
+        ComputePass,
+        CompositeStep,
+        ModePass,
+        ModeStream,
+        ModeTarget,
+        PassGeometry,
+        PassOutput,
+        PassSampler,
+        StorageImage,
+        TargetAttachment,
+        TransparencyResolve,
+        TransparencyTarget,
+    )
+    from rendering.quick.scene3d.waveform import SCENE_SAMPLES
+
+    fogged, strays, sparks, giving, prepass, backdrop = variant
+    pack = _shader_pack
+    add = BlendState(("add", "one", "one"), ("add", "one", "one"))
+    light = BlendState(("add", "one", "one"), ("add", "zero", "one"))
+    replace = BlendState(("add", "one", "zero"), ("add", "one", "zero"))
+    fog = {"": "fog_volume", "_mirror": "fog_volume_mirror"}
+    linear = dict(filter="linear", wrap="clamp")
+
+    def fog_sampler(camera):
+        return PassSampler("uFogVolume", fog[camera], **linear)
+
+    give_sampler = PassSampler("uFloorGiveField", "give_field", **linear)
+    images = [StorageImage("field", _WAVEFORM_IDLE, "rgba32f"), StorageImage("give_sections", _WAVEFORM_IDLE, "rgba32f"),
+              StorageImage("give_field", _WAVEFORM_IDLE, "rgba32f")]
+    for camera in ("", "_mirror"):
+        images += [StorageImage("fog_inject" + camera, (1, 1, 1), "rgba16f"),
+                   StorageImage("fog_steady" + camera, (1, 1, 1), "r16f"),
+                   StorageImage("fog_volume" + camera, (1, 1, 1), "rgba16f")]
+    passes: list = []
+    if giving:
+        passes += [
+            ComputePass("give_section", pack("waveform_give_section.comp"), groups=("give_groups", 4, 1),
+                        bindings=(ComputeBinding("Paths", "ribbon_knots", "stream"),
+                                  ComputeBinding("uSections", "give_sections", "image", "write"))),
+            ComputePass("give_blur", pack("waveform_give_blur.comp"), groups=("give_groups", 1, 1),
+                        bindings=(ComputeBinding("uSections", "give_sections", "image", "read"),
+                                  ComputeBinding("uOutput", "give_field", "image", "write")))]
+    if fogged:
+        passes.append(ComputePass("field", pack("waveform_field.comp"), groups=("field_groups", 1, 1),
+                                  bindings=(ComputeBinding("Paths", "ribbon_knots", "stream"),
+                                            ComputeBinding("uOutput", "field", "image", "write"))))
+        for camera in ("", "_mirror"):
+            passes += [
+                ComputePass("medium" + camera, pack(f"waveform_medium{camera}.comp"),
+                            groups=tuple(f"medium{camera}_groups_{axis}" for axis in "xyz"),
+                            bindings=(ComputeBinding("uFogInject", "fog_inject" + camera, "image", "write"),
+                                      ComputeBinding("uFogSteady", "fog_steady" + camera, "image", "write")),
+                            samplers=(PassSampler("uBodyField", "field", **linear),)),
+                ComputePass("integrate" + camera, pack(f"waveform_fog_integrate{camera}.comp"),
+                            groups=(f"integrate{camera}_groups_x", f"integrate{camera}_groups_y", 1),
+                            bindings=(ComputeBinding("uFogInject", "fog_inject" + camera, "image", "read"),
+                                      ComputeBinding("uFogIntegrated", fog[camera], "image", "write")))]
+
+    def ribbon(name, fragment, camera, target, blend, outputs, *, sorted_pack=None, storage_pulse=True):
+        storage = (("Paths", "ribbon_knots"),) + ((("PulseRimField", "ribbon_pulse"),) if storage_pulse else ())
+        return ModePass(name, pack(fragment), blend, target=target, outputs=outputs, depth_test="less",
+                        samplers=(fog_sampler(camera), give_sampler), sorted_pack=sorted_pack,
+                        geometry=PassGeometry(pack(f"waveform_ribbon{camera}.vert"), vertices="ribbon_vertices",
+                                              instances="ribbon_instances", storage=storage))
+
+    def stray(camera, target, blend, outputs):
+        return ModePass("strays" + camera, pack(f"waveform_strays{camera}.frag"), blend, target=target,
+                        outputs=outputs, depth_test="less", samplers=(fog_sampler(camera), give_sampler),
+                        geometry=PassGeometry(pack(f"waveform_strays{camera}.vert"), vertices="strays_vertices",
+                                              instances="ribbon_instances",
+                                              storage=(("Paths", "ribbon_knots"), ("StrandBirths", "ribbon_cohorts"))))
+
+    def burst(camera, target, blend, outputs):
+        return ModePass("bursts" + camera, pack(f"waveform_bursts{camera}.frag"), blend, target=target,
+                        outputs=outputs, depth_test="less", samplers=(fog_sampler(camera),),
+                        geometry=PassGeometry(pack(f"waveform_bursts{camera}.vert"), topology="triangle_strip",
+                                              vertices=4, mesh="burst_quad", instances="bursts_instances",
+                                              storage=(("Bursts", "ribbon_bursts"),)))
+
+    # The planar reflection: everything above the plane through the mirrored camera, added (alpha: the emitters'
+    # weighted height), depth tested, never written.
+    mirrored = (PassOutput(True, add),)
+    if fogged:
+        passes.append(ModePass("sky_mirror", pack("waveform_sky_mirror.frag"), add, target=WAVEFORM_REFLECTION,
+                               outputs=mirrored, depth_test="less", samplers=(fog_sampler("_mirror"),),
+                               geometry=PassGeometry(pack("waveform_sky_mirror.vert"), vertices=3)))
+    passes.append(ribbon("ribbon_mirror", "waveform_ribbon_light_mirror.frag", "_mirror", WAVEFORM_REFLECTION, add,
+                         mirrored))
+    if strays:
+        passes.append(stray("_mirror", WAVEFORM_REFLECTION, add, mirrored))
+    if sparks:
+        passes.append(burst("_mirror", WAVEFORM_REFLECTION, add, mirrored))
+    # The scene: opaque colour, emission added (``SceneTarget.emission_writes``).
+    opaque = (PassOutput(True, replace), PassOutput(True, add))
+    lit = (PassOutput(True, light), PassOutput(True, add))
+    floor_samplers = lambda specular: (  # noqa: E731
+        PassSampler("uAlbedo", "albedo", "linear", "repeat", "linear"),
+        PassSampler("uSlope", "slope", "linear", "repeat", "linear"),
+        PassSampler("uReflection", f"{WAVEFORM_REFLECTION}.colour", "linear", "clamp", "linear"),
+        PassSampler("uRoughness", "roughness", "linear", "repeat", "linear"),
+        PassSampler("uSpecular", specular, **linear),
+        fog_sampler(""), give_sampler, PassSampler("uBodyField", "field", **linear))
+    if fogged:
+        passes.append(ModePass("sky", pack("waveform_sky.frag"), replace, target=WAVEFORM_SCENE, outputs=opaque,
+                               samplers=(fog_sampler(""),),
+                               geometry=PassGeometry(pack("waveform_sky.vert"), vertices=3)))
+    if prepass:
+        # The reflection term alone into its own target (it never reads the target it draws: its uSpecular is the
+        # reflection, unread in this mode).
+        passes.append(ModePass("floor_prepass", pack("waveform_floor_prepass.frag"), replace, target=WAVEFORM_PREPASS,
+                               outputs=(PassOutput(True, replace),),
+                               samplers=floor_samplers(f"{WAVEFORM_REFLECTION}.colour"),
+                               geometry=PassGeometry(pack("waveform_floor_prepass.vert"), vertices="mesh",
+                                                     mesh="floor")))
+    passes.append(ModePass("floor", pack("waveform_floor.frag"), replace, target=WAVEFORM_SCENE, outputs=opaque,
+                           depth_test="less", depth_write=True,
+                           samplers=floor_samplers(f"{WAVEFORM_PREPASS}.colour" if prepass
+                                                   else f"{WAVEFORM_REFLECTION}.colour"),
+                           geometry=PassGeometry(pack("waveform_floor.vert"), vertices="mesh", mesh="floor")))
+    passes += [ribbon("ribbon_body", "waveform_ribbon_body.frag", "", WAVEFORM_OIT, add,
+                      (PassOutput(True), PassOutput(True), PassOutput(True, add)),
+                      sorted_pack=pack("waveform_ribbon_body_sorted.frag"), storage_pulse=False),
+               TransparencyResolve("ribbon_resolve", WAVEFORM_OIT),
+               ribbon("ribbon_light", "waveform_ribbon_light.frag", "", WAVEFORM_SCENE, light, lit)]
+    if strays:
+        passes.append(stray("", WAVEFORM_SCENE, light, lit))
+    if sparks:
+        passes.append(burst("", WAVEFORM_SCENE, light, lit))
+    passes += [BloomStep("waveform_bloom", f"{WAVEFORM_SCENE}.emission"),
+               CompositeStep("waveform_show", "overlay_glow", f"{WAVEFORM_SCENE}.colour", "waveform_bloom.glow",
+                             scene_frame="oriented")]
+    targets = [
+        ModeTarget(WAVEFORM_SCENE, (TargetAttachment("colour", "rgba16f", clear=(*(c * .35 for c in backdrop), 1.)),
+                                    TargetAttachment("emission", "rgba16f")), depth=True, samples=SCENE_SAMPLES),
+        TransparencyTarget(WAVEFORM_OIT, WAVEFORM_SCENE, borrow=("emission",)),
+        ModeTarget(WAVEFORM_REFLECTION, (TargetAttachment("colour", "rgba16f"),), size=_WAVEFORM_IDLE, depth=True,
+                   mips=True, allocation="exact"),
+        ModeTarget(WAVEFORM_PREPASS, (TargetAttachment("colour", "rgba16f"),), size=_WAVEFORM_IDLE, allocation="exact"),
+    ]
+    streams = [ModeStream("ribbon_knots", "ribbon_knots", "storage", used="ribbon_knot_floats"),
+               ModeStream("ribbon_cohorts", "ribbon_cohorts", "storage", used="ribbon_cohort_floats"),
+               ModeStream("ribbon_bursts", "ribbon_bursts", "storage", used="ribbon_burst_floats"),
+               ModeStream("ribbon_pulse", "ribbon_pulse", "storage", used="ribbon_pulse_floats")]
+    # The record's fields of the passes this variant leaves out are read nowhere (ABI 26).
+    drawn = {"ribbon", "ribbon_mirror", "floor"} | ({"give_section", "give_blur"} if giving else set()) \
+        | ({"field", "medium", "medium_mirror", "integrate", "integrate_mirror", "sky", "sky_mirror"} if fogged
+           else set()) | ({"strays", "strays_mirror"} if strays else set()) \
+        | ({"bursts", "bursts_mirror"} if sparks else set()) | ({"floor_prepass"} if prepass else set())
+    from core.visualizer_engine.waveform_native_schema import MEMBER_ENTRIES
+
+    owners = {member_name(pass_id, member): pass_id for pass_id, members in pass_numbers().items()
+              for member in members}
+    unread = [name for name, _kind, _count in MEMBER_ENTRIES if owners[name] not in drawn]
+    unread += [name for name, used in (("ribbon_cohorts", strays), ("ribbon_cohort_floats", strays),
+                                       ("strays_vertices", strays), ("ribbon_bursts", sparks),
+                                       ("ribbon_burst_floats", sparks), ("bursts_instances", sparks),
+                                       ("field_groups", fogged), ("give_groups", giving)) if not used]
+    assert {pass_id for _name, _body, pass_id in PASS_FILES} >= drawn
+    return {"passes": passes, "targets": targets, "streams": streams, "images": images, "unread": unread}
+
+
+def waveform_settings_values(snapshot: Any, size: tuple[int, int] | None = None) -> dict:
+    """Waveform's card-decided members (N5.4; ``waveform_native_schema.SETTINGS_MEMBERS``): every pass's viewport and
+    the floor's pre-pass mode, and the fog volumes' compute groups, at the card's device pixels (``size``, or the
+    snapshot's ``waveform_card_size``)."""
+    from core.visualizer_engine.waveform_native_schema import SETTINGS_MEMBERS
+    from rendering.gl_programs.waveform_shader_files import member_name
+    from rendering.quick.visualizer.implementations.waveform_ribbon import waveform_pass_values
+
+    state = snapshot.logical.mode_state
+    size = waveform_card_size(snapshot.presentation) if size is None else (int(size[0]), int(size[1]))
+    passes, counts = waveform_pass_values(state, size)
+    values = {}
+    for pass_id, members in passes.items():
+        for member, value in members.items():
+            name = member_name(pass_id, member)
+            if name in SETTINGS_MEMBERS:
+                values[name] = [float(v) for v in value] if isinstance(value, tuple) else float(value)
+    for camera in ("", "_mirror"):
+        grid = counts.get("fog_grid" + camera, (1, 1, 1))
+        for axis, cells, local in zip("xyz", grid, (4, 4, 4)):
+            values[f"medium{camera}_groups_{axis}"] = float(-(-int(cells) // local))
+        values[f"integrate{camera}_groups_x"] = float(-(-int(grid[0]) // 8))
+        values[f"integrate{camera}_groups_y"] = float(-(-int(grid[1]) // 8))
+    return values
+
+
+def waveform_sizes(snapshot: Any, size: tuple[int, int] | None = None) -> dict:
+    """Waveform's explicit sizes at the card's device pixels: the reflection and pre-pass targets, the world field,
+    the yielding floor's images and both fog volumes (one texel where the stage is off), sent when they change."""
+    from rendering.quick.visualizer.implementations.waveform_ribbon import waveform_pass_values
+
+    state = snapshot.logical.mode_state
+    recipe = state.scene
+    size = waveform_card_size(snapshot.presentation) if size is None else (int(size[0]), int(size[1]))
+    _passes, counts = waveform_pass_values(state, size)
+    field = int(recipe.fog.field_span[2]) if recipe.fog is not None else 1
+    give = int(recipe.floor.give_span[2]) if recipe.floor.give > 0. else 1
+    from rendering.gl_programs.waveform_atmosphere import FIELD_ROWS
+    from rendering.gl_programs.waveform_floor_give import FLOOR_GIVE_ROWS
+    from rendering.gl_programs.waveform_atmosphere import FIELD_RIBBONS
+
+    sizes = {WAVEFORM_REFLECTION: tuple(counts["reflection_size"]),
+             WAVEFORM_PREPASS: tuple(counts["prepass_size"] or _WAVEFORM_IDLE),
+             "field": (field, FIELD_ROWS if recipe.fog is not None else 1),
+             "give_sections": (give, FIELD_RIBBONS if give > 1 else 1),
+             "give_field": (give, FLOOR_GIVE_ROWS if give > 1 else 1)}
+    for camera in ("", "_mirror"):
+        grid = tuple(counts.get("fog_grid" + camera, (1, 1, 1)))
+        for image in ("fog_inject", "fog_steady", "fog_volume"):
+            sizes[image + camera] = grid
+    return sizes
+
+
 #: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function
 #: ``(snapshot, card) -> members by name``. Its program is its own fragment pack (one pass, straight alpha over, as the
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).

@@ -10,6 +10,7 @@ import pytest
 #: Each pass program the native port draws: (vertex file, fragment file) or (compute file,).
 PROGRAMS = (
     ("waveform_ribbon.vert", "waveform_ribbon_body.frag"),
+    ("waveform_ribbon.vert", "waveform_ribbon_body_sorted.frag"),
     ("waveform_ribbon.vert", "waveform_ribbon_light.frag"),
     ("waveform_ribbon_mirror.vert", "waveform_ribbon_light_mirror.frag"),
     ("waveform_strays.vert", "waveform_strays.frag"),
