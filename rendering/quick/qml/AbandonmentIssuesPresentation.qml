@@ -512,21 +512,9 @@ OverlayWidget {
                 height: abandonmentRoot.canonicalBacklogHeight
                     * abandonmentRoot.abandonmentModel.customBacklogHeightScale
                 radius: 6.0
-                color: Qt.rgba(
-                    abandonmentRoot.abandonmentModel.accentColor.r,
-                    abandonmentRoot.abandonmentModel.accentColor.g,
-                    abandonmentRoot.abandonmentModel.accentColor.b,
-                    0.36
-                )
-                border.color: Qt.rgba(
-                    abandonmentRoot.abandonmentModel.accentColor.r,
-                    abandonmentRoot.abandonmentModel.accentColor.g,
-                    abandonmentRoot.abandonmentModel.accentColor.b,
-                    0.80
-                )
-                border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                    1.0, abandonmentRoot.presentationScale
-                )
+                // A header badge: the header's semantic fill and text roles, no border.
+                color: abandonmentRoot.abandonmentModel.headerFillColor
+                border.width: 0
 
                 ShadowedText {
                     anchors.fill: parent
@@ -535,18 +523,12 @@ OverlayWidget {
                     text: abandonmentRoot.abandonmentModel.statusText.length > 0
                         ? abandonmentRoot.abandonmentModel.statusText
                         : "CURATED SHELF"
-                    // The archive/Backlog BLOCK carries the distinctive accent
-                    // through its fill/border. Keep the label on the resolved
-                    // theme text semantic so pale/low-contrast accents cannot
-                    // make BACKLOG text disappear into its own accent surface.
-                    color: abandonmentRoot.abandonmentModel.textColor
+                    color: abandonmentRoot.abandonmentModel.headerTextColor
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.66
                         * abandonmentRoot.abandonmentModel.customBacklogHeightScale
                     font.bold: true
-                    horizontalAlignment:
-                        abandonmentRoot.abandonmentModel.customBacklogAlignment === "right"
-                            ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     fontSizeMode: Text.HorizontalFit
                     minimumPointSize: Math.max(5.0, 6.0
@@ -598,6 +580,8 @@ OverlayWidget {
                     width: normalContent.artworkWidth + 13.0
                     height: normalContent.artworkHeight + 13.0
 
+                    // Artwork frame, outline and shadow as Achievement Pulse draws them: the
+                    // background, its shadow and the image sit exactly in the frame rectangle.
                     RectangularShadow {
                         anchors.fill: shelfBackground
                         color: "#76000000"
@@ -610,8 +594,11 @@ OverlayWidget {
                     Rectangle {
                         id: shelfBackground
                         objectName: "abandonmentArtworkShelfBackground"
-                        anchors.fill: parent
-                        radius: 8.0
+                        x: artworkFrame.x
+                        y: artworkFrame.y
+                        width: artworkFrame.width
+                        height: artworkFrame.height
+                        radius: 7.0
                         gradient: Gradient {
                             GradientStop {
                                 position: 0.0
@@ -637,47 +624,12 @@ OverlayWidget {
                             abandonmentRoot.scaleAwareStrokeWidthForScale(
                                 2.25, abandonmentRoot.presentationScale
                             )
-                        readonly property real imageInset: Math.max(1.0, artworkStrokeWidth)
+                        readonly property real imageInset: Math.max(2.0, artworkStrokeWidth)
                         x: 5.0
                         y: 4.0
                         width: normalContent.artworkWidth
                         height: normalContent.artworkHeight
                         clip: true
-
-                        Rectangle {
-                            id: artworkBorder
-                            anchors.fill: parent
-                            radius: 8.0
-                            color: abandonmentRoot.abandonmentModel.steamArtworkSurfaceColor
-                        }
-
-                        // Keep the decorative stripe node count stable while CUSTOM
-                        // artwork is dragged. Spacing stretches with the freeform
-                        // frame, but delegate creation remains authored-baseline work
-                        // rather than pointer-sample churn.
-                        readonly property int stripeCount: Math.max(
-                            1,
-                            Math.ceil((abandonmentRoot.canonicalArtworkWidth
-                                + abandonmentRoot.canonicalArtworkHeight) / 12.0)
-                        )
-                        readonly property real stripeStep:
-                            (artworkFrame.width + artworkFrame.height) / stripeCount
-
-                        Repeater {
-                            model: artworkFrame.stripeCount
-                            delegate: Rectangle {
-                                required property int index
-                                x: index * artworkFrame.stripeStep - artworkFrame.height
-                                y: artworkFrame.height
-                                width: artworkFrame.height * 1.45
-                                height: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                    1.0, abandonmentRoot.presentationScale
-                                )
-                                rotation: -45.0
-                                transformOrigin: Item.Left
-                                color: abandonmentRoot.abandonmentModel.steamArtworkStripeColor
-                            }
-                        }
 
                         ArtworkFadeImage {
                             id: abandonmentArtworkImage
@@ -701,7 +653,7 @@ OverlayWidget {
                         Rectangle {
                             id: artworkMask
                             anchors.fill: abandonmentArtworkImage
-                            radius: Math.max(0.0, 8.0 - artworkFrame.imageInset)
+                            radius: Math.max(0.0, 7.0 - artworkFrame.imageInset)
                             visible: false
                             layer.enabled: true
                         }
@@ -732,7 +684,7 @@ OverlayWidget {
                         y: artworkFrame.y
                         width: artworkFrame.width
                         height: artworkFrame.height
-                        radius: 8.0
+                        radius: 7.0
                         color: "transparent"
                         border.color: artworkHover.hovered
                             ? "white" : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
@@ -875,22 +827,13 @@ OverlayWidget {
                     height: abandonmentRoot.canonicalLastVisitHeight
                         * abandonmentRoot.abandonmentModel.customLastVisitHeightScale
                     radius: 6.0
-                    color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
-                    border.color: abandonmentRoot.abandonmentModel.steamMetricBorderColor
+                    // The Feed story tile: a faint ink wash and the header hairline.
+                    color: abandonmentRoot.abandonmentModel.tileColor
+                    border.color: abandonmentRoot.abandonmentModel.headerBorderColor
                     readonly property real childStrokeScale: Math.min(
                         abandonmentRoot.abandonmentModel.customLastVisitWidthScale,
                         abandonmentRoot.abandonmentModel.customLastVisitHeightScale)
-                    border.width: abandonmentRoot.scaleAwareChildStrokeWidth(2.0, childStrokeScale)
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 4.0
-                        radius: 4.0
-                        color: "transparent"
-                        border.color: abandonmentRoot.abandonmentModel.steamMetricInnerBorderColor
-                        border.width: abandonmentRoot.scaleAwareChildStrokeWidth(
-                            1.0, parent.childStrokeScale)
-                    }
+                    border.width: abandonmentRoot.scaleAwareChildStrokeWidth(1.0, childStrokeScale)
 
                     ShadowedText {
                         x: abandonmentRoot.abandonmentModel.customLastVisitAlignment === "left"
