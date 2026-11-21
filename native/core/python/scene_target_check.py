@@ -65,6 +65,19 @@ Run alone (not in the default set):
              the capture split; each at 1x and 4x.
   python_cost (the reference child, OpenGL) the Python renderer's ``SceneTarget`` on the same load at 2560x1440 and 4K,
              1x and 4x (the lead's measure for the native four-sample figure: accepted when no worse).
+N5.4 (ABI 33; Waveform's five C++ boxes; ``native/core/python/waveform_primitives``), alone or together, evidence
+under .artifacts/evidence/native_core/n5_4/ when run without the N3.1 rounds:
+  wave_floor (each API, and the reference child) the floor scene: an exact, mipped, drawable reflection at odd sizes
+             (two-output passes into its one attachment), the exact pre-pass, the RGBA16F slope map's GPU levels, the
+             floor's anisotropic taps; rule (a) per texture against the Python reference, every reflection level
+             against Python's glGenerateTextureMipmap (the odd-built ones reported apart), the controls (one read at
+             1x, the bucketed reflection, the slope stored as RGBA8) leaving the bound, the taps against Python's
+             hardware anisotropy reported (wave_sheet_<api>.png); nothing at rest; the new declarations' refusals.
+  wave_limits (each API) Waveform's shape (28 passes, 9 storage images, 4 targets) admitted and built, nothing at
+             rest; one pass, one image and one target past the limits refused with their reasons.
+  wave_filter (each API) linear_filter_formats in the device facts, an RGBA32F storage image read linearly drawn, the
+             faked device without linear 32-bit float filtering (compute_control no_float32_linear) refusing it with
+             its reason, and drawing again once the control is off.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation
@@ -1703,6 +1716,475 @@ def _sheet(out: Path, api: str, frames: dict) -> None:
         sheet.save(out / f"sheet_{api}.png")
 
 
+# --------------------------------------------------------------------------------------------------- N5.4 (ABI 33)
+# Waveform's five C++ boxes on the harness scenes native/core/python/waveform_primitives (Current_Plan.md N5.4):
+# - wave_floor: the floor scene (an exact, mipped, drawable reflection at odd sizes with two-output passes; the
+#   exact pre-pass; the RGBA16F slope map's GPU levels; the floor's anisotropic taps), native frames per variant: taps
+#   (the means chosen), plain (box 2's control: one read at 1x), bucket (box 1's control: the reflection bucketed),
+#   slope_rgba8 (box 3's control: the slope map stored as RGBA8); the state (allocation, self mips, the chains counted,
+#   nothing at rest). The reference child draws the same text (waveform_primitives.reference_frames). The parent judges
+#   (wave_verdict): rule (a) per texture against the reference on each API, every reflection level reported (odd
+#   levels apart on Vulkan), the controls failing where their box says, and the taps against Python's hardware
+#   anisotropy reported as a fact.
+# - wave_limits: Waveform's shape (28 passes, 9 storage images, 4 targets) admitted and built (its objects counted,
+#   the first record's wall time, nothing at rest); one pass, one image and one target past the limits refused with
+#   their reasons.
+# - wave_filter: the device facts (linear_filter_formats on both backends), an RGBA32F storage image read linearly
+#   drawn, the faked device (compute_control no_float32_linear) refusing it with its reason, and recovery.
+WAVE_ROUNDS = ("wave_floor", "wave_limits", "wave_filter")
+WAVE_NATIVE_VARIANTS = ("taps", "plain", "bucket", "slope_rgba8")
+WAVE_SETTLE_S = 15.0
+
+
+def _wave_module():
+    import waveform_primitives
+
+    return waveform_primitives
+
+
+class WaveScene:
+    """One item drawing a waveform_primitives program at (MARGIN, MARGIN), with its textures: a still, or (``schema``)
+    a streamed item whose records the harness publishes (a still draws no compute: N3.3), the record's fields
+    ``unread`` (ABI 26: the shape's stand-ins read none)."""
+
+    def __init__(self, core, engine, host, card: tuple[int, int], passes, settings: dict, *, targets=(), images=(),
+                 textures: tuple = (), schema=None, unread: tuple = ()) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtQml import QQmlComponent
+        from PySide6.QtQuick import QQuickItem
+
+        self.host = host
+        self.component = QQmlComponent(engine)
+        self.component.setData(SCENE_QML, QUrl())
+        self.root = self.component.create()
+        if self.root is None:
+            raise RuntimeError(f"the scene did not load: {self.component.errorString()}")
+        self.content = self.root.findChild(QQuickItem, "contentHost")
+        host.set_content(self.root)
+        self.mode = core.mode(self.content)
+        self.mode.composite.set(rect=[0.0, 0.0, float(card[0]), float(card[1])], coverage=None, quarters=0,
+                                visible=True)
+        self.stream = None
+        self.schema = schema
+        self.step = 0
+        if schema is None:
+            self.mode.still()
+        self.mode.program(passes, settings, targets=targets, images=images, unread=unread)
+        self.mode.card(_card(card, 1.0))
+        if schema is not None:
+            import mesh_buffer_check as mbc
+
+            self.stream = mbc.Stream(schema)
+            self.mode.bind(self.stream.name, schema, expect=self.stream.expect)
+        for name, pixels, size, fmt in textures:
+            self.mode.texture(name, pixels, size, mips=True, format=fmt)
+        self.expected_textures = len(textures)
+
+    def publish(self) -> None:
+        """A new record (streamed items only): u_frame counts them."""
+        if self.stream is not None:
+            self.stream.publish(self.schema.encode({"u_frame": float(self.step)}), float(self.step))
+            self.step += 1
+
+    def settle(self, timeout_s: float = WAVE_SETTLE_S) -> dict:
+        """Frames until every texture is resident and no upload job is pending (the passes draw); the state then."""
+        deadline = time.monotonic() + timeout_s
+        while True:
+            self.publish()
+            self.mode.update()
+            self.host.frames(1)
+            state = self.mode.state()
+            if (state.get("textures_resident", 0) >= self.expected_textures
+                    and (state.get("texture_jobs") or {}).get("pending", 0) == 0) or time.monotonic() > deadline:
+                self.host.frames(2)
+                return self.mode.state()
+
+    def targets(self, timeout_s: float = 10.0) -> dict:
+        self.mode.read_targets()
+        self.mode.update()
+        deadline = time.monotonic() + timeout_s
+        while True:
+            self.host.frames(1)
+            pixels = self.mode.target_pixels()
+            if pixels is not None or time.monotonic() > deadline:
+                break
+        if pixels is None:
+            raise RuntimeError("the target readback did not complete")
+        return {p["name"]: _array(p) for p in pixels}
+
+    def close(self, app) -> None:
+        self.mode.composite.destroy()
+        self.host.set_content(None)
+        host_check._drop_item(app, self.root)
+        if self.stream is not None:
+            self.stream.close()
+
+
+def _wave_floor_scene(core, engine, host, packs: dict, variant: str) -> WaveScene:
+    wp = _wave_module()
+    passes, targets = wp.floor_program(packs, reflection_allocation="bucket" if variant == "bucket" else "exact")
+    settings = wp.floor_settings(u_taps=0.0 if variant == "plain" else 1.0,
+                                 u_slope_encoded=1.0 if variant == "slope_rgba8" else 0.0)
+    slope, fmt = wp.slope_texture(variant == "slope_rgba8")
+    textures = (("checker", wp.checker_pixels().tobytes(), (wp.CHECKER, wp.CHECKER), "rgba8"),
+                ("slope", slope, (wp.SLOPE, wp.SLOPE), fmt))
+    return WaveScene(core, engine, host, wp.FLOOR, passes, settings, targets=targets, textures=textures)
+
+
+def round_wave_floor(core, engine, app, api: str, packs: dict, out: Path) -> dict:
+    wp = _wave_module()
+    host = core.hidden_host(*_host_size([wp.FLOOR]))
+    checks, facts, frames = {}, {}, {}
+    try:
+        for variant in WAVE_NATIVE_VARIANTS:
+            mips_before = core.composite_live().get("scene_target_mips", 0)
+            scene = _wave_floor_scene(core, engine, host, packs, variant)
+            try:
+                state = scene.settle()
+                frames[variant] = scene.targets()
+                targets = {t["name"]: t for t in (state.get("scene_targets") or {}).get("targets", [])}
+                reflection = targets.get("reflection", {})
+                facts[variant] = {
+                    "content_failing": state.get("content_failing"), "content_failure": state.get("content_failure"),
+                    "last_reason": state.get("last_reason"),
+                    "textures": [{k: t.get(k) for k in ("name", "format", "mips", "size")}
+                                 for t in state.get("textures", [])],
+                    "texture_route": (state.get("texture_jobs") or {}).get("route"),
+                    "reflection": {k: reflection.get(k) for k in ("allocation", "content", "self_mips", "mips",
+                                                                 "depth", "last_reason")},
+                    "chains_generated": core.composite_live().get("scene_target_mips", 0) - mips_before,
+                    "levels_read": sorted(name for name in frames[variant] if name.startswith("reflection.colour")),
+                }
+                checks[f"{variant}_drew"] = not state.get("content_failing") and all(
+                    name in frames[variant] for name in ("floor.checker", "floor.mean", "slope_levels.colour"))
+                checks[f"{variant}_reflection_is_self_mipped"] = reflection.get("self_mips") is True
+                checks[f"{variant}_the_chain_was_generated"] = facts[variant]["chains_generated"] >= 1
+                if variant == "bucket":
+                    checks["bucket_control_allocates_a_bucket"] = (
+                        tuple(reflection.get("allocation") or ()) == tuple(bucket_pixels_pair(wp.REFLECTION)))
+                else:
+                    checks[f"{variant}_reflection_is_exact"] = (
+                        tuple(reflection.get("allocation") or ()) == tuple(wp.REFLECTION)
+                        == tuple(reflection.get("content") or ()))
+                    checks[f"{variant}_every_level_read"] = len(facts[variant]["levels_read"]) == 1 + int(
+                        math.floor(math.log2(max(wp.REFLECTION))))
+                slope_state = [t for t in facts[variant]["textures"] if t["name"] == "slope"]
+                checks[f"{variant}_slope_format"] = bool(slope_state) and slope_state[0]["format"] == (
+                    "rgba8" if variant == "slope_rgba8" else "rgba16f")
+                if variant == "taps":
+                    # Nothing at rest: no record, no allocation, no chain over frames with nothing changed.
+                    host.frames(2)
+                    before, live_before = scene.mode.state(), core.composite_live()
+                    host.frames(REST_FRAMES)
+                    after, live_after = scene.mode.state(), core.composite_live()
+                    checks["nothing_recorded_at_rest"] = after.get("records") == before.get("records")
+                    checks["no_chain_at_rest"] = (live_after.get("scene_target_mips")
+                                                  == live_before.get("scene_target_mips"))
+                    checks["nothing_allocated_at_rest"] = (live_after["scene_target_allocations"]
+                                                           == live_before["scene_target_allocations"])
+            finally:
+                scene.close(app)
+                host.frames(2)
+                host_check._flush_deletes(app)
+        # The declarations the core refuses (GPU-free admission through the same face).
+        facts["refusals"] = _wave_floor_refusals(core, engine, app, host, packs)
+        checks.update({f"refused_{k}": v.startswith("refused") for k, v in facts["refusals"].items()})
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    _save(out, f"wave_{api}", frames)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def bucket_pixels_pair(size: tuple[int, int]) -> tuple[int, int]:
+    from rendering.native.scene_targets import bucket_pixels
+
+    return bucket_pixels(size[0]), bucket_pixels(size[1])
+
+
+def _wave_floor_refusals(core, engine, app, host, packs: dict) -> dict:
+    """What the core refuses of the new declarations: two outputs into a one-attachment target (the light shader's
+    own text: the core draws its one-output variant); mips of a target without mips; an unknown allocation."""
+    from rendering.native.mode import ModePass, ModeTarget
+
+    wp = _wave_module()
+    passes, targets = wp.floor_program(packs)
+    cases = {}
+    two = dict(packs, refl_sky=packs["refl_sky_two_outputs"])
+    two_passes, _ = wp.floor_program(two)
+    cases["two_outputs_into_one_attachment"] = (two_passes, targets)
+    flat = tuple(ModeTarget(t.name, t.colour, size=t.size, depth=t.depth, allocation="exact")
+                 if t.name == "reflection" else t for t in targets)
+    cases["mips_of_a_target_without_mips"] = (passes, flat)
+    unknown = '{"name": "x", "size": [4, 4], "colour": [{"name": "c", "format": "rgba8"}], "allocation": "tight"}'
+    results = {}
+    scene = WaveScene(core, engine, host, wp.FLOOR, (ModePass("show", packs["shape_out1"], "replace"),), {})
+    try:
+        for label, (case_passes, case_targets) in cases.items():
+            try:
+                scene.mode.program(case_passes, wp.floor_settings(), targets=case_targets)
+                results[label] = "admitted"
+            except ValueError as exc:
+                results[label] = f"refused: {exc}"
+        try:
+            scene.mode._module.composite_mode_program(scene.mode._handle(), json.dumps(
+                {"passes": [{"name": "p", "blend": "replace", "target": "x"}], "targets": [json.loads(unknown)]}),
+                [packs["prepass"]])
+            results["unknown_allocation"] = "admitted"
+        except ValueError as exc:
+            results["unknown_allocation"] = f"refused: {exc}"
+    finally:
+        scene.close(app)
+    return results
+
+
+def round_wave_reference(out: Path) -> dict:
+    wp = _wave_module()
+    frames = {variant: wp.reference_frames(variant) for variant in wp.REFERENCE_VARIANTS}
+    _save(out, "wave_reference", frames)
+    again = wp.reference_frames("taps")
+    import numpy as np
+
+    repeat = all(np.array_equal(again[k]["array"], frames["taps"][k]["array"]) for k in again)
+    return {"pass": repeat, "checks": {"reference_repeats_exactly": repeat},
+            "facts": {"textures": sorted(frames["taps"])}}
+
+
+WAVE_JUDGED = ("floor.checker", "floor.reflection", "floor.relief", "floor.mean", "prepass.colour",
+               "slope_levels.colour")
+#: Each control's textures that must leave rule (a)'s bound (the box's negative control), against the taps reference.
+WAVE_CONTROLS = {"plain": ("floor.checker", "floor.reflection"), "bucket": ("floor.mean",),
+                 "slope_rgba8": ("floor.relief", "slope_levels.colour")}
+#: The floor's filtered reads (derivative-driven: trilinear levels and the taps' weights), judged in 8-bit levels, what
+#: a frame shows, over every pixel: the core rasterises its targets top first (F1), mirrored from Python, so vUv and
+#: its derivatives differ in their last bits (prepass.colour, no filter: 185 texels a float16 ulp apart). Measured on
+#: the ABI 33 build (21 Nov, the target reads through the conventions, the continuous taps): floor.checker 191 and
+#: floor.relief 141 pixels at 1 level, none past it, on both APIs (with the first, discrete tap count: one pixel at 4
+#: levels where the count flipped); the bound is that: 1 level everywhere, no tie, no flip. The float textures that
+#: are no filter's output (the levels, the mean, the pre-pass, the slope's levels) keep SCENE_RULE_A.
+WAVE_FILTERED = ("floor.checker", "floor.reflection", "floor.relief")
+WAVE_FILTERED_RULE = pt.Tolerance("the floor's filtered reads (8-bit), rule (a)", masked_level=1)
+
+
+def wave_judged(name: str, candidate: dict, reference: dict) -> dict:
+    """One texture of the floor scene against the reference: a filtered read in 8-bit levels (WAVE_FILTERED_RULE,
+    every pixel in the mask), anything else by ``judged`` with SCENE_RULE_A."""
+    import numpy as np
+
+    if name not in WAVE_FILTERED:
+        return judged(candidate, reference, SCENE_RULE_A)
+    x, y = candidate["array"], reference["array"]
+    if x.shape != y.shape:
+        return {"pass": False, "reasons": ["shapes differ"], "differing": -1}
+    quantised = [np.rint(np.clip(a.astype(np.float64), 0.0, 1.0) * 255.0).astype(np.uint8) for a in (x, y)]
+    result = pt.judge(quantised[0], quantised[1], WAVE_FILTERED_RULE, mask=np.ones(x.shape[:2], bool))
+    result.setdefault("differing", int((quantised[0] != quantised[1]).any(axis=-1).sum()))
+    return result
+
+
+def wave_verdict(out: Path, apis) -> dict:
+    """Rule (a) of every judged texture of each API's taps frames against the reference's taps frames; every
+    reflection level against Python's glGenerateTextureMipmap (reported per level, the odd-built ones apart); each
+    control failing where its box says; Python's hardware anisotropy against the taps (a fact)."""
+    import numpy as np
+
+    wp = _wave_module()
+    reference = _load(out, "wave_reference")
+    result: dict = {"pass": True, "apis": {}, "reasons": []}
+    if not reference:
+        return {"pass": False, "reasons": ["no reference frames"]}
+    taps = reference["taps"]
+    for api in apis:
+        native = _load(out, f"wave_{api}")
+        if not native:
+            result["pass"] = False
+            result["reasons"].append(f"{api}: no native frames")
+            continue
+        record: dict = {"rule_a": {}, "levels": {}, "controls": {}}
+        for name in WAVE_JUDGED:
+            judged_result = wave_judged(name, native["taps"][name], taps[name])
+            record["rule_a"][name] = {k: judged_result.get(k) for k in ("pass", "differing", "reasons")}
+            if not judged_result.get("pass"):
+                result["pass"] = False
+                result["reasons"].append(f"{api} {name}: rule (a)")
+        size = wp.REFLECTION
+        for level in range(1 + int(math.floor(math.log2(max(size))))):
+            name = "reflection.colour" + (f"@{level}" if level else "")
+            parent = (max(1, size[0] >> (level - 1)), max(1, size[1] >> (level - 1))) if level else size
+            judged_result = judged(native["taps"][name], taps[name], SCENE_RULE_A)
+            diff = np.abs(native["taps"][name]["array"].astype(np.float64) - taps[name]["array"].astype(np.float64))
+            record["levels"][name] = {"pass": judged_result.get("pass"), "differing": judged_result.get("differing"),
+                                      "max_abs": float(diff.max()),
+                                      "made_from_odd": level > 0 and (parent[0] % 2 == 1 or parent[1] % 2 == 1)}
+        # Every level on both APIs: the core's box kernel is the reference's text (never the driver's chain).
+        failed_levels = [n for n, v in record["levels"].items() if not v["pass"]]
+        if failed_levels:
+            result["pass"] = False
+            result["reasons"].append(f"{api} levels {failed_levels}: the shared box chain should match")
+        for variant, names in WAVE_CONTROLS.items():
+            for name in names:
+                judged_result = wave_judged(name, native[variant][name], taps[name])
+                record["controls"][f"{variant}:{name}"] = {"fails_the_bound": not judged_result.get("pass"),
+                                                           "differing": judged_result.get("differing")}
+                if judged_result.get("pass"):
+                    result["pass"] = False
+                    result["reasons"].append(f"{api} control {variant} {name} stayed inside the bound")
+        result["apis"][api] = record
+        wp.sheet({"python taps": taps, f"{api} taps": native["taps"], f"{api} 1x (control)": native["plain"],
+                  "python hardware": reference["hardware"]}, out / f"wave_sheet_{api}.png", reference="python taps")
+    facts = {}
+    for name in ("floor.checker", "floor.reflection", "floor.relief"):
+        x, y = reference["taps"][name]["array"], reference["hardware"][name]["array"]
+        diff = np.abs(x.astype(np.float64) - y.astype(np.float64))
+        judged_result = judged(reference["taps"][name], reference["hardware"][name], SCENE_RULE_A)
+        facts[name] = {"inside_rule_a": judged_result.get("pass"), "differing": judged_result.get("differing"),
+                       "mean_abs": float(diff.mean()), "max_abs": float(diff.max())}
+    result["taps_against_pythons_hardware_anisotropy"] = facts
+    # Python's shipping chain (glGenerateTextureMipmap, the driver's odd levels) against the shared box chain: what the
+    # Python renderer's reflection changes by when the port takes the box kernel (a fact).
+    chain = {}
+    for level in range(1 + int(math.floor(math.log2(max(wp.REFLECTION))))):
+        name = "reflection.colour" + (f"@{level}" if level else "")
+        diff = np.abs(reference["driver_chain"][name]["array"].astype(np.float64)
+                      - reference["taps"][name]["array"].astype(np.float64))
+        chain[name] = {"max_abs": float(diff.max()), "mean_abs": float(diff.mean())}
+    for name in ("floor.reflection", "floor.mean"):
+        diff = np.abs(reference["driver_chain"][name]["array"].astype(np.float64)
+                      - reference["taps"][name]["array"].astype(np.float64))
+        chain[name] = {"max_abs": float(diff.max()), "mean_abs": float(diff.mean())}
+    result["pythons_driver_chain_against_the_box_chain"] = chain
+    return result
+
+
+def round_wave_limits(core, engine, app, packs: dict, folder: Path) -> dict:
+    import post_stages
+
+    wp = _wave_module()
+    layer_packs = post_stages.bake_all(folder / "post_stages")
+    host = core.hidden_host(*_host_size([CARD]))
+    checks, facts = {}, {}
+    try:
+        passes, targets, images = wp.shape_program(packs, layer_packs)
+        settings = _wave_shape_settings()
+        facts["counts"] = {"passes": len(passes), "images": len(images), "targets": len(targets)}
+        checks["the_shape_is_waveforms"] = (len(passes), len(images), len(targets)) == (
+            wp.SHAPE_PASSES, wp.SHAPE_IMAGE_COUNT, 4)
+        live_before = core.composite_live()
+        started = time.perf_counter()
+        import compute_passes
+
+        schema = compute_passes.schema("state", (("u_frame", "f64", 1),))
+        scene = WaveScene(core, engine, host, CARD, passes, settings, targets=targets, images=images, schema=schema,
+                          unread=("u_frame",))
+        try:
+            state = scene.settle()
+            facts["first_record_wall_ms"] = round((time.perf_counter() - started) * 1000.0, 1)
+            live = core.composite_live()
+            facts["content_failure"] = state.get("content_failure")
+            facts["last_reason"] = state.get("last_reason")
+            facts["mode_resources_built"] = live.get("mode_resources", 0) - live_before.get("mode_resources", 0)
+            facts["storage_images"] = live.get("compute_images")
+            facts["records"] = state.get("records")
+            checks["admitted_and_drawn"] = not state.get("content_failing") and state.get("records", 0) > 0
+            checks["pipelines_built"] = facts["mode_resources_built"] > len(passes)
+            host.frames(2)
+            before, live_before_rest = scene.mode.state(), core.composite_live()
+            host.frames(REST_FRAMES)
+            after, live_after = scene.mode.state(), core.composite_live()
+            checks["nothing_recorded_at_rest"] = after.get("records") == before.get("records")
+            facts["dispatches_per_record"] = live_after.get("compute_dispatches", 0) - live_before_rest.get(
+                "compute_dispatches", 0)
+            checks["nothing_dispatched_at_rest"] = facts["dispatches_per_record"] == 0
+            checks["nothing_built_at_rest"] = live_after.get("mode_resources") == live_before_rest.get("mode_resources")
+            refusals = {}
+            for label, options in (("one_pass_past", {"extra_pass": True}), ("one_image_past", {"extra_image": True})):
+                case_passes, case_targets, case_images = wp.shape_program(packs, layer_packs, **options)
+                try:
+                    scene.mode.program(case_passes, settings, targets=case_targets, images=case_images,
+                                       unread=("u_frame",))
+                    refusals[label] = "admitted"
+                except ValueError as exc:
+                    refusals[label] = f"refused: {exc}"
+            fifth = targets + (type(targets[3])("fifth", targets[3].colour, size=(8, 8)),)
+            try:
+                scene.mode.program(passes, settings, targets=fifth, images=images, unread=("u_frame",))
+                refusals["one_target_past"] = "admitted"
+            except ValueError as exc:
+                refusals["one_target_past"] = f"refused: {exc}"
+            facts["refusals"] = refusals
+            checks["one_pass_past_refused_with_its_reason"] = "28 passes" in refusals["one_pass_past"]
+            checks["one_image_past_refused_with_its_reason"] = "at most 9 storage images" in refusals["one_image_past"]
+            checks["one_target_past_refused_with_its_reason"] = "at most 4 targets" in refusals["one_target_past"]
+            host.frames(2)
+            checks["the_drawn_program_kept"] = not scene.mode.state().get("content_failing")
+        finally:
+            scene.close(app)
+            host.frames(2)
+            host_check._flush_deletes(app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _wave_shape_settings() -> dict:
+    """The shape's settings: the members of the transparent layer's block (post_stages' ``eb_layer1``, drawn as the
+    ribbon body) and the overlay_glow composite's, from post_stages' values; its stand-ins have no block."""
+    import re
+
+    import post_stages
+
+    names = set(re.findall(r"\bu_\w+", post_stages.texts()["eb_layer1"])) | set(post_stages.STAGE_MEMBERS["overlay_glow"])
+    return {k: v for k, v in post_stages.SETTINGS.items() if k in names}
+
+
+def round_wave_filter(core, engine, app, packs: dict) -> dict:
+    wp = _wave_module()
+    host = core.hidden_host(*_host_size([CARD]))
+    checks, facts = {}, {}
+    try:
+        passes, images = wp.float_filter_program(packs)
+        scene = WaveScene(core, engine, host, CARD, passes, {}, images=images)
+        try:
+            state = scene.settle()
+            device = (state.get("storage") or {}).get("device") or {}
+            facts["device_facts"] = {k: device.get(k) for k in ("linear_filter_formats", "float32_linear_control")}
+            facts["drawn"] = {k: state.get(k) for k in ("content_failing", "content_failure", "records")}
+            checks["the_device_reports_linear_filtering_of_rgba32f"] = (
+                (device.get("linear_filter_formats") or {}).get("rgba32f") is True)
+            checks["the_device_reports_linear_filtering_of_r32f"] = (
+                (device.get("linear_filter_formats") or {}).get("r32f") is True)
+            checks["rgba32f_read_linearly_draws"] = not state.get("content_failing")
+            core.module.compute_control(json.dumps({"no_float32_linear": True}))
+            try:
+                passes32, images32 = wp.float_filter_program(packs)
+                scene.mode.program(passes32, {}, images=images32)
+                refused = scene.settle()
+                facts["faked_device"] = {k: refused.get(k) for k in ("content_failing", "content_failure")}
+                checks["the_faked_device_refuses_it_with_its_reason"] = bool(refused.get("content_failing")) and (
+                    "filters the storage image 'field' linearly" in (refused.get("content_failure") or ""))
+                passes16, images16 = wp.float_filter_program(packs, fmt="rgba16f")
+                scene.mode.program(passes16, {}, images=images16)
+                half = scene.settle()
+                facts["faked_device_rgba16f"] = {k: half.get(k) for k in ("content_failing", "content_failure")}
+                checks["the_faked_device_draws_rgba16f"] = not half.get("content_failing")
+            finally:
+                core.module.compute_control(json.dumps({"no_float32_linear": False}))
+            passes_again, images_again = wp.float_filter_program(packs)
+            scene.mode.program(passes_again, {}, images=images_again)
+            again = scene.settle()
+            facts["recovered"] = {k: again.get(k) for k in ("content_failing", "content_failure")}
+            checks["the_real_device_draws_it_again"] = not again.get("content_failing")
+        finally:
+            scene.close(app)
+            host.frames(2)
+            host_check._flush_deletes(app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- the child
 
 def child(args) -> dict:
@@ -1745,8 +2227,15 @@ def child(args) -> dict:
     with tempfile.TemporaryDirectory(prefix="srpss_n31_") as scratch:
         folder = Path(scratch)
         packs = _scene_module().bake_all(folder)
+        # N5.4: the waveform_primitives scenes' packs, only when one of its rounds runs.
+        wave_packs = _wave_module().bake_all(folder / "wave") if set(args.rounds) & set(WAVE_ROUNDS) else {}
         try:
             if args.api == "reference":
+                if "wave_floor" in args.rounds:
+                    try:
+                        record["wave_reference"] = round_wave_reference(out)
+                    except Exception:
+                        record["wave_reference"] = {"pass": False, "error": traceback.format_exc()}
                 if "parity" in args.rounds or "placement_control" in args.rounds:
                     record["reference"] = round_reference(core, packs, out)
                 if "python_cost" in args.rounds:
@@ -1795,6 +2284,12 @@ def child(args) -> dict:
                             record[name] = round_prime_control(core, engine, app, packs)
                         elif name == "cost_parts":
                             record[name] = round_cost_parts(core, engine, app, packs)
+                        elif name == "wave_floor":
+                            record[name] = round_wave_floor(core, engine, app, args.api, wave_packs, out)
+                        elif name == "wave_limits":
+                            record[name] = round_wave_limits(core, engine, app, wave_packs, folder)
+                        elif name == "wave_filter":
+                            record[name] = round_wave_filter(core, engine, app, wave_packs)
                     except Exception:
                         record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:
@@ -1812,7 +2307,7 @@ def child(args) -> dict:
                                         "attribution": summary["groups"]}
             del engine
     if args.api == "reference":
-        record["rounds"] = [name for name in ("reference", "python_cost") if name in record]
+        record["rounds"] = [name for name in ("reference", "python_cost", "wave_reference") if name in record]
     return record
 
 
@@ -1846,7 +2341,7 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
     if record.get("exit_code", 0) != 0:
         return False, [f"{api}: child process failed ({record['exit_code']})"]
     if api == "reference":
-        rounds = [name for name in ("reference", "python_cost") if name in record]
+        rounds = [name for name in ("reference", "python_cost", "wave_reference") if name in record]
         failed = [f"{name}: {record[name].get('error') or 'failed'}"[:1500] for name in rounds
                   if not record[name].get("pass")]
         if not rounds:
@@ -1879,8 +2374,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, *CONTROL_ROUNDS, *PYTHON_ROUNDS))
-    parser.add_argument("--label", default="n31_scene_targets")
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS),
+                        choices=(*ROUNDS, *CONTROL_ROUNDS, *PYTHON_ROUNDS, *WAVE_ROUNDS))
+    parser.add_argument("--label", default=None, help="default n31_scene_targets (n54_waveform_primitives for the "
+                                                      "wave rounds alone)")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
@@ -1911,13 +2408,15 @@ def main(argv: list[str] | None = None) -> int:
     root = host_check._root(args.repo)
     from tools import artifact_paths
 
-    out = artifact_paths.evidence_dir("native_core", "n3_1", args.label)
+    wave_only = set(args.rounds) <= set(WAVE_ROUNDS)   # N5.4's rounds alone: their own topic
+    label = args.label or ("n54_waveform_primitives" if wave_only else "n31_scene_targets")
+    out = artifact_paths.evidence_dir("native_core", "n5_4" if wave_only else "n3_1", label)
     out.mkdir(parents=True, exist_ok=True)
     environment = vk_validation.environment_record(_ALLOWED_ENV)
     results: dict = {}
     children = [a for a in APIS if a in args.apis and set(args.rounds) - set(PYTHON_ROUNDS)]
     if (("parity" in args.rounds or "placement_control" in args.rounds) and "opengl" in args.apis) \
-            or "python_cost" in args.rounds:
+            or "python_cost" in args.rounds or "wave_floor" in args.rounds:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
@@ -1954,9 +2453,15 @@ def main(argv: list[str] | None = None) -> int:
             if needed and not cross[rule].get("pass"):
                 failed.append(f"{rule}: " + json.dumps({k: v for k, v in cross[rule].get("compared", {}).items()
                                                         if v.get("past", 0) != 0} or cross[rule])[:1500])
+    wave = None
+    if "wave_floor" in args.rounds:
+        # N5.4: rule (a) of the floor scene per API against the Python reference, the levels, the controls.
+        wave = wave_verdict(out, [api for api in APIS if api in args.apis])
+        if not wave["pass"]:
+            failed.append("wave_floor: " + "; ".join(wave.get("reasons", []))[:1500])
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
-    summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment,
+    summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment, "wave_floor": wave,
                "require_validation": args.require_validation, "cross": cross, "placement_control": placement_control,
                "verdicts": {api: {"pass": ok, "failed": reasons} for api, (ok, reasons) in verdicts.items()},
                "results": results, "pass": not failed}

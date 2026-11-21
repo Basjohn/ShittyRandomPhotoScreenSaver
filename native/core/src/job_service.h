@@ -51,6 +51,7 @@ class QVulkanInstance;
 namespace srpss_core {
 
 struct TextureImage; // mode_content.h
+enum class ModeTextureFormat; // mode_content.h (ABI 33: RGBA8 or RGBA16F)
 class JobThread;
 
 enum class JobState : int {
@@ -88,6 +89,7 @@ public:
     const quint64 generation;  // the image's (ModeTexture::generation)
     const QSize size;
     const bool mips;
+    const ModeTextureFormat format; // ABI 33: the image's (its output texture's format)
 
     JobState state() const { return JobState(m_state.loadAcquire()); }
 

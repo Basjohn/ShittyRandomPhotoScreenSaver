@@ -1,0 +1,91 @@
+"""The mip chain's box, one text for both renderers (Current_Plan.md N5.4, the exact-size mipped target box).
+
+Why it exists: a mip chain made by ``glGenerateTextureMipmap`` (Python) or QRhi's ``generateMips`` (the core) is the
+driver's: on this machine's OpenGL its levels made from odd sizes are anchored at memory row 0, and the core stores its
+targets top first (F1) where Python stores them bottom first, so the same picture's chain differs from level 3 on at
+Waveform's odd reflection sizes (measured: the core's OpenGL chain is exactly Python's own call over the rows stored top
+first); on Vulkan ``generateMips`` is a linear blit, another filter again. This kernel is the exact area average of
+each destination texel (an even side two taps of 1/2, an odd side 2d + 1 three taps of (d - i), d and (i + 1) over
+2d + 1), summed outer taps first with no fused multiply-add, so it gives the same bits whichever way the rows are
+stored and on every backend.
+
+``MIP_BOX_COMP`` is ``native/core/shaders/mip_box.comp`` (a test holds them equal): one dispatch a level, level L - 1
+bound as ``u_source`` (rgba16f, read) and level L as ``u_dest`` (write), 8 x 8 invocations a group. The core runs it
+for a self-mipped scene target's attachments a sampler reads with mips (``native/core/src/scene_targets.cpp``
+``generateSelfMips``); the Python renderer runs the same text with ``glBindImageTexture`` per level
+(``dispatch_mip_chain``).
+"""
+from __future__ import annotations
+
+MIP_BOX_COMP = """#version 440
+// The mip chain's box (ABI 33, N5.4; rendering/gl_programs/mip_chain.py MIP_BOX_COMP holds the same text, a test holds
+// them equal): one level from the one above it, each destination texel the exact area average of the source texels it
+// covers (an even side: two taps of 1/2; an odd side 2d + 1: three taps of (d - i), d and (i + 1) over 2d + 1; a side
+// of 1: one tap), separable, summed outer taps first so the result is the same bit for bit whichever way the rows are
+// stored (the core's targets top first, F1; Python's bottom first). Never generateMips: its odd levels are the driver's
+// (anchored at memory row 0 on OpenGL, a linear blit on Vulkan) and differ between the two renderers.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(binding = 0, rgba16f) readonly uniform image2D u_source;
+layout(binding = 1, rgba16f) writeonly uniform image2D u_dest;
+
+void taps(int i, int s, out ivec3 at, out vec3 w)
+{
+    if (s == 1) {
+        at = ivec3(0, 0, 0);
+        w = vec3(0.0, 1.0, 0.0);
+    } else if ((s & 1) == 0) {
+        at = ivec3(2 * i, 2 * i, 2 * i + 1);
+        w = vec3(0.5, 0.0, 0.5);
+    } else {
+        int d = s / 2;
+        at = ivec3(2 * i, 2 * i + 1, 2 * i + 2);
+        w = vec3(float(d - i), float(d), float(i + 1)) / float(s);
+    }
+}
+
+vec4 row(int y, ivec3 ax, vec3 wx)
+{
+    // precise: no fused multiply-add, so the outer pair's sum is the same whichever tap comes first.
+    precise vec4 outer = wx.x * imageLoad(u_source, ivec2(ax.x, y)) + wx.z * imageLoad(u_source, ivec2(ax.z, y));
+    precise vec4 sum = outer + wx.y * imageLoad(u_source, ivec2(ax.y, y));
+    return sum;
+}
+
+void main()
+{
+    ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(u_dest);
+    if (dst.x >= size.x || dst.y >= size.y)
+        return;
+    ivec2 source = imageSize(u_source);
+    ivec3 ax;
+    ivec3 ay;
+    vec3 wx;
+    vec3 wy;
+    taps(dst.x, source.x, ax, wx);
+    taps(dst.y, source.y, ay, wy);
+    precise vec4 outer = wy.x * row(ay.x, ax, wx) + wy.z * row(ay.z, ax, wx);
+    precise vec4 sum = outer + wy.y * row(ay.y, ax, wx);
+    imageStore(u_dest, dst, sum);
+}
+"""
+MIP_BOX_GROUP = 8
+
+
+def dispatch_mip_chain(program: int, texture: int, size: tuple[int, int], levels: int) -> None:
+    """Every level of ``texture`` (RGBA16F, ``levels`` levels, level 0 of ``size``) from the one above it, with the
+    compiled ``MIP_BOX_COMP`` ``program`` (the caller's current GL context; an image barrier after each level)."""
+    from OpenGL import GL as gl
+
+    gl.glUseProgram(program)
+    for level in range(1, levels):
+        width, height = max(1, size[0] >> level), max(1, size[1] >> level)
+        gl.glBindImageTexture(0, texture, level - 1, gl.GL_FALSE, 0, gl.GL_READ_ONLY, gl.GL_RGBA16F)
+        gl.glBindImageTexture(1, texture, level, gl.GL_FALSE, 0, gl.GL_WRITE_ONLY, gl.GL_RGBA16F)
+        gl.glDispatchCompute((width + MIP_BOX_GROUP - 1) // MIP_BOX_GROUP, (height + MIP_BOX_GROUP - 1) // MIP_BOX_GROUP,
+                             1)
+        gl.glMemoryBarrier(gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+    gl.glUseProgram(0)
+
+
+__all__ = ["MIP_BOX_COMP", "MIP_BOX_GROUP", "dispatch_mip_chain"]

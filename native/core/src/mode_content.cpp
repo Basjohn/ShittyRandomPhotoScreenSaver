@@ -814,7 +814,10 @@ bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, c
         }
     } else {
         // N3.1: location n is the target's attachment n, every attachment written once (a pass that leaves one alone
-        // masks it with "write": false).
+        // masks it with "write": false). ABI 33 (N5.4): an output past the target's attachments is refused too (Vulkan's
+        // validation names every such pipeline, Undefined-Value-ShaderOutputNotConsumed): Waveform's light shaders,
+        // which write colour and emission, reach the one-attachment reflection as a one-output variant of the same file
+        // (a wrapper that defines the variant and includes it), while Python's one-attachment framebuffer takes both.
         const int expected = int(target->colour.size());
         bool seen[kMaxTargetColour] = {};
         for (const QShaderDescription::InOutVariable &output : outputs) {
@@ -1010,13 +1013,16 @@ bool checkTargetSampler(const ModePass &pass, const PassSampler &s, QList<Target
                           QString::fromLatin1(targetName));
         return false;
     }
-    if (s.mips != SamplerMips::None) {
-        *error = QStringLiteral("pass '%1': the sampler '%2' reads a scene target's texture, which has no mips")
-                     .arg(label, QString::fromLatin1(s.name));
-        return false;
-    }
     TargetDeclaration &t = targets[index];
     const bool capture = attachment == "capture_colour" || attachment == "capture_depth";
+    // ABI 33: a mipped target's colour attachments have their levels (a defocus layer's are refused once the steps are
+    // known: ModeProgram::fromJson); a depth, a capture and any other target's texture have none.
+    if (s.mips != SamplerMips::None && (!t.mips || capture || attachment == "depth")) {
+        *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3', which has none (a scene target's colour "
+                                "attachments have levels only when it is declared with \"mips\": true)")
+                     .arg(label, QString::fromLatin1(s.name), QString::fromLatin1(s.texture));
+        return false;
+    }
     if (capture)
         return true;                          // checked against the capture steps after every pass
     if (index == pass.target) {
@@ -2009,6 +2015,13 @@ bool parseStageStep(const QJsonObject &o, int index, const QByteArray &pack, Mod
                                 "premultiplied light, then the circle)").arg(label, QString::fromLatin1(layer.name));
         return false;
     }
+    if (!layer.surfaceSized() || layer.exact || layer.depth) {
+        // ABI 33: D17 choices G and H (its levels from even sizes, its read level capped): the layer shares the scene's
+        // bucketed allocation and has no depth (a drawable mipped target may have both; it is not a defocus layer).
+        *error = QStringLiteral("defocus step '%1': its layer '%2' is surface-sized, bucket-allocated and without depth "
+                                "(D17 choices G and H)").arg(label, QString::fromLatin1(layer.name));
+        return false;
+    }
     if (scene.transparency() || scene.mips || !scene.surfaceSized()) {
         *error = QStringLiteral("defocus step '%1': it draws onto a surface-sized scene target (the layer's allocation "
                                 "is its)").arg(label);
@@ -2247,15 +2260,42 @@ QJsonObject PassSampler::toJson() const
 
 // ------------------------------------------------------------------------------------------------- the textures (N4.a)
 
-qint64 rgba8TextureBytes(const QSize &size, bool mips)
+bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out)
+{
+    if (text == QLatin1String("rgba8"))
+        *out = ModeTextureFormat::RGBA8;
+    else if (text == QLatin1String("rgba16f"))
+        *out = ModeTextureFormat::RGBA16F;
+    else
+        return false;
+    return true;
+}
+
+QString modeTextureFormatName(ModeTextureFormat format)
+{
+    return format == ModeTextureFormat::RGBA16F ? QStringLiteral("rgba16f") : QStringLiteral("rgba8");
+}
+
+QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format)
+{
+    return format == ModeTextureFormat::RGBA16F ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
+}
+
+int modeTextureTexelBytes(ModeTextureFormat format)
+{
+    return format == ModeTextureFormat::RGBA16F ? 8 : 4;
+}
+
+qint64 modeTextureBytes(const QSize &size, bool mips, ModeTextureFormat format)
 {
     qint64 bytes = 0;
     int w = size.width();
     int h = size.height();
     if (w < 1 || h < 1)
         return 0;
+    const qint64 texel = modeTextureTexelBytes(format);
     for (;;) {
-        bytes += qint64(w) * qint64(h) * 4;
+        bytes += qint64(w) * qint64(h) * texel;
         if (!mips || (w == 1 && h == 1))
             break;
         w = qMax(1, w / 2);
@@ -2264,8 +2304,13 @@ qint64 rgba8TextureBytes(const QSize &size, bool mips)
     return bytes;
 }
 
-TextureImage::TextureImage(const QByteArray &pixelsIn, const QSize &sizeIn, bool mipsIn)
-    : pixels(pixelsIn), size(sizeIn), mips(mipsIn)
+qint64 rgba8TextureBytes(const QSize &size, bool mips)
+{
+    return modeTextureBytes(size, mips, ModeTextureFormat::RGBA8);
+}
+
+TextureImage::TextureImage(const QByteArray &pixelsIn, const QSize &sizeIn, bool mipsIn, ModeTextureFormat formatIn)
+    : pixels(pixelsIn), size(sizeIn), mips(mipsIn), format(formatIn)
 {
     g_liveImages.fetchAndAddRelaxed(1);
     g_imageBytes.fetchAndAddRelaxed(qint64(pixels.size()));
@@ -2668,6 +2713,51 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             *error = QStringLiteral("target '%1' is read as the frame before, but no pass draws into it")
                          .arg(QString::fromLatin1(program.targets.at(t).name));
             return false;
+        }
+    }
+    // ABI 33 (N5.4): a mipped target no defocus step reads is drawable and makes its own chains after each run on it
+    // (selfMips); a sampler reads the levels of no defocus layer (its levels are its step's, made where it reads them).
+    for (int t = 0; t < int(program.targets.size()); ++t) {
+        TargetDeclaration &target = program.targets[t];
+        bool layer = false;
+        for (const ModePass &pass : program.passes)
+            layer = layer || (pass.stage == StageKind::Defocus && pass.stageSource == t);
+        target.selfMips = target.mips && !layer;
+        if (target.mips && !layer && !drawn[t]) {
+            *error = QStringLiteral("mipped target '%1': no pass draws into it and no defocus step reads it")
+                         .arg(QString::fromLatin1(target.name));
+            return false;
+        }
+    }
+    for (const ModePass &pass : program.passes) {
+        for (const PassSampler &s : pass.samplers) {
+            if (s.mips == SamplerMips::None || !targetTextureName(s.texture))
+                continue;
+            const int t = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
+            if (t >= 0 && !program.targets.at(t).selfMips) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of the defocus layer '%3' (its levels "
+                                        "are its defocus step's)").arg(QString::fromLatin1(pass.name),
+                                                                       QString::fromLatin1(s.name),
+                                                                       QString::fromLatin1(program.targets.at(t).name));
+                return false;
+            }
+            if (t < 0) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3', which has none")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                  QString::fromLatin1(s.texture));
+                return false;                 // a bloom step's glow is one level
+            }
+            // ABI 33: the attachment's chain is the core's box kernel's (RGBA16F images: scene_targets.h).
+            TargetDeclaration &read = program.targets[t];
+            const int colour = read.colourIndex(s.texture.mid(s.texture.indexOf('.') + 1));
+            if (colour < 0 || read.colour.at(colour).format != TargetFormat::RGBA16F) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3': a self-mipped target's levels "
+                                        "are made for an rgba16f attachment only (the core's box kernel)")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                  QString::fromLatin1(s.texture));
+                return false;
+            }
+            read.colour[colour].mipsRead = true;
         }
     }
     // N3.1: a capture is read only after a capture step of its target made it in the same record.
@@ -3724,7 +3814,7 @@ void ModeSource::setCard(const ModeCard &card)
 }
 
 bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
-                            QString *error, bool inFrame)
+                            QString *error, bool inFrame, ModeTextureFormat format)
 {
     if (!passName(name)) {
         *error = QStringLiteral("a texture's name is an identifier (a-z, 0-9, _; at most 64)");
@@ -3735,9 +3825,10 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
                      .arg(kMaxTextureSide);
         return false;
     }
-    if (qint64(pixels.size()) != qint64(size.width()) * qint64(size.height()) * 4) {
-        *error = QStringLiteral("texture '%1': %2 bytes are not %3 x %4 RGBA8 pixels, rows top first and tight")
-                     .arg(QString::fromLatin1(name)).arg(pixels.size()).arg(size.width()).arg(size.height());
+    if (qint64(pixels.size()) != qint64(size.width()) * qint64(size.height()) * modeTextureTexelBytes(format)) {
+        *error = QStringLiteral("texture '%1': %2 bytes are not %3 x %4 %5 pixels, rows top first and tight")
+                     .arg(QString::fromLatin1(name)).arg(pixels.size()).arg(size.width()).arg(size.height())
+                     .arg(modeTextureFormatName(format).toUpper());
         return false;
     }
     QMutexLocker lock(&m_mutex);
@@ -3763,8 +3854,9 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
     slot->generation = g_textureGenerations.fetchAndAddRelaxed(1) + 1;
     slot->size = size;
     slot->mips = mips;
+    slot->format = format;                    // ABI 33
     slot->inFrame = inFrame;
-    slot->image = QSharedPointer<TextureImage>::create(pixels, size, mips); // the one it replaces (if not taken) goes
+    slot->image = QSharedPointer<TextureImage>::create(pixels, size, mips, format); // the one it replaces (if not taken) goes
     ++m_generation;
     ++m_buildGeneration;
     return true;
@@ -4107,6 +4199,7 @@ void ModeSource::stateInto(QJsonObject &o) const
         t.insert(QStringLiteral("generation"), double(texture.generation));
         t.insert(QStringLiteral("size"), QJsonArray { texture.size.width(), texture.size.height() });
         t.insert(QStringLiteral("mips"), texture.mips);
+        t.insert(QStringLiteral("format"), modeTextureFormatName(texture.format)); // ABI 33
         t.insert(QStringLiteral("in_frame"), texture.inFrame);
         t.insert(QStringLiteral("image_held"), !texture.image.isNull()); // not yet taken by the render thread
         textures.append(t);
@@ -4516,10 +4609,11 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
                                 .arg(image->size.width()).arg(image->size.height());
     const QRhiTexture::Flags flags = image->mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                                  : QRhiTexture::Flags();
+    const QRhiTexture::Format format = modeTextureRhiFormat(image->format); // ABI 33: RGBA8 or RGBA16F
     if (gpu.texture && gpu.frontOutput)
         releaseFront(gpu);                    // an imported job output is never written in the frame: Qt's own instead
     if (!gpu.texture) {
-        gpu.texture.reset(rhi->newTexture(QRhiTexture::RGBA8, image->size, 1, flags));
+        gpu.texture.reset(rhi->newTexture(format, image->size, 1, flags));
         gpu.texture->setName(QByteArrayLiteral("srpss core mode texture ") + gpu.name);
         if (!gpu.texture->create()) {
             gpu.texture.reset();
@@ -4529,10 +4623,12 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
         gpu.bytes = 0;
         g_liveTextures.fetchAndAddRelaxed(1);
         ++m_textureObjects;
-    } else if (gpu.texture->pixelSize() != image->size || gpu.texture->flags() != flags) {
-        // Another size or mips: the same object recreated, and the bindings that name it made again.
+    } else if (gpu.texture->pixelSize() != image->size || gpu.texture->flags() != flags
+               || gpu.texture->format() != format) {
+        // Another size, mips or format: the same object recreated, and the bindings that name it made again.
         gpu.texture->setPixelSize(image->size);
         gpu.texture->setFlags(flags);
+        gpu.texture->setFormat(format);
         ++m_textureObjects;
         if (!gpu.texture->create()) {
             releaseFront(gpu);
@@ -4540,7 +4636,7 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
             return false;
         }
     }
-    const qint64 bytes = rgba8TextureBytes(image->size, image->mips);
+    const qint64 bytes = modeTextureBytes(image->size, image->mips, image->format);
     g_textureBytes.fetchAndAddRelaxed(bytes - gpu.bytes);
     gpu.bytes = bytes;
     // The pixels are implicitly shared with the batch (no copy); the core's copy goes once the batch is done.
@@ -4559,7 +4655,7 @@ RhiOwned<QRhiTexture> ModeContent::importTexture(QRhi *rhi, GpuTexture &gpu, con
 {
     const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                               : QRhiTexture::Flags();
-    RhiOwned<QRhiTexture> imported(rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
+    RhiOwned<QRhiTexture> imported(rhi->newTexture(modeTextureRhiFormat(job.format), job.size, 1, flags)); // ABI 33
     imported->setName(QByteArrayLiteral("srpss core mode texture ") + gpu.name + QByteArrayLiteral(" (job output)"));
     // Same queue family as the job queue: an exclusive image needs no ownership transfer (facts C3); Qt's QRhi knows only
     // the layout the job left it in (facts C2) and tracks it from here.
@@ -5216,7 +5312,7 @@ bool ModeContent::meshesReady() const
 quint64 ModeContent::missingMeshMask() const
 {
     // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list); bit
-    // 2 * pass for a pass's mesh, the next bit for its instance source (kMaxModePasses 16: 32 bits).
+    // 2 * pass for a pass's mesh, the next bit for its instance source (kMaxModePasses 28: 56 bits).
     static_assert(2 * kMaxModePasses <= 64, "a pass's two mesh names are bits of a quint64");
     quint64 mask = 0;
     const ModeProgram &program = m_source->drawnProgram();
@@ -5924,6 +6020,18 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         *error = QStringLiteral("the mode has no program");
         return false;
     }
+    // ABI 33 (N5.4): a self-mipped target's chain is the core's box kernel, a compute pass a level: refused, with the
+    // reason, where the device has no compute (never assumed).
+    for (const TargetDeclaration &declared : program.targets) {
+        bool chain = false;
+        for (const TargetAttachment &a : declared.colour)
+            chain = chain || a.mipsRead;
+        if (declared.selfMips && chain && !rhi->isFeatureSupported(QRhi::Compute)) {
+            *error = QStringLiteral("target '%1': a sampler reads its levels, whose chain is a compute kernel, and this "
+                                    "device does not report QRhi::Compute").arg(QString::fromLatin1(declared.name));
+            return false;
+        }
+    }
     // Audit 4 L4: D15 point 3's and 6's device limits, refused with the reason (none is reached on this machine's
     // devices): a block within the device's uniform range, an indirect draw only where QRhi reports DrawIndirect.
     const int uniformRange = rhi->resourceLimit(QRhi::MaxUniformBufferRange);
@@ -5938,6 +6046,19 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                                     "QRhi::DrawIndirect").arg(QString::fromLatin1(pass.name),
                                                               QString::fromLatin1(pass.indirect));
             return false;
+        }
+        // ABI 33 (N5.4): a linear sampler over a storage image only where this device filters its format linearly
+        // (Vulkan guarantees no linear filtering of 32-bit floats: Waveform's RGBA32F world field and floor give). The
+        // program is refused with the reason, never drawn with an undefined filter.
+        for (const PassSampler &s : pass.samplers) {
+            const StorageImageDeclaration *image = program.storageImage(s.texture);
+            QString why;
+            if (image && s.filter == SamplerFilter::Linear && !storageImageLinearFilter(rhi, image->format, &why)) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' filters the storage image '%3' linearly, and %4")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                  QString::fromLatin1(s.texture), why);
+                return false;
+            }
         }
         if (pass.compute) {
             // Checkpoint audit 5 L3: the pack's reflected local size within the device's group limits (QRhi checks
@@ -6762,6 +6883,14 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 drawPass(rhi, cb, k, viewport, input, v); // N3.2
             cb->endPass();
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
+            // ABI 33 (N5.4): a self-mipped target's chains from what this run drew (the core's box kernel, the text the
+            // Python renderer runs after the reflection's passes), before any later pass reads its levels. Its kernel
+            // is checked at the build (compute on the device), so a failure here is a binding the driver refused.
+            bool chained = true;
+            QString chainError;
+            m_targets.generateSelfMips(rhi, cb, runTarget, &chained, &chainError);
+            if (!chained)
+                m_reason = chainError;
         }
         i = last + 1;
     }

@@ -128,8 +128,9 @@ public:
     bool stillMode(bool still, QString *error);
     // N4.a: the item's textures (mode_content.h): an image by name (RGBA8, rows top first), or its removal. `inFrame`
     // (N3.8, a harness control): uploaded in the frame where the device has a job service.
+    // ABI 33: `halfFloat`, the pixels are RGBA16F half floats (8 bytes a texel; mode_content.h ModeTextureFormat).
     bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
-                     bool inFrame = false);
+                     bool inFrame = false, bool halfFloat = false);
     bool removeTextureMode(const QByteArray &name, QString *error);
     // N3.2 (D15 point 2): the item's meshes (mode_content.h): a mesh by name from its declaration and bytes, or its
     // removal.

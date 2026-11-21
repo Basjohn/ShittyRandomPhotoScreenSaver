@@ -33,7 +33,8 @@
 // Sampling an earlier pass, depth, more targets or compute are primitives with their own C++ and harness.
 //
 // The textures (N4.a): an item holds up to kMaxModeTextures named textures (ModeTexture), each uploaded from pixels
-// Python holds (RGBA8, rows top first) and owned by the core: the GUI thread stores the image (a new generation); the
+// Python holds (RGBA8, rows top first; ABI 33: or RGBA16F half floats, ModeTextureFormat) and owned by the core: the
+// GUI thread stores the image (a new generation); the
 // render thread takes it at the item's sync and uploads it once, at the next record, into a QRhiTexture the content
 // owns (mips generated on the GPU when the texture asks for them), then drops the core's copy. Nothing is uploaded
 // again at rest. A replaced image of the same size and mips is uploaded into the same QRhiTexture; another size
@@ -190,7 +191,10 @@
 
 namespace srpss_core {
 
-constexpr int kMaxModePasses = 16; // N3.1: a 3D scene's passes and captures (8 before)
+// ABI 33 (N5.4): Waveform's program (7 compute entries and about 15 draws, 28 with its continuation draws as passes of
+// their own; Current_Plan.md N5.4's reading); 16 at ABI 32, 8 before N3.1. A pass's two mesh names are bits of a quint64
+// (missingMeshMask: 2 * 28 bits).
+constexpr int kMaxModePasses = 28;
 constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;
@@ -482,19 +486,32 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
 
 int modeContentObjects();
 
-// Every level's bytes of an RGBA8 texture (the base level only without mips): the one count of the core's and the job
-// service's textures.
+// ABI 33 (N5.4): a mode texture's format: RGBA8 (N4.a: 4 bytes a texel) or RGBA16F (half floats, 8 bytes a texel, in
+// the platform's byte order: Waveform's slope map, baked once with a full chain the GPU makes). Uploaded as given (no
+// conversion), its chain by QRhi's generateMips as an RGBA8 texture's.
+enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1 };
+bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out);
+QString modeTextureFormatName(ModeTextureFormat format);
+QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format);
+int modeTextureTexelBytes(ModeTextureFormat format);
+
+// Every level's bytes of a mode texture (the base level only without mips): the one count of the core's and the job
+// service's textures. rgba8TextureBytes is the RGBA8 form.
+qint64 modeTextureBytes(const QSize &size, bool mips, ModeTextureFormat format);
 qint64 rgba8TextureBytes(const QSize &size, bool mips);
 
-// N4.a: a texture's pixels as the core holds them until the render thread uploads them (RGBA8, rows top first, tight).
-// Counted while alive (the copies the core holds). N3.8: an upload job owns one until it recorded the upload.
+// N4.a: a texture's pixels as the core holds them until the render thread uploads them (rows top first, tight; ABI 33:
+// in its format). Counted while alive (the copies the core holds). N3.8: an upload job owns one until it recorded the
+// upload.
 struct TextureImage
 {
     const QByteArray pixels;
     const QSize size;
     const bool mips = false;
+    const ModeTextureFormat format = ModeTextureFormat::RGBA8;
 
-    TextureImage(const QByteArray &pixels, const QSize &size, bool mips);
+    TextureImage(const QByteArray &pixels, const QSize &size, bool mips,
+                 ModeTextureFormat format = ModeTextureFormat::RGBA8);
     ~TextureImage();
     TextureImage(const TextureImage &) = delete;
     TextureImage &operator=(const TextureImage &) = delete;
@@ -507,6 +524,7 @@ struct ModeTexture
     quint64 generation = 0;              // a new image (process-wide, never reused)
     QSize size;
     bool mips = false;
+    ModeTextureFormat format = ModeTextureFormat::RGBA8; // ABI 33
     bool inFrame = false;                // N3.8, a harness control: the in-frame form where a job service exists
     QSharedPointer<TextureImage> image;  // the core's copy, until the render thread takes it for its upload
 };
@@ -576,8 +594,9 @@ public:
     // the one of that name; refused for a bad name, size or byte count, more than kMaxModeTextures, or mips the current
     // program samples that this texture lacks. removeTexture: false when there is no such texture. `inFrame` (N3.8, a
     // harness control): upload it in the frame where a job service exists (the measurement both ways).
+    // ABI 33: `format` RGBA16F takes half floats (8 bytes a texel).
     bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
-                    bool inFrame = false);
+                    bool inFrame = false, ModeTextureFormat format = ModeTextureFormat::RGBA8);
     bool removeTexture(const QByteArray &name, QString *error);
     // N3.2 (D15 point 2), GUI thread: a mesh (makeModeMesh's declaration and bytes), replacing the one of that name;
     // refused for a bad name, declaration or byte count, or more than kMaxModeMeshes. removeMesh: false when there is

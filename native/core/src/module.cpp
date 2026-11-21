@@ -763,6 +763,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
     o.insert(QStringLiteral("scene_target_resolve_primes"), double(scenes.resolvePrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
+    o.insert(QStringLiteral("scene_target_mips"), double(scenes.generatedMips)); // ABI 33: self-mipped chains made
     // N3.2 (D15): the meshes (resident buffers, bytes, the core's copies, uploads), the streams and arenas (buffers,
     // bytes, writes), every buffer created (the no-allocation proof), and the indirect and batched draws recorded.
     const srpss_core::MeshBufferCounts mb = srpss_core::meshBufferCounts();
@@ -1285,7 +1286,8 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
     PyObject *pixels = nullptr;
     int mips = 0;
     int inFrame = 0; // N3.8, a harness control: the in-frame form where the device has a job service
-    if (!PyArg_ParseTuple(args, "Ls(ii)O|pp", &handle, &name, &width, &height, &pixels, &mips, &inFrame))
+    int halfFloat = 0; // ABI 33: RGBA16F half floats (8 bytes a texel)
+    if (!PyArg_ParseTuple(args, "Ls(ii)O|ppp", &handle, &name, &width, &height, &pixels, &mips, &inFrame, &halfFloat))
         return nullptr;
     srpss_core::CompositeItem *item = compositeOf(handle);
     if (!item)
@@ -1300,7 +1302,7 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
         return nullptr;
     QString error;
     if (!item->textureMode(QByteArray(name), QByteArray(data, qsizetype(size)), QSize(width, height), mips != 0,
-                           &error, inFrame != 0)) {
+                           &error, inFrame != 0, halfFloat != 0)) {
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
@@ -1960,7 +1962,8 @@ PyObject *compute_control(PyObject *, PyObject *args)
         return nullptr;
     const QJsonObject o = QJsonDocument::fromJson(QByteArray(json, qsizetype(length))).object();
     static const QStringList keys = { QStringLiteral("write_as_read"), QStringLiteral("single_pass"),
-                                      QStringLiteral("trigger_every_record"), QStringLiteral("skip_storage_release") };
+                                      QStringLiteral("trigger_every_record"), QStringLiteral("skip_storage_release"),
+                                      QStringLiteral("no_float32_linear") }; // ABI 33: the faked device
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             PyErr_Format(PyExc_ValueError, "unknown control '%s' (%s)", it.key().toUtf8().constData(),
@@ -1976,6 +1979,8 @@ PyObject *compute_control(PyObject *, PyObject *args)
         srpss_core::setComputeTriggerEveryRecord(o.value(QStringLiteral("trigger_every_record")).toBool());
     if (o.contains(QStringLiteral("skip_storage_release")))
         srpss_core::setSkipStorageRelease(o.value(QStringLiteral("skip_storage_release")).toBool());
+    if (o.contains(QStringLiteral("no_float32_linear")))
+        srpss_core::setComputeNoFloat32Linear(o.value(QStringLiteral("no_float32_linear")).toBool());
     Py_RETURN_NONE;
 }
 
@@ -3012,8 +3017,9 @@ PyMethodDef methods[] = {
       "(handle, card_json) -> None: the item as shown (rendering/native/mode.py mode_card), which the core's members "
       "read." },
     { "composite_mode_texture", composite_mode_texture, METH_VARARGS,
-      "(handle, name, (width, height), pixels_bytes, mips=False, in_frame=False) -> None: the item's texture of that "
-      "name (N4.a): RGBA8 rows top first, tight, copied once into the core and uploaded from the next record (mips "
+      "(handle, name, (width, height), pixels_bytes, mips=False, in_frame=False, half_float=False) -> None: the item's "
+      "texture of that name (N4.a): RGBA8 rows top first, tight (ABI 33, half_float: RGBA16F half floats, 8 bytes a "
+      "texel), copied once into the core and uploaded from the next record (mips "
       "generated on the GPU): by the device's job service where it has one (N3.8), else in the frame; in_frame is the "
       "harness control of the in-frame form. ValueError for a bad name, size or byte count, too many textures, or mips "
       "the program samples that it lacks." },
@@ -3105,7 +3111,8 @@ PyMethodDef methods[] = {
       "composite_mode_storage_data(handle) -> list | None: N3.3 harness, the storage readback once completed" },
     { "compute_control", compute_control, METH_VARARGS,
       "compute_control(json): N3.3 harness, the compute proofs' negative controls (write_as_read, single_pass, "
-      "trigger_every_record, skip_storage_release)" },
+      "trigger_every_record, skip_storage_release; ABI 33: no_float32_linear, a device without linear filtering of "
+      "32-bit float formats)" },
     { "mesh_buffer_control", mesh_buffer_control, METH_VARARGS,
       "(controls_json) -> None: N3.2, harness: the proofs' negative controls (hide_draw_parameters, "
       "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used), process-wide." },

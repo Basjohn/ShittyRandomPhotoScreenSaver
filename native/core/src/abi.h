@@ -173,4 +173,15 @@
 // core's steps, vUv passes and a card-less content are unchanged. stage_control's card_triangle (harness: the full
 // triangle again, its negative control). Every generic mode's native frames may change (regression guards on the branch's ABI 31 build: every generic
 // mode's harness on both APIs, Bubble variant a on one take).
-#define SRPSS_NATIVE_CORE_ABI 32
+// 33 (N5.4, Waveform's five C++ boxes): a target's "allocation": "exact" (the content's exact
+// size, no bucket) and a drawable mipped target (a mipped target no defocus step reads: a depth and an explicit size
+// allowed; a sampler reading an RGBA16F attachment's levels with "mips", whose chain the core's box kernel makes after
+// each run on it, shaders/mip_box.comp, never generateMips; the layout JSON's targets carry "self_mips" and
+// "allocation", their attachments "mips_read"; composite_live's scene_target_mips); composite_mode_texture's
+// seventh argument half_float (an RGBA16F item texture, its chain generated on the GPU; the textures' state "format");
+// kMaxModePasses 28 (16 before) and kMaxStorageImages 9 (8 before); compute_control's no_float32_linear (harness: a
+// device without linear filtering of 32-bit floats), the device facts' linear_filter_formats (Vulkan's
+// SAMPLED_IMAGE_FILTER_LINEAR_BIT per storage format) and the compute facts' linear_filter_formats and
+// float32_linear_control; a linear sampler over a storage image this device does not filter linearly fails the
+// content with its reason. Backward compatible for every earlier program and caller.
+#define SRPSS_NATIVE_CORE_ABI 33

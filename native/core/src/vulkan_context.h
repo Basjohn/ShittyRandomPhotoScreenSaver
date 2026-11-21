@@ -61,6 +61,9 @@ QJsonObject vulkanDeviceFacts(quint64 device);
 // color_attachment_blend (per target format: VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT, optimal tiling).
 // Harness only (D17's negative control): the next devices are created with independentBlend off and their fact false,
 // a device that lacks the feature; false restores it. Read at each device's creation.
+// ABI 33 (N5.4): the facts also hold linear_filter_formats (per storage-image format:
+// VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT, optimal tiling), read by compute_passes.h
+// storageImageLinearFilter.
 void setDeviceWithoutIndependentBlend(bool without);
 bool deviceWithoutIndependentBlend();
 

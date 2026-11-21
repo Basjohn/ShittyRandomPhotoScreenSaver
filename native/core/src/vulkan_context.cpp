@@ -839,6 +839,16 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
                              (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
             }
             facts.insert(QStringLiteral("color_attachment_blend"), blend);
+            // ABI 33 (N5.4): which storage-image formats a linear sampler filters (Vulkan guarantees no linear
+            // filtering of 32-bit float formats; Waveform's world field and floor give are RGBA32F read linearly).
+            QJsonObject linear;
+            for (const auto &f : storageFormats) {
+                VkFormatProperties fp = {};
+                getFormat(physDev, f.format, &fp);
+                linear.insert(QLatin1String(f.name),
+                              (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+            }
+            facts.insert(QStringLiteral("linear_filter_formats"), linear);
         }
         // N3.4 (D17 point 3): the per-attachment blend and per-sample shading features as enabled on this device.
         facts.insert(QStringLiteral("independent_blend"), f2.features.independentBlend == VK_TRUE);

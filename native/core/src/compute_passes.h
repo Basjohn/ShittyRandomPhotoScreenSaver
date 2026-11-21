@@ -54,7 +54,8 @@
 namespace srpss_core {
 
 constexpr int kMaxStorageBuffers = 8;
-constexpr int kMaxStorageImages = 8;
+// ABI 33 (N5.4): Waveform with Floor Give on holds 9 (the world field 1, floor give 2, two fog volumes 3 each).
+constexpr int kMaxStorageImages = 9;
 constexpr int kMaxComputeBindings = 8;
 constexpr qint64 kMaxStorageBufferBytes = qint64(256) << 20;
 constexpr int kMaxStorageImageSide2D = 16384;
@@ -172,7 +173,22 @@ bool computeTriggerEveryRecord();
 void setSkipStorageRelease(bool on);
 bool skipStorageRelease();
 
-// The device's compute facts (QRhi's features and limits; any thread).
+// ABI 33 (N5.4): the harness's faked device without linear filtering of 32-bit float formats (rgba32f, r32f): the
+// negative control of the linear-filter check below (process-wide, the harness's only).
+void setComputeNoFloat32Linear(bool on);
+bool computeNoFloat32Linear();
+
+// ABI 33 (N5.4): whether this device filters a storage image of `format` with a linear sampler (Vulkan guarantees no
+// linear filtering of 32-bit float formats). On a Vulkan device the core created, its facts read at creation decide
+// (VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT: vulkan_context.h linear_filter_formats); on OpenGL every format
+// is filterable on desktop GL, and a 32-bit float format on OpenGL ES only with GL_OES_texture_float_linear (the
+// context current, render thread); elsewhere (D3D, a device of Qt's own) QRhi has no question for it and the format is
+// taken as filterable (D3D11's feature level 10 filters it). False with the reason (`why`, may be null). The
+// harness's faked device answers false for rgba32f and r32f.
+bool storageImageLinearFilter(QRhi *rhi, QRhiTexture::Format format, QString *why);
+
+// The device's compute facts (QRhi's features and limits; any thread). ABI 33: and linear_filter_formats (per storage
+// format, storageImageLinearFilter's answer; OpenGL's needs its context current) and float32_linear_control.
 QJsonObject computeDeviceFacts(QRhi *rhi);
 
 // ------------------------------------------------------------------------------------------- harness readback
