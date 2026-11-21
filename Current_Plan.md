@@ -170,10 +170,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Leftover worktree folders (lead, 21 Nov; retire fix: Sonnet agent a5960af4c4315168e; branches merged and deleted, evidence copied to main):
-  `.claude/worktrees/agent-a6257c36aeee45f10` (empty, held open) and `.claude/worktrees/agent-a40f1b6d7aec65276`
-  (about 4,000 files; git's remove failed on long paths). Delete both once nothing holds them, with a long-path-capable
-  delete, after checking no reparse point inside. Then make `agent_handover.py --retire` handle long paths.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
