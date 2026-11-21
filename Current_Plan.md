@@ -71,7 +71,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   Bubble method proof (it decides whether coverage windows become the default), and the rule (a) reruns of
   human_heavy1 and nightsolong. The Oscilloscope partner control follows the Oscilloscope merge.
 - [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
-- [ ] The smoke-host branch `worktree-agent-ad927a7c14bbc5053`: run both smoke tools, review the sheets, merge.
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
   identical counts before the HUD fix; order-dependent bubble-normal failures too). The protected clip commits rule
   applies: root cause first, never retune production to satisfy the oracle.
@@ -167,9 +166,11 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
-  blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
-  `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
+- [ ] Side defect (lead, 21 Nov, the Media smoke's review sheet): with no artwork, a long title ("A Very Long Track
+  Name For Layout Proof") and its metadata shrink to about 6 px, unreadable, though the no-art layout has more room
+  than the art layout. Reproduce with `tools/qtquick_media_smoke.py`, cases `media_playing_no_art_w` and
+  `media_progress_glow_off_reference`. Find the auto-fit owner and give it a legibility floor: elide before
+  shrinking below the theme's minimum text size. Prove it on the sheet.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
