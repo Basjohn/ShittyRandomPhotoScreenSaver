@@ -231,6 +231,7 @@ def _real_gl(qt_app):
             assert width <= max_width and height <= max_height
             return _render(host, gl, snapshot, width, height, _matrix(width, height))
 
+        render.host = host          # a caller that swaps the shader releases the host's programs through it
         yield gl, render
     finally:
         host.release_resources()
