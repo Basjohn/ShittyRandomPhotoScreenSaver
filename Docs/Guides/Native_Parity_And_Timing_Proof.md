@@ -195,7 +195,13 @@ decision, recorded with its reason.
 - **The split this sets (lead, 21 Nov):** what changed decides the material.
   - A shader, core or optimisation change, and every port's acceptance: a native-only run over each full take, every
     frame judged against the cached Python references (a frame hash-identical to the accepted native baseline needs
-    no rejudge). Coverage windows never stand in for this.
+    no rejudge). Coverage windows never stand in for this. The run: `owner_render_parity.py --native --recording TAKE
+    --seconds 60 --references --accepted ACCEPTED.json`. Confirmed 21 Nov on Bubble, nightsolong, variant a: the
+    accepted run is the full replay (399.2 s, Python drawn and stored); with `--accepted`, 57.6 s (all 5,266 judged
+    frames hash-identical, kept); every frame judged against the cached reference, 208.2 s. Its controls are caught:
+    `--shader-control ulp_ring` changes 2 frames on this route (2026, 2499), exactly the 2 rejudged; `--native-control
+    shift` rejudges and fails all 5,313 Bubble frames with the switch and digests intact (R-242). Evidence:
+    `.artifacts/evidence/native_core/fast_proof/20261121_split_*`.
   - Python references: drawn once per take on the full continuous run and cached; redrawn only when their cache key
     changes. The slow full-path replay (Python drawn alongside) exists only to draw or redraw them.
   - Coverage windows: for record- and settings-driven classes (settings sweeps, offers, partner and switch frames),

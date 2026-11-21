@@ -1518,8 +1518,12 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
             verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement,
                                     references=references, clip_name=clip.name, windows=windows, accepted=entry)
             report["results"][key] = verdict
+            carried = len(verdict["carried_from_accepted"])
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
-                  f" published; differing inputs {verdict['differing_inputs']}, pixels "
+                  + (f" published; {verdict['rejudged']} judged, {carried} kept from the accepted run (hash-"
+                     f"identical: their verdicts, not sized here); of the judged, differing inputs "
+                     if entry is not None else " published; differing inputs ")
+                  + f"{verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
                   f"{'bit-identical' if verdict['identical'] else 'not bit-identical'}; edge pixels in the worst "
