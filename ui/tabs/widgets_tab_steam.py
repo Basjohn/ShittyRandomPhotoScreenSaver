@@ -57,6 +57,11 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
     style_group_box,
 )
+from rendering.quick.widgets.surface_material import (
+    SURFACE_MATERIALS,
+    SURFACE_MATERIAL_LABELS,
+    normalize_pulse_child_surface_mode,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.widgets.outlined_button import OutlinedButton
 from ui.tabs.widget_surface_material_row import add_surface_material_row
@@ -105,6 +110,18 @@ _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Wide", "wide"),
     ("Square", "square"),
     ("Portrait", "portrait"),
+)
+# (row label, tab attribute, persisted key, tooltip): the pulse ring's and its inner circle's own
+# surfaces. They are not card settings; the card keeps the shared Surface Material row.
+_ACHIEVEMENT_PULSE_SURFACE_ROWS: tuple[tuple[str, str, str, str], ...] = (
+    ("Progress Ring Material:", "achievement_pulse_progress_ring_surface",
+     "progress_ring_surface_material",
+     "The pulse ring's own surface. Inherit follows the card's material; any other choice "
+     "applies to the ring only and never changes the card."),
+    ("Progress Circle Material:", "achievement_pulse_progress_circle_surface",
+     "progress_circle_surface_material",
+     "The material inside the ring when Material Progress Circle is on. Inherit follows "
+     "the card's material; any other choice applies to the circle only."),
 )
 _ABANDONMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Smart Rotation", "smart_rotation"),
@@ -867,6 +884,14 @@ def _update_achievement_capsule_style_controls(tab: "WidgetsTab") -> None:
     ring_material = getattr(tab, "achievement_pulse_progress_circle_material", None)
     if ring_material is not None:
         ring_material.setEnabled(pulse_enabled)
+    ring_surface = getattr(tab, "achievement_pulse_progress_ring_surface", None)
+    if ring_surface is not None:
+        ring_surface.setEnabled(pulse_enabled)
+    circle_surface = getattr(tab, "achievement_pulse_progress_circle_surface", None)
+    if circle_surface is not None:
+        circle_surface.setEnabled(
+            pulse_enabled and bool(ring_material is not None and ring_material.isChecked())
+        )
     fill = getattr(tab, "achievement_pulse_capsule_fill_color_btn", None)
     doubled = getattr(tab, "achievement_pulse_double_capsules", None)
     if fill is not None:
@@ -1234,8 +1259,28 @@ def _build_card_group(
         )
         ring_material.setChecked(tab._default_bool(key, "progress_circle_material"))
         ring_material.stateChanged.connect(tab._save_settings)
+        ring_material.stateChanged.connect(
+            lambda _state: _update_achievement_capsule_style_controls(tab)
+        )
         tab.achievement_pulse_progress_circle_material = ring_material
         appearance_layout.addWidget(ring_material)
+
+        # The ring and, separately, its inside are their own surfaces; the card's
+        # material stays with the shared Surface Material row above.
+        for label_text, attr_name, payload_key, tooltip in _ACHIEVEMENT_PULSE_SURFACE_ROWS:
+            surface_row = _aligned_row(appearance_layout, label_text)
+            surface_combo = StyledComboBox()
+            surface_combo.setFixedWidth(192)
+            surface_combo.addItem("Inherit", "inherit")
+            for material in SURFACE_MATERIALS:
+                surface_combo.addItem(SURFACE_MATERIAL_LABELS[material], material)
+            surface_combo.setToolTip(tooltip)
+            surface_combo.setObjectName(f"achievementPulse_{payload_key}")
+            _set_combo_data(surface_combo, str(tab._widget_default(key, payload_key)))
+            surface_combo.currentIndexChanged.connect(tab._save_settings)
+            setattr(tab, attr_name, surface_combo)
+            surface_row.addWidget(surface_combo)
+            surface_row.addStretch()
 
         shelf_style = QCheckBox("Shelf Style")
         shelf_style.setProperty("circleIndicator", True)
@@ -1958,6 +2003,11 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab.achievement_pulse_progress_circle_material.setChecked(
                 bool(config.get("progress_circle_material", tab._default_bool(key, "progress_circle_material")))
             )
+            for _label, attr_name, payload_key, _tip in _ACHIEVEMENT_PULSE_SURFACE_ROWS:
+                _set_combo_data(
+                    getattr(tab, attr_name),
+                    str(config.get(payload_key, tab._widget_default(key, payload_key))),
+                )
             tab.achievement_pulse_shelf_style.setChecked(
                 bool(config.get("shelf_style", tab._default_bool(key, "shelf_style")))
             )
@@ -2158,6 +2208,10 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["progress_circle_material"] = bool(
             tab.achievement_pulse_progress_circle_material.isChecked()
         )
+        for _label, attr_name, payload_key, _tip in _ACHIEVEMENT_PULSE_SURFACE_ROWS:
+            payload[payload_key] = normalize_pulse_child_surface_mode(
+                getattr(tab, attr_name).currentData()
+            )
         payload["shelf_style"] = bool(tab.achievement_pulse_shelf_style.isChecked())
         payload["capsule_font_size"] = int(tab.achievement_pulse_capsule_font_size.value())
         payload["capsule_fill_color"] = _rgba_payload(tab._achievement_capsule_fill_color)

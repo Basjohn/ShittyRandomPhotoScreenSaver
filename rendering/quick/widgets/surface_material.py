@@ -145,6 +145,47 @@ def resolve_media_controls_surface_mode(widgets_config: Mapping[str, object] | N
     return "inherit"
 
 
+def normalize_pulse_child_surface_mode(value: object) -> str:
+    """One Achievement Pulse child surface choice: a material id, or ``inherit`` (follow the card)."""
+
+    choice = str(value or INHERIT).strip().lower()
+    if choice == "flat":
+        return NORMAL
+    return choice if choice in SURFACE_MATERIALS else INHERIT
+
+
+def resolve_achievement_pulse_child_surface_modes(
+    widgets_config: Mapping[str, object] | None,
+) -> tuple[str, str]:
+    """(ring, inner circle) surface modes of Achievement Pulse's progress circle.
+
+    The ring and the circle's inside are their own surfaces, each with its own persisted choice
+    (``progress_ring_surface_material`` / ``progress_circle_surface_material``); neither is a card
+    setting. ``inherit`` follows the card's material, as before these keys existed.
+    """
+
+    values = widgets_config.get("achievement_pulse", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping):
+        return INHERIT, INHERIT
+    return (normalize_pulse_child_surface_mode(values.get("progress_ring_surface_material")),
+            normalize_pulse_child_surface_mode(values.get("progress_circle_surface_material")))
+
+
+def achievement_pulse_child_backdrop_demand(
+    widgets_config: Mapping[str, object] | None,
+) -> tuple[str, ...]:
+    """Explicit child materials that need the shared backdrop even when the card is Normal."""
+
+    values = widgets_config.get("achievement_pulse", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping) or values.get("progress_pulse") is False:
+        return ()
+    ring, circle = resolve_achievement_pulse_child_surface_modes(widgets_config)
+    modes = [ring]
+    if values.get("progress_circle_material") is not False:
+        modes.append(circle)
+    return tuple(mode for mode in modes if mode not in {INHERIT, NORMAL})
+
+
 def transition_refresh_interval_s(materials) -> float:
     """The backdrop refresh spacing a set of present materials needs (the smallest)."""
 
@@ -182,7 +223,10 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     border_mode = resolve_border_surface_mode(widgets_config)
     header_mode = resolve_header_surface_mode(widgets_config)
     bar_mode = resolve_media_controls_surface_mode(widgets_config) if widget_id == "media" else "inherit"
+    child_demand = (achievement_pulse_child_backdrop_demand(widgets_config)
+                    if widget_id == "achievement_pulse" else ())
     if (material == NORMAL and card_style.surface_material == NORMAL and adjustment == 0.0
+            and child_demand == card_style.child_surface_modes
             and border_mode == card_style.border_surface_mode
             and border_adjustment == card_style.border_surface_opacity_adjust
             and header_mode == card_style.header_surface_mode
@@ -198,6 +242,7 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
                       border_surface_opacity_adjust=border_adjustment,
                       header_surface_mode=header_mode,
                       media_controls_surface_mode=bar_mode,
+                      child_surface_modes=child_demand,
                       header_surface_opacity_adjust=header_adjustment,
                       media_controls_opacity_adjust=controls_adjustment,
                       surface_opacity_adjust=adjustment, background_color=background,
@@ -208,7 +253,9 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
 
 __all__ = [
     "INHERIT", "NORMAL", "SURFACE_MATERIALS", "SURFACE_MATERIAL_LABELS", "THEME",
-    "TRANSITION_REFRESH_INTERVAL_S", "normalize_surface_material", "resolve_global_surface_material",
+    "TRANSITION_REFRESH_INTERVAL_S", "normalize_surface_material",
+    "achievement_pulse_child_backdrop_demand", "normalize_pulse_child_surface_mode",
+    "resolve_achievement_pulse_child_surface_modes", "resolve_global_surface_material",
     "resolve_surface_material", "resolve_border_surface_mode", "resolve_header_surface_mode", "resolve_media_controls_surface_mode",
     "surface_text_color", "theme_surface_material",
     "transition_refresh_interval_s",
