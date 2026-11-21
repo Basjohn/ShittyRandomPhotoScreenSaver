@@ -83,7 +83,8 @@ def candidate_world_resolver(exponent: float, density: str):
     production = profile.resolve_bubble_world
 
     def resolve(viewport_extent, *, authored_population, baseline_viewport_size=(
-            profile.CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)):
+            profile.CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE), display_wide=False):
+        # A candidate is computed from the card rule whatever the product does display-wide.
         world = production(viewport_extent, authored_population=authored_population,
                            baseline_viewport_size=baseline_viewport_size)
         if world.world_scale == 1.0:
@@ -547,8 +548,6 @@ def main() -> None:
     for item in filter(None, args.candidates.split(",")):
         name, exponent, density = item.split(":")
         candidates[f"candidate_{name}"] = (float(exponent), density)
-    if args.motion and not candidates:
-        parser.error("--motion compares display-wide with candidates: give --candidates")
     if args.render_fps > 0.0 or args.motion:
         from PySide6.QtGui import QGuiApplication
         QCoreApplication.instance() or QGuiApplication([])
@@ -650,11 +649,11 @@ def main() -> None:
             return {"big": big, "small": small, "live": big + small}
 
         report["live_targets"] = {"card": targets(resolve_bubble_world(card, authored_population=sum(authored))),
-                                  "display_wide": targets(resolve_bubble_world(wide,
-                                                                               authored_population=sum(authored)))}
+                                  "display_wide": targets(resolve_bubble_world(wide, authored_population=sum(authored),
+                                                                               display_wide=True))}
         meaning = {"count": "today's count", "area": "today's density", "mid": "count halfway"}
         labels = {"card": "card",
-                  "display_wide": f"fullscreen now: zoom {runs['display_wide'][0][-1]['world_scale']:.2f}, "
+                  "display_wide": f"fullscreen: zoom {runs['display_wide'][0][-1]['world_scale']:.2f}, "
                                   f"{report['live_targets']['display_wide']['live']} heroes"}
         for name, (exponent, density) in candidates.items():
             world = candidate_world_resolver(exponent, density)(wide, authored_population=sum(authored))
@@ -675,7 +674,7 @@ def main() -> None:
         for name in names:
             with drawing(name):
                 panes[name] = drawn_frames({i: snaps[name][i] for i in motion}, wide_drawn, width=width)
-        columns = 2
+        columns = min(2, len(names))
         rows_n = math.ceil(len(names) / columns)
         pictures = []
         for frame_index in range(len(motion)):
@@ -686,7 +685,8 @@ def main() -> None:
                 frame.paste(_labelled(panes[name][frame_index], labels[name]),
                             ((slot % columns) * (width + 8), (slot // columns) * (height + 8)))
             pictures.append(frame)
-        pictures[0].save(args.output / "motion_current_vs_candidates.webp", save_all=True,
+        pictures[0].save(args.output / ("motion_current_vs_candidates.webp" if candidates else "motion_display_wide.webp"),
+                         save_all=True,
                          append_images=pictures[1:], duration=round(1000 / args.motion_fps), loop=0, quality=75,
                          method=4)
         if args.clearest:

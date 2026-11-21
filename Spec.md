@@ -795,11 +795,14 @@ must not create another clock. **Bubble's world is in canonical-card units on ev
 makes it `extent / (420, 280)` units wide and tall, and every authored speed, drift, swirl, margin, entry depth, cluster
 spread, collision gap/push, overlap allowance and trail length is that literal unprojected, so at equal uniform visual
 scale a tall, wide, tiny or huge card moves and sizes exactly like the canonical card. Only the population follows the
-card's area (authored counts describe one canonical card). The renderer holds 110 heroes including trails still draining
+card's area (authored counts describe one canonical card). A card holds 110 heroes including trails still draining
 off-card, so a card larger than the canonical one grows its live population to 72 (or the authored population if larger)
 and past that the whole world zooms isotropically by `world_scale` (bubbles, speeds and distances together, like a larger
 uniform scale); the canonical card and anything no larger never zoom, and live bubbles keep their place when the zoom
-changes. Positions/trails normalize by the world size; radius stays in canonical units and the Quick layout projects it
+changes. The display-wide card (its drawn world) zooms out from that rule (operator, 22 Nov: room to breathe): its zoom
+is the overflow (needed / live capacity) to the power 0.26 instead of its square root, its live population halfway
+between the card rule's count and the zoomed world's density by area (at most 126), within the renderer's 192 heroes
+(`bubble_viewport_profile`). Positions/trails normalize by the world size; radius stays in canonical units and the Quick layout projects it
 once through the canonical card's equal-area response height `sqrt(w * h / 1.5)` at the current uniform scale and inset,
 times `world_scale` (`BubbleFrame.world_scale`); on the canonical extent that is the operator's 2026-09-05 projection
 exactly. Wake ring constants project the same way; there is no per-axis history compression. Optional decor moves in
