@@ -71,6 +71,20 @@ def _bubble_settings(snapshot: Any, card: dict) -> dict:
     return values
 
 
+def _oscilloscope_settings(snapshot: Any, card: dict) -> dict:
+    """The Oscilloscope's Settings- and card-derived members of both its passes (N5.1): the Python renderer's own
+    ``oscilloscope_settings_values`` under the card's content rect and oriented size, the drawn dpr and visual scale."""
+    from rendering.quick.visualizer.implementations.oscilloscope import oscilloscope_settings_values
+
+    presentation = snapshot.presentation
+    return oscilloscope_settings_values(snapshot.logical, card["content_rect"], card["oriented_size"],
+                                        presentation.dpr, presentation.uniform_visual_scale)
+
+
+#: The Oscilloscope's settings function by name (its harness and tests call it directly).
+OSCILLOSCOPE_SETTINGS = _oscilloscope_settings
+
+
 def _shader_pack(filename: str) -> bytes:
     """A pack of the Visualizer modes' shader folder (``tools/regen_qrc.py --shaders`` bakes it beside its source)."""
     from widgets.spotify_visualizer import shaders
@@ -141,6 +155,65 @@ def bubble_program(pack: bytes, sizes: dict) -> dict:
     return {"passes": passes, "targets": [ambient], "streams": streams}
 
 
+#: The Oscilloscope's overlay target (D14, D17): the beam's colour (RGBA8, its alpha coverage) and, under Glow, its light
+#: (RGBA16F) that the bloom spreads; single-sampled, the surface's size.
+OSCILLOSCOPE_TARGET = "scope"
+
+
+def oscilloscope_glow(snapshot: Any) -> bool:
+    """Whether the Oscilloscope's program carries the glow (its Glow Setting above 0): the program the route draws,
+    chosen at the Settings edge (D17 choice E), never per frame."""
+    from rendering.quick.visualizer.implementation_values import parameter
+
+    return float(parameter(snapshot.logical.mode_state.parameters, "osc_glow")) > 0.0
+
+
+def oscilloscope_program(glow: bool) -> dict:
+    """The Oscilloscope's program (N5.1): the graticule (one quad, its vertex count the record's: 0 when its style draws
+    none) and the beam (one instanced quad a segment, its endpoints read from the record's points as a storage stream)
+    into the overlay target, both blended MAX on every attachment as the Python renderer blends them; with ``glow`` the
+    target's emission spread by the bloom and the overlay composite with the glow (``u_bloom_strength`` the record's,
+    ``u_hdr_exposure`` 0), else the target's colour alone and the plain overlay composite (no emission, no bloom: D17
+    point 1), whose program leaves the record's bloom strength unread."""
+    from rendering.native.mode import (
+        BlendState,
+        BloomStep,
+        CompositeStep,
+        ModePass,
+        ModeStream,
+        ModeTarget,
+        PassGeometry,
+        PassOutput,
+        TargetAttachment,
+    )
+
+    maximum = BlendState(("max", "one", "one"), ("max", "one", "one"))
+    attachments = (TargetAttachment("colour", "rgba8"),) + ((TargetAttachment("emission", "rgba16f"),) if glow else ())
+    outputs = tuple(PassOutput(True, maximum) for _ in attachments)
+    plain = "" if glow else "_plain"
+    passes: list = [
+        ModePass("oscilloscope_graticule", _shader_pack(f"oscilloscope_graticule{plain}.frag"), maximum,
+                 target=OSCILLOSCOPE_TARGET, outputs=outputs,
+                 geometry=PassGeometry(_shader_pack("oscilloscope_graticule.vert"), topology="triangle_strip",
+                                       vertices="osc_graticule_vertices")),
+        ModePass("oscilloscope_beam", _shader_pack(f"oscilloscope_beam{plain}.frag"), maximum,
+                 target=OSCILLOSCOPE_TARGET, outputs=outputs,
+                 geometry=PassGeometry(_shader_pack("oscilloscope_beam.vert"), topology="triangle_strip", vertices=4,
+                                       instances="osc_segments", storage=(("OscPoints", "osc_points"),))),
+    ]
+    if glow:
+        passes += [BloomStep("oscilloscope_bloom", f"{OSCILLOSCOPE_TARGET}.emission"),
+                   CompositeStep("oscilloscope_show", "overlay_glow", f"{OSCILLOSCOPE_TARGET}.colour",
+                                 "oscilloscope_bloom.glow")]
+    else:
+        passes.append(CompositeStep("oscilloscope_show", "overlay", f"{OSCILLOSCOPE_TARGET}.colour"))
+    streams = [ModeStream("osc_points", "osc_points", "storage", used="osc_point_floats")]
+    program = {"passes": passes, "targets": [ModeTarget(OSCILLOSCOPE_TARGET, attachments)], "streams": streams}
+    if not glow:
+        program["unread"] = ["u_bloom_strength"]
+    return program
+
+
 #: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function
 #: ``(snapshot, card) -> members by name``. Its program is its own fragment pack (one pass, straight alpha over, as the
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
@@ -158,6 +231,12 @@ GENERIC_MODE_PROGRAMS: dict[str, Callable[[bytes, dict], dict]] = {
 }
 GENERIC_MODE_TARGET_SIZES: dict[str, Callable[[Any, dict], dict]] = {
     "bubble": _bubble_target_sizes,
+}
+#: A generic mode whose program follows a Setting (N5.1, the Oscilloscope's Glow: D17 choice E, a stage turned on or
+#: off by its program at the Settings edge, never per frame): mode id -> ``(variant of the drawn snapshot, the variant's
+#: program builder)``. The route builds the variant's program at the bind and again only when the variant changes.
+GENERIC_MODE_PROGRAM_VARIANTS: dict[str, tuple[Callable[[Any], Any], Callable[[Any], dict]]] = {
+    "oscilloscope": (oscilloscope_glow, oscilloscope_program),
 }
 #: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
 #: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
@@ -631,8 +710,9 @@ class NativeVisualizerRoute:
         # The Python renderer's item lies in the content host (R-NEW): at the drawn card on the display, and wherever
         # the display lies in the window (an R-63 overscan above it).
         placement = {"host_origin": content_host_origin(presentation), "item_origin": self._host_window_origin()}
+        # ABI 28: the card carries Python's SceneTarget rect (scene_item; the generic item reads it, Spectrum's ignores it).
         card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
-                                     **placement)
+                                     scene_item=True, **placement)
         drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
                                       window_pixels=window_pixels, **placement)
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
@@ -765,6 +845,7 @@ class _ModeContent:
         self.composite = self.item.composite
         self._pack: tuple[str, bytes] | None = None       # the bound mode's fragment pack, read at its bind
         self._program_mode: str | None = None             # the mode whose program the item holds
+        self._program_variant: Any = None                   # and its variant (GENERIC_MODE_PROGRAM_VARIANTS)
         self._pending: tuple[str, str, dict] | None = None   # (mode, mapping name, expect): bound at its first settings
         self._bound = False
         self._sizes: dict | None = None                     # the explicit targets' sizes sent since the program
@@ -796,32 +877,50 @@ class _ModeContent:
     def present(self, card: dict) -> None:
         self.item.card(card)
 
+    def _variant(self, mode_id: str, snapshot: Any) -> Any:
+        """The drawn snapshot's program variant of ``mode_id`` (None: a mode with one program)."""
+        variants = GENERIC_MODE_PROGRAM_VARIANTS.get(mode_id)
+        return None if variants is None or snapshot is None else variants[0](snapshot)
+
+    def _program(self, mode_id: str, values: dict, snapshot: Any, variant: Any) -> None:
+        """``mode_id``'s program with ``values`` (its variant's when it has variants)."""
+        from rendering.native.mode import ModePass
+
+        if self._pack is None or self._pack[0] != mode_id:
+            self.load(mode_id)
+        try:
+            build = GENERIC_MODE_PROGRAMS.get(mode_id)
+            variants = GENERIC_MODE_PROGRAM_VARIANTS.get(mode_id)
+            if build is None and variants is None:
+                self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+            else:
+                sizer = GENERIC_MODE_TARGET_SIZES.get(mode_id)
+                sizes = sizer(snapshot, values) if sizer is not None else {}
+                program = variants[1](variant) if variants is not None else build(self._pack[1], sizes)
+                unread = {"unread": program["unread"]} if program.get("unread") else {}
+                self.item.program(program["passes"], values, targets=program["targets"],
+                                  streams=program["streams"], **unread)
+                self._sizes = dict(sizes)                  # the program's declarations hold them
+        except Exception as exc:
+            # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
+            # Spectrum's program at its bind, never tried again at every update.
+            raise _ProgramRefused(exc) from exc
+        self._program_mode, self._program_variant = mode_id, variant
+
     def settings(self, values: dict, snapshot: Any = None) -> None:
         pending = self._pending
         if pending is None:
-            self.item.settings(values)
+            variant = self._variant(str(self._program_mode), snapshot)
+            if variant != self._program_variant:
+                # A Setting chose the mode's other program (a stage on or off): built at this Settings edge only.
+                self._program(str(self._program_mode), values, snapshot, variant)
+            else:
+                self.item.settings(values)
             return
         mode_id, mapping_name, expect = pending
-        if self._program_mode != mode_id:
-            from rendering.native.mode import ModePass
-
-            if self._pack is None or self._pack[0] != mode_id:
-                self.load(mode_id)
-            try:
-                build = GENERIC_MODE_PROGRAMS.get(mode_id)
-                if build is None:
-                    self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
-                else:
-                    sizes = GENERIC_MODE_TARGET_SIZES[mode_id](snapshot, values)
-                    program = build(self._pack[1], sizes)
-                    self.item.program(program["passes"], values, targets=program["targets"],
-                                      streams=program["streams"])
-                    self._sizes = dict(sizes)                  # the program's declarations hold them
-            except Exception as exc:
-                # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
-                # Spectrum's program at its bind, never tried again at every update.
-                raise _ProgramRefused(exc) from exc
-            self._program_mode = mode_id
+        variant = self._variant(mode_id, snapshot)
+        if self._program_mode != mode_id or variant != self._program_variant:
+            self._program(mode_id, values, snapshot, variant)
         else:
             self.item.settings(values)
         from core.visualizer_engine.native_schema import schema_for_mode

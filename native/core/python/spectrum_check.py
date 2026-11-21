@@ -291,9 +291,12 @@ def round_block(core, records: list[dict]) -> dict:
                          "fade_differs": fade_differs}}
 
 
-def python_references(samples) -> list:
+def python_references(samples, margin: int = 0) -> list:
     """The Python renderer's own draw of each sampled frame into a transparent target the item's size (top-down RGBA;
-    the quad through a Qt Quick-like item matrix, Y down)."""
+    the quad through a Qt Quick-like item matrix, Y down). ``margin`` (device pixels): the window is larger than the
+    item by this on every side, the item inside it, and the item's own rect is read: what a renderer draws past its item
+    (a ``SceneTarget``'s overrun into its allocation's slack, bloomed back into the item) is then drawn as the product
+    draws it, where an item-sized window cuts it on every side (checkpoint audit 10, M1)."""
     import numpy as np
     from OpenGL import GL as gl
     from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
@@ -319,24 +322,26 @@ def python_references(samples) -> list:
         for index, snapshot, logical_size, quarters in samples:
             dpr = float(snapshot.presentation.dpr)
             width, height = (int(round(v * dpr)) for v in logical_size)
+            full_w, full_h = width + 2 * margin, height + 2 * margin
             color = gl.glGenTextures(1)
             gl.glBindTexture(gl.GL_TEXTURE_2D, color)
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, full_w, full_h, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
             fbo = gl.glGenFramebuffers(1)
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
             gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
-            gl.glViewport(0, 0, width, height)
+            gl.glViewport(0, 0, full_w, full_h)
             gl.glDisable(gl.GL_SCISSOR_TEST)
             gl.glClearColor(0.0, 0.0, 0.0, 0.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
             w, h = logical_size
-            matrix = _reference_matrix(w, h)
-            host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(w), float(h)),
+            matrix = _reference_matrix(w, h) if not margin else _window_matrix(w, h, margin / dpr)
+            host.render(snapshot=snapshot, viewport=(0, 0, full_w, full_h), logical_size=(float(w), float(h)),
                         matrix_values=matrix)
             gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
-            raw = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+            raw = gl.glReadPixels(0, 0, full_w, full_h, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
             raw = raw if isinstance(raw, (bytes, bytearray)) else np.asarray(raw).tobytes()
-            rows = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 4)[::-1].copy()
+            whole = np.frombuffer(raw, dtype=np.uint8).reshape(full_h, full_w, 4)[::-1]
+            rows = whole[margin:margin + height, margin:margin + width].copy()
             references.append((index, rows, quarters))
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
             gl.glDeleteFramebuffers(1, [fbo])
@@ -505,6 +510,14 @@ class Scene:
 def _reference_matrix(width: float, height: float) -> tuple:
     """The Python reference's item matrix (``python_references``): the item is the whole target, Y down."""
     return (2.0 / width, 0.0, 0.0, 0.0, 0.0, -2.0 / height, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+
+
+def _window_matrix(width: float, height: float, margin: float) -> tuple:
+    """An item ``width`` x ``height`` (logical) at (``margin``, ``margin``) in a window larger by ``margin`` on every
+    side, Y down: Qt's own float32 product, as the product's item matrix is."""
+    from rendering.native.spectrum import _ortho_item_matrix
+
+    return _ortho_item_matrix((width + 2.0 * margin, height + 2.0 * margin), (margin, margin), single=True)
 
 
 def _card_for_item(card: dict) -> dict:

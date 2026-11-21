@@ -70,12 +70,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] The fast-proof tools are merged (6055b0f97). Agent a6257c36aeee45f10 is running the held heavy runs: the
   Bubble method proof (it decides whether coverage windows become the default), and the rule (a) reruns of
   human_heavy1 and nightsolong. The Oscilloscope partner control follows the Oscilloscope merge.
-- [ ] The Oscilloscope branch: audit 10 is done (High H1: Trace fails rule (a), the native target holds other overrun
-  light past the item than Python's SceneTarget; M1-M4; boxes on branch worktree-agent-a6c19089ac30a8e94, b5c2d898f).
-  Lead decision: H1 option (a), an ABI 28 native target with Python's origin and bucket allocation; Python's pictures
-  stay frozen. Agent a652d2d5a77e690ff fixes H1, M1-M4 and L2 on its branch (it merges the audit branch first), then
-  the lead builds ABI 28 on GitHub, merges, and runs the quiet cost round and layer T. Retire the audit worktree only
-  after the Oscilloscope branch is on main (its branch contains it; never -s ours it before).
+- [ ] The Oscilloscope at ABI 28 is merged (audit 10's H1, M1-M4 and L2 fixed; Trace, Ring and Phase pass rule (a)
+  on both APIs). Open before its 60 s takes, layer T and registration, agent a652d2d5a77e690ff (details under the
+  N5.1 H1 box): audio block sizes 0 and 3 exceed rule (a)'s 10 ties (12-21, at most 2 levels); graticule 0 input 167;
+  L1 (576 x 384 on OpenGL); the owner run's Bubble frames after the switch must be judged under Bubble's bounds (main's
+  partner-bounds judge, now on the branch). Lead: the ABI 28 build of main, then the quiet cost round and layer T.
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` fail at 100 % and 125 % (14 per run,
   7 modes x 2 scales, "content under the frame" at line 291; glass 150 % and every Normal case pass; the bubble-normal
   order-dependent failures did not reproduce in two full-file runs). Root cause (Sonnet a62cc0db13acbcc4d, 21 Nov): the
@@ -680,6 +679,33 @@ the feature (D3D11 is not stated).
     what is per settings change, the ring's size rule, and which N3.4 stages it needs (overlay target, bloom from
     emission, composite with glow). Confirm in writing that nothing the port needs is missing from ABI 25. Anything
     missing is a C++ box here, with its build.
+    Read (Opus High, 20 Nov, at d9b5c4505; ABI 25). *Per frame, from the logical frame alone* (the record): the traces'
+    points (float32 x, y, every trace back to back, at most 16 x 384; a storage stream with its used length), each
+    trace's alpha (16, zero past the count), the points per trace (always 384 from the runtime; the frame admits 2 to
+    384), the segment count (the instanced draw's instances: traces x (points - 1)), the flare's beam widening
+    (1 + 0.9 flare x Flare), the brightness, the white-hot centre, the beam colour (the tone's tint under Spectral) and
+    the bloom strength (Glow x (0.55 + 0.3 Pulse drive + 0.45 flare)); whether the graticule draws (its style and a
+    frame with traces). *Per Settings or card change* (the settings): the content rect, the oriented size and quarter
+    turns, one device pixel, the beam's base half width (half Beam Width x visual scale), the layout (the Trace's half
+    extent past the centre, the vertical scale, the Ring's and Phase's radius and length), the glow colour, the glow
+    light (`_GLOW_LIGHT`), Analog Beam, the Phase centre fade and the graticule's whole block. The flare-dependent
+    reach, the Trace's horizontal scale (it runs past the item by the reach) and the focus length mix the two, so the
+    converted beam shader derives them from the base values and the record's widening (checklist 16: the Python
+    renderer draws the converted files). *The ring's size rule*: the record's points field is the whole capacity,
+    49,152 bytes, only the used floats written; the slot is the record in whole 4096-byte steps (53,248).
+    *The N3.4 stages*: a surface-sized single-sample overlay target (RGBA8 colour, RGBA16F emission), both passes
+    blended MAX on both attachments, a bloom step from `scene.emission`, the `overlay_glow` composite (`u_bloom_strength`
+    from the record, `u_hdr_exposure` 0 from the settings); with Glow 0 a target of colour alone and the `overlay`
+    composite, so the beam and graticule each ship a fragment without the emission output (the core requires one output
+    per attachment). *ABI 25 has all of it but one thing*: a record field no pass of the program reads is refused
+    (`ModeProgram::check`), so the Glow 0 program, which has no composite reading `u_bloom_strength`, cannot read the
+    one record. Neither a second schema per program nor an unused member is acceptable (D12 rejects silent unused
+    fields). C++ box below.
+  - [ ] C++ (ABI 26, needs a GitHub build): a program may name the record fields it reads nowhere (`"unread"`: a stage
+    it leaves out reads them; each must be a field of the record and read by no pass, draw or stream), so a stage
+    turned off at the Settings edge keeps the mode's one record. The Python face's `program_json` and
+    `NativeMode.program` take `unread`. Proof: the Glow 0 program admitted with it and refused without it (GPU-free
+    `mode_blocks`), a name the record lacks refused, a read field named unread refused.
   - [ ] The record schema and shared Settings and frame-value functions, which the Python renderer also calls (as
     Bubble did), proved byte-identical by a GPU-free test.
   - [ ] The route's program: the target, the stream ring, the instanced pass, the bloom stage and the composite step,
@@ -693,6 +719,97 @@ the feature (D3D11 is not stated).
   - [ ] Layer T: the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row (lead runs it on
     Display 1). Layer C: per pass at 2560 x 1440 and 4K, the glow-off path included.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
+  - [ ] Blocking finding for owner rule (a) (Opus High, 21 Nov; `n5_1_oscilloscope/20261121_owner_variant_a/`): at the
+    owner level the native glow differs from the Python renderer's by up to 4 to 5 levels in steady frames (variant a,
+    5.5 s replay: 547 of 549 inputs, about 11,000 pixels a frame past one level, the scope's whole glow), though every
+    setting and record value is the Python renderer's (probe: no member differs) and the harness's rule (a), with the
+    target on the item's own rect, passes. Cause: the bloom chain's texel grid is anchored at the target's origin. The
+    route's surface is quad-aligned (`composite_geometry(quad_aligned=True)`: 632 x 422 device pixels from window pixel
+    44 for a 630 x 420 card at 45), so the native content sits one pixel into its target, while Python's `SceneTarget`
+    allocation starts at the item's own pixel (and counts rows from the bottom); each 2 x 2 downsample pairs other
+    pixels, and the glow moves by several levels. Python's frame at a fade input (360) also draws nothing where the
+    native one draws its fading scope (10 levels). Decide one of: (a) C++: a scene target anchored at the item's own
+    device-pixel origin inside the quad-aligned surface (the bloom grid as Python's; the beam's derivatives keep the
+    surface's quads), with its harness; (b) Python's `SceneTarget` aligns its allocation as the native target does
+    (changes the frozen Python pictures of every scene-target mode); (c) a measured tolerance class for the bloom
+    grid's phase. The three 60 s takes and the offers smoke were stopped at this finding (each failing the same way).
+    - [ ] Lead's decision (21 Nov): (a). C++ (ABI 27, needs a GitHub build): the core member `u_scene_item`, every
+      composite form reading from the item's own pixel, the bloom's first downsample from it (`bloomTriangle`), the
+      `bloom_at_target_origin` control; proof `oscilloscope_check.py --rounds block item pixels offsets` (odd and even
+      offsets in each axis) and `--control old_origin` seen failing; then owner rule (a) on the 5.5 s replay. Input 360's
+      cause (a new stream's admission-rejected first frame left the previous mode's record and frame) is fixed in the
+      same build (`StreamSource::syncStream`). The three 60 s takes and the full Choice-offer runs wait for the fast-proof
+      tools (operator, 21 Nov: no long-take proofing before them).
+      Run on the ABI 27 build (21 Nov, `n5_1_oscilloscope/20261121_n51_oscilloscope_abi27/`, `20261121_owner_abi27/`):
+      the harness passes on both APIs with validation clean, offsets included (4 placements x dpr 1 and 1.5 x 16
+      frames: at most 2 levels from the item's own rect, rule (a) against Python on every placement). `old_origin`
+      failed as expected at all 8 (3 to 6 levels, about 33,000 to 56,000 masked pixels a frame). Owner smoke: the
+      Oscilloscope's inputs 0 to 336 pass rule (a) in both halves (at most 2 levels, at most 3 ties), and input 360 is
+      0. The run fails only on Bubble's frames after the switch (inputs 390 to 418, 11 to 12 ties) judged under the
+      Oscilloscope's tolerance (`owner_render_parity` judges the partner's frames under the run's mode: that tool's
+      owner decides). Glow 0 set (`..._abi27_glow_off/`, `..._abi27_item_glow_off/`): block, item, pixels and rule (b)
+      pass on both APIs (36 samples, at most 1 level). The item round needed two harness fixes: `item_key`, and a beam
+      width change at Glow 0.
+  - [ ] Layer C cost on a quiet machine (lead): `python native/core/python/oscilloscope_check.py --module-dir
+    release/native_module --require-validation --layer-path <layers> --label n51_oscilloscope_cost --rounds cost`. A
+    first round ran 21 Nov under concurrent load from two other agents' heavy runs (CPU 57 %), so its figures are not
+    clean (`..._abi27_cost/`). Median whole surface on Vulkan: 0.142 ms at 1440p and 0.249 ms at 4K. On OpenGL:
+    0.186 ms and 0.300 ms. The clear, bloom and composite take about 70 % of it. "4K" is capped at dpr 8 (3360 x 2240,
+    7.5 M pixels).
+  - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
+    its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
+    still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
+    composes it at startup, the route's `_ModeContent.load` reads its pack at every Oscilloscope bind (the program
+    ignores it), and `generic_mode_check.py`'s product-pack round admits it as "the Oscilloscope's" pack. Retire it with
+    its registry entry once the route no longer reads a mode's pack for a mode with its own program, and move the
+    harness's admission check to the beam's packs.
+  - [ ] Audit 10 H1 (blocks registration; `Docs/Future_Work/Checkpoint_Audits_Nov21.md`, checkpoint audit 10): the
+    Trace display fails owner rule (a) on ABI 27 (5.5 s, `--offers --runs oscilloscope:osc_display=0`: 429 of 546
+    frames, at most 8 levels, a glow wedge along the card's right edge). Python's `SceneTarget` keeps the beam's overrun
+    right of and above the item in its allocation's slack and cuts it left of and below; the native surface-sized target
+    holds 1 to 2 pixels of it on every side; the bloom spreads the difference into the item. Lead decides: (a) C++ ABI
+    28, the target is Python's own (origin the item's pixel, allocation the bucket of its rect, grow-only, drawn through
+    the window's viewport), or (b) Python's `SceneTarget` scissors its passes to its rect and the core scissors to
+    `u_scene_item`. Then: owner rule (a) for every display (`--offers`, 5.5 s), the offsets round over every sampled
+    frame, audit 10 L1's 64-multiple case rerun, and D12's bucket sentence corrected.
+    Lead chose (a); built as ABI 28 (eb3aabb30), run 21 Nov:
+    - Harness `n51_oscilloscope_abi28`: passes on both APIs. Rule (a) holds over 63 samples a ratio from all 7 runs
+      (Trace, Ring and Phase included), at most 2 levels, at most 4 ties. The offsets round's placements are
+      bit-identical to the item's own rect. `old_origin` failed at all 8 placements.
+    - `generic_mode_check` (M4 case): passes on both APIs.
+    - Owner `--offers` (`20261121_owner_offers_abi28/`): the Oscilloscope's shown inputs pass rule (a) in both halves
+      for Ring, Trace, Phase and audio block size 2.
+      - Every run but Phase fails on Bubble's frames after the switch (inputs 390 to 418), judged under the
+        Oscilloscope's tolerance (the owner tool's judging, its owner decides).
+      - Open: audio block sizes 0 and 3 exceed rule (a)'s tie count in the shown span (12 to 21 ties a frame at
+        2 levels, 52 + 28 and 42 + 28 frames); Graticule 0 fails one frame (167: 3 ties not isolated). Not the
+        overrun (placement-independent); cause not isolated.
+    - L1 rerun (`20261121_n51_audit10_edge_abi28/`): at 48/35 (a 576 x 384 item, whole buckets) rule (a) still fails
+      on OpenGL (13 to 14 ties, 2,260 masked one-level pixels a frame) and rule (b) one frame (2 ties not isolated);
+      32/35 passes rule (a). Cause not isolated; it was there at ABI 27 too.
+  - [ ] Audit 10 M1: `oscilloscope_check.py`'s offsets round places only the first 16 samples (Ring and Phase), and its
+    Python reference is drawn through a viewport the item's size (all overrun cut, unlike the product). Place every
+    sampled frame; draw the reference as the product does or state it is not the edge's oracle; run the box's owner
+    smoke with `--offers`. Control: the Trace owner run fails on ABI 27 (`20261121_audit10_owner_trace/`).
+  - [ ] Audit 10 M2: one owner of the item's pixel rect. `sceneItemRect` snaps at a fixed 1e-3 with no viewport clamp;
+    `item_pixel_rect` snaps within its float32 matrix's rounding and clamps. They disagree within about 1e-4 to 1e-3 of a
+    whole pixel (`snap_probe.py`: six of eight fractions), a one-pixel phase error. The core applies Python's rule
+    exactly, its test deriving every expectation from `item_pixel_rect` over near-integer fractions (or the card carries
+    one Python computation).
+  - [ ] Audit 10 M3 (before the first turned bloom consumer: Waveform Ribbon, Extruded Bubble, Neon Lake, Extruded
+    Spectrum): `u_scene_item`, `bloomTriangle` and the composite forms anchor in physical pixels, Python's turned scenes
+    in the turned frame (`_ORIENTED_COMPOSITES`' `sceneTexel`). Take the turn as Python does, or refuse a bloom or
+    composite program on a turned card until then; prove at quarters 1 to 3 with odd item sides.
+  - [ ] Audit 10 M4: a regression test for ABI 27's stale-stream fix: a new stream whose first frame the admission
+    rejects shows nothing of the old stream (`generic_mode_check.py` case or a module test, `stale_stream_probe.py`'s
+    steps), its negative control seen failing; the R number at merge.
+  - [ ] Turned-card anchoring for the Oscilloscope (from audit 10 M3, the lead 21 Nov): ABI 28 refuses a bloom or
+    composite step under a turned card (fail closed, the refusal's reason in the item's state), because a turned card's
+    native surface is turned against Python's physical `SceneTarget`, so its bloom pairs and its composite's texel and
+    dither key would be rotated. The Oscilloscope on a turned display is therefore refused (the route fades it out)
+    until this is built: the scene target in physical pixels (or the composite and first downsample taking the turn as
+    Python's `sceneTexel` does), proved at quarters 1 to 3 with odd item sides against the Python renderer. Required
+    before registration only if a turned display is offered.
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
   Bubble"). Owner rule (a) passes on the 5.5 s replay; on the four 60 s recorded takes, rejudged 21 Nov under today's

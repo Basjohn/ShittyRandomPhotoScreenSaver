@@ -151,9 +151,9 @@ def test_the_cores_conventions_are_the_faces(core, qt_app):
     assert core.mode_core_members() == MODE_CORE_MEMBERS
 
 
-def _bumped(value):
+def _bumped(value, *, whole: bool = False):
     if isinstance(value, list):
-        return [v + 1.25 for v in value]
+        return [v + (1.0 if whole else 1.25) for v in value]
     if isinstance(value, int):
         return (value + 1) % 4                       # the quarters
     return value + 0.25
@@ -167,14 +167,15 @@ def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_t
 
     card = {"quarters": 1, "item_size": [300.0, 160.0], "oriented_size": [160.0, 300.0], "dpr": 1.5,
             "content_fade": 0.5, "border_width": 2.0, "window_from_target": [0.0, 1.0, 10.0, -1.0, 0.0, 470.0],
-            "item_from_window": [0.0, 0.5, -3.0, -0.5, 0.0, 260.0]}
+            "item_from_window": [0.0, 0.5, -3.0, -0.5, 0.0, 260.0], "scene_item": [3.0, 4.0, 200.0, 100.0]}
     assert set(card) == set(MODE_CARD_KEYS)
     target = (451, 243)
     for name, (components, from_card) in MODE_CORE_MEMBERS.items():
         base = core.mode_core_values(name, card, target)
         assert len(base) == components, name
         moved_by = {key for key in card
-                    if core.mode_core_values(name, {**card, key: _bumped(card[key])}, target) != base}
+                    if core.mode_core_values(name, {**card, key: _bumped(card[key], whole=key == "scene_item")},
+                                             target) != base}
         assert bool(moved_by) == from_card, (name, moved_by)
         if from_card:
             assert core.mode_core_values(name, card, (target[0] + 3, target[1] + 5)) == base, name
@@ -183,6 +184,36 @@ def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_t
     # Control: a card-derived member is not constant (the check above can see a row that zero-fills).
     assert core.mode_core_values("u_fade", card, target) != core.mode_core_values("u_fade", {**card, "content_fade": 0.0},
                                                                                      target)
+
+
+def _placed_card(scene_item: list[float] | None) -> dict:
+    """An unturned card 420 x 280 logical at dpr 1.5 on a surface from window pixel (44, 44), with ``scene_item``."""
+    card = {"quarters": 0, "item_size": [420.0, 280.0], "oriented_size": [420.0, 280.0], "dpr": 1.5,
+            "content_fade": 1.0, "border_width": 0.0, "window_from_target": [1.0, 0.0, 44.0, 0.0, -1.0, 1576.0],
+            "item_from_window": [1.0 / 1.5, 0.0, -45.0 / 1.5, 0.0, -1.0 / 1.5, 1575.0 / 1.5]}
+    if scene_item is not None:
+        card["scene_item"] = scene_item
+    return card
+
+
+@pytest.mark.parametrize("scene_item", ([1.0, 0.0, 630.0, 420.0], [0.0, 1.0, 631.0, 421.0], [2.0, 3.0, 629.0, 419.0]))
+def test_the_scene_item_is_the_cards_own_rect(core, scene_item, qt_app):
+    # ABI 28 (checkpoint audit 10, M2: one owner): u_scene_item is the card's scene_item (Python's item_pixel_rect, the
+    # route's item_target_rect; tests/test_native_oscilloscope.py holds that against item_pixel_rect near whole pixels),
+    # never re-derived. Without one the item covers its target; the control bloom_at_target_origin is the target's
+    # origin and size (as before ABI 27). A fractional or empty rect is refused.
+    target = (640, 424)
+    assert tuple(core.mode_core_values("u_scene_item", _placed_card(scene_item), target)) == tuple(scene_item)
+    assert tuple(core.mode_core_values("u_scene_item", _placed_card(None), target)) == (0.0, 0.0, 640.0, 424.0)
+    assert core.module.stage_control("bloom_at_target_origin", True) is True
+    try:
+        assert tuple(core.mode_core_values("u_scene_item", _placed_card(scene_item), target)) == (0.0, 0.0, 640.0,
+                                                                                                    424.0)
+    finally:
+        core.module.stage_control("bloom_at_target_origin", False)
+    for bad in ([1.5, 0.0, 630.0, 420.0], [1.0, 0.0, 0.0, 420.0]):
+        with pytest.raises(ValueError, match="scene_item"):
+            core.mode_core_values("u_scene_item", _placed_card(bad), target)
 
 
 @pytest.mark.qt

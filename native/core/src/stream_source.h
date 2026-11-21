@@ -13,7 +13,8 @@
 //   stays;
 // - the drop edge (R-184) is the reader's own (dropRetainedFrame, applied by the next read);
 // - an unbind keeps the last admitted frame (audit N29 round 2, L3): the card fades out over it, never over a cleared
-//   target; a new stream's first sync clears it (nothing of the old stream is drawn under the new one);
+//   target; a new stream's first sync clears it (nothing of the old stream is drawn under the new one), whatever that
+//   first read is (ABI 27: an admission-rejected first frame cleared nothing before, and the old mode's frame showed);
 // - the report: the render thread copies the reader's counters into it when a read changed something (audit L9: the GUI
 //   thread never reads the reader's consumer-thread state; round 2 L2: a plain copy, the JSON is built on the GUI thread
 //   when the state is asked for), with the content's records, draws, refusals and failures;
@@ -126,6 +127,7 @@ private:
     QByteArray m_record;
     quint64 m_frameSerial = 0;              // N3.3
     bool m_hasFrame = false;
+    qint64 m_frameBind = 0;                 // ABI 27: the bind (m_binds) whose stream the frame came from
     bool m_streamBound = false;
 
     mutable QMutex m_reportMutex;           // guards the report
