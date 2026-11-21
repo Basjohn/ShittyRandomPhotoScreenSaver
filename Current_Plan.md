@@ -72,15 +72,15 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   human_heavy1 and nightsolong. The Oscilloscope partner control follows the Oscilloscope merge.
 - [ ] The Oscilloscope branch: an Opus High audit (agent a6c19089ac30a8e94, 21 Nov), then merge, an ABI 27 build of main, the quiet cost round, layer T.
 - [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
-  identical counts before the HUD fix; order-dependent bubble-normal failures too). The protected clip commits rule
+  identical counts before the HUD fix; order-dependent bubble-normal failures too). Sonnet agent a62cc0db13acbcc4d (21 Nov): root cause first. The protected clip commits rule
   applies: root cause first, never retune production to satisfy the oracle.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
 - [ ] High (Opus High): the Oscilloscope port (step 4), then N3.6. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
-- [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 2's
-  scene-fade fix, then step 3.
+- [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 3.
+- [ ] Second Medium (Opus Medium, while the High slot audits): step 2's scene-fade fix.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   hygiene item 6's closed-report cleanup, and the low-risk section 1E items.
@@ -901,7 +901,7 @@ the feature (D3D11 is not stated).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
 - [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking: the
-  scene-fade double-rounding fix, then a rerun as their control). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
+  scene-fade double-rounding fix, then a rerun as their control). Opus Medium agent a9931705e23b026a7 (21 Nov) on the scene-fade fix. Their landed parity was proved only on the 5.5 s Studio clip, which the owner
   replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
   - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
     support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
