@@ -78,13 +78,13 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High, core-critical C++): N3.6, then Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
+- [ ] High (Opus High, core-critical C++): N3.6 (agent ab5da4c3c451f82c5), then Waveform's C++ boxes (N5.4). The Oscilloscope's 60 s takes and
   layer L go to a Medium. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
-- [ ] Medium (Opus Medium): the 60 s reruns under the fast proof (Spline Curve, Spectrum, Bubble variant b), then
-  the Oscilloscope's 60 s takes and layer L; the lead runs layer T.
+- [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
+  layer L; the lead runs layer T. Then Spline Curve's two steady classes.
 - [ ] Second Medium (Opus Medium): step 3 continues: the hero reject is merged (-40 % OpenGL, -52 % Vulkan at 4K);
-  next the wake loop's byte-identical bound, now the largest stage.
+  next the wake loop's byte-identical bound, now the largest stage (agent abbcd68ea9219da70).
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   and hygiene (item 6).
@@ -544,7 +544,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a quiet
     GPU, record load/clocks before and after, and review median margins plus the D5.3 tail watch. The available-GPU
     proof validates the harness, not quiet-GPU performance admission.
-- [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
+- [ ] N3.6 Lifetime (Opus High agent ab5da4c3c451f82c5, 21 Nov): lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
   audit rerun on it. On a lost device the Vulkan backend's `VK_EXT_device_fault` detail (vendor fault codes and
