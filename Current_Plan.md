@@ -907,6 +907,13 @@ the feature (D3D11 is not stated).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
+  - [ ] Source reading first (Sonnet, research only, no code), as the Oscilloscope's: the record each frame carries
+    (what is per frame from the logical frame, what is per Settings or card change), each stream's size rule, every
+    pass with its targets and attachments (the five compute passes, the three rings, the planar reflection, the fog
+    volume, the floor and pulse-rim textures, bloom if any), how it turns (Waveform is a turned scene consumer: the
+    Oscilloscope's turned-card anchoring box serves it), and its clear. Then confirm in writing, against the ABI 28 core
+    (`native/core/src`, `Docs/Future_Work/Native_Core_P3_Decisions.md` D12-D17), what the port needs that the core
+    lacks: one C++ box each here, with what its proof must show. Cite file and line for every claim.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
