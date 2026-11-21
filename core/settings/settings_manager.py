@@ -169,6 +169,12 @@ class SettingsManager(QObject):
             logger.exception("Legacy 3D Detail migration failed; refusing to replace the selected tier")
             raise
 
+        try:
+            self._migrate_widget_opacity_base_before_defaults()
+        except Exception:
+            logger.exception("Widget Opacity base migration failed; refusing to shift the stored look")
+            raise
+
         # Upgrade the retired Visualizer enabled-id list *before* current defaults
         # are merged. Otherwise mode_activation defaults would mask the old user
         # selection before the one compatibility seam can preserve it.
@@ -458,6 +464,25 @@ class SettingsManager(QObject):
                 SCENE3D_TRANSITIONS_DETAIL_KEY,
                 migrated[1] or "General",
             )
+
+    def _migrate_widget_opacity_base_before_defaults(self) -> None:
+        """Re-express a stored Widget Opacity from the new base before defaults can mask it."""
+
+        from core.settings.widget_opacity_base_input_compat import bridge_widget_opacity_base
+        with self._lock:
+            raw_widgets = self._settings.value("widgets", None)
+            if not isinstance(raw_widgets, Mapping):
+                return
+            raw_global = raw_widgets.get("global")
+            if not isinstance(raw_global, Mapping):
+                return
+            bridged, changed = bridge_widget_opacity_base(raw_global)
+            if not changed:
+                return
+            self._settings.setValue("widgets", {**raw_widgets, "global": bridged})
+            self._settings.sync()
+            self._clear_cache_locked()
+        logger.info("Migrated stored Widget Opacity to the base-relative offset")
 
     def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:
         """Preserve old per-mode dormancy before current defaults can mask it.

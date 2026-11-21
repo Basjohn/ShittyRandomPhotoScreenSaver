@@ -159,10 +159,9 @@ They affect surface fills/tints, never text, borders, shadow or whole-widget fad
 final floor. Widget adjustment reaches ordinary cards, material children, the Visualizer card and Context Menu.
 Endpoints express maximum transparency/density subject to legibility, not whole-card fade. `SurfaceContrast.js`
 derives each panel's reference ratio from its steady ink RGB/effective alpha at style edges, with headroom for grain
-and chromatic compositing; it does no per-frame/per-fragment search. Media supplies its
-playback-state ink (including the item's actual opacity); every other card, Gmail included (its own timestamp ink
-was retired on 20 Nov 2026: it gave Gmail a denser panel on light themes and a thinner one on dark), conservatively
-admits faint themed ink.
+and chromatic compositing; it does no per-frame/per-fragment search. Every card conservatively admits faint themed ink;
+no family supplies its own legibility ink (Gmail's timestamp ink was retired on 20 Nov 2026 and Media's playback-state ink
+on 21 Nov 2026: each gave its card a denser panel on one theme polarity than Feeds, Reddit and Weather).
 Text-bearing child controls use their full icon/text ink; textless volume surfaces omit the panel entirely. The former
 fixed 7:1 encoded-RGB calculation is historical evidence, not the current shader ratio. Settings resolves a combined surface-density target, then corrects actual semantic ink with small-text
 antialiasing headroom; its ink guard does not restore panel density. Pixel bars still enforce 4.5:1 for Gmail/Media faint runs.

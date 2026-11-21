@@ -1022,7 +1022,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         slider.setRange(-100, 100)
         slider.setValue(round(resolve_opacity_adjust(widgets_config, target) * 100))
         slider.setToolTip(
-            "-1 = maximum transparency, 0 = current surface density, +1 = maximum "
+            "-1 = maximum transparency, 0 = " + ("the theme's base density" if target == "widget"
+                                          else "current surface density") + ", +1 = maximum "
             "density. This adjusts only the named surface; text, borders, "
             "shadows and the surrounding widget are unaffected."
         )
@@ -1354,4 +1355,6 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
         slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
         global_config[f"{target}_opacity_adjust"] = (slider.value() / 100 if slider is not None
             else resolve_opacity_adjust(existing_widgets, target))
+    from core.settings.widget_opacity_base_input_compat import OPACITY_BASE_VERSION, OPACITY_BASE_VERSION_KEY
+    global_config[OPACITY_BASE_VERSION_KEY] = OPACITY_BASE_VERSION
     return shadows_config, global_config

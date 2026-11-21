@@ -355,7 +355,8 @@ def test_widget_override_is_projected_at_the_family_style_seam():
     assert result.card_style.border_color == style.card_style.border_color
     config["global"]["surface_material"] = "glass"
     material = with_surface_material(style, config, "clock")
-    assert material.card_style.surface_opacity_adjust == -.4
+    from core.settings.surface_opacity import effective_opacity_adjust
+    assert material.card_style.surface_opacity_adjust == effective_opacity_adjust(config, "widget")
     assert material.card_style.background_color == style.card_style.background_color
 
 

@@ -147,9 +147,11 @@ bool StreamSource::syncStream()
     m_syncProbe.hit(); // D5.4: the read's thread, and whether it held a Python thread state
     releaseRetired();  // the render-thread retire job
     PacketReader *current = nullptr;
+    qint64 bind = 0;
     {
         QMutexLocker lock(&m_mutex);
         current = m_current;
+        bind = m_binds;
     }
     bool accepted = false;
     bool rejected = false;
@@ -159,6 +161,14 @@ bool StreamSource::syncStream()
     bool snapshot = false;
     m_streamBound = current != nullptr;
     if (current) {
+        if (m_hasFrame && m_frameBind != bind) {
+            // Another stream bound (ABI 27; N5.1 owner rule (a), the Oscilloscope's switch to Bubble): nothing of the old
+            // one is drawn under it, whatever the new one's first read is. Before, only a new stream holding nothing
+            // cleared it, so a first frame the admission rejected left the old mode's record in place: the next record
+            // packed it under the new schema, was refused, and the target showed the old mode's last frame.
+            m_hasFrame = false;
+            changed = true;
+        }
         const ReadResult read = current->read(); // the accept edge (D2), on the render thread
         result = QString::fromLatin1(readResultName(read));
         SlotHead head;
@@ -178,6 +188,7 @@ bool StreamSource::syncStream()
             std::memcpy(m_record.data(), retained->constData(), size_t(retained->size()));
             ++m_frameSerial;    // N3.3: a compute entry's frame trigger
             m_hasFrame = true;
+            m_frameBind = bind;
             accepted = true;
             changed = true;
         } else if (m_hasFrame && !holds) {

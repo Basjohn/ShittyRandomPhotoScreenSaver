@@ -101,9 +101,15 @@ ShaderEffect {
         || GraphicsInfo.api === GraphicsInfo.Direct3D11 || GraphicsInfo.api === GraphicsInfo.Direct3D12
         || GraphicsInfo.api === GraphicsInfo.Metal
     readonly property vector4d srpssConventions: Qt.vector4d(targetRowsTopDown ? 1.0 : 0.0, 0.0, 0.0, 0.0)
-    readonly property real targetPixelRatio: Window.window ? Window.window.devicePixelRatio : 1.0
+    // A host whose window has no screen of the render target's ratio (the hidden render host) names the target's own.
+    readonly property real targetPixelRatio: Window.window
+        ? (Window.window.srpssRenderPixelRatio || Window.window.devicePixelRatio) : 1.0
     readonly property vector2d targetPx: Qt.vector2d(Math.round(Window.width * targetPixelRatio),
                                                      Math.round(Window.height * targetPixelRatio))
+    // The shader snaps a card's border to whole device pixels (floor(w * ratio + 0.5) / ratio, the rule Qt applies to a
+    // Rectangle border and the Visualizer's content clip applies to its inset), so every MaterialSurface border meets
+    // the content it frames with no overlap and no seam. Guarded: a ratio of 0 would divide by zero.
+    readonly property real borderPixelRatio: Math.max(0.01, targetPixelRatio)
 
     blending: true
     vertexShader: "shaders/surface_material.vert.qsb"

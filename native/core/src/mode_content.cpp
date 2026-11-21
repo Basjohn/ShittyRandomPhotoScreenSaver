@@ -70,8 +70,65 @@ void valueTargetPixels(const ModeCard &, const QSize &target, double *out)
     out[0] = target.width();
     out[1] = target.height();
 }
+void valueSceneItem(const ModeCard &card, const QSize &target, double *out)
+{
+    if (bloomAtTargetOrigin()) {               // the harness's negative control: the target's origin, as before ABI 27
+        out[0] = 0.0;
+        out[1] = 0.0;
+        out[2] = target.width();
+        out[3] = target.height();
+        return;
+    }
+    sceneItemRect(card, out);
+    if (out[2] <= 0.0 || out[3] <= 0.0) {     // no card (a harness probe): the whole target, as before ABI 27
+        out[0] = 0.0;
+        out[1] = 0.0;
+        out[2] = target.width();
+        out[3] = target.height();
+    }
+}
 
 } // namespace
+
+// ABI 27 (the lead's decision, 21 Nov; N5.1 owner rule (a)): Python's SceneTarget starts at the item's own device pixel
+// (item_pixel_rect: the item quad's outward cover of whole window pixels), so its bloom pairs pixels and counts rows from
+// there. ABI 28 (checkpoint audit 10, M2: one owner): the rect is Python's own, computed once by the route
+// (rendering/native/spectrum.py item_target_rect: item_pixel_rect of Qt's float32 item matrix, mapped into the target's
+// pixels) and carried by the card; the core never re-derives it (its own snap disagreed near whole pixels). Without one:
+// nothing (zeros), so the caller reads the whole target.
+void sceneItemRect(const ModeCard &card, double *out)
+{
+    for (int i = 0; i < 4; ++i)
+        out[i] = card.valid && card.hasSceneItem ? card.sceneItem[i] : 0.0;
+}
+
+bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &surface, ModeCard *sceneCard,
+                 QSize *sceneSize)
+{
+    *sceneCard = card;
+    *sceneSize = surface;
+    if (!card.valid || !card.hasSceneItem || (card.quarters & 3) != 0 || bloomAtTargetOrigin())
+        return false;
+    bool composite = false;
+    for (const ModePass &pass : program.passes)
+        composite = composite || pass.stage == StageKind::Composite;
+    if (!composite)
+        return false;
+    const int iw = int(card.sceneItem[2]);
+    const int ih = int(card.sceneItem[3]);
+    const QSize size(bucketPixels(iw), bucketPixels(ih));
+    // The scene's target pixel (tx, ty) (top-first rows, the item's at its content's bottom left) is the surface's
+    // (tx + left, ty + top - (H - h)); window_from_target maps the surface's to the window's, exactly (whole pixels).
+    const double dx = card.sceneItem[0];
+    const double dy = card.sceneItem[1] - double(size.height() - ih);
+    const double *w = card.windowFromTarget;
+    sceneCard->windowFromTarget[2] = w[0] * dx + w[1] * dy + w[2];
+    sceneCard->windowFromTarget[5] = w[3] * dx + w[4] * dy + w[5];
+    sceneCard->sceneItem[0] = 0.0;
+    sceneCard->sceneItem[1] = double(size.height() - ih);
+    *sceneSize = size;
+    return true;
+}
 
 // The core's conventions (mode_content.h): the members the Python renderers of Spectrum, Spline Curve and Bubble compute
 // per frame from the card and their target (implementations/spectrum.py spectrum_settings_values, devcurve.py and
@@ -95,6 +152,9 @@ const ModeCoreMember kModeCoreMembers[] = {
     { "u_window_from_target_x", 3, true, valueWindowFromTargetX }, // the target's pixel -> the window's (whole-pixel, exact)
     { "u_window_from_target_y", 3, true, valueWindowFromTargetY },
     { "u_target_px", 2, false, valueTargetPixels },           // the target's pixels (the core's own)
+    // ABI 27: the item's cover in the target's pixels (left, top, width, height; sceneItemRect): where Python's
+    // SceneTarget starts, read by the composite step (its texel, glow and dither from the item's own pixel).
+    { "u_scene_item", 4, true, valueSceneItem },
     // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
     // 2 L7's scan of implementations/oscilloscope.py).
     { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
@@ -134,6 +194,10 @@ constexpr float kFullTriangle[6] = { -1.0f, -1.0f, 3.0f, -1.0f, -1.0f, 3.0f };
 // the item quad's (vUv: y up), so a pass reads the one it names (mode_content.h) through its own vertex input layout.
 constexpr int kVertexFloats = 6;
 constexpr int kTriangleFloats = 3 * kVertexFloats;
+// The card's, a target's own, the scene's card's (ABI 28: sceneAnchor), each bloom step's first downsample's.
+constexpr int kSceneTriangle = 2;
+constexpr int kFirstBloomTriangle = 3;
+constexpr int kTriangles = kFirstBloomTriangle + kMaxBloomStages;
 constexpr quint32 kUvDownOffset = 2 * sizeof(float);
 constexpr quint32 kUvUpOffset = 4 * sizeof(float);
 constexpr const char kConventionsBlock[] = "SrpssConventions";
@@ -1922,7 +1986,8 @@ bool ModeCard::fromJson(const QByteArray &json, ModeCard *out, QString *error)
     const QJsonObject o = document.object();
     const QStringList keys = { QStringLiteral("quarters"), QStringLiteral("item_size"), QStringLiteral("oriented_size"),
                                QStringLiteral("dpr"), QStringLiteral("content_fade"), QStringLiteral("border_width"),
-                               QStringLiteral("window_from_target"), QStringLiteral("item_from_window") };
+                               QStringLiteral("window_from_target"), QStringLiteral("item_from_window"),
+                               QStringLiteral("scene_item") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown card key '%1' (%2)").arg(it.key(), keys.join(QStringLiteral(", ")));
@@ -1942,6 +2007,19 @@ bool ModeCard::fromJson(const QByteArray &json, ModeCard *out, QString *error)
         || !readNumbers(o, "window_from_target", c.windowFromTarget, 6, error)
         || !readNumbers(o, "item_from_window", c.itemFromWindow, 6, error))
         return false;
+    // ABI 28 (checkpoint audit 10, M2): the item's cover in the target's pixels, Python's own item_pixel_rect carried
+    // by the card (one owner); optional: without it the item covers its target (a harness card on the item's rect).
+    if (o.contains(QStringLiteral("scene_item"))) {
+        if (!readNumbers(o, "scene_item", c.sceneItem, 4, error))
+            return false;
+        for (int i = 0; i < 4; ++i) {
+            if (c.sceneItem[i] != std::floor(c.sceneItem[i]) || (i >= 2 && c.sceneItem[i] < 1.0)) {
+                *error = QStringLiteral("'scene_item' is whole pixels (left, top, width, height), its size at least 1");
+                return false;
+            }
+        }
+        c.hasSceneItem = true;
+    }
     c.valid = true;
     *out = c;
     return true;
@@ -1959,6 +2037,8 @@ QJsonObject ModeCard::toJson() const
     o.insert(QStringLiteral("border_width"), borderWidth);
     o.insert(QStringLiteral("window_from_target"), numbersJson(windowFromTarget, 6));
     o.insert(QStringLiteral("item_from_window"), numbersJson(itemFromWindow, 6));
+    if (hasSceneItem)
+        o.insert(QStringLiteral("scene_item"), numbersJson(sceneItem, 4));
     return o;
 }
 
@@ -1968,7 +2048,8 @@ bool ModeCard::operator==(const ModeCard &o) const
         && borderWidth == o.borderWidth && std::memcmp(itemSize, o.itemSize, sizeof itemSize) == 0
         && std::memcmp(orientedSize, o.orientedSize, sizeof orientedSize) == 0
         && std::memcmp(windowFromTarget, o.windowFromTarget, sizeof windowFromTarget) == 0
-        && std::memcmp(itemFromWindow, o.itemFromWindow, sizeof itemFromWindow) == 0;
+        && std::memcmp(itemFromWindow, o.itemFromWindow, sizeof itemFromWindow) == 0
+        && hasSceneItem == o.hasSceneItem && std::memcmp(sceneItem, o.sceneItem, sizeof sceneItem) == 0;
 }
 
 // ------------------------------------------------------------------------------------------------- blends
@@ -2064,8 +2145,10 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     const bool withStreams = root.contains(QStringLiteral("streams")); // N3.2
     const bool withBuffers = root.contains(QStringLiteral("buffers")); // N3.3
     const bool withImages = root.contains(QStringLiteral("images"));   // N3.3
+    const bool withUnread = root.contains(QStringLiteral("unread"));   // ABI 26
     if (parse.error != QJsonParseError::NoError || !document.isObject()
         || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0) + (withBuffers ? 1 : 0) + (withImages ? 1 : 0)
+                              + (withUnread ? 1 : 0)
         || declared.isEmpty() || declared.size() > kMaxModePasses) {
         *error = QStringLiteral("a mode's program is {\"passes\": [{\"name\", \"blend\"}, ...], \"targets\" (optional): "
                                 "[...]} with 1 to %1 passes").arg(kMaxModePasses);
@@ -2089,6 +2172,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     }
     qsizetype packIndex = 0;
     ModeProgram program;
+    // ABI 26: the record's fields this program reads nowhere (checked against the record in check()).
+    if (withUnread) {
+        const QJsonValue unread = root.value(QStringLiteral("unread"));
+        if (!unread.isArray() || unread.toArray().size() > kMaxModeUnread) {
+            *error = QStringLiteral("\"unread\" is a list of at most %1 record field names").arg(kMaxModeUnread);
+            return false;
+        }
+        for (const QJsonValue &entry : unread.toArray()) {
+            const QByteArray name = entry.toString().toLatin1();
+            if (!entry.isString() || name.isEmpty() || program.unread.contains(name)) {
+                *error = QStringLiteral("\"unread\" names each record field once, by its name");
+                return false;
+            }
+            program.unread.append(name);
+        }
+    }
     // N3.2: the streams (a record field each), before the passes that bind them.
     if (withStreams) {
         const QJsonValue streams = root.value(QStringLiteral("streams"));
@@ -2614,6 +2713,10 @@ QJsonObject ModeProgram::toJson() const
     for (const TargetDeclaration &target : targets)
         declaredTargets.append(target.toJson());
     o.insert(QStringLiteral("targets"), declaredTargets);
+    QJsonArray declaredUnread; // ABI 26
+    for (const QByteArray &name : unread)
+        declaredUnread.append(QString::fromLatin1(name));
+    o.insert(QStringLiteral("unread"), declaredUnread);
     return o;
 }
 
@@ -2659,15 +2762,38 @@ bool ModeProgram::hasCompute() const
 }
 
 void ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized,
-                                  QList<QSize> *out) const
+                                  QList<QSize> *out, const QSize &scene) const
 {
     const QList<TargetDeclaration> &list = sized && sized->size() == targets.size() ? *sized : targets;
     out->resize(passes.size());               // in place: no allocation once the capacity holds the passes
     for (qsizetype p = 0; p < passes.size(); ++p) {
         const ModePass &pass = passes.at(p);
         const TargetDeclaration *target = pass.target >= 0 ? &list.at(pass.target) : nullptr;
-        (*out)[p] = target && !target->surfaceSized() ? target->size : surface;
+        (*out)[p] = !target ? surface : !target->surfaceSized() ? target->size : scene.isEmpty() ? surface : scene;
     }
+}
+
+bool ModeProgram::drawsSurfaceSizedScene(int p) const
+{
+    if (p < 0 || p >= int(passes.size()))
+        return false;
+    const int t = passes.at(p).target;
+    return t >= 0 && t < int(targets.size()) && targets.at(t).surfaceSized();
+}
+
+QString ModeProgram::turnedStagesRefusal(const ModeCard &card) const
+{
+    if (!card.valid || (card.quarters & 3) == 0)
+        return QString();
+    for (const ModePass &pass : passes) {
+        if (pass.stage == StageKind::Bloom || pass.stage == StageKind::Composite) {
+            return QStringLiteral("refused: pass '%1' is a %2 step under a turned card (quarters %3); the item-anchored "
+                                  "bloom and composite are built for an unturned scene only: a turned card's surface is turned "
+                                  "against Python's SceneTarget (checkpoint audit 10, M3)")
+                .arg(QString::fromLatin1(pass.name), stageKindName(pass.stage)).arg(card.quarters);
+        }
+    }
+    return QString();
 }
 
 QString ModeProgram::textureFits(const QByteArray &texture, bool mips) const
@@ -2879,6 +3005,23 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
         }
     }
     if (schema) {
+        // ABI 26: each unread name is a field of the record that the program reads nowhere (never a way to leave a read
+        // field unchecked, never a name the record lacks).
+        for (const QByteArray &name : unread) {
+            bool field = false;
+            for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                field = name == schema->fields[i].name;
+            if (!field) {
+                *error = QStringLiteral("unknown: the program leaves '%1' unread, which is no field of the record")
+                             .arg(QString::fromLatin1(name));
+                return false;
+            }
+            if (declares(name) || drawNames(name) || streamReads(name)) {
+                *error = QStringLiteral("the program leaves the record's field '%1' unread, yet a pass, draw or stream "
+                                        "reads it").arg(QString::fromLatin1(name));
+                return false;
+            }
+        }
         for (quint32 i = 0; i < schema->fieldCount; ++i) {
             const fa::Field &field = schema->fields[i];
             const QByteArray name(field.name);
@@ -2887,6 +3030,8 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                              .arg(QString::fromLatin1(name));
                 return false;
             }
+            if (unread.contains(name))
+                continue;                     // read by no pass of this program, by its declaration (checked above)
             if (!declares(name) && !drawNames(name) && !streamReads(name)) {
                 *error = QStringLiteral("unknown: the record's field '%1' is no pass's member, draw count or stream "
                                         "(an unknown name is refused)").arg(QString::fromLatin1(name));
@@ -3112,8 +3257,14 @@ bool ModeProgram::packSettings(const QJsonObject &settings, QList<BlockValues> *
 
 bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, const ModeCard &card,
                             const QSize &surfaceTarget, QList<BlockValues> &blocks, QString *error,
-                            const QList<QSize> *passTargets, const float *clipCorrection) const
+                            const QList<QSize> *passTargets, const float *clipCorrection,
+                            const ModeCard *sceneCard) const
 {
+    const QString turned = turnedStagesRefusal(card);
+    if (!turned.isEmpty()) {
+        *error = turned;                      // M3: fail closed, reported once per run of refusals
+        return false;
+    }
     if (quint32(record.size()) != schema.recordBytes) {
         *error = QStringLiteral("a %1-byte record is not schema 0x%2's %3").arg(record.size())
                      .arg(schema.schemaId, 0, 16).arg(schema.recordBytes);
@@ -3129,6 +3280,8 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
         if (!pass.block.valid())
             continue;
         const QSize target = passTargets && p < passTargets->size() ? passTargets->at(p) : surfaceTarget;
+        // ABI 28: a pass into a surface-sized scene target draws under the scene's card (sceneAnchor).
+        const ModeCard &passCard = sceneCard && drawsSurfaceSizedScene(p) ? *sceneCard : card;
         BlockValues &block = blocks[p];
         for (quint32 i = 0; i < schema.fieldCount; ++i) {
             const fa::Field &field = schema.fields[i];
@@ -3140,12 +3293,13 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
             int count = 0;
             if (pass.ownVertex() && member.name == "uMatrix") {
                 // N3.2 (D15 choice H): item pixels to the drawn target's clip space, corrected once.
-                itemClipMatrix(card, target, clipCorrection, values);
+                itemClipMatrix(passCard, target, clipCorrection, values);
                 if (!block.set(member.name, values, 16, error))
                     return false;
                 continue;
             }
-            if (modeCoreValues(member.name, card, target, values, &count) && !block.set(member.name, values, count, error))
+            if (modeCoreValues(member.name, passCard, target, values, &count)
+                && !block.set(member.name, values, count, error))
                 return false;
         }
         const QStringList unfilled = block.unfilled();
@@ -3174,8 +3328,17 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
         return false;
     }
     QList<BlockValues> blocks;
+    // ABI 28: the product's own geometry (sceneAnchor): a pass into a surface-sized scene target at the scene's card and
+    // content.
+    ModeCard sceneCard;
+    QSize sceneSize;
+    const bool anchored = sceneAnchor(program, card, target, &sceneCard, &sceneSize);
+    QList<QSize> passTargets;
+    if (anchored)
+        program.passTargetSizes(target, nullptr, &passTargets, sceneSize);
     if (!program.packSettings(settings, &blocks, reason)
-        || !program.packFrame(schema.schema(), record, card, target, blocks, reason, nullptr, clipCorrection))
+        || !program.packFrame(schema.schema(), record, card, target, blocks, reason, anchored ? &passTargets : nullptr,
+                              clipCorrection, anchored ? &sceneCard : nullptr))
         return false;
     blocksOut->clear();
     QJsonArray passes;
@@ -3877,8 +4040,9 @@ struct ModeContent::Resources
     };
     NearestResolve nearest[kMaxSceneTargets][kNearestSlots];
     // The vertices uploaded: the card's triangle (fullTriangle for the drawn card and the surface), then (N3.1) the
-    // triangle of an explicit-size target (its own uv, no card).
-    float triangle[2 * kTriangleFloats] = {};
+    // triangle of an explicit-size target (its own uv, no card), then (ABI 27) each bloom step's first downsample's
+    // (its own uv moved to the item's own pixel: bloomTriangle).
+    float triangle[kTriangles * kTriangleFloats] = {};
     bool triangleUploaded = false;
     bool staticUploaded = false;
     bool targetsUploaded = false; // N3.1: the clears' values and the captures' blocks
@@ -4410,10 +4574,31 @@ QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *t
     }
     for (const BlockValues &block : m_blocks)
         s.append(block.bytes());
-    s.append(reinterpret_cast<const char *>(triangle), qsizetype(2 * kTriangleFloats * sizeof(float)));
+    s.append(reinterpret_cast<const char *>(triangle), qsizetype(kTriangles * kTriangleFloats * sizeof(float)));
     put(m_targets.objectGeneration());       // N3.1: a scene target made again draws again
     put(m_meshes.objects());                 // N3.2: a mesh made or gone draws again
     return s;
+}
+
+void ModeContent::bloomTriangle(const BloomSpec &spec, const ModeCard &sceneCard, const float *own, float *out) const
+{
+    std::memcpy(out, own, size_t(kTriangleFloats) * sizeof(float));
+    const SceneTargets::Target *source = m_targets.target(spec.source);
+    if (!source || !source->decl.surfaceSized() || source->allocation.isEmpty() || bloomAtTargetOrigin())
+        return;
+    double item[4];
+    sceneItemRect(sceneCard, item);
+    if (item[2] <= 0.0 || item[3] <= 0.0)
+        return;
+    // The source's content lies at its allocation's left columns and bottom rows (D14 point 2); vUv runs up from the
+    // allocation's bottom row, as Python's uv over its own allocation, which starts at the item's pixel.
+    const double below = double(source->content.height()) - item[1] - item[3];
+    const float du = float(item[0] / double(source->allocation.width()));
+    const float dv = float(below / double(source->allocation.height()));
+    for (int i = 0; i < 3; ++i) {
+        out[i * kVertexFloats + 4] += du;
+        out[i * kVertexFloats + 5] += dv;
+    }
 }
 
 bool ModeContent::texturesReady() const
@@ -4462,13 +4647,19 @@ void ModeContent::pack(QRhi *rhi, const ColorTarget &target)
     const fa::Schema &schema = still ? stillSchema() : source.drawnSchema()->schema();
     // N3.1: each pass's target size, filled in place, for a program with targets only (N2.9's: the surface's for all).
     const QList<QSize> *passTargets = nullptr;
+    // ABI 28: a surface-sized scene target of a program with a composite step takes Python's SceneTarget geometry.
+    ModeCard sceneCard;
+    QSize sceneSize;
+    const bool anchored = sceneAnchor(program, source.drawnCard(), target.texture->pixelSize(), &sceneCard, &sceneSize);
     if (!program.targets.isEmpty()) {
-        program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets(), &m_passTargets);
+        program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets(), &m_passTargets,
+                                anchored ? sceneSize : QSize());
         passTargets = &m_passTargets;
     }
     const QMatrix4x4 correction = targetCorrection(rhi); // N3.2: a vertex stage's uMatrix, corrected once (rule 1)
     if (!program.packFrame(schema, still ? QByteArray() : source.frameRecord(), source.drawnCard(),
-                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets, correction.constData())) {
+                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets, correction.constData(),
+                           anchored ? &sceneCard : nullptr)) {
         m_refused = true;                     // a value with no defined conversion: the frame is refused (M4)
         m_blocksGeneration = 0;               // the next frame starts from the packed settings again
         return;
@@ -6156,7 +6347,11 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
         return true;                          // nothing declared, nothing held: no work (N2.9's programs)
     decideTransparencyGate(rhi);              // N3.4 (D17 point 3): at its edge only
     bool relayout = false;
-    bool ok = m_targets.sync(rhi, declared, target.texture->pixelSize(), &relayout, error);
+    // ABI 28: a surface-sized scene target of a program with a composite step holds Python's SceneTarget content.
+    ModeCard sceneCard;
+    QSize sceneSize;
+    sceneAnchor(m_source->drawnProgram(), m_source->drawnCard(), target.texture->pixelSize(), &sceneCard, &sceneSize);
+    bool ok = m_targets.sync(rhi, declared, sceneSize, &relayout, error);
     if (relayout)
         releasePipelines();                   // before the descriptors they were built over go (allocateStep)
     bool done = m_targets.complete();
@@ -6265,6 +6460,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     const QRect surfaceViewport(QPoint(), size);
     const QRhiCommandBuffer::VertexInput cardInput(r.vertices.get(), 0);
     const QRhiCommandBuffer::VertexInput ownInput(r.vertices.get(), quint32(kTriangleFloats * sizeof(float)));
+    const QRhiCommandBuffer::VertexInput sceneInput(r.vertices.get(),
+                                                    quint32(kSceneTriangle * kTriangleFloats * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
     bool surfaceOpened = false;
     bool cleared[kMaxSceneTargets] = {};
@@ -6303,8 +6500,16 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             continue;
         }
         if (pass.stage == StageKind::Bloom) {
-            // N3.4 (D17 point 4): the chain, each level a render pass of its own, outside any run.
-            m_post.recordBloom(rhi, cb, i, ownInput, &pending);
+            // N3.4 (D17 point 4): the chain, each level a render pass of its own, outside any run; ABI 27: its first
+            // downsample from the item's own pixel (bloomTriangle).
+            int n = 0;
+            while (n < int(m_bloomSpecs.size()) && m_bloomSpecs.at(n).pass != i)
+                ++n;
+            const QRhiCommandBuffer::VertexInput firstInput(
+                r.vertices.get(), n < kMaxBloomStages && n < int(m_bloomSpecs.size())
+                                      ? quint32((kFirstBloomTriangle + n) * kTriangleFloats * sizeof(float))
+                                      : quint32(kTriangleFloats * sizeof(float)));
+            m_post.recordBloom(rhi, cb, i, ownInput, firstInput, &pending);
             ++i;
             continue;
         }
@@ -6363,7 +6568,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // Harness only: a full-allocation viewport makes a quad extend into slack independently of clip-volume
             // clipping. The scissor remains the content rect; the product always uses v for both.
             const QRect viewport = sceneOversizeViewport() ? QRect(QPoint(), t.allocation) : v;
-            const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? cardInput : ownInput;
+            const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? sceneInput : ownInput;
             for (int k = i; k <= last; ++k)
                 drawPass(rhi, cb, k, viewport, input, v); // N3.2
             cb->endPass();
@@ -6462,9 +6667,18 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
-    float triangle[2 * kTriangleFloats];
+    float triangle[kTriangles * kTriangleFloats] = {};
     fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
     fullTriangle(rhi, ModeCard(), target.texture->pixelSize(), triangle + kTriangleFloats); // N3.1: a target's own uv
+    // ABI 28: a surface-sized scene target's passes draw under the scene's card over its content (sceneAnchor); the
+    // card's own triangle when the program is not anchored.
+    ModeCard sceneCard;
+    QSize sceneSize;
+    sceneAnchor(m_source->drawnProgram(), m_source->drawnCard(), target.texture->pixelSize(), &sceneCard, &sceneSize);
+    fullTriangle(rhi, sceneCard, sceneSize, triangle + kSceneTriangle * kTriangleFloats);
+    for (int n = 0; n < int(m_bloomSpecs.size()) && n < kMaxBloomStages; ++n)
+        bloomTriangle(m_bloomSpecs.at(n), sceneCard, triangle + kTriangleFloats,
+                      triangle + (kFirstBloomTriangle + n) * kTriangleFloats);
     m_keptTarget = false;
     const bool readback = m_source->targetReadRequests() != m_targetReadsDone; // N3.1, harness
     if (draw && m_source->drawnStill()) {

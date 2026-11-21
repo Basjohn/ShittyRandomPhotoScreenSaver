@@ -109,7 +109,9 @@
 // "blend" as a full declaration ({"color": [op, src, dst], "alpha": [...]}) beside the presets. The vertex stage's inputs
 // bind by name to the mesh's and the instance source's attributes; its outputs carry the fragment's inputs by location.
 // Its block is the pass's own (the same block in both stages when both declare it), and it may read the conventions
-// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each). Every block of
+// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each), and (ABI 26)
+// the record's fields it reads nowhere ({"unread": [...]}: a stage the program leaves out reads them, as the
+// Oscilloscope's Glow 0 program leaves the bloom strength; any other unread field is refused). Every block of
 // the content (the passes', the conventions, the clears', the captures', the nearest resolves') lives in one block arena
 // given as dynamic offsets; firstInstance is always 0. The core member uMatrix (item pixels, the item's own unrotated
 // coordinates, to the drawn target's clip space, corrected once: conventions.h rule 1) is filled for a pass with its own
@@ -183,6 +185,7 @@
 namespace srpss_core {
 
 constexpr int kMaxModePasses = 16; // N3.1: a 3D scene's passes and captures (8 before)
+constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;
 class ItemNotifier;
@@ -215,6 +218,9 @@ struct ModeCard
     double borderWidth = 0.0;
     double windowFromTarget[6] = {};
     double itemFromWindow[6] = {};
+    // ABI 28: Python's item_pixel_rect in the target's pixels (left, top, width, height; top-first rows), when given.
+    bool hasSceneItem = false;
+    double sceneItem[4] = {};
 
     static bool fromJson(const QByteArray &json, ModeCard *out, QString *error);
     QJsonObject toJson() const;
@@ -225,6 +231,23 @@ struct ModeCard
 // The core member's numbers for this card and target (false: the member is not a core member, or its row has no
 // values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
+
+// ABI 27: the item's cover in a target's pixels from the card alone (left, top, width, height; top-first rows): Python's
+// item_pixel_rect, where its SceneTarget starts. Zeros without a card. The core member u_scene_item and the bloom
+// step's first downsample read it (mode_content.cpp).
+void sceneItemRect(const ModeCard &card, double out[4]);
+
+struct ModeProgram;
+// ABI 28 (checkpoint audit 10, H1; the lead's decision (a)): Python's SceneTarget geometry for a program with a
+// composite step (Python's SceneTarget). Its scene targets of the surface's size take Python's own geometry: the
+// item's pixel at the content's bottom left, the content the 64-pixel bucket of the item's cover (Python's allocation).
+// A pass's light past the item's right and top edges then lands in the target as it does in Python's allocation slack,
+// and nothing lands left of or below the item. `sceneCard` is the card those passes draw under (window_from_target
+// moved to the target's pixels; scene_item the item's place in it); `sceneSize` is the content. Returns false, with the
+// card and the surface as they are, for a program without a composite step, a card without the item's rect, a turned
+// card (refused at the pack: M3), or the bloom_at_target_origin control.
+bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &surface, ModeCard *sceneCard,
+                 QSize *sceneSize);
 
 // N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
 enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
@@ -368,6 +391,10 @@ struct ModeProgram
     QList<StreamDeclaration> streams; // N3.2: its streams (a record field each)
     QList<StorageBufferDeclaration> buffers; // N3.3: its storage buffers
     QList<StorageImageDeclaration> images;   // N3.3: its storage images
+    // ABI 26 (N5.1, the Oscilloscope's Glow 0): the record's fields the program reads nowhere ({"unread": [...]}: a
+    // stage it leaves out reads them), each a field of the record that no pass, draw or stream reads; any other record
+    // field no pass reads is refused as before.
+    QList<QByteArray> unread;
     // N3.2: the numbers of the settings the draws name (counts and selectors), set where the settings are admitted.
     QHash<QByteArray, double> drawSettings;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
@@ -412,11 +439,18 @@ struct ModeProgram
     // the uMatrix of a pass with its own vertex stage.
     bool packFrame(const frame_abi::Schema &schema, const QByteArray &record, const ModeCard &card, const QSize &target,
                    QList<BlockValues> &blocks, QString *error, const QList<QSize> *passTargets = nullptr,
-                   const float *clipCorrection = nullptr) const;
-    // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's)
-    // under `targets` (the program's own when null: ModeSource::drawnTargets carries the sizes set since), into `out`
-    // in place (audit 2, M5: no new list per frame once its capacity holds the passes).
-    void passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets, QList<QSize> *out) const;
+                   const float *clipCorrection = nullptr, const ModeCard *sceneCard = nullptr) const;
+    // ABI 28: whether pass `p` draws into a scene target of the surface's size (sceneAnchor's: its card is the scene's).
+    bool drawsSurfaceSizedScene(int p) const;
+    // M3 (checkpoint audit 10): a bloom or composite step under a turned card is refused (its anchoring is built for an
+    // unturned scene only, until a turned consumer builds it); the reason, or empty.
+    QString turnedStagesRefusal(const ModeCard &card) const;
+    // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's,
+    // or `scene` when given: sceneAnchor's content) under `targets` (the program's own when null: ModeSource::drawnTargets
+    // carries the sizes set since), into `out` in place (audit 2, M5: no new list per frame once its capacity holds the
+    // passes).
+    void passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets, QList<QSize> *out,
+                         const QSize &scene = QSize()) const;
 };
 
 // GPU-free: what the content uploads for one record (each pass's block bytes), with the same refusals; `facts` names
@@ -779,6 +813,12 @@ private:
     bool texturesReady() const;
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).
     QByteArray stillSignature(const ColorTarget &target, const float *triangle) const;
+    // ABI 27: a bloom step's first downsample's triangle: the target's own (`own`) with its uv moved by the item's place
+    // in its surface-sized source (ABI 28: `sceneCard`'s, sceneAnchor: the item at the content's origin, no move;
+    // sceneItemRect: columns from the left, rows under the item, over the source's
+    // allocation), so level 0 pairs the pixels Python's SceneTarget pairs from the item's own pixel; `own` itself for a
+    // source of explicit size, no card, or the bloom_at_target_origin control.
+    void bloomTriangle(const BloomSpec &spec, const ModeCard &sceneCard, const float *own, float *out) const;
     GpuTexture *slot(const QByteArray &name);
     GpuTexture *front(const QByteArray &name);
     const GpuTexture *front(const QByteArray &name) const;

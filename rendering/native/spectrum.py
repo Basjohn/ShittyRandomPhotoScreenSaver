@@ -75,9 +75,34 @@ def compose_window_from_target(window_rows, target_origin: tuple[float, float],
     return composed
 
 
+def item_target_rect(matrix: tuple, item_size: tuple[float, float], window_pixels: tuple[int, int],
+                     window_from_target) -> list[float]:
+    """The Python renderer's ``item_pixel_rect`` (its SceneTarget's rect: the item quad's outward cover of whole window
+    pixels, from Qt's float32 item ``matrix``) in the target's pixels (left, top, width, height; top-first rows): the
+    card's ``scene_item``, the core's one source of the item's rect (ABI 28; checkpoint audit 10, M2).
+    ``window_from_target`` maps the target's pixel to the window's exactly (whole pixels), so its inverse is exact."""
+    from types import SimpleNamespace
+
+    from rendering.quick.scene3d.frame import item_pixel_rect
+
+    frame = SimpleNamespace(matrix_values=tuple(float(v) for v in matrix),
+                            logical_size=(float(item_size[0]), float(item_size[1])),
+                            viewport=(0, 0, int(window_pixels[0]), int(window_pixels[1])))
+    left, bottom, width, height = item_pixel_rect(frame)
+    a, b, c, d, e, f = (float(v) for v in window_from_target)
+    det = a * e - b * d
+    xs, ys = [], []
+    for wx, wy in ((left, bottom), (left + width, bottom + height)):
+        u, v = wx - c, wy - f
+        xs.append((e * u - b * v) / det)
+        ys.append((a * v - d * u) / det)
+    x0, y0 = round(min(xs)), round(min(ys))
+    return [float(x0), float(y0), float(round(max(xs)) - x0), float(round(max(ys)) - y0)]
+
+
 def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, window_size: tuple[float, float],
                           window_pixels: tuple[int, int], host_origin: tuple[float, float] | None = None,
-                          item_origin: tuple[float, float] | None = None) -> dict:
+                          item_origin: tuple[float, float] | None = None, scene_item: bool = False) -> dict:
     """The card as the native Spectrum draws it: ``presentation`` (a ``ResolvedVisualizerPresentation``) through its
     composite ``geometry``, in a window of ``window_size`` (logical) and ``window_pixels`` (its framebuffer). The item
     is the Python renderer's: the card's outer size, its content placed against the outer rect, the item itself lying
@@ -125,7 +150,12 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
             raise ValueError("the card's window map is degenerate")
         rows[single] = mapping
     window_from_target = compose_window_from_target(rows[False], (target[0], target[1]), oriented_ratio)
-    return {
+    extra = {}
+    if scene_item:
+        # ABI 28 (the generic item's card): Python's SceneTarget rect, from the same float32 matrix as the rows above.
+        extra["scene_item"] = item_target_rect(_ortho_item_matrix(window_size, (window_x, window_y), single=True),
+                                               item_size, window_pixels, window_from_target)
+    return extra | {
         "quarters": quarters,
         "item_size": [outer_width, outer_height],
         "oriented_size": list(oriented_size),

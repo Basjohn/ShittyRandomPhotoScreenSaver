@@ -374,7 +374,8 @@ def test_umatrix_follows_the_cards_rotation_and_window_map(core, mb_packs, monke
     matrix.scale(1.3, -0.9, 1.0)
     parameters = {"osc_display": "Trace", "osc_flare": 0.2, "osc_pulse": 0.3, "osc_glow": 0.0,
                   "osc_beam_width": 2.0, "osc_beam_color": (90, 170, 230, 255), "osc_spectral": 0.0,
-                  "osc_graticule": "Off", "osc_beam_glow_color": (120, 180, 240, 255), "osc_analog": 0.5}
+                  "osc_graticule": "Off", "osc_beam_glow_color": (120, 180, 240, 255), "osc_analog": 0.5,
+                  "osc_graticule_color": (200, 200, 200, 60)}
     state = OscilloscopeFrame(points=struct.pack("<4f", -0.5, 0.2, 0.5, -0.2), trace_alphas=(1.0,),
                               parameters=parameters)
     renderer = osc.QuickOscilloscopeRenderer()
@@ -400,10 +401,11 @@ def test_umatrix_follows_the_cards_rotation_and_window_map(core, mb_packs, monke
         renderer.render(frame)
         values = renderer._resources.values("beam")
         python_matrix = values["uMatrix"]
-        mapping = item_from_fragment(python_matrix, frame.viewport, item_size, values["uQuarters"], values["uOriented"])
+        mapping = item_from_fragment(python_matrix, frame.viewport, item_size, values["uContentRotationQuarters"],
+                                     values["u_resolution"])
         assert mapping is not None
         card = dict(probe_rings.harness_card(item_size, 1.5), quarters=quarters,
-                    oriented_size=list(values["uOriented"]), item_from_window=[*mapping[0], *mapping[1]],
+                    oriented_size=list(values["u_resolution"]), item_from_window=[*mapping[0], *mapping[1]],
                     window_from_target=[1, 0, origin[0], 0, -1, target[1] - origin[1]])
         expected = []
         for x, y in points:
@@ -411,7 +413,7 @@ def test_umatrix_follows_the_cards_rotation_and_window_map(core, mb_packs, monke
             window = ((clip[0] + 1) * target[0] / 2, (clip[1] + 1) * target[1] / 2, 1)
             oriented = logical_uv_from_physical_uv((x / item_size[0], y / item_size[1]), quarters)
             assert [sum(row[i] * window[i] for i in range(3)) for row in mapping] == pytest.approx(
-                [oriented[i] * values["uOriented"][i] for i in range(2)], abs=1e-5)
+                [oriented[i] * values["u_resolution"][i] for i in range(2)], abs=1e-5)
             expected.append([clip[0] - 2 * origin[0] / target[0], clip[1] + 2 * origin[1] / target[1], *clip[2:]])
 
         def assert_matches(shown):

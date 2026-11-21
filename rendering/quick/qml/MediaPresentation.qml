@@ -4,8 +4,6 @@ import "MediaArtworkRule.js" as ArtworkRule
 
 OverlayWidget {
     id: mediaRoot
-    cardSurfaceLegibilityInk: Qt.rgba(playbackState.color.r, playbackState.color.g, playbackState.color.b,
-                                     playbackState.color.a * playbackState.opacity)
     objectName: "mediaPresentation"
 
 

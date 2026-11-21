@@ -820,6 +820,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                         'header_surface_mode': 'inherit',
                         'header_surface_opacity_adjust': 0.0,
                         'media_controls_opacity_adjust': 0.0,
+                        'opacity_base_version': 1,
                         'settings_opacity_adjust': 0.0,
                         'widget_opacity_adjust': 0.0},
              'gmail': {'account_slot': '0',

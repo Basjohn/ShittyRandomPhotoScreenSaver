@@ -103,6 +103,10 @@ void setSkipBloomPrime(bool skip);              // the bloom upsample's rule C p
 bool skipBloomPrime();
 void setBloomSameTexture(bool same);            // an upsample samples the level it draws into (read at a build)
 bool bloomSameTexture();
+// ABI 27's negative control: the bloom's grid and the composite's texel anchored at the target's origin again (as before
+// ABI 27), not at the item's own pixel (u_scene_item reads the whole target; read per record).
+void setBloomAtTargetOrigin(bool atOrigin);
+bool bloomAtTargetOrigin();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)
@@ -215,9 +219,11 @@ public:
     int live() const;
 
     // Record (outside any pass): the bloom step `pass`'s chain, each level a render pass of its own; `triangle` the core's
-    // triangle (its own uv). `pending`: the record's uploads, handed to the first pass and nulled.
+    // triangle (its own uv); `firstTriangle` the first downsample's (ABI 27: its uv from the item's own pixel, so level 0
+    // pairs the source's pixels as Python's SceneTarget does). `pending`: the record's uploads, handed to the first pass
+    // and nulled.
     void recordBloom(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
-                     QRhiResourceUpdateBatch **pending);
+                     const QRhiCommandBuffer::VertexInput &firstTriangle, QRhiResourceUpdateBatch **pending);
     // Record: the defocus step `pass`'s clip (its own render pass, the layer's mips generated first in `mips`), then,
     // inside the onto target's render pass the caller has begun, its gather and sprites. The arena's offsets are the
     // step's block and the conventions.

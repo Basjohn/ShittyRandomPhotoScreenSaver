@@ -1661,8 +1661,8 @@ class DisplayManager(QObject):
         )
 
         baseline_material = resolve_global_surface_material(self._widgets_config_snapshot)
-        from core.settings.surface_opacity import resolve_opacity_adjust
-        opacity_adjust = resolve_opacity_adjust(self._widgets_config_snapshot, "widget")
+        from core.settings.surface_opacity import effective_opacity_adjust, resolve_opacity_adjust
+        opacity_adjust = effective_opacity_adjust(self._widgets_config_snapshot, "widget")
         unit.runtime.scene_controller.apply_context_menu_surface_material(baseline_material, opacity_adjust)
         # The Visualizer has independent frame chrome: share the ordinary widget
         # border choice while leaving its foreground pixels above the card face.

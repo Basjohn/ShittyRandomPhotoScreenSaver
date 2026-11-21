@@ -995,6 +995,74 @@ empty pair (two passes into the 64 x 64 target, no instance; its cost does not d
 OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
 p90s in the evidence.
 
+**As built: Oscilloscope (N5.1, ABI 27: Glow 0's unread field at 26, the item-anchored bloom at 27; not yet
+registered).** The first consumer of
+N3.4's bloom and composite, and the first instanced pass over a storage stream in a product mode. Its record is a
+runtime schema (`core/visualizer_engine/oscilloscope_native_schema.py`, 49,376 bytes, version 1; field names follow the
+core's identifier rule, lowercase): what follows the music, from the logical frame alone (`oscilloscope_frame_values`:
+each trace's alpha, the points per trace, the flare's widening `1 + 0.9 flare`, the brightness, the white-hot centre,
+the beam colour under Spectral, the composite's `u_bloom_strength`), the traces' points as a storage stream
+(`osc_points`, 16 x 384 float32 pairs, only the used floats written) and two draw counts (`osc_segments`, the beam's
+instances; `osc_graticule_vertices`, 4 or 0). Everything that follows the Settings and the card is a setting
+(`oscilloscope_settings_values`); the reach, the Trace's overrun past the item and the focus length mix the two, so the
+converted beam shader derives them from the settings' base values and the record's widening (checklist 16: both
+renderers draw the files `widgets/spotify_visualizer/shaders/oscilloscope_*`; against the shader as it was, 65 pixels
+of 270 sampled frames moved by one level, `n5_1_oscilloscope/20261120_shader_conversion/`). Every read of the points is
+clamped to the buffer's own length (no robust access). Its program (`native_route.oscilloscope_program`) is the
+graticule (one quad) and the beam (an instanced quad a segment) into a surface-sized single-sample overlay target,
+blended MAX on every attachment, then with Glow the bloom from the emission and the `overlay_glow` composite, else the
+target's colour alone and the `overlay` composite: two variants of one program, chosen at the Settings edge
+(`GENERIC_MODE_PROGRAM_VARIANTS`, D17 choice E), each fragment shipped with and without the emission output. The Glow 0
+variant names `u_bloom_strength` in its `"unread"` (ABI 26), so one record serves both. Proved by
+`native/core/python/oscilloscope_check.py` (the generic modes' rounds of `devcurve_check.py`): both passes' blocks byte
+for byte over the 2,513 frames of the widened run set (9 runs; 2,154 drawing the graticule); the item's contract on both
+APIs; rule (a) on OpenGL against the Python renderer under the composite's tolerance (63 sampled frames at dpr 1 and
+1.5: worst 71 one-level pixels on the mask, one tie at 2 levels); rule (b), Vulkan against native OpenGL over the 126
+sampled frames: every differing pixel on the mask, at most 103 a frame, one level but for ties at two levels (the bloom's
+float16 chain, two compilers), at most 2 a frame, no scatter. Rule (b)'s bound (the lead's decision, 21 Nov): 3 ties a
+frame at 2 levels, no scatter (the measured worst, 2, times 1.5; `oscilloscope_check.VULKAN_RULE_B`). The mask is the
+reference's translucent pixels and, with Glow, every pixel it lights (the
+glow is light the composite adds over the card with alpha untouched: D12 point 2's "pixels a blended layer sums into").
+Validation clean; its five negative controls each fail in their own process (the flare widening nudged, the live
+trace's alpha dropped, the beam's edge narrowed, the bloom strength dropped, the skipped release). Evidence
+`n5_1_oscilloscope/20261120_n51_oscilloscope/`. Owner rule (a) did not pass at ABI 26: the bloom grid was anchored at
+the target's origin, and the route's quad-aligned surface puts the content one pixel into it where Python's
+`SceneTarget` starts at the item's own pixel, so the glow differed by up to 5 levels (`20261121_owner_variant_a/`).
+*The lead's decision (21 Nov): Python is the oracle and a systematic offset is not a tolerance class*, so the core
+anchors the grid at the item's own pixel (ABI 27, every bloom consumer): the core member `u_scene_item` is the item's
+cover in the drawn target's pixels from the card alone (`sceneItemRect`: Python's `item_pixel_rect`, outward to whole
+pixels); every composite form reads its texel, its glow and its dither key from there and draws nothing outside the item
+(as Python's `uOrigin`/`uExtent`); a bloom step from a surface-sized target draws its first downsample over a triangle
+whose uv starts at the item's pixel (`bloomTriangle`), so level 0 pairs Python's pixels and rows (the levels are
+Python's sizes while the surface stays in the item's 64-pixel bucket). An item that covers its target is drawn as
+before. Proof: `oscilloscope_check.py --rounds ... offsets` (odd and even offsets in each axis against the item's own
+rect and the Python renderer); negative control `old_origin` (stage_control `bloom_at_target_origin`). On the build (21
+Nov, `20261121_n51_oscilloscope_abi27/`): every placement within 2 levels of the item's own rect on both APIs, and rule
+(a) against Python on all of them; the control fails at all 8 (3 to 6 levels). The owner's 5.5 s replay then passes
+rule (a) over the Oscilloscope's shown inputs (at most 2 levels, at most 3 ties a frame; `20261121_owner_abi27/`). Owner rule (a)'s
+fade input 360 (10 levels) was not a fade rule: at the switch to Bubble the generic item's new stream rejected its first
+frame at admission, the core kept the Oscilloscope's record, packed it under Bubble's schema (refused) and showed the
+Oscilloscope's last frame; ABI 27 clears the old stream's frame at a new stream's first sync whatever that read is (the
+Python render host draws nothing for that frame: its content fade is 0).
+*Checkpoint audit 10 and the lead's decisions (21 Nov), ABI 28.* ABI 27 anchored the grid's phase but not what the
+target holds past the item: Python's `SceneTarget` draws through the window's viewport with no scissor, so a pass's
+light past the item's right and top edges lands in its allocation's slack (the bucket of the item, less the item) and is
+bloomed back into the item, while the native target (the quad-aligned surface) held a pixel or two of it on every side.
+The Trace display (its beam runs past the item) failed owner rule (a) at 8 levels (H1). The parenthesis above was
+wrong: what moves the glow is that light, not the bucket. Option (a): a surface-sized scene target of a program with a
+composite step takes Python's own geometry (`sceneAnchor`): the item's pixel at its content's bottom left, the content
+the 64-pixel bucket of the item's cover, its passes drawn under a card moved into its pixels, and the composite forms
+read the scene at the item's texel. So it holds exactly the light Python's allocation holds. The allocation still
+follows D14's rule: Python's grows only, so after an item shrinks by two buckets or more the native allocation is
+smaller than Python's (recorded, not matched). The item's rect has one owner (M2): the card's `scene_item`, Python's
+`item_pixel_rect` of Qt's float32 item matrix mapped into the target (`rendering/native/spectrum.py item_target_rect`).
+The core no longer re-derives it, because its own 1e-3 snap disagreed near whole pixels. A bloom or composite step under
+a turned card is refused (M3): the native surface of a turned card is itself turned against Python's physical
+`SceneTarget`, so the Oscilloscope on a turned display is refused until its turned anchoring is built (the plan's box).
+`oscilloscope_check.py` now draws its Python reference in a window 72 pixels larger than the item on every side (an
+item-sized window had cut the overrun on every side) and places every display (M1). On ABI 27 it fails as it should:
+rule (a) on OpenGL at both ratios, and the offsets round at every placement (`20261121_n51_oscilloscope_m1_abi27/`).
+
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
 premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:

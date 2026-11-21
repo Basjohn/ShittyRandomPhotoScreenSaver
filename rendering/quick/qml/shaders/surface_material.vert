@@ -35,6 +35,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 borderGlassLegibility;
     vec4 srpssConventions;   // row orientation for target fragment coordinates
     vec2 targetPx;
+    float borderPixelRatio;
 };
 out gl_PerVertex { vec4 gl_Position; };
 void main() {

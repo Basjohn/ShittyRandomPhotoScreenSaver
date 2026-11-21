@@ -399,12 +399,13 @@ class Stream:
     def expect(self) -> dict:
         return {**IDENTITY, "mode_code": _mode().MODE_CODE}
 
-    def publish(self, payload: bytes, timestamp: float) -> int:
+    def publish(self, payload: bytes, timestamp: float, *, present: bool = True) -> int:
+        """``present`` False: a slot that is not a present frame (the admission rejects it, the Python node's rule)."""
         from core.visualizer_engine.packet_abi import FLAG_PRESENT_FRAME
 
         pr = _mode()
         return self.writer.publish(payload, payload_schema=pr.SCHEMA.schema_id, logical_timestamp=timestamp,
-                                   flags=FLAG_PRESENT_FRAME, mode_code=pr.MODE_CODE, **IDENTITY)
+                                   flags=FLAG_PRESENT_FRAME if present else 0, mode_code=pr.MODE_CODE, **IDENTITY)
 
     def close(self) -> None:
         if self.closed:
@@ -803,6 +804,31 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
             bright(last) > 0 and int(np.abs(after_unbind.astype(int) - last.astype(int)).max()) == 0
             and unbound.get("bound") is False)
         checks["a_new_stream_clears_the_frame_of_the_old_one"] = bright(cleared) == 0.0
+        # ABI 27 (checkpoint audit 10, M4): a new stream whose first frame the admission rejects (not a present frame)
+        # draws nothing of the old stream either; before ABI 27 the old record stayed and the old frame showed (the
+        # Oscilloscope's switch to Bubble, owner input 360). Then its first present frame draws.
+        drawn_before = show(sample)
+        rejected_stream = Stream()
+        try:
+            scene.mode.bind(rejected_stream.name, pr.SCHEMA, expect=rejected_stream.expect)
+            rejected_stream.publish(pr.record(sample), float(step[0]), present=False)
+            step[0] += 1
+            scene.mode.update()
+            after_rejected = scene.read()
+            rejected_state = scene.mode.state()
+            rejected_stream.publish(pr.record(sample), float(step[0]))
+            step[0] += 1
+            scene.mode.update()
+            after_present = scene.read()
+        finally:
+            rejected_stream.close()
+        scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
+        checks["a_new_stream_whose_first_frame_is_rejected_shows_nothing_of_the_old_one"] = (
+            bright(drawn_before) > 0 and bright(after_rejected) == 0.0
+            and int(rejected_state.get("admission_rejected") or 0) > 0 and rejected_state.get("has_frame") is False)
+        checks["its_first_present_frame_draws"] = bright(after_present) > 0
+        facts["rejected_first_frame"] = {k: rejected_state.get(k) for k in ("has_frame", "admission_rejected",
+                                                                             "accepted", "draws")}
         # The fade (M1; round 2 L7: its pixels): a hide fades the item out through intermediate frames, never at once,
         # and a show fades it back in to the frame it had.
         shown = show(sample)

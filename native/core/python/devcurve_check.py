@@ -134,6 +134,13 @@ def control_record(record: bytes) -> bytes:
     return record
 
 
+def reference_mask(reference):
+    """The one-level class's mask of a sampled frame, derived from the Python reference drawn into a transparent
+    target (D12 "The pixel tolerance"): its translucent pixels, read from its own alpha. A mode whose layers sum light
+    into pixels its alpha does not cover (the Oscilloscope's glow) names its own."""
+    return pt.translucent_by_alpha(reference)
+
+
 def item_settings_change(settings: dict) -> dict:
     """Rule (g)'s Settings change: a layer colour and its outline width."""
     changed = dict(settings)
@@ -246,6 +253,11 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
     return records, samples
 
 
+#: The Python reference's window margin (device pixels; ``spectrum_check.python_references``): 0 draws it in a window
+#: the item's size. A mode whose renderer draws past its item into a SceneTarget sets it (the Oscilloscope).
+REFERENCE_MARGIN = 0
+
+
 def python_references(samples, dpr: float) -> list:
     """The Python renderer's own draw of each sampled frame at ``dpr`` into a transparent target the item's size
     (top-down RGBA): ``spectrum_check.python_references`` with the snapshot's presentation at that ratio."""
@@ -257,7 +269,7 @@ def python_references(samples, dpr: float) -> list:
     for index, snapshot, logical_size, quarters in samples:
         presentation = dataclasses.replace(snapshot.presentation, dpr=float(dpr))
         moved.append((index, dataclasses.replace(snapshot, presentation=presentation), logical_size, quarters))
-    return spectrum_check.python_references(moved)
+    return spectrum_check.python_references(moved, REFERENCE_MARGIN)
 
 
 # --------------------------------------------------------------------------------------------------------- block
@@ -409,17 +421,35 @@ class Scene:
         self.mode = core.mode(self.content)
         self.programmed = False
 
-    def place(self, entry: dict, dpr: float, stream: Stream | None = None) -> dict:
+    def place(self, entry: dict, dpr: float, stream: Stream | None = None,
+              margins: tuple[int, int, int, int] | None = None) -> dict:
         """The item at ``entry``'s card under ``dpr`` (its target on the item's own rect, no coverage: the Python
         reference draws the whole item too): the program with the settings the first time (then the stream), else the
-        settings."""
+        settings. ``margins`` (left, top, right, bottom device pixels, an unrotated item only): the target larger than
+        the item by these, the item inside it at (left, top), as the route's quad-aligned surface holds it (ABI 27's
+        proof); the read stays the item's own rect."""
         import spectrum_check
 
         card = spectrum_check._card_for_item(dict(entry["card"], dpr=float(dpr)))
         width, height = card["item_size"]
-        self.mode.composite.set(rect=[0.0, 0.0, width, height], coverage=None, quarters=int(card["quarters"]),
-                                visible=True)
-        shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target")})
+        rect = [0.0, 0.0, width, height]
+        # ABI 28: the item's rect in the target (the card's scene_item, Python's item_pixel_rect): the item's own rect
+        # here, at (left, top) with margins; the reference draws the item on whole pixels.
+        card["scene_item"] = [0.0, 0.0, *(float(v) for v in card["target_size"])]
+        if margins is not None:
+            from rendering.native.spectrum import compose_window_from_target
+
+            if int(card["quarters"]) % 4:
+                raise ValueError("an offset placement is for an unrotated item")
+            left, top, right, bottom = (int(v) for v in margins)
+            rows = (card["item_from_window"][:3], card["item_from_window"][3:])
+            card = dict(card, window_from_target=compose_window_from_target(rows, (-left / dpr, -top / dpr), dpr),
+                        target_size=[card["target_size"][0] + left + right, card["target_size"][1] + top + bottom],
+                        scene_item=[float(left), float(top), *card["scene_item"][2:]])
+            rect = [-left / dpr, -top / dpr, width + (left + right) / dpr, height + (top + bottom) / dpr]
+        self.mode.composite.set(rect=rect, coverage=None, quarters=int(card["quarters"]), visible=True)
+        shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target",
+                                                                   "scene_item")})
         self.mode.card(shown)
         program_item(self.mode, entry, dpr, not self.programmed)
         if not self.programmed:
@@ -481,8 +511,7 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 level = int(delta.max())
                 if level:
                     # The reference is drawn into a transparent target: its own alpha is the translucency mask.
-                    verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3],
-                                                  pixel_tolerance.translucent_by_alpha(reference), MODE_ID)
+                    verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3], reference_mask(reference), MODE_ID)
                     verdict["index"] = index
                     judged.append(verdict)
                     stats["differing"] += 1
@@ -558,7 +587,7 @@ def vulkan_against_opengl(out: Path, control: str | None = None) -> dict:
             continue
         compared += 1
         verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B,
-                           mask=pt.translucent_by_alpha(refs[key]))
+                           mask=reference_mask(refs[key]))
         judged.append(verdict)
         differing += int(verdict["differing"] > 0)
         max_level = max(max_level, int(verdict["max_level"]))
@@ -592,8 +621,18 @@ def _find_key(value, key: str) -> list:
     return found
 
 
+def item_key(records: list) -> str:
+    """The run the item round draws (and ``_save`` keeps for the other API): the mode's default run; a run set without
+    one (the Oscilloscope's Glow 0 runs, keyed by their change) its first run."""
+    drawn = [entry for entry in records if entry is not None]
+    if any(entry["key"] == MODE_ID for entry in drawn):
+        return MODE_ID
+    return drawn[0]["key"] if drawn else MODE_ID
+
+
 def round_item(core, engine, app, host, records: list[dict]) -> dict:
-    chosen = [entry for entry in records if entry is not None and entry["key"] == MODE_ID][:ITEM_FRAMES]
+    key = item_key(records)
+    chosen = [entry for entry in records if entry is not None and entry["key"] == key][:ITEM_FRAMES]
     dpr = 1.5
     host.set_device_pixel_ratio(dpr)
     scene = Scene(core, engine, host)
@@ -735,7 +774,8 @@ def _save(out: Path, records: list[dict], references: dict) -> None:
     work = _work(out)
     # Only the frames another API draws: the sampled ones and the item round's (the rest are held as None).
     kept = {index for refs in references.values() for index, _rows, _q in refs}
-    kept |= {index for index in [i for i, entry in enumerate(records) if entry["key"] == MODE_ID][:ITEM_FRAMES]}
+    key = item_key(records)
+    kept |= {index for index in [i for i, entry in enumerate(records) if entry["key"] == key][:ITEM_FRAMES]}
     rows = [None if index not in kept else
             {key: (base64.b64encode(value).decode("ascii") if isinstance(value, bytes) else value)
              for key, value in entry.items() if key != "python_block"} for index, entry in enumerate(records)]

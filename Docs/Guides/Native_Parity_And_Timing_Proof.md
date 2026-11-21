@@ -188,11 +188,20 @@ decision, recorded with its reason.
     lifecycle windows excluded; `tools/quick_frame_cadence.py` computes them today), and per-pass GPU time from
     `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
-- **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
-  (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies
-  on it.
+- **Method proof** (Bubble, 21 Nov): the coverage windows caught input 22, the offer fade frame 337 and the one-level
+  shift, every window frame hash-identical to the continuous run's, but missed the one-ulp shader change
+  (`ulp_ring` flips 3 frames per full take, none in a window). A one-ulp change flips only pixels on a rounding
+  boundary, and no record predicts those frames. Evidence: `.artifacts/evidence/native_core/fast_proof/20261121_method_*`.
+- **The split this sets (lead, 21 Nov):** what changed decides the material.
+  - A shader, core or optimisation change, and every port's acceptance: a native-only run over each full take, every
+    frame judged against the cached Python references (a frame hash-identical to the accepted native baseline needs
+    no rejudge). Coverage windows never stand in for this.
+  - Python references: drawn once per take on the full continuous run and cached; redrawn only when their cache key
+    changes. The slow full-path replay (Python drawn alongside) exists only to draw or redraw them.
+  - Coverage windows: for record- and settings-driven classes (settings sweeps, offers, partner and switch frames),
+    where a full take per setting is unaffordable; the late-song window stays required.
 - **Once proven, it is the default** (operator, 20 Nov). After the fast tools pass their identical-verdict check and
   the method proof above, every port and every optimisation uses them: the cheaper judge, cached Python references,
-  native-only hash runs and coverage windows. The slow full-path replay stays only as the fallback for a mode where the
-  method proof fails. The tools are kept long term as the optimisation parity aid and the control in section 6, and
+  native-only hash runs and coverage windows, each for what the split above gives it. The slow full-path replay
+  stays only to draw references. The tools are kept long term as the optimisation parity aid and the control in section 6, and
   are never retired as "temporary".

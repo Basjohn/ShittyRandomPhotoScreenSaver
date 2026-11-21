@@ -2019,6 +2019,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSkipBloomPrime(value);
     else if (control == "bloom_same_texture")
         srpss_core::setBloomSameTexture(value);
+    else if (control == "bloom_at_target_origin")
+        srpss_core::setBloomAtTargetOrigin(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")
@@ -3009,7 +3011,9 @@ PyMethodDef methods[] = {
       "negative control); [] restores them." },
     { "stage_control", stage_control, METH_VARARGS,
       "(name, on) -> bool: N3.4, harness: a D17 negative control by name (skip_blend_gate, blend_formats_missing, "
-      "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, skip_stage_release, "
+      "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, "
+      "bloom_at_target_origin (ABI 27's control: the bloom grid and composite texel at the target's origin), "
+      "skip_stage_release, "
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
       "flush_defocus_between_draws, flush_defocus_after_sprites, declare_defocus_external, "
       "disable_defocus_compute_tracking (OpenGL; latter requires no compute passes), device_without_independent_blend: read at the next device's "
