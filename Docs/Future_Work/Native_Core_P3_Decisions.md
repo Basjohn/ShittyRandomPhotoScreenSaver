@@ -35,8 +35,8 @@ The scopes overlap and must not be added.
 | Full admitted pre-SMP native/compositor/primitive programme | 20–35% | 65–80% |
 
 The foundation already supplies hosts, frame/packet services, generic programs, compositing, targets, mesh/buffer,
-compute, post stages and async jobs. Spectrum, Spline Curve and Bubble use native routes (Bubble registered and
-offered on Vulkan since 17 Nov; its live run and long-take proofs remain, plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
+compute, post stages and async jobs. Spectrum, Spline Curve, Bubble and the Oscilloscope use native routes (Bubble registered and
+offered on Vulkan since 17 Nov, its live run and long-take proofs remain; the Oscilloscope since 21 Nov; plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
 Studio/tools migration and installed acceptance remain. The full scope additionally includes admitted N6 high-potential
 primitives and compositor/material work before SMP. Conditional mesh-shader work and low-potential primitives
 without a consumer are not an indefinite blocker. `Current_Plan.md` owns admission and ordering; the actual routes
@@ -799,7 +799,7 @@ stays selectable in Settings as the fallback.
 - Facts J1 in the owner: `native_hidden_host` creates the process's one hidden host at the first request, keeps it,
   refuses another size, and closes it at the application's quit (a process ending with it alive did not exit).
 - Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
-  family), every Visualizer mode but Spectrum (N2.5, 14 Nov: `renderer_backends` `("opengl", "vulkan")`, drawn by
+  family), every Visualizer mode but Spectrum, Spline Curve, Bubble and the Oscilloscope (Spectrum N2.5, 14 Nov: `renderer_backends` `("opengl", "vulkan")`, drawn by
   the native core's item through `rendering/quick/visualizer/native_route.py`), and every mode's Studio: its preview
   is the mode's Python renderer in an OpenGL render node, so `has_studio` answers False on a backend outside
   `STUDIO_PREVIEW_BACKENDS` (`ui/studio/registry.py`, OpenGL only) until a native preview exists. Settings' Visualizers page keeps every mode listed (a selection there is a
@@ -995,8 +995,8 @@ empty pair (two passes into the 64 x 64 target, no instance; its cost does not d
 OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
 p90s in the evidence.
 
-**As built: Oscilloscope (N5.1, ABI 27: Glow 0's unread field at 26, the item-anchored bloom at 27; not yet
-registered).** The first consumer of
+**As built: Oscilloscope (N5.1, ABI 29: Glow 0's unread field at 26, the item-anchored bloom at 27, the scene's
+Python geometry at 28, the turned card's window-frame scene at 29; registered and offered on Vulkan, 21 Nov).** The first consumer of
 N3.4's bloom and composite, and the first instanced pass over a storage stream in a product mode. Its record is a
 runtime schema (`core/visualizer_engine/oscilloscope_native_schema.py`, 49,376 bytes, version 1; field names follow the
 core's identifier rule, lowercase): what follows the music, from the logical frame alone (`oscilloscope_frame_values`:
@@ -1108,6 +1108,16 @@ With the mask taken from both frames (pixels either frame lights) every frame pa
 `n5_1_oscilloscope/20261121_l1_discard_flip/`, `l1_discard_flip.py` and `figures.json`). *The lead's decision (21
 Nov): rule (b) compares two peer APIs, neither the reference, so its mask is the union over both frames, for every
 mode* ("The pixel tolerance", rule (b)'s mask).
+*Registered (21 Nov).* The operator accepted the mode for the route without more 1:1 polish (it is reworked after the
+flip, plan item 9): `GENERIC_MODE_SETTINGS["oscilloscope"]` and `renderer_backends` `("opengl", "vulkan")`, playbook
+checklist 18. Verdicts: owner rule (a) passes all six 60 s recorded takes and 14 of the 15 offers; layer L identical;
+layer C passed on a quiet machine with validation on (the whole surface on Vulkan under OpenGL's at 1440p and at a 4K
+frame's pixel count, clear, bloom and composite most of it); layer T on Display 1, 90 s of recorded music, no load: Vulkan
+keeps frame times level with the OpenGL control and no frame over 16.7 ms. Not matched, recorded in the plan's
+Backlog (Oscilloscope parity and offers) and not owed a slot: rule (b)'s 60 s misses (2 to 6 levels, isolated, on edges)
+and the one offer input that fails. Its Studio preview is not offered on Vulkan (the Studio is OpenGL only until N5.8).
+Evidence: `n5_1_oscilloscope/` (cost `20261121_n51_oscilloscope_cost_quiet/`), `visualizers/oscilloscope/live_check/
+20261121_osc_layer_t_{vulkan,opengl}/`; the figures are in the commit messages of b8c6c3528 and 4572f7e88.
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
@@ -1121,6 +1131,30 @@ comparison, not the owner route). The proof: `.artifacts/evidence/native_core/n5
 runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixels over a run, every one at exactly 1
 level, no edge pixel; the same figures with the route as it was before N5.1
 (`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
+
+**As built: the card's own quad (ABI 32; the lead's decision, 21 Nov: fixed at the source, no D12 class).** The 21 Nov
+long-take reruns failed Spline Curve on 23 steady frames (11-12 ties in variant b; touching one-level pairs in the
+bright core, both variants). Drawn again offline factor by factor, every failing frame's verdict and classified pixel
+reproduced exactly (three whole frames bit for bit against the module), the cause was the geometry alone: the pack's
+GLSL against the driver-compiled source is bit-identical, the premultiplied surface alone gives only the one-level mask
+class, and the core's full triangle (a primitive three times the target, v_uv interpolated over it) lands every pixel
+up to 1.0e-4 logical pixel across and 5e-5 down from where the Python quad's does, moving the fragment's colour by at
+most 0.054 level: enough to tip pixels lying on a rounding boundary (one level off the mask; two on it, with the
+composite's own rounding). Evidence: `longclip_recheck/20261121_devcurve_residual_causes/` (`causes.json`,
+`measured_worst.json`, `emulation/`, its scripts). The fix: a mode's own pass reading `v_uv` on the surface draws over
+the card's own quad (`mode_content.cpp cardQuad`): the Python renderer's item quad, its corners the oriented item's
+through `item_from_window` and `window_from_target` inverted (composed in double), its `v_uv` exact (each corner 0 or 1,
+turned by the card's quarter turns as Python's vertex stage turns it), its two triangles Python's strip's (top-left,
+top-right, bottom-left, bottom-right drawn as (0, 1, 2) and (2, 1, 3)), so the diagonal splits the item where Python's
+does. Offline, that quad passed all 23 frames (at most 5 ties; it is not bit-identical, since it lies in another
+target). *Why the quad keeps the fine-derivative pairing:* `dFdx`/`dFdy` pair the pixels of the target's own 2x2 grid,
+whatever the primitive; the surface's origin stays on the window's even device pixels (the 2x2 quad alignment,
+`composite_geometry(quad_aligned=True)`, unchanged), so each pair is the one Python's draw in the window takes, and the
+diagonal adds the helper lanes Python's own diagonal adds, on the same pixels. Unchanged: scene-target passes (the
+scene's card triangle), the core's steps (bloom, defocus, composite, resolve), `vUv` passes (the transitions) and a
+card-less content (the harness probes) keep the full triangle. The negative control is the harness's
+`stage_control("card_triangle", True)` (`owner_render_parity.py --stage-control card_triangle`): the full triangle
+again, which must fail the 23 frames as on 21 Nov.
 
 **The pixel tolerance (every native parity harness; checkpoint audit 3 M1 and audit 4 M2, 15 Nov 2026).** The
 tolerances above were histograms: "any pixel within 1 level" let a uniform one-level regression through (a fade packed

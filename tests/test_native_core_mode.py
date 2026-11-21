@@ -216,6 +216,14 @@ def test_the_scene_item_is_the_cards_own_rect(core, scene_item, qt_app):
             core.mode_core_values("u_scene_item", _placed_card(bad), target)
 
 
+def test_the_card_triangle_control_is_the_modules_own(core):
+    # ABI 32: the card's own quad has one negative control, the full triangle again, reachable only through the
+    # harness's stage_control (no flag, no setting); an unknown name stays refused (False).
+    assert core.module.stage_control("card_triangle", True) is True
+    assert core.module.stage_control("card_triangle", False) is True
+    assert core.module.stage_control("card_triangles", True) is False
+
+
 @pytest.mark.qt
 def test_the_product_2d_packs_are_admitted_and_bubble_with_its_samplers_bound(core, tmp_path, qt_app):
     # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs. N4.a: Bubble's

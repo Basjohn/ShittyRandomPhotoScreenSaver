@@ -76,7 +76,10 @@ build selection; current host and composite proof lives here.
     optionally the conventions block, a vec2 at location 0 named `v_uv` (the Visualizer quad's uv, y down: the ITEM's
     oriented uv, from the card's `window_from_target` and `item_from_window` rows per vertex, so the product 2D shaders'
     `fc = v_uv * u_resolution` is the Python renderer's at any origin, ratio, rotation and backend; the target's uv only
-    with no card: audit N29 round 2, M6) or `vUv` (the item quad's, y up, over the target: the fullscreen transitions),
+    with no card: audit N29 round 2, M6; ABI 32: a mode's own `v_uv` pass on the surface draws over the card's own
+    quad, the Python renderer's item quad with exact corner uv, not the full triangle, whose float32 interpolation
+    tipped boundary pixels; harness control `stage_control("card_triangle", True)`) or `vUv` (the item quad's, y up,
+    over the target: the fullscreen transitions),
     and `sampler2D`s, each bound by name to one of the item's textures (N4.a, "Samplers and textures" below); anything
     else is refused. One rule fills the block by member name from exactly one of three sources: the core's conventions
     (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what the Python renderers take from the card per frame, read
@@ -96,6 +99,7 @@ build selection; current host and composite proof lives here.
   - The product modes on it: Spline Curve (`devcurve`, N5.1; its record `core/visualizer_engine/devcurve_native_schema.py`,
     its settings `devcurve_settings_values`), drawn through the Visualizer's route (`native_route.py`
     `GENERIC_MODE_SETTINGS`: one generic item per Visualizer item, its program retargeted by mode).
+    Bubble (N5.1, D12 "As built: Bubble") and the Oscilloscope (N5.1, D12 "As built: Oscilloscope") are on it too.
   - Python faces: `rendering/native/mode.py` (`NativeMode`), `rendering/native/spectrum.py`; a composite item hides
     and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
     (`window_pixels`), as its own synchronisation read it on the render thread: nothing before it, nothing while the
@@ -373,8 +377,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    "unread"?})`): the route builds the variant's program at the bind and again only at the Settings edge that changes
    it. One record serves every variant: a variant that leaves a stage out names the record fields only that stage reads
    in `"unread"` (ABI 26; any other record field no pass reads is still refused). Its harness is
-   `oscilloscope_check.py`; until its registration, its owner rule (a) runs through `oscilloscope_check.py owner`, the
-   route's registration process-local.
+   `oscilloscope_check.py`; the mode is registered on the route and offered on Vulkan (21 Nov), its owner rule (a) run
+   through `owner_render_parity.py --native --mode oscilloscope`.
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 

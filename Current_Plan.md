@@ -78,8 +78,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
   it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
   (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
-  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered 21 Nov.
-  Left: its docs.
+  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered and documented
+  21 Nov. Left: its two side defects and the backlog line.
 - [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
   - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
     generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
@@ -93,7 +93,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
 - [ ] High (Opus High, core-critical C++): Waveform's five C++ boxes (N5.4) in one branch at ABI 33 (32 is the card
-  quad's), one GitHub build (dispatched 21 Nov). Defects between N steps: 1D.6 (design note first), then 1C.10.
+  quad's), one GitHub build (agent a6688ad0cd2ae360a, Opus High). Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -657,7 +657,6 @@ the feature (D3D11 is not stated).
     so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
     `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
     `outer_origin=(803.0, 517.0)`, dpr 1.
-  - [ ] Docs: D12 "As built: Oscilloscope", Primitives, README (registered 21 Nov after layer T).
 - [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
   suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
   follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
@@ -852,16 +851,6 @@ the feature (D3D11 is not stated).
     reads a filter). Proof: both backends on this machine report the capability; a faked device without it refuses the
     program with its reason, or the images fall back to RGBA16F with the loss measured on the field (positions to
     80 world units). Negative control: the faked device.
-  - [ ] C++: bloom and HDR off for a record (the reading's first finding). Choice E fixed a stage by program only
-    (`Native_Core_P3_Decisions.md:2263-2266`); Waveform's strength reaches 0 mid-run and Python then changes its
-    composite (no HDR, no tone map). Either the core skips the stage per record at strength 0, or Python keeps HDR
-    at 0 (changes the oracle, and removes a pop at 0: "fade, never vanish"); the lead chooses. Proof: a recorded run
-    with the range's low at 0 matches Python through the crossing with no pop. Negative control: the program-only
-    switch, whose frame at 0 differs.
-    - Lead decision (21 Nov): Python keeps HDR and the tone map at strength 0 (bloom's contribution fades to 0, the
-      composite path never switches), which removes the pop (fade, never vanish) and needs no per-record C++ switch.
-      Not a C++ box any more: a Python change with its proof (a recorded crossing of 0 with no pop; control: the old
-      switch, which pops). Sonnet agent, dispatched 21 Nov.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
@@ -1425,6 +1414,9 @@ the feature (D3D11 is not stated).
     Next: compare the uniforms and the per-fragment colour of one A and one B frame Python against native; fix at
     the owner; if either proves a D12 class, the bound is a lead decision with the measured worst stated (A: 12
     ties; B: a touching pair at range 10).
+    - Fixed at the source by the card quad (ABI 32, merged 21 Nov): failed frames 23 -> 6, class A gone. The 6 left
+      (class B, one-level touching pairs, also seen in Python against itself) are backlog: human_heavy1 a 2358, 4200;
+      nightsolong a 941, 4194, b 4836; anything_mixed2 a 2151.
   - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
     (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
     Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.

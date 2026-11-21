@@ -123,7 +123,7 @@ Depth Cascade, Disintegrate, Exploding Tiles, Glass Shatter, Jigsaw, Membrane, P
 Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spectrum, Sphere, Waveform Ribbon (modes).
 Native consumer: Bubble (N5.1), its ambient target (RGBA8 coverage plus RGBA16F light, an explicit size that follows
 its content, held at the smallest bucket while the ambience is off) sampled by its card pass; the Oscilloscope (N5.1,
-not yet registered), N3.4's first consumer: a surface-sized single-sample overlay target (RGBA8 colour, with Glow an
+registered and offered on Vulkan 21 Nov), N3.4's first consumer: a surface-sized single-sample overlay target (RGBA8 colour, with Glow an
 RGBA16F emission) drawn by an instanced beam over a storage stream, then the bloom and the glow composite, or at Glow
 0 the plain overlay composite (a program variant chosen at the Settings edge; D12 "As built: Oscilloscope"). Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
 (D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
@@ -382,7 +382,8 @@ particles) and of N3.2 (instanced quads in place of `gl_PointSize`). Notes: poin
 a missing feature (Decisions D5.6 row 11).
 Native status: built as instanced quads (D15 point 5); the pass itself is N4.l, not built. First product consumer of
 the instanced quads: Bubble (N5.1), its ambient points and hero-circle mask as two instance streams from its record
-(`native_route.bubble_program`). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e2).
+(`native_route.bubble_program`); the second: the Oscilloscope's beam, one instanced quad a segment over a storage
+stream of the traces' points (`native_route.oscilloscope_program`; D12 "As built: Oscilloscope"). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e2).
 
 <a id="e24"></a>
 ### E24. Heightfields and terrain sampling
