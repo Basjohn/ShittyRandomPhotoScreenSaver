@@ -2507,3 +2507,22 @@ def test_media_short_card_fades_low_priority_lines_instead_of_shrinking_below_mi
     assert "mediaTitle" in shown and "mediaArtist" in shown
     assert len(shown) < len(short), "a short card must fade its lowest-priority lines"
     assert all(size >= floor - 0.01 for size in shown.values()), (shown, floor)
+
+
+def test_media_card_surface_comes_only_from_the_shared_owner() -> None:
+    """Media panel density is the shared widget material path, not its own playback-state ink.
+
+    Every ``cardSurface*`` property OverlayWidget exposes is the shared owner input. Media once
+    assigned the legibility ink from its playback-state line, which gave its glass a different
+    density than Feeds and Reddit on the same theme."""
+
+    import re
+
+    shared = re.findall(
+        r"property alias (cardSurface\w+)\s*:",
+        (QML_ROOT / "OverlayWidget.qml").read_text(encoding="utf-8"),
+    )
+    assert shared, "OverlayWidget no longer exposes the shared surface properties"
+    media_qml = (QML_ROOT / "MediaPresentation.qml").read_text(encoding="utf-8")
+    own = [name for name in shared if re.search(rf"^\s*{name}\s*:", media_qml, re.MULTILINE)]
+    assert own == []
