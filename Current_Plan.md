@@ -120,14 +120,14 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
-- [ ] Achievement Pulse ring material garbled whatever is selected (operator, 21 Nov, screenshot: the ring shows a
+- [ ] Achievement Pulse ring material garbled whatever is selected (agent a8e5c8ed661250a76, Sonnet Medium; operator, 21 Nov, screenshot: the ring shows a
   blotchy pink smear instead of the chosen material). Likely a regression of this session's fix that gave the ring and
   inner circle their own surface materials (5a1d84407, merged d604ae84a): check the ring's material sampling (backdrop
   UVs or blur level mapped to a thin annulus, the ring's own demand for the shared backdrop, the alpha/mask) against
   the card's working path. Fix at the owner; render every ring material on a real wallpaper (smoke tool, hidden GL
   host) before and after, zoomed, with the inner circle and borderless unaffected; a test whose control fails on the
   current code.
-- [ ] Games You Follow draws an extra backdrop the feed cards do not (operator, 21 Nov, screenshot
+- [ ] Games You Follow draws an extra backdrop the feed cards do not (agent a8e5c8ed661250a76, Sonnet Medium, with the Pulse ring box; operator, 21 Nov, screenshot
   `.artifacts/evidence/widgets/steam/20261121_operator_reports/games_you_follow_extra_backdrop.webp`): its stories sit on
   a layer the News/Feed card lacks, so the two read inconsistently. Find the extra layer in
   `rendering/quick/qml/GamesYouFollowPresentation.qml` against `FeedPresentation.qml` (story tile, legibility row,
