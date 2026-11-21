@@ -2860,8 +2860,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     }
     for (const ModePass &pass : program.passes) {
         for (const PassSampler &s : pass.samplers) {
-            if (s.mips == SamplerMips::None || !targetTextureName(s.texture))
-                continue;
+            if (s.mips == SamplerMips::None || !targetTextureName(s.texture) || environmentOf(s.texture))
+                continue;                     // N5.2c: an environment step's copy holds its levels (the box kernel's)
             const int t = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
             if (t >= 0 && !program.targets.at(t).selfMips) {
                 *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of the defocus layer '%3' (its levels "

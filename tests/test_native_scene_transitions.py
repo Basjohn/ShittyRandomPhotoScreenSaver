@@ -147,6 +147,22 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
     assert len(packs) == len(program["passes"]) + len(drawn)   # each drawn pass's vertex pack after its fragment's
 
 
+def _mips_read_check_exempts_environments(source: str) -> bool:
+    """ModeProgram::fromJson's check of a sampler reading mips (ABI 33's self-mipped targets) passes an environment
+    step's copy, which holds its own levels (found 21 Nov on the ABI 36 build: every scene with an environment was
+    refused, "reads mips of 'environment.environment', which has none", and the run ended as a cut)."""
+    parse = source[source.index("bool ModeProgram::fromJson("):source.index("QJsonObject ModeProgram::toJson(")]
+    check = parse[parse.index("if (s.mips == SamplerMips::None || !targetTextureName(s.texture)"):]
+    return "environmentOf(s.texture)" in check[:check.index("\n")]
+
+
+def test_a_sampler_reads_the_environments_levels():
+    source = (ROOT / "native" / "core" / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert _mips_read_check_exempts_environments(source)
+    # Negative control: the ABI 36 build's check (no exemption) is caught.
+    assert not _mips_read_check_exempts_environments(source.replace(" || environmentOf(s.texture))\n", ")\n", 1))
+
+
 def test_the_scene_packs_are_the_bakes_of_the_python_renderers_texts():
     """The committed packs are discovered from the renderers (``tools/regen_qrc.py --shaders``); the current-bake check
     for every pack is ``tests/test_quick_shader_packs.py``."""

@@ -158,7 +158,7 @@ VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **N52C_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS)
 
 
 def variant_transition(variant: str) -> str:
@@ -339,7 +339,8 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     if vulkan:
         checks.update(_route_on_vulkan(core, engine, app, frames, facts))
     np.savez_compressed(work / f"route_{api}.npz", **frames)
-    blc._sheet(out / f"transition_route_{api}.png", tiles)
+    if tiles:                                            # a selection without a sheet variant draws no sheet
+        blc._sheet(out / f"transition_route_{api}.png", tiles)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -363,14 +364,16 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
     from rendering.quick import bootstrap
 
     owner = bootstrap._owner
+    # The run is resolved before the backend is the native one: N5.2c's scenes are drawn natively before Vulkan offers
+    # them (registration comes last, playbook checklist 18), so the resolver would refuse them on Vulkan.
+    photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
+    run = production_run(route_variant, [image for image, _rows in photos], 1)
     saved = (owner.core, owner.backend)
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     host = blc._host(core, blc.WINDOW, dpr)
     scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
     try:
-        photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
-        run = production_run(route_variant, [image for image, _rows in photos], 1)
         scene.present(photos[0][0])
         scene.settle()
         layer = scene.item.native_layer
@@ -411,8 +414,15 @@ def _over(a, b, level: int) -> int:
     return int(np.count_nonzero(difference > level))
 
 
+#: N5.2c variants that are one authored fragment between the two pictures (Blinds' flat style: no scene, no target),
+#: judged as N5.2b's fragment passes (PROPOSED, agent 21 Nov: measured 125 pixels a frame at 1 level on the ABI 36
+#: build, the two compilers' rounding; the bound is the lead's).
+N52C_FRAGMENT_VARIANTS = ("blinds_flat",)
+
+
 def _is_fragment_pass(variant: str) -> bool:
-    return variant.split("@", 1)[0] in N52B_VARIANTS or variant.split("@", 1)[0] in BEAM_VARIANTS
+    drawn = variant.split("@", 1)[0]
+    return drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
 
 
 def _multisampled_scene(entry: dict) -> bool:
