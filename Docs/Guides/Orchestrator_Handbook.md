@@ -191,8 +191,9 @@ defaults, the installer script) are committed and pushed at once, silently.
   start a fresh one for the next item; never keep resuming one past about 300k tokens (the stop notice shows
   `subagent_tokens`). Briefs stay short (section 3) so a fresh agent starts small. Interim "waiting" notices need no
   reply; follow-ups go only when they change what the agent does.
-- **The lead's own context.** The lead's turns cost the most. Past about 400k tokens, write the stop state into the
-  plan's resume box and hand over to a fresh lead session rather than carrying on. No check-in turns that only
+- **The lead's own context.** The lead's turns cost the most. Past about 400k tokens, keep the plan's resume box
+  current and ask the operator to run `/compact` (the lead cannot compact itself; the app only auto-compacts near
+  the limit); a fresh lead session is needed only if compaction is not available. No check-in turns that only
   restate status; batch merges, plan edits and pushes into as few turns as the work allows.
 - **Proof economy.** Cached Python references are keyed on what draws them (shaders, renderer, settings), never on
   judge or tool code, so tool merges never force redraws; one agent builds a reference per change and the others
