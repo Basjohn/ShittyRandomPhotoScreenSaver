@@ -151,8 +151,14 @@ N52C_VARIANTS = {
 #: pass's.
 N52C_RULE_A_SAMPLES = pt.Tolerance("3D transition scene, multisampled, against its Python renderer (rule a, provisional)",
                                    scatter_pixels=72, tie_pixels=TIE_PIXELS, flip_pixels=1)
-N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b, provisional)", scatter_pixels=2000,
-                           tie_pixels=TIE_PIXELS)
+#: Rule (b)'s flips (lead's instruction 21 Nov, as BEAM_RULE_B): measured on the ABI 36 build (068be1f26, r3) at most 3
+#: pixels a frame past 2 levels, each isolated on a geometry edge, where the two APIs' rasterisers decide a pixel centre
+#: within float error of the edge differently (Vulkan's clip space is OpenGL's with z halved and y flipped, so the edge
+#: equations differ in their last bits): Cube Turn's slanted silhouette (up to 233 levels: the box against the
+#: backdrop), a Jigsaw piece's outline, and Depth Card Cascade's card edges (options: 3 a frame at x 249-253, one card's
+#: left edge, its fwidth ramp).
+N52C_RULE_B = pt.Tolerance("3D transition scene, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
+                           tie_pixels=TIE_PIXELS, flip_pixels=3)
 TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + N52C_TRANSITIONS
 VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **N52C_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
@@ -344,6 +350,75 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+#: The performance step's cost (``--cost``; Native_Parity_And_Timing_Proof.md section 3, "A transition port": C per pass
+#: at 2560 x 1440 and 4K on both backends): the layer's record of the run (the environment's copy and chain once, the
+#: scene's passes, the composite) timed by the core's GPU timer over COST_FRAMES frames of the effect, median and p90;
+#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context. Frames run back to
+#: back (no readback between them, which let the GPU idle and downclock: the first run's 4K figures were below its
+#: 1440p ones); Crossfade, timed in the same run, is the control the others are read against.
+COST_SIZES = ((2560, 1440), (3840, 2160))
+COST_FRAMES = 240
+
+
+def round_cost(core, engine, app, api: str, variants) -> dict:
+    from PIL import Image
+
+    facts: dict = {}
+    checks: dict = {}
+    for size in COST_SIZES:
+        label = f"{size[0]}x{size[1]}"
+        photos = [blc.processed(path, "fill", size) for path in PHOTOS]
+        host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
+        scene = blc.Scene(core, engine, host, 1.0, size, kind="layer")
+        clock = Clock()
+        scene.layer._clock_ns = clock
+        try:
+            for index, variant in enumerate(variants):
+                run = production_run(variant, [image for image, _rows in photos], index + 1)
+                scene.present(photos[0][0])
+                scene.settle()
+                clock.at(run, 0.1)
+                scene.layer.transition(run)
+                scene.settle()
+                scene.frames(4)
+                host.set_gpu_timer(True)
+                host.gpu_samples()
+                walls = []
+                for frame in range(COST_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
+                    started = time.perf_counter()
+                    scene.layer.tick()
+                    scene.frames(1)
+                    walls.append((time.perf_counter() - started) * 1000.0)
+                scene.frames(4)
+                samples = host.gpu_samples()
+                host.set_gpu_timer(False)
+                surface = [s.nanoseconds / 1e6 for s in samples if s.kind == 2]
+                frame_gpu = [s.nanoseconds / 1e6 for s in samples if s.kind == 0]
+                facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
+                                               "qrhi_frame_gpu": blc._ms_stats(frame_gpu),
+                                               "gui_tick_and_frame_wall": blc._ms_stats(walls),
+                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0)}
+                checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
+                scene.layer.transition(None)
+                scene.present(photos[1][0])
+                scene.settle()
+        finally:
+            scene.close(app)
+            facts.setdefault("host_close", []).append(blc._close_host(app, host))
+        if api == "opengl":
+            pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
+            capture = product_capture(size[0], size[1], *pictures, 1.0)
+            try:
+                for index, variant in enumerate(variants):
+                    run = production_run(variant, [image for image, _rows in photos], index + 1)
+                    capture.render(run, 0.5)                     # its per-run resources made before the timing
+                    facts[f"{label}_{variant}"]["python_opengl"] = capture.benchmark(run)
+            finally:
+                capture.close()
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
     """The product's route: ``BackgroundRenderItem.set_transition_run`` on the native backend draws the run through its
     layer, the same pixels as the layer driven directly; the run's end draws the destination. Each ``ROUTE_VARIANTS``
@@ -529,7 +604,10 @@ def child(args) -> dict:
     engine = QQmlEngine()
     try:
         try:
-            record["draw"] = round_draw(core, engine, app, args.api, args.variants, work, out)
+            if args.cost:
+                record["draw"] = round_cost(core, engine, app, args.api, args.variants)
+            else:
+                record["draw"] = round_draw(core, engine, app, args.api, args.variants, work, out)
         except Exception:
             record["draw"] = {"pass": False, "error": traceback.format_exc()}
     finally:
@@ -565,6 +643,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    parser.add_argument("--cost", action="store_true",
+                        help="the performance step instead of the draw: GPU time per run at COST_SIZES (round_cost)")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -597,7 +677,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--variants", *args.variants]
+                   "--variants", *args.variants, *(["--cost"] if args.cost else [])]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
@@ -621,7 +701,7 @@ def main(argv: list[str] | None = None) -> int:
             bad = [k for k, v in (entry.get("checks") or {}).items() if not v]
             failed.append(f"{api} draw: {bad or entry.get('error', 'failed')}"[:1500])
     comparison = None
-    if set(APIS) <= set(args.apis):
+    if set(APIS) <= set(args.apis) and not args.cost:
         comparison = vulkan_against_opengl(out / "work")
         if not comparison.get("pass"):
             failed.append(f"rule (b): Vulkan against OpenGL native, worst {comparison.get('worst_level')} levels")
