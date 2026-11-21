@@ -744,13 +744,9 @@ the feature (D3D11 is not stated).
     `20261121_warmup_probe_*`, `20261121_windows_against_full_human_heavy1_a/`). Until it is understood, offers take
     full-take player runs (the offers' delivery streams are kept in `D:\Temp\Scratch\SRPSS\fast_proof\deliveries\`).
   - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
-    with `tools/quick_frame_cadence.py` on native paths.
-  - [ ] Layer C cost on a quiet machine (lead): `python native/core/python/oscilloscope_check.py --module-dir
-    release/native_module --require-validation --layer-path <layers> --label n51_oscilloscope_cost --rounds cost`. A
-    first round ran 21 Nov under concurrent load from two other agents' heavy runs (CPU 57 %), so its figures are not
-    clean (`..._abi27_cost/`). Median whole surface on Vulkan: 0.142 ms at 1440p and 0.249 ms at 4K. On OpenGL:
-    0.186 ms and 0.300 ms. The clear, bloom and composite take about 70 % of it. "4K" is capped at dpr 8 (3360 x 2240,
-    7.5 M pixels).
+    with `tools/quick_frame_cadence.py` on native paths. It needs the registration first: on main the mode is not in
+    `native_route.GENERIC_MODE_SETTINGS` and its `renderer_backends` is OpenGL only, so a live run today times the
+    Python path (and Vulkan does not offer the mode). Register, then run unattended and read the results.
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
