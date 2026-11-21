@@ -1132,6 +1132,30 @@ runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixel
 level, no edge pixel; the same figures with the route as it was before N5.1
 (`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
 
+**As built: the card's own quad (ABI 32; the lead's decision, 21 Nov: fixed at the source, no D12 class).** The 21 Nov
+long-take reruns failed Spline Curve on 23 steady frames (11-12 ties in variant b; touching one-level pairs in the
+bright core, both variants). Drawn again offline factor by factor, every failing frame's verdict and classified pixel
+reproduced exactly (three whole frames bit for bit against the module), the cause was the geometry alone: the pack's
+GLSL against the driver-compiled source is bit-identical, the premultiplied surface alone gives only the one-level mask
+class, and the core's full triangle (a primitive three times the target, v_uv interpolated over it) lands every pixel
+up to 1.0e-4 logical pixel across and 5e-5 down from where the Python quad's does, moving the fragment's colour by at
+most 0.054 level: enough to tip pixels lying on a rounding boundary (one level off the mask; two on it, with the
+composite's own rounding). Evidence: `longclip_recheck/20261121_devcurve_residual_causes/` (`causes.json`,
+`measured_worst.json`, `emulation/`, its scripts). The fix: a mode's own pass reading `v_uv` on the surface draws over
+the card's own quad (`mode_content.cpp cardQuad`): the Python renderer's item quad, its corners the oriented item's
+through `item_from_window` and `window_from_target` inverted (composed in double), its `v_uv` exact (each corner 0 or 1,
+turned by the card's quarter turns as Python's vertex stage turns it), its two triangles Python's strip's (top-left,
+top-right, bottom-left, bottom-right drawn as (0, 1, 2) and (2, 1, 3)), so the diagonal splits the item where Python's
+does. Offline, that quad passed all 23 frames (at most 5 ties; it is not bit-identical, since it lies in another
+target). *Why the quad keeps the fine-derivative pairing:* `dFdx`/`dFdy` pair the pixels of the target's own 2x2 grid,
+whatever the primitive; the surface's origin stays on the window's even device pixels (the 2x2 quad alignment,
+`composite_geometry(quad_aligned=True)`, unchanged), so each pair is the one Python's draw in the window takes, and the
+diagonal adds the helper lanes Python's own diagonal adds, on the same pixels. Unchanged: scene-target passes (the
+scene's card triangle), the core's steps (bloom, defocus, composite, resolve), `vUv` passes (the transitions) and a
+card-less content (the harness probes) keep the full triangle. The negative control is the harness's
+`stage_control("card_triangle", True)` (`owner_render_parity.py --stage-control card_triangle`): the full triangle
+again, which must fail the 23 frames as on 21 Nov.
+
 **The pixel tolerance (every native parity harness; checkpoint audit 3 M1 and audit 4 M2, 15 Nov 2026).** The
 tolerances above were histograms: "any pixel within 1 level" let a uniform one-level regression through (a fade packed
 as 254/255, a colour converted twice), and "at most 8 pixels past 1 level" bounded neither how far those pixels were

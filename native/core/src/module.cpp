@@ -2107,6 +2107,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setBloomAtTargetOrigin(value);
     else if (control == "scene_frame_surface")
         srpss_core::setSceneFrameSurface(value);
+    else if (control == "card_triangle")
+        srpss_core::setCardTriangle(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")

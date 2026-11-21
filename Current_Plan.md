@@ -1414,6 +1414,9 @@ the feature (D3D11 is not stated).
     Next: compare the uniforms and the per-fragment colour of one A and one B frame Python against native; fix at
     the owner; if either proves a D12 class, the bound is a lead decision with the measured worst stated (A: 12
     ties; B: a touching pair at range 10).
+    - Fixed at the source by the card quad (ABI 32, merged 21 Nov): failed frames 23 -> 6, class A gone. The 6 left
+      (class B, one-level touching pairs, also seen in Python against itself) are backlog: human_heavy1 a 2358, 4200;
+      nightsolong a 941, 4194, b 4836; anything_mixed2 a 2151.
   - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
     (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
     Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.

@@ -781,8 +781,9 @@ private:
     // N3.2: the meshes' and streams' state, noted on the source only when their objects changed (never per record).
     void noteMeshBuffers();
     // N3.2: one pass's draw on its open render pass (pipeline, viewport, the arena's offsets, inputs, the draw call).
+    // `triangleVertices`: the core's geometry's count at `triangle` (3: a triangle; ABI 32: 6, the card's own quad).
     void drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRect &viewport,
-                  const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor);
+                  const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor, quint32 triangleVertices = 3);
     // N3.2: a count or a selector for this record (a number, the mesh's, a record u32 field, a setting).
     quint32 resolveCount(const DrawCount &count, quint32 meshCount) const;
     // N3.2 audit 4 (H2, M1): pass `index`'s draw refused this record: `what` (a DrawRefusal) asked `asked` of a buffer
@@ -874,6 +875,7 @@ private:
     QSize m_drawnSize;
     QByteArray m_stillSignature;             // N5.7a: what the still last drew (empty: nothing of a still's)
     bool m_keptTarget = false;               // the last record kept the target (a still's unchanged frame)
+    bool m_cardQuad = false;                 // ABI 32: this record's vertices hold the card's own quad (cardQuad)
     SceneTargets m_targets;                  // N3.1 (D14 choice B: the content owns its targets)
     ModeMeshes m_meshes;                     // N3.2 (D15 choice A: the content owns its meshes)
     ModeStreams m_streams;                   // N3.2: the streams and the block arena

@@ -167,4 +167,10 @@
 // core_wrappers_live_after_invalidation; the hidden host's close record's core_wrappers_live_after_invalidation; the job
 // service's stop record's told_device_lost and device_lost and its self-test's device_was_lost step (L2). RhiOwned is a
 // class (rhi_owned.h). Backward compatible for every earlier caller.
-#define SRPSS_NATIVE_CORE_ABI 31
+// 32 (the lead's decision, 21 Nov: Spline Curve's long-take residuals fixed at the source): a mode's own pass reading
+// v_uv on the surface draws over the card's own quad (mode_content.cpp cardQuad: Python's item quad, its strip's two
+// triangles, exact corner uv turned as Python's vertex stage turns it), not the full triangle; scene-target passes, the
+// core's steps, vUv passes and a card-less content are unchanged. stage_control's card_triangle (harness: the full
+// triangle again, its negative control). Every generic mode's native frames may change (regression guards on the branch's ABI 31 build: every generic
+// mode's harness on both APIs, Bubble variant a on one take).
+#define SRPSS_NATIVE_CORE_ABI 32
