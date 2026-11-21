@@ -69,7 +69,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
 - [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a; its core C++ merged at ABI 35; the Python
   conversion's first slice approved; continuing to stop point 2.
-- [ ] Background track: N5.2d with N4.i (motion blur and trails), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
+- [ ] Background track: N5.2d with N4.i (motion blur and trails), agent a52b367bbd9c11f5c (Opus Medium), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
