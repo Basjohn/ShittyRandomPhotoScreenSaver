@@ -753,10 +753,13 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     # card's grown world while it is drawn). Read as configuration only; it never
     # ticks or gates the authored Bubble step.
     viewport_extent = None
+    display_wide = False
     try:
         viewport_extent = controller.logical_world_extent
+        display_wide = bool(controller.logical_world_is_display_wide)
     except Exception:
         viewport_extent = None
+        display_wide = False
     step_token = cadence.begin_step()
     try:
         resolved = runtime.advance(
@@ -777,6 +780,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             source_activation_id=source_activation,
             edge_token=int(step_token[1]),
             viewport_extent=viewport_extent,
+            display_wide=display_wide,
         )
     except Exception:
         cadence.note_step_failed()

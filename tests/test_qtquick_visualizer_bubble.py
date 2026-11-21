@@ -506,24 +506,26 @@ def test_quick_bubble_payload_still_rejects_short_active_arrays(fields) -> None:
 
 
 def test_quick_bubble_payload_bounds_oversized_arrays_without_mutating_source() -> None:
-    # Since 5.1.3 (6dd336b7) the frame itself admits at most 110 heroes (its class
-    # bits are validated at construction), so a count above the shader loop cannot
-    # exist; arrays longer than the admitted count are still bounded by the payload.
-    with pytest.raises(ValueError, match="110-hero limit"):
-        BubbleFrame(positions=(0.5, 0.5, 0.04, 1.0) * 111, bubble_count=111)
+    # Since 5.1.3 (6dd336b7) the frame itself admits at most the render capacity's heroes
+    # (its class bits are validated at construction), so a count above the shader loop
+    # cannot exist; arrays longer than the admitted count are still bounded by the payload.
+    from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_RENDER_CAPACITY as cap
+
+    with pytest.raises(ValueError, match=f"{cap}-hero limit"):
+        BubbleFrame(positions=(0.5, 0.5, 0.04, 1.0) * (cap + 1), bubble_count=cap + 1)
     frame = BubbleFrame(
-        positions=(0.5, 0.5, 0.04, 1.0) * 111,
-        extras=(0.8, 0.0, 0.0, 0.0) * 111,
-        trails=(0.2, 0.4, 0.8) * 333,
-        bubble_count=110,
+        positions=(0.5, 0.5, 0.04, 1.0) * (cap + 1),
+        extras=(0.8, 0.0, 0.0, 0.0) * (cap + 1),
+        trails=(0.2, 0.4, 0.8) * (3 * cap + 3),
+        bubble_count=cap,
     )
     snapshot = SimpleNamespace(logical=SimpleNamespace(mode_state=frame))
     payload = resolve_quick_bubble_payload(snapshot)
-    assert payload.bubble_count == 110
-    assert payload.positions == frame.positions[:440]
-    assert payload.extras == frame.extras[:440]
-    assert payload.trails == frame.trails[:990]
-    assert len(frame.positions) == 444 and len(frame.trails) == 999
+    assert payload.bubble_count == cap
+    assert payload.positions == frame.positions[:4 * cap]
+    assert payload.extras == frame.extras[:4 * cap]
+    assert payload.trails == frame.trails[:9 * cap]
+    assert len(frame.positions) == 4 * cap + 4 and len(frame.trails) == 9 * cap + 9
 
 
 def _layout(presentation, *, world_scale: float = 1.0):

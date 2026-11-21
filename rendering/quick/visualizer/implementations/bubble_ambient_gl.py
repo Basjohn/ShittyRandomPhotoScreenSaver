@@ -3,7 +3,7 @@
 One transparent, content-local RGBA target holds at most 192 GPU point sprites.
 The existing fullscreen Bubble shader samples it *after the gradient and before*
 its original wake, ghost and hero loops. Nothing touches the bubble simulator,
-its RNG, 110-body shader loop, scene clipping or persistent render clock.
+its RNG, hero shader loop, scene clipping or persistent render clock.
 
 Particle glow is real emitted light: while any particle glows, a second,
 same-sized half-float (RGBA16F) attachment accumulates its *linear-light* radiance
@@ -38,8 +38,10 @@ from widgets.spotify_visualizer.bubble_ambient_geometry import (
     ambient_target_size, MAX_AMBIENT_TEXTURE_EDGE,
 )
 
+from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_RENDER_CAPACITY  # noqa: E402
+
 #: The hero circles the mask erases under at most (one occluder record each: x, y, height-normalized radius, alpha).
-MAX_OCCLUDERS = 110
+MAX_OCCLUDERS = BUBBLE_RENDER_CAPACITY
 
 
 def _ambient_programs():
@@ -221,7 +223,7 @@ class QuickBubbleAmbientPoints:
             return 0, 0
         if len(points)%RECORD_STRIDE or len(points)>self._data.size:
             raise ValueError('Unbounded Bubble ambient point input')
-        if len(occluders) % 4 or len(occluders) > 110 * 4:
+        if len(occluders) % 4 or len(occluders) > MAX_OCCLUDERS * 4:
             raise ValueError('Unbounded Bubble ambient occluders')
         width,height,texel_scale = ambient_target_size(content_rect,dpr)
         light = _points_glow(points)
