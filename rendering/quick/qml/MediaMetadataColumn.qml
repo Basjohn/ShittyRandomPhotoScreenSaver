@@ -20,6 +20,32 @@ Item {
     property real artistScale: 1.0
     property string artistAlignment: textAlignment
     property alias artistEditTarget: currentArtistText
+    // The caller's fit decision: false when the card is too short to show the album line at a
+    // legible size. The line fades out and its row collapses; provider truth is untouched.
+    property bool albumFits: true
+    readonly property bool albumWanted: mediaModel.showAlbum && _currentAlbum.length > 0
+    readonly property bool artistWanted: _currentArtist.length > 0
+
+    // Heights the caller needs to choose a fit, independent of what is currently collapsed
+    // (a hidden Text keeps its implicit height, so this never feeds back on albumFits).
+    function stackHeight(withAlbum) {
+        var h = currentTitleText.implicitHeight
+        if (artistWanted)
+            h += rowSpacing + currentArtistText.implicitHeight
+        if (withAlbum && albumWanted)
+            h += rowSpacing + currentAlbumText.implicitHeight
+        return h
+    }
+    // The smallest text point size in the stack at scale 1.
+    function smallestPointSize(withAlbum) {
+        var f = mediaModel.fontSize
+        var smallest = f * 1.12
+        if (artistWanted)
+            smallest = Math.min(smallest, f)
+        if (withAlbum && albumWanted)
+            smallest = Math.min(smallest, f * 0.82)
+        return smallest
+    }
 
     property string _currentTitle: ""
     property string _currentArtist: ""
@@ -95,6 +121,7 @@ Item {
         z: 1
 
         MediaMetadataText {
+            id: currentTitleText
             objectName: "mediaTitle"
             width: currentColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
@@ -147,15 +174,19 @@ Item {
         }
 
         MediaMetadataText {
+            id: currentAlbumText
             objectName: "mediaAlbum"
-            visible: metadataFade.mediaModel.showAlbum && text.length > 0
+            // Fades out (never vanishes); the row's height is released at once so the
+            // fit above it can enlarge the remaining lines.
+            visible: metadataFade.albumWanted && (metadataFade.albumFits || opacity > 0.001)
             width: currentColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
                 ? Text.AlignRight : Text.AlignLeft
-            height: visible ? implicitHeight : 0.0
+            height: metadataFade.albumFits && visible ? implicitHeight : 0.0
             text: metadataFade._currentAlbum
             color: metadataFade.mediaModel.textColor
-            opacity: 0.75
+            opacity: metadataFade.albumFits ? 0.75 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.InOutQuad } }
             font.family: metadataFade.mediaModel.fontFamily
             font.pointSize: metadataFade.mediaModel.fontSize * 0.82
             font.italic: true
@@ -227,7 +258,7 @@ Item {
         }
 
         MediaMetadataText {
-            visible: metadataFade.mediaModel.showAlbum && text.length > 0
+            visible: metadataFade.mediaModel.showAlbum && text.length > 0 && metadataFade.albumFits
             width: outgoingColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
                 ? Text.AlignRight : Text.AlignLeft

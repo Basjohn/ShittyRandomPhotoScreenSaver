@@ -5,7 +5,6 @@ import QtQuick
 ShadowedText {
     textFormat: Text.PlainText
     fontSizeMode: Text.HorizontalFit
-    minimumPointSize: 6.0
     maximumLineCount: 1
     wrap: maximumLineCount > 1
     breakLongWords: true

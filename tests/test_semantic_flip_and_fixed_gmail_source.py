@@ -32,8 +32,8 @@ def test_media_positioner_only_owns_flow_slots_and_never_child_edit_offsets():
     assert 'objectName: "mediaMetadataFlowSlot"' in column
     assert 'objectName: "mediaPlaybackStateFlowSlot"' in column
     assert 'height: trackMetadata.implicitHeight' in column
-    assert 'height: visible ? playbackState.implicitHeight : 0.0' in column
-    assert 'y: trackMetadataSlot.height + (visible ? mediaRoot.metadataSpacing : 0.0)' in column
+    assert 'playbackState.implicitHeight : 0.0' in column
+    assert 'y: trackMetadataSlot.height + (height > 0.0 ? mediaRoot.metadataSpacing : 0.0)' in column
     assert 'height: implicitHeight' in column
     assert 'MediaMetadataColumn {\n                        id: trackMetadata' in column
     assert 'ShadowedText {\n                        id: playbackState' in column

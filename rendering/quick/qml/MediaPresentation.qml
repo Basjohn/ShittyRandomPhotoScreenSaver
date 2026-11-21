@@ -485,17 +485,53 @@ OverlayWidget {
                 // second positioner/polish pass after the child editor clears
                 // custom X/Y. Reset can be projected in the same QML evaluation.
                 implicitHeight: trackMetadataSlot.height
-                    + (playbackStateSlot.visible
+                    + (playbackStateSlot.height > 0.0
                         ? mediaRoot.metadataSpacing + playbackStateSlot.height : 0.0)
                 height: implicitHeight
+                // Fit policy for a card too short for its text. The block first shrinks toward
+                // the band; before any line would fall under the canonical minimum text size
+                // (ShadowedText.minimumPointSize, the text runs' one owner) the lowest-priority
+                // lines fade out instead: the playback state, then the album. Title and artist
+                // always stay, and elide horizontally in their own rows.
+                readonly property real fitBand: Math.max(1.0, mainBand.height - 2.0)
+                readonly property real minimumTextPointSize: playbackState.minimumPointSize
+                readonly property bool stateWanted:
+                    mediaRoot.mediaModel.showPlaybackState && mediaRoot.mediaModel.hasTrack
+                function tierHeight(withAlbum, withState) {
+                    return trackMetadata.stackHeight(withAlbum)
+                        + (withState && stateWanted
+                            ? mediaRoot.metadataSpacing + playbackState.implicitHeight : 0.0)
+                }
+                function tierSmallestPointSize(withAlbum, withState) {
+                    var smallest = trackMetadata.smallestPointSize(withAlbum)
+                    if (withState && stateWanted)
+                        smallest = Math.min(smallest, mediaRoot.mediaModel.fontSize * 0.65)
+                    return smallest
+                }
+                function tierScale(withAlbum, withState) {
+                    var h = tierHeight(withAlbum, withState)
+                    return h > fitBand && h > 0.0 ? fitBand / h : 1.0
+                }
+                function tierLegible(withAlbum, withState) {
+                    return tierScale(withAlbum, withState)
+                        * tierSmallestPointSize(withAlbum, withState)
+                        >= minimumTextPointSize - 0.0001
+                }
+                readonly property int fitTier: tierLegible(true, true) ? 0
+                    : (tierLegible(true, false) ? 1 : 2)
+                readonly property bool stateFits: fitTier === 0
+                readonly property bool albumFits: fitTier <= 1
                 // Compact-Y text scales toward its CURRENT semantic rail:
                 // unflipped is left-anchored and flipped is right-anchored.
                 // A fixed left origin on the flipped card pulled the title and
                 // artist inward after Reset -> Flip -> Save -> re-Edit -> Y shrink.
                 transformOrigin: mediaRoot.headerFlipped ? Item.Right : Item.Left
-                scale: implicitHeight > mainBand.height && implicitHeight > 0.0
-                    ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
-                    : 1.0
+                // Last resort (a card too short even for title and artist): clamp at the
+                // minimum size rather than shrink below it.
+                scale: fitTier < 2
+                    ? tierScale(albumFits, stateFits)
+                    : Math.max(tierScale(false, false),
+                               minimumTextPointSize / tierSmallestPointSize(false, false))
 
                 // The Column positions only flow slots. Editable X/Y/scale
                 // belong to the content INSIDE each slot, so a child reset
@@ -513,6 +549,7 @@ OverlayWidget {
                         objectName: "mediaTrackMetadata"
                         width: parent.width
                         mediaModel: mediaRoot.mediaModel
+                        albumFits: metadata.albumFits
                         rowSpacing: mediaRoot.metadataSpacing
                         textAlignment: mediaRoot.orientedChildAlignment("metadata", "left")
                         artistOffsetX: mediaRoot.childOffsetX("artist")
@@ -531,11 +568,10 @@ OverlayWidget {
                 Item {
                     id: playbackStateSlot
                     objectName: "mediaPlaybackStateFlowSlot"
-                    visible: mediaRoot.mediaModel.showPlaybackState
-                        && mediaRoot.mediaModel.hasTrack
+                    visible: metadata.stateWanted && (metadata.stateFits || playbackState.opacity > 0.001)
                     width: metadata.width
-                    y: trackMetadataSlot.height + (visible ? mediaRoot.metadataSpacing : 0.0)
-                    height: visible ? playbackState.implicitHeight : 0.0
+                    y: trackMetadataSlot.height + (height > 0.0 ? mediaRoot.metadataSpacing : 0.0)
+                    height: metadata.stateWanted && metadata.stateFits ? playbackState.implicitHeight : 0.0
 
                     ShadowedText {
                         id: playbackState
@@ -550,7 +586,8 @@ OverlayWidget {
                         horizontalAlignment: mediaRoot.orientedChildAlignment("playback_state", "left")
                             === "right" ? Text.AlignRight : Text.AlignLeft
                         color: mediaRoot.mediaModel.textColor
-                        opacity: 0.62
+                        opacity: metadata.stateFits ? 0.62 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.InOutQuad } }
                         font.family: mediaRoot.mediaModel.fontFamily
                         font.pointSize: mediaRoot.mediaModel.fontSize * 0.65
                         font.bold: true
