@@ -85,19 +85,20 @@ def test_a_planned_name_with_no_run_or_no_begin_record_fails_and_a_dead_saver_is
                                                                          returncode=9)["failures"])
 
 
-def native_frames(run_id, start_ms, count, *, gap_ms=16.0, first_ms=4.0, slow_at=(), end_record=True):
-    """A run the native core draws (Vulkan's background layer): a NATIVE_TRANSITION_TICK when it starts and one per
-    frame, Quick's frames (no background-node record carries the run), and NATIVE_TRANSITION_END at its end. The first
-    frame lands ``first_ms`` after the start; ``slow_at``: frames ``gap_ms * 4`` late."""
+def native_frames(run_id, start_ms, count, *, gap_ms=16.0, first_ms=4.0, slow_at=(), end_record=True, screen=0):
+    """A run the native core draws (Vulkan's background layer) on ``screen``'s window: a NATIVE_TRANSITION_TICK when it
+    starts and one per frame, Quick's frames (no background-node record carries the run), and NATIVE_TRANSITION_END at
+    its end. The first frame lands ``first_ms`` after the start; ``slow_at``: frames ``gap_ms * 4`` late."""
     start = start_ms * MS
-    events, now = [(start, session.NATIVE_TRANSITION_TICK, 0, 0, run_id)], start + int(first_ms * MS) - int(gap_ms * MS)
+    events = [(start, session.NATIVE_TRANSITION_TICK, screen, 0, run_id)]
+    now = start + int(first_ms * MS) - int(gap_ms * MS)
     for index in range(count):
         now += int((gap_ms * (4 if index in slow_at else 1)) * MS)
-        events += [(now - MS, session.NATIVE_TRANSITION_TICK, 0, index, run_id), (now, 51, 0, index, 0),
-                   (now + MS, 54, 0, index, 0)]
+        events += [(now - MS, session.NATIVE_TRANSITION_TICK, screen, index, run_id), (now, 51, screen, index, 0),
+                   (now + MS, 54, screen, index, 0)]
     if end_record:
-        events.append((now + 2 * MS, session.NATIVE_TRANSITION_END, 0, count, run_id))
-    events.append((now + 20 * MS, 54, 0, count, 0))                   # the destination's handover: after the window
+        events.append((now + 2 * MS, session.NATIVE_TRANSITION_END, screen, count, run_id))
+    events.append((now + 20 * MS, 54, screen, count, 0))              # the destination's handover: after the window
     return events
 
 
@@ -113,7 +114,7 @@ def test_a_native_run_is_cut_from_its_tick_and_end_records_and_is_failed_without
 
 
 def test_a_runs_hitch_verdict_is_no_frame_gap_over_33_ms_with_its_first_frame_from_the_runs_start():
-    smooth = session.run_gaps(trace(native_frames(1, 200, 60)), 200 * MS, 200 * MS + 61 * 16 * MS)
+    smooth = session.run_gaps(trace(native_frames(1, 200, 60)), 200 * MS, 200 * MS + 61 * 16 * MS, screen=0)
     assert smooth["hitch_verdict"] == "pass" and smooth["gaps_over_limit"] == 0
     assert smooth["gap_ms"]["median"] == pytest.approx(16.0, abs=0.5) and smooth["first_frame_ms"] == pytest.approx(5.0)
     # Controls: one 64 ms gap inside the run, and a first-run compile stall (the first frame 80 ms after the start).
@@ -126,7 +127,36 @@ def test_a_runs_hitch_verdict_is_no_frame_gap_over_33_ms_with_its_first_frame_fr
     # The figures reach the stored record and its table.
     figures = pack.session_figures(row)
     assert figures["hitch_verdict"] == row["hitch_verdict"] and figures["gap_ms"]["max"] >= 80.0
-    assert session.run_gaps(trace(), 0, MS)["hitch_verdict"].startswith("fail: no frame")
+    assert session.run_gaps(trace(), 0, MS, screen=0)["hitch_verdict"].startswith("fail: no frame")
+
+
+def other_screen_frames(start_ms, count, *, gap_ms=50.0, screen=0):
+    """Another display's window rendering on its own thread: Quick's render phase records on ``screen``, no run."""
+    events, now = [], start_ms * MS
+    for index in range(count):
+        now += int(gap_ms * MS)
+        events += [(now, 51, screen, index, 0), (now + 3 * MS, 54, screen, index, 0)]
+    return events
+
+
+def test_a_runs_figures_count_only_its_own_screens_frames():
+    """N5.2c audit: each display's window renders on its own thread, so a run's gaps, fps and render times are its own
+    screen's frames (the screen its tick records carry), never another window's."""
+    events = trace(native_frames(1, 200, 60, screen=1), other_screen_frames(195, 22, screen=0))
+    windows = session.cut_windows(events)
+    assert windows[1]["screen"] == 1
+    row = by_name(session.analyse_session(events, state((1, "Name A")), ["Name A"]))["Name A"]
+    assert row["status"] == "ok" and row["screen"] == 1 and row["frames"] == 60 and row["hitch_verdict"] == "pass"
+    assert row["gap_ms"]["median"] == pytest.approx(16.0, abs=0.5) and row["quick_render_ms"]["median"] == pytest.approx(1.0)
+    # Control: the same frames read as one screen's (the other window's records relabelled onto the run's screen), as an
+    # unfiltered count read them, change the frame count, the gaps and the render times.
+    merged = [(ts, event, 1 if screen == 0 else screen, revision, aux) for ts, event, screen, revision, aux in events]
+    mixed = by_name(session.analyse_session(merged, state((1, "Name A")), ["Name A"]))["Name A"]
+    assert mixed["frames"] > 60 and mixed["gap_ms"]["count"] > row["gap_ms"]["count"]
+    assert mixed["quick_render_ms"]["p90"] > row["quick_render_ms"]["p90"]
+    # Control: the other screen's frames alone are that window's figures (a 50 ms cadence, failing the hitch rule).
+    other = session.run_gaps(events, windows[1]["begin_ns"], windows[1]["end_ns"], screen=0)
+    assert other["gap_ms"]["count"] < 60 and other["hitch_verdict"].startswith("fail")
 
 
 # -- attribution ---------------------------------------------------------------------------------------------------------------
@@ -213,7 +243,6 @@ def test_transition_rows_of_a_size_and_state_form_one_session_and_are_never_meas
             for kind, p in pack.plan_units(rows, per_row=True)] == [
         ("row", "m"), ("session", ["a"]), ("session", ["b"]), ("session", ["c"])]
     assert len(pack.plan_units(_rows("idle") + _rows("loaded"))) == 4              # a session per state
-    assert all(kind == "row" for kind, _ in pack.plan_units(rows, sessions=False))  # no session runner: rows only
 
 
 def test_session_command_is_one_invisible_process_on_one_display_with_the_names_in_order():

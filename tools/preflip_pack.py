@@ -219,14 +219,12 @@ def pending_rows(rows: list[Row], baseline: dict, *, redo: bool = False) -> list
     return [row for row in rows if redo or stored.get(row.key, {}).get("status") != "ok"]
 
 
-def plan_units(rows: list[Row], *, per_row: bool = False, sessions: bool = True) -> list[tuple[str, object]]:
+def plan_units(rows: list[Row], *, per_row: bool = False) -> list[tuple[str, object]]:
     """The saver processes the rows need: ``("row", Row)`` for one process per row, ``("session", [Row, ...])`` for the
     transition rows of one size and state run as one session (in the order the rows have). A transition row is always
     measured in a session (21 Nov: a per-row process reports the Visualizer's fps and late frames, which a saver without
     one never has): ``per_row`` makes each transition its own one-transition session and every Visualizer row its own
-    process; ``sessions=False`` (no session runner given) runs every row as a row."""
-    if not sessions:
-        return [("row", row) for row in rows]
+    process."""
     if per_row:
         return [("session", [row]) if row.kind == "transition" else ("row", row) for row in rows]
     groups: dict[tuple[str, str], list[Row]] = {}
@@ -638,15 +636,14 @@ def _log_record(record: dict, log) -> None:
 
 
 def measure_rows(rows: list[Row], baseline: dict, path: Path, *, measure, conditions_fn, displays_fn, out_dir_fn,
-                 save=save_baseline, redo: bool = False, log=print, clock=time.time, measure_session=None,
+                 measure_session, save=save_baseline, redo: bool = False, log=print, clock=time.time,
                  per_row: bool = False) -> dict:
     """Measure ``rows`` one saver process after another, storing each result in ``baseline`` and on disk as it lands.
     Returns ``{"ok": [...], "failed": [...], "skipped": {key: reason}}``. ``measure(row, out) -> (exit code, summary or
-    None)``; with ``measure_session(rows, out) -> (exit code, summary or None)`` the pending transition rows of one size
-    and state run as one session (see ``plan_units``), unless ``per_row``."""
+    None)`` measures a Visualizer row; ``measure_session(rows, out) -> (exit code, summary or None)`` the pending
+    transition rows of one size and state as one session (see ``plan_units``; with ``per_row`` one session each)."""
     outcome = {"ok": [], "failed": [], "skipped": {}}
-    for kind, payload in plan_units(pending_rows(rows, baseline, redo=redo), per_row=per_row,
-                                    sessions=measure_session is not None):
+    for kind, payload in plan_units(pending_rows(rows, baseline, redo=redo), per_row=per_row):
         group = payload if kind == "session" else [payload]
         problem = display_problem(SIZES[group[0].size], displays_fn())
         if problem:

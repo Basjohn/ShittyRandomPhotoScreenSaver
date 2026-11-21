@@ -575,9 +575,14 @@ def _rule_a(variant: str, entry: dict):
 
 
 def _environment_copies(core) -> int:
-    """N5.2c: the photo environments' copies drawn in the process so far (``composite_live``)."""
+    """N5.2c: the photo environments' copies drawn in the process so far (``composite_live``). A module that does not
+    count them is refused (a missing count must never read as "no copy", which would pass the copy check)."""
     live = core.composite_live()
-    return int((live or {}).get("stage_environment_copies", 0)) if isinstance(live, dict) else 0
+    copies = live.get("stage_environment_copies") if isinstance(live, dict) else None
+    if isinstance(copies, bool) or not isinstance(copies, int) or copies < 0:
+        raise RuntimeError(f"composite_live() has no environment copy count (stage_environment_copies={copies!r}): "
+                           "the module predates N5.2c or its accounting is broken")
+    return copies
 
 
 def _reads_environment(run) -> bool:

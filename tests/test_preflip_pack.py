@@ -100,8 +100,18 @@ def _summary(**over):
     return summary
 
 
+def _no_session(group, out):
+    raise AssertionError("a Visualizer row was measured as a transition session")
+
+
+def visualizer_rows(sizes=("2160p",)):
+    """The matrix's Visualizer rows: measured one process each by ``measure`` (transition rows always run in a session;
+    tests/test_preflip_session.py proves that path)."""
+    return [row for row in rows(sizes) if row.kind == "visualizer"]
+
+
 def test_measurement_is_resumable_one_saved_row_at_a_time(tmp_path):
-    matrix = rows(["2160p"])
+    matrix = visualizer_rows(["2160p"])
     path = tmp_path / "b.json"
     baseline = pack.new_baseline("b", commit="abc", load=None, backend="x")
     saves, calls = [], []
@@ -118,7 +128,7 @@ def test_measurement_is_resumable_one_saved_row_at_a_time(tmp_path):
 
     kwargs = dict(conditions_fn=lambda: {"c": 1}, displays_fn=lambda: [{"index": 1, "width": 3840, "height": 2160,
                                                                        "primary": False}],
-                  out_dir_fn=lambda row, session=False: tmp_path / row.ident, save=save)
+                  out_dir_fn=lambda row, session=False: tmp_path / row.ident, save=save, measure_session=_no_session)
     with pytest.raises(KeyboardInterrupt):
         pack.measure_rows(matrix, baseline, path, measure=measure, **kwargs)
     assert len(saves) == 2 and len(saves[-1]) == 2          # each finished row was on disk before the next began
@@ -132,17 +142,19 @@ def test_measurement_is_resumable_one_saved_row_at_a_time(tmp_path):
 
 
 def test_failed_row_is_recorded_and_retried_and_a_missing_display_skips_without_blocking(tmp_path):
-    matrix = rows(["2160p"])
+    matrix = visualizer_rows(["2160p"])
     baseline = pack.new_baseline("b", commit="abc", load=None, backend=None)
     only_d1 = [{"index": 1, "width": 3840, "height": 2160, "primary": False}]
     out = pack.measure_rows(matrix[:1], baseline, tmp_path / "b.json", measure=lambda r, o: (3, None),
                             conditions_fn=dict, displays_fn=lambda: only_d1,
-                            out_dir_fn=lambda r, session=False: tmp_path / "x", save=lambda *a: None)
+                            out_dir_fn=lambda r, session=False: tmp_path / "x", save=lambda *a: None,
+                            measure_session=_no_session)
     assert out["failed"] == [matrix[0].key] and baseline["rows"][matrix[0].key]["status"] == "failed"
     assert pack.pending_rows(matrix[:1], baseline) == matrix[:1]
     out = pack.measure_rows(matrix, baseline, tmp_path / "b.json", measure=lambda r, o: (0, _summary()),
                             conditions_fn=dict, displays_fn=lambda: [], redo=True,
-                            out_dir_fn=lambda r, session=False: tmp_path / "y", save=lambda *a: None)
+                            out_dir_fn=lambda r, session=False: tmp_path / "y", save=lambda *a: None,
+                            measure_session=_no_session)
     assert set(out["skipped"]) == {r.key for r in matrix} and not out["ok"]
 
 
@@ -246,8 +258,9 @@ def test_a_row_is_recorded_on_its_own_into_an_existing_baseline_without_touching
     before = json.dumps(pack.load_baseline(path)["rows"], sort_keys=True)
 
     baseline = pack.open_baseline(path, "named", commit="new5678", load=None, backend="something-else")
-    row = pack.Row("transition/t_extra/2160p/idle", "transition", "t_extra", "T Extra", "2160p", "idle", 75.0)
+    row = pack.Row("visualizer/m_extra/2160p/idle", "visualizer", "m_extra", "m_extra", "2160p", "idle", 75.0)
     pack.measure_rows([row], baseline, path, measure=lambda r, o: (0, _summary()), conditions_fn=dict,
+                      measure_session=_no_session,
                       displays_fn=lambda: [{"index": 1, "width": 3840, "height": 2160, "primary": False}],
                       out_dir_fn=lambda r, session=False: tmp_path / "o",
                       save=lambda p, d: (pack.stamp_new_rows(d, {row.key}, commit="new5678", backend="native-vulkan"),
