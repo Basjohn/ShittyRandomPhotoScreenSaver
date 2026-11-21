@@ -1604,7 +1604,7 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
   **SMP visual/library foundations (operator, 16 Nov):** M0/M1 must define/consume versioned semantic shape,
   surface, type and motion tokens before building the panes, including full sharp-to-pill radii, inner junctions,
-  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The full visual Theme & Skin Studio comes after the first usable SMP release at M10. Design and boundaries: plan 02 §8.2B and document 05.
+  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The Theme Studio (visual authoring of the unified theme) is pre-SMP, after the native core, the flip and M4 (operator, 21 Nov; the 1B.8 box below); SMP M10 only extends that same Studio with skin authoring. Design and boundaries: plan 02 §8.2B and document 05.
   M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
   concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
   **Pre-SMP admission (operator, 16 Nov):** NF (the native flip) is necessary but not sufficient: finish the
@@ -1732,6 +1732,15 @@ follow-ups with their evidence folders).
   - [ ] **Theme-authored legibility guard per eligible surface:** evaluate a typed semantic on/off (and inheritance precedence) for the guard/legibility panel, resolving theme default -> user Style Override if that component exposes one -> material child, with no duplicate shader or capture. Defaults mirror **current effective per-component states**: the ordinary Media card keeps its guard; the volume child and Media Control Bar do not have theirs restored by accident. Do not apply a global switch that disables guards on unrelated cards or sacrifices necessary contrast; prove light/dark/bright-scene ink accessibility and independently configurable card/child guards.
   - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
   - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
+- [ ] **Theme Studio (operator, 21 Nov; supersedes "Studio only at SMP M10"):** after the native core work, the flip
+  (NF) and its follow-ups, and M4, and **before SMP M0**; not worth building before then. One visual editor for the
+  unified Appearance Theme at the quality of the Visualizer Studios: live rendered previews of real Settings, ordinary
+  widgets, Media, the Context Menu and fullscreen overlays on light and dark backdrops at real DPR; edits of every
+  semantic role and sub-semantic (colours, materials, face and border transparency bias, border thickness, curvature,
+  typography, legibility guard) with an inheritance inspector, one-click revert, undo and redo, Save and Cancel, and
+  export and import through the production theme loader. It renders through the production theme renderer (no second
+  renderer, no per-frame theme parsing) and edits appearance only. SMP M10 later adds skin authoring and the SMP
+  Full/Compact previews to this same Studio. Design: `Docs/Future_Work/ShittyMusicPlayer/05_Theme_Skin_Studio.md` §5.
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
