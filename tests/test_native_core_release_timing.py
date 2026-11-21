@@ -33,16 +33,41 @@ def plain_resources(text: str) -> list[str]:
     return _PLAIN_RESOURCE.findall(_code(text))
 
 
+def owner_problems(owned: str) -> list[str]:
+    """``RhiOwned`` (checkpoint audit 11 L1: a class that counts its wrappers per QRhi) retires through one ``retire()``
+    that calls ``deleteLater`` and never ``delete``, from its destructor, its move assignment, its nullptr assignment and
+    its ``reset``; ``release()`` hands the resource over uncounted and never retires it."""
+    code = _code(owned)
+    problems = []
+    retire = _body(code, "void retire() noexcept")
+    if "resource->deleteLater();" not in retire or "rhiOwnedRetired(" not in retire:
+        problems.append("retire() does not deleteLater and uncount")
+    if re.search(r"\bdelete\s+\w", code):
+        problems.append("a plain delete")
+    for signature in ("~RhiOwned()", "RhiOwned &operator=(RhiOwned &&other) noexcept",
+                      "RhiOwned &operator=(std::nullptr_t) noexcept", "void reset(Resource *resource = nullptr)"):
+        if "retire();" not in _body(code, signature):
+            problems.append(f"{signature} does not retire")
+    release = _body(code, "Resource *release() noexcept")
+    if "retire();" in release or "deleteLater" in release:
+        problems.append("release() retires what it hands over")
+    return problems
+
+
 def test_every_qrhi_resource_of_the_core_is_retired_by_delete_later():
     found = {path.name: plain_resources(path.read_text(encoding="utf-8"))
              for path in sorted((CORE / "src").glob("*.cpp")) + sorted((CORE / "src").glob("*.h"))}
     assert not {name: hits for name, hits in found.items() if hits}, found
     owned = (CORE / "src" / "rhi_owned.h").read_text(encoding="utf-8")
-    assert re.search(r"resource->deleteLater\(\);", owned) and "delete resource" not in owned
-    assert "using RhiOwned = std::unique_ptr<Resource, RhiDeleteLater>;" in owned
-    # Negative controls: a plain owner is caught; QRhi itself (no resource) is not.
+    assert owner_problems(owned) == []
+    # Negative controls: a plain owner is caught; QRhi itself (no resource) is not; a retire that deletes, and a
+    # destructor that forgets its resource, are caught.
     assert plain_resources("std::unique_ptr<QRhiBuffer> m_arena;") == ["QRhiBuffer"]
     assert plain_resources("std::unique_ptr<QRhi> m_rhi;") == []
+    deletes = owned.replace("resource->deleteLater();", "delete resource;", 1)
+    assert deletes != owned and owner_problems(deletes)
+    leaks = owned.replace("~RhiOwned() { retire(); }", "~RhiOwned() {}", 1)
+    assert leaks != owned and owner_problems(leaks)
 
 
 def _body(source: str, signature: str) -> str:
