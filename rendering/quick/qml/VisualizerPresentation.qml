@@ -247,12 +247,37 @@ Item {
     // on this display, and transparent to input, so a press there reaches what lies below.
     property bool prepareOnly: false
     enabled: !prepareOnly
-    opacity: authoredSceneOpacity * startupRevealOpacity
-    visible: presentationActive && (customLayoutWorkingVisible || prepareOnly) && opacity > 0.0
+    // The scene's opacity: the authored scene fade times the startup reveal gate. The card's chrome fades with it in
+    // the two layers below (and its shadow in the display's shadow lane); the content host between them carries none
+    // of it: both renderers fold it into their own content fade (u_fade), the Python node and the native item alike
+    // (render_contract.scene_faded_snapshot; the scene hands it to the item, VisualizerRenderItem.set_scene_opacity).
+    // Qt's opacity on the native item's surface rounded twice and, where a shader mixes with u_fade, drew another
+    // formula than the Python node's (Docs/Historical_Bugs, "scene fade applied twice").
+    readonly property real sceneOpacity: authoredSceneOpacity * startupRevealOpacity
+    visible: presentationActive && (customLayoutWorkingVisible || prepareOnly) && sceneOpacity > 0.0
+
+    // The chrome under the content (its shadow, surface material and fill) and over it (glow, border, frame,
+    // overlays, glyphs, tips, hint, HUD): each item names its layer as its visual parent; their z order within a layer
+    // is the order they had as the root's children.
+    Item {
+        id: visualizerSceneUnderLayer
+        objectName: "visualizerSceneUnderLayer"
+        anchors.fill: parent
+        z: 1
+        opacity: visualizerPresentationRoot.sceneOpacity
+    }
+    Item {
+        id: visualizerSceneOverLayer
+        objectName: "visualizerSceneOverLayer"
+        anchors.fill: parent
+        z: 2.5
+        opacity: visualizerPresentationRoot.sceneOpacity
+    }
 
     Loader {
         id: visualizerInteractionGlowLoader
         objectName: "visualizerInteractionGlowLoader"
+        parent: visualizerSceneOverLayer
         anchors.fill: parent
         z: 2.8
         active: visualizerPresentationRoot.interactionGlowEligible
@@ -311,6 +336,7 @@ Item {
 
     RectangularShadow {
         id: cardShadow
+        parent: visualizerSceneUnderLayer
         x: cardBackground.x
             - visualizerPresentationRoot.cardShadowBaseLeft
             - visualizerPresentationRoot.cardShadowExtendLeft
@@ -367,6 +393,7 @@ Item {
     Loader {
         id: cardSurfaceMaterialLoader
         objectName: "visualizerCardSurfaceMaterial"
+        parent: visualizerSceneUnderLayer
         anchors.fill: parent
         active: visualizerPresentationRoot.cardSurfaceMaterialActive
         visible: active
@@ -387,6 +414,7 @@ Item {
     Rectangle {
         id: cardBackground
         objectName: "visualizerCardBackground"
+        parent: visualizerSceneUnderLayer
         anchors.fill: parent
         visible: visualizerPresentationRoot.cardShellEnabled
             && !visualizerPresentationRoot.cardSurfaceMaterialActive
@@ -410,6 +438,7 @@ Item {
     Loader {
         id: visualizerBorderMaterialLoader
         objectName: "visualizerCardBorderMaterial"
+        parent: visualizerSceneOverLayer
         anchors.fill: parent
         active: visualizerPresentationRoot.cardBorderMaterialActive
         visible: active
@@ -438,6 +467,7 @@ Item {
     Rectangle {
         id: cardFrame
         objectName: "visualizerCardFrame"
+        parent: visualizerSceneOverLayer
         anchors.fill: parent
         visible: visualizerPresentationRoot.cardShellEnabled
         color: "transparent"
@@ -454,6 +484,7 @@ Item {
     Loader {
         id: expandedOverlayLoader
         objectName: "visualizerExpandedOverlays"
+        parent: visualizerSceneOverLayer
         anchors.fill: parent
         z: 6
         transform: Translate {
@@ -557,6 +588,7 @@ Item {
     Row {
         id: glyphRow
         objectName: "visualizerGlyphRow"
+        parent: visualizerSceneOverLayer
         // Anchored at the card's bottom-right inset; it grows leftwards over its offered members only.
         x: visualizerPresentationRoot.glyphRowRight - width
         y: visualizerPresentationRoot.glyphRowBottom - visualizerPresentationRoot.glyphSize
@@ -971,6 +1003,7 @@ Item {
     Rectangle {
         id: expandTooltip
         objectName: "visualizerExpandTooltip"
+        parent: visualizerSceneOverLayer
         visible: expandGlyph.visible && opacity > 0.0
         opacity: Math.max(0.0, Math.min(1.0,
             (visualizerPresentationRoot.expandTipProgress - 0.56) / 0.44))
@@ -1004,6 +1037,7 @@ Item {
     Rectangle {
         id: cameraResetTooltip
         objectName: "visualizerPresetTooltip"
+        parent: visualizerSceneOverLayer
         z: 14
         enabled: false
         visible: visualizerPresentationRoot.widgetGlowAdmitted && opacity > 0.0
@@ -1031,6 +1065,7 @@ Item {
     Loader {
         id: visualizerHoverGlyphLoader
         objectName: "visualizerHoverGlyphLoader"
+        parent: visualizerSceneOverLayer
         anchors.fill: parent
         z: 11
         // Edit glyphs edit the ordinary card; a display-wide view offers none of them.
@@ -1119,6 +1154,7 @@ Item {
     Image {
         id: controlHintImage
         objectName: "visualizerControlHint"
+        parent: visualizerSceneOverLayer
         anchors.top: parent.top
         anchors.right: parent.right
         readonly property real inset: Math.max(12, visualizerPresentationRoot.cardBorderWidth + 6)
@@ -1143,6 +1179,7 @@ Item {
     Rectangle {
         id: visualizerPerfHud
         objectName: "visualizerPerfHud"
+        parent: visualizerSceneOverLayer
         visible: visualizerPresentationRoot.perfHudEnabled
             && visualizerPresentationRoot.perfHudText.length > 0
         // Place the visualizer counter BELOW its original 6px top inset.

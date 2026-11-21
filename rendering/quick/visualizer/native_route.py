@@ -366,9 +366,16 @@ class NativeVisualizerRoute:
         """The snapshot last published for ``identity`` (the Python node's ``retained_snapshot``)."""
         return self._snapshot if identity is not None and identity == self._identity else None
 
-    def sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool) -> bool:
+    def sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool,
+             scene_opacity: float = 1.0) -> bool:
         """GUI thread, at an update request of the item: the take the Python item makes at its sync, published into
         the stream, and the native item asked for a frame. Returns whether a frame was published.
+
+        ``scene_opacity``: the Visualizer scene's (the item's, ``VisualizerRenderItem.set_scene_opacity``). The native
+        item lies in the card's content host, which carries no scene opacity: the drawn frame's content fade takes it
+        here (``render_contract.scene_faded_snapshot``, as the Python node folds it), so the shader applies it once and
+        Qt's composite never fades the surface for it (two roundings, and another formula where a shader mixes with
+        u_fade).
 
         Never raises (audit 14 Nov, M1; N29 L2). A failure is logged once per run of failures and the native item fades
         out (never vanishes: N29 M1). What is tried again (N29 M1): a failure of the setup (the bind, the program, the
@@ -402,7 +409,7 @@ class NativeVisualizerRoute:
                 return False                              # failed closed: nothing per update until an input changes
         try:
             published = self._sync(bridge=bridge, identity=identity, presentation=presentation, authority=authority,
-                                   metrics=metrics)
+                                   metrics=metrics, scene_opacity=scene_opacity)
         except _FrameFailure as failure:
             return self._fail(inputs, failure.cause, stage="frame")
         except Exception as exc:
@@ -527,12 +534,14 @@ class NativeVisualizerRoute:
             self._core_failure = None
         return self._core_failure is None
 
-    def _sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool, metrics: tuple) -> bool:
+    def _sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool, metrics: tuple,
+              scene_opacity: float = 1.0) -> bool:
         if identity != self._identity:
             self.bind(identity)
         if bridge is None:
             return False
         from rendering.native.composite import composite_geometry, window_pixel_ratio
+        from rendering.quick.visualizer.render_contract import scene_faded_snapshot
 
         # On the window's own 2x2 quads (every edge on an even device pixel): the shader's fine derivatives then pair
         # the pixels the Python renderer's did (N2.5 rule (a): an odd target origin moved them at the cap arcs). The
@@ -562,6 +571,8 @@ class NativeVisualizerRoute:
             drawn = snapshot if snapshot is not None else self._snapshot
             if drawn is None:
                 return False
+            # The scene's opacity folded into the drawn content fade, as the Python node folds it (one rounding).
+            drawn = scene_faded_snapshot(drawn, scene_opacity)
             full = self.card(presentation, drawn, geometry, metrics)
             card = content.shown_card(full, drawn)
             if snapshot is None and card == self._card and placed == self._placed and not recheck:

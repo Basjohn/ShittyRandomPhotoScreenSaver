@@ -2736,11 +2736,14 @@ class QuickSceneController(QObject):
         held = card_is_the_display(presentation)
         if scene_root is not None and bool(scene_root.property("visualizerCardIsTheDisplay")) != held:
             scene_root.setProperty("visualizerCardIsTheDisplay", held)
+        # The scene fade before the record reaches the item: the item's sync (the native route's, at once) draws the
+        # record under the scene opacity it comes with.
+        root.setProperty("authoredSceneOpacity", presentation.scene_fade)
+        self._project_visualizer_scene_opacity()
         item.set_presentation(presentation)
         self._resolve_visualizer_framed_view(presentation)
 
         style = presentation.shell_style
-        root.setProperty("authoredSceneOpacity", presentation.scene_fade)
         root.setProperty(
             "cardShellEnabled",
             presentation.shell_policy is VisualizerShellPolicy.CARD,
@@ -3230,7 +3233,20 @@ class QuickSceneController(QObject):
         if root is None:
             return False
         root.setProperty("startupRevealOpacity", clamped)
+        self._project_visualizer_scene_opacity()
         return True
+
+    def _project_visualizer_scene_opacity(self) -> None:
+        """Hand the Visualizer item the scene opacity its presentation root resolves (``sceneOpacity``: the authored
+        scene fade times the startup reveal gate). The root's chrome fades with it in its own layers; the content host
+        carries none of it, so this is how it reaches the content: both drawing paths fold it into the drawn content
+        fade (``VisualizerRenderItem.set_scene_opacity``)."""
+        root = self._visualizer_root
+        item = self._visualizer_item
+        if root is None or item is None:
+            return
+        value = root.property("sceneOpacity")
+        item.set_scene_opacity(1.0 if value is None else float(value))
 
     def _ensure_visualizer_items(self) -> VisualizerRenderItem:
         if self._visualizer_item is not None:
@@ -3337,6 +3353,7 @@ class QuickSceneController(QObject):
             )
         self._visualizer_content_host = content_host
         self._visualizer_item = item
+        self._project_visualizer_scene_opacity()
         root.setProperty("perfHudEnabled", self._perf_hud_enabled)
         # Its card material: projected here, then demand (a woken or created backdrop binds
         # it; an existing one is bound directly).

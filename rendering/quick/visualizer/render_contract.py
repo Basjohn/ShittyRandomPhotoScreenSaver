@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import time
 from typing import Protocol
 
@@ -65,6 +65,25 @@ def snapshot_is_render_admissible(snapshot: VisualizerRenderSnapshot) -> bool:
     ):
         return snapshot_has_current_reactive_source(snapshot)
     return True
+
+
+def scene_faded_snapshot(snapshot: VisualizerRenderSnapshot, scene_opacity: float) -> VisualizerRenderSnapshot:
+    """The one place the Visualizer's scene fade reaches its content, on both drawing paths: ``snapshot`` with
+    ``scene_opacity`` (the authored scene fade times the startup reveal gate; the Python node also multiplies in any
+    opacity Qt still applies above the card) folded into its content fade, which every mode's shader reads as
+    ``u_fade``.
+
+    The Python render node draws raw GL, so Qt cannot fade its pixels; the native item's surface could be faded by Qt's
+    composite, but that rounds twice (the shader's output into the RGBA8 surface, then the faded composite) and, for a
+    shader that uses ``u_fade`` inside its colour mix (Bubble, Spectrum), is another formula. So the card's content
+    host carries no scene opacity (``VisualizerPresentation.qml``: the chrome fades in its own layers) and both paths
+    fold it here (``VisualizerRenderNode.render``, ``NativeVisualizerRoute``). Allocates only while the scene is mid-fade.
+    """
+    if scene_opacity >= 1.0:
+        return snapshot
+    presentation = snapshot.presentation
+    return replace(snapshot, presentation=replace(
+        presentation, content_fade=max(0.0, presentation.content_fade * scene_opacity)))
 
 
 class VisualizerModeTraceContext:
@@ -193,6 +212,7 @@ __all__ = [
     "QuickVisualizerRenderFrame",
     "QuickVisualizerRenderer",
     "VisualizerModeTraceContext",
+    "scene_faded_snapshot",
     "snapshot_has_current_reactive_source",
     "snapshot_is_render_admissible",
 ]

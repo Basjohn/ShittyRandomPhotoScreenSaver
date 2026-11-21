@@ -73,7 +73,11 @@ def test_scene_root_opacity_derives_from_scene_fade_without_owning_startup_gate(
     assert 'setProperty("authoredSceneOpacity", presentation.scene_fade)' in source, (
         "the presentation root authored opacity must derive from scene_fade"
     )
-    assert "opacity: authoredSceneOpacity * startupRevealOpacity" in qml
+    # The scene opacity is the authored fade times the startup gate; the chrome's layers fade with it, and the root
+    # itself (and so the content host) never does: both renderers fold it into u_fade (test_visualizer_scene_fade_once).
+    assert "readonly property real sceneOpacity: authoredSceneOpacity * startupRevealOpacity" in qml
+    assert qml.count("opacity: visualizerPresentationRoot.sceneOpacity") == 2
+    assert "\n    opacity:" not in qml, "the presentation root must not fade its content host"
     assert "QVariantAnimation" not in qml
 
 
@@ -104,13 +108,19 @@ def test_render_node_folds_inherited_opacity_into_content_fade():
     source = (
         ROOT / "rendering" / "quick" / "visualizer" / "node.py"
     ).read_text(encoding="utf-8")
+    contract = (
+        ROOT / "rendering" / "quick" / "visualizer" / "render_contract.py"
+    ).read_text(encoding="utf-8")
     assert "inheritedOpacity" in source, (
-        "the visualizer render node must read the QML root's inherited opacity"
+        "the visualizer render node must read the opacity Qt still inherits above the card"
     )
-    assert "content_fade" in source and "inherited" in source.lower(), (
-        "inherited opacity must be folded into the authored content fade so the "
+    # The scene opacity (the startup reveal gate times the authored scene fade) reaches the node from its item and
+    # is folded with Qt's inherited opacity through the one fold both drawing paths share.
+    assert "self._scene_opacity" in source and "scene_faded_snapshot(snapshot, self._inherited_scene_opacity())" in source, (
+        "inherited and scene opacity must be folded into the authored content fade so the "
         "coordinated startup reveal fades the GL content, not just the card"
     )
+    assert "content_fade=max(0.0, presentation.content_fade * scene_opacity)" in contract
 
 
 def test_owner_scene_fade_eases_from_zero_on_activation():
