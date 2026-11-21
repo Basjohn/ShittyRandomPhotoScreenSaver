@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from OpenGL import GL as gl
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QOpenGLContext
@@ -30,7 +28,7 @@ from .clip_host import (
     VisualizerClipHost,
     VisualizerClipTraceContext,
 )
-from .render_contract import VisualizerModeTraceContext, snapshot_is_render_admissible
+from .render_contract import VisualizerModeTraceContext, scene_faded_snapshot, snapshot_is_render_admissible
 from .render_host import QuickVisualizerRenderHost
 from ..render_failure_log import RenderFailureLog
 from .telemetry import VisualizerRenderNodeTelemetry
@@ -77,6 +75,8 @@ class VisualizerRenderNode(QSGRenderNode):
             tuple[tuple[float, float], tuple[float, float, float, float], float] | None
         ) = None
         self._logical_size = (0.0, 0.0)
+        # The Visualizer scene's opacity at this sync (``VisualizerRenderItem.set_scene_opacity``), folded into u_fade.
+        self._scene_opacity = 1.0
         self._clip_host = VisualizerClipHost()
         self._render_host = QuickVisualizerRenderHost()
         self._released = False
@@ -118,8 +118,12 @@ class VisualizerRenderNode(QSGRenderNode):
         presentation: ResolvedVisualizerPresentation | None,
         clear_snapshot: bool = False,
         screen_index: int = -1,
+        scene_opacity: float = 1.0,
     ) -> None:
         """Accept detached state during the blocked-GUI synchronization phase.
+
+        ``scene_opacity`` is the Visualizer scene's opacity at this sync (the item's, ``set_scene_opacity``): the
+        content host carries none of it, so the node folds it into the drawn content fade itself.
 
         ``presentation`` is the record the scene draws the card from at this sync (the retained item's). It sizes
         the node and bounds the clip. The snapshot may be one retained from an earlier sync whose record no longer
@@ -167,6 +171,7 @@ class VisualizerRenderNode(QSGRenderNode):
             )
         )
         self._screen_index = int(screen_index)
+        self._scene_opacity = max(0.0, min(1.0, float(scene_opacity)))
         self._telemetry.note_sync()
 
     @staticmethod
@@ -199,21 +204,24 @@ class VisualizerRenderNode(QSGRenderNode):
         )
 
     def _inherited_scene_opacity(self) -> float:
-        """Return the QML-inherited opacity applied to this node's content.
+        """Return the opacity this node's content is drawn at: the Visualizer's scene opacity (the authored scene fade
+        times the startup reveal gate, ``VisualizerRenderItem.set_scene_opacity``, synced with the record) times
+        whatever opacity Qt's scene graph still applies above the card's content host.
 
-        ``QSGRenderNode.inheritedOpacity()`` carries the effective opacity of the
-        item subtree (here: authored visualizer scene fade x generation startup
-        reveal gate). It is clamped to ``[0, 1]``; any binding/availability gap
-        fails open to a fully opaque draw rather than hiding the visualizer.
+        ``QSGRenderNode.inheritedOpacity()`` carries the latter: the content host carries no scene opacity (the native
+        item, drawn in the same host, folds the scene opacity into its own fade too and is never faded by Qt for it:
+        ``render_contract.scene_faded_snapshot``). Clamped to ``[0, 1]``; any binding/availability gap fails open to a
+        fully opaque draw rather than hiding the visualizer.
         """
 
         getter = getattr(self, "inheritedOpacity", None)
-        if not callable(getter):
-            return 1.0
-        try:
-            return max(0.0, min(1.0, float(getter())))
-        except (TypeError, ValueError):
-            return 1.0
+        inherited = 1.0
+        if callable(getter):
+            try:
+                inherited = max(0.0, min(1.0, float(getter())))
+            except (TypeError, ValueError):
+                inherited = 1.0
+        return inherited * self._scene_opacity
 
     def render(self, state: QSGRenderNode.RenderState) -> None:
         """Draw the latest admitted state without advancing logical state."""
@@ -247,25 +255,13 @@ class VisualizerRenderNode(QSGRenderNode):
             card = self._presentation
             if snapshot is None or card is None or min(self._logical_size) <= 0.0:
                 return
-            # The QML root's inherited opacity (the generation startup-reveal gate
-            # multiplied by the authored scene fade) must fade the GL content
-            # coherently with the card, exactly as it fades every other Quick
-            # item. This node draws raw GL, so the scene graph cannot apply that
-            # opacity for us; fold it into the authored content fade the shaders
-            # already honour via ``u_fade``. Rebasing only allocates while the
-            # scene is genuinely mid-fade, so steady-state rendering is unchanged.
-            inherited_opacity = self._inherited_scene_opacity()
-            if inherited_opacity < 1.0:
-                presentation = snapshot.presentation
-                snapshot = replace(
-                    snapshot,
-                    presentation=replace(
-                        presentation,
-                        content_fade=max(
-                            0.0, presentation.content_fade * inherited_opacity
-                        ),
-                    ),
-                )
+            # The scene's opacity (the generation startup-reveal gate multiplied
+            # by the authored scene fade) fades the GL content coherently with the
+            # card. This node draws raw GL, so the scene graph cannot apply it; it
+            # is folded into the content fade the shaders honour via ``u_fade``,
+            # the one place both drawing paths apply it (the native item's too).
+            # Allocates only while the scene is mid-fade.
+            snapshot = scene_faded_snapshot(snapshot, self._inherited_scene_opacity())
             render_target = self.renderTarget()
             if render_target is None:
                 raise RuntimeError("Quick visualizer has no active render target")

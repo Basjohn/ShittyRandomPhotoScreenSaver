@@ -259,7 +259,9 @@ Item {
                     && sourceRoot.cardShellEnabled
                     && sourceRoot.cardShadowEnabled
                     && width > 0.0 && height > 0.0
-                opacity: sourceRoot ? Number(sourceRoot.opacity) : 0.0
+                // The card's scene opacity, as the chrome in its layers (the root itself is never faded: its content
+                // host carries no scene opacity, VisualizerPresentation.qml).
+                opacity: sourceRoot ? Number(sourceRoot.sceneOpacity) : 0.0
                 color: sourceRoot ? sourceRoot.cardShadowColor : "transparent"
                 blur: sourceRoot ? Number(sourceRoot.cardShadowBlur) : 0.0
                 radius: sourceRoot ? Number(sourceRoot.cardCornerRadius) : 0.0

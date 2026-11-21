@@ -419,11 +419,15 @@ owned by `QuickDisplayVisualizerOwner`, not the QWidget-era `VisualizerPresentat
 (those, and the retired per-tick `push_spotify_visualizer_frame`, must not be resurrected). The owner eases
 `scene_fade` 0→1 once per activation (`_activation_scene_fade`, smoothstep over
 `_ACTIVATION_SCENE_FADE_DURATION_S`) sampled through the existing pacer-driven `sync_present` + transition
-clock — no new timer. Because the GL content is a custom `QSGRenderNode` that the scene graph cannot apply
-item opacity to, `rendering/quick/visualizer/node.py` folds `inheritedOpacity()` (authored `scene_fade` x
-generation `startupRevealOpacity` gate) into `content_fade` at render time, only while genuinely fading. The
-whole visualizer therefore fades shell + content coherently and honours the coordinated startup reveal, and
-`content_fade` remains free to carry the mode-transition crossfade layer.
+clock — no new timer. The scene opacity (authored `scene_fade` x generation `startupRevealOpacity` gate, the
+presentation root's `sceneOpacity`) fades the card's chrome in the root's two layers and its shadow in the display's
+shadow lane; the content host between them carries none of it (21 Nov 2026, R-242 "scene fade applied twice"). The
+scene hands it to the Visualizer item (`VisualizerRenderItem.set_scene_opacity`), and both drawing paths, the Python
+render node and the native route, fold it into `content_fade` through the one function
+`render_contract.scene_faded_snapshot` (the shader's `u_fade`), only while genuinely fading. Never let Qt's opacity
+reach the content host: the native item's surface would be faded after the shader (two roundings, and another formula
+where a shader mixes with `u_fade`). The whole visualizer therefore fades shell + content coherently and honours the
+coordinated startup reveal, and `content_fade` remains free to carry the mode-transition crossfade layer.
 
 For carded modes the authority fades shell + content coherently.
 

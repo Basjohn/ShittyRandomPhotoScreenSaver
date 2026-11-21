@@ -229,6 +229,9 @@ class VisualizerRenderItem(QQuickItem):
         self._identity: VisualizerRenderIdentity | None = None
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._custom_layout_presentation_authority = False
+        # The Visualizer scene's opacity (the authored scene fade times the startup reveal gate): its content host
+        # carries none of it, so both drawing paths fold it into the drawn content fade (``set_scene_opacity``).
+        self._scene_opacity = 1.0
         self._drop_retained = False
         # A display move's target before its swap (1C.2): the identity it will be given and the latest snapshot the
         # owner handed over, drawn only at zero content opacity so the render host prepares; never a render source.
@@ -305,7 +308,7 @@ class VisualizerRenderItem(QQuickItem):
         if expected is not None:
             expected.close()                      # a native mode keeps no renderer history to carry over
         route.sync(bridge=self._bridge, identity=self._identity, presentation=self._presentation,
-                   authority=self._custom_layout_presentation_authority)
+                   authority=self._custom_layout_presentation_authority, scene_opacity=self._scene_opacity)
 
     def render_host_lifecycle_snapshot(
         self,
@@ -345,6 +348,22 @@ class VisualizerRenderItem(QQuickItem):
     @property
     def presentation(self) -> ResolvedVisualizerPresentation | None:
         return self._presentation
+
+    @property
+    def scene_opacity(self) -> float:
+        return self._scene_opacity
+
+    def set_scene_opacity(self, opacity: float) -> None:
+        """GUI thread: the Visualizer scene's opacity (the presentation root's ``sceneOpacity``: the authored scene
+        fade times the startup reveal gate), set by the scene at the edges that change it. The card's content host
+        carries none of it, so it reaches the content only here: the Python node and the native route both fold it into
+        the drawn content fade (``render_contract.scene_faded_snapshot``), one rounding on either path. A change asks
+        for a sync; nothing at rest."""
+        value = max(0.0, min(1.0, float(opacity)))
+        if value == self._scene_opacity:
+            return
+        self._scene_opacity = value
+        self.update()
 
     def bind_render_source(
         self,
@@ -729,6 +748,7 @@ class VisualizerRenderItem(QQuickItem):
             presentation=presentation,
             clear_snapshot=clear_snapshot or drop_retained,
             screen_index=screen_index,
+            scene_opacity=self._scene_opacity,
         )
         if snapshot is not None and self._frame_trace is not None:
             self._frame_trace.record(
