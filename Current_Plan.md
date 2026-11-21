@@ -1719,8 +1719,10 @@ Each item reproduces its failure first. The lead judges pixels on the operator's
 by risk; none takes a slot native work can use.
 
 - [ ] **Media's own playback-state ink** (`MediaPresentation.qml:7`) still differs from Feeds and Reddit (glass 0.80
-  against 0.88 on Default Dark): decide whether Media too takes the shared legibility path. (The Gmail light-Mica
-  shortfall filed beside it was the capture tool measuring the authored colour instead of the drawn ink, fixed 21 Nov.)
+  against 0.88 on Default Dark). Lead decision (21 Nov): Media takes the shared legibility path, one owner, as Gmail
+  did; remove Media's own ink, then measure every material and both themes with `tools/surface_material_capture.py
+  --legibility` (floors held) and render a before/after Media sheet for the lead. (The Gmail light-Mica shortfall filed
+  beside it was the capture tool measuring the authored colour instead of the drawn ink, fixed 21 Nov.)
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
   live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 
