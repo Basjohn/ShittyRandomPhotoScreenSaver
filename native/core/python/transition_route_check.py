@@ -82,6 +82,13 @@ FRAGMENT_PASS_RULE_A = pt.Tolerance("native fragment pass against its Python ren
 SEVEN_RULE_B = pt.Tolerance("fullscreen transition, Vulkan against OpenGL (rule b)", scatter_pixels=1100)
 FRAGMENT_PASS_RULE_B = pt.Tolerance("native fragment pass, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
                                     tie_pixels=TIE_PIXELS)
+#: Beam's rule (b), PROPOSED (agent, 21 Nov; flips need the lead's decision, ``tools/pixel_tolerance.py``): the fragment
+#: pass's bound and one flip a frame. Measured over the 54 frames of BEAM_VARIANTS (twice): one pixel in one frame
+#: (beam_sparks, dpr 1.5, progress 0.35), 3 levels in every channel, isolated on a spark streak's edge, where the two
+#: APIs' rasterisers decide a dim spark's coverage of a pixel differently; native OpenGL holds Python's value there
+#: (rule a passes), and no other pixel of any frame is past 2 levels.
+BEAM_RULE_B = pt.Tolerance("Beam (fragment and sparks), Vulkan against OpenGL (rule b)", scatter_pixels=2000,
+                           tie_pixels=TIE_PIXELS, flip_pixels=1)
 REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
@@ -387,13 +394,15 @@ def vulkan_against_opengl(work: Path) -> dict:
         entry["max_level"] = max(entry["max_level"], result.get("max_level", 0))
         entry["max_over"] = max(entry["max_over"], _over(vk[key], gl[key], VULKAN_TOLERANCE))
         worst = max(worst, result.get("max_level", 255))
-        tolerance = FRAGMENT_PASS_RULE_B if _is_fragment_pass(variant.split("_", 1)[1]) else SEVEN_RULE_B
+        drawn = variant.split("_", 1)[1]
+        tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
+                     FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound()]}
 
 
 # --------------------------------------------------------------------------------------------------- the child
