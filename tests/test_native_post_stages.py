@@ -158,7 +158,7 @@ def test_the_bloom_chain_is_one_texture_a_level_and_never_generate_mips() -> Non
     assert f"constexpr int kBloomLevels = {post.BLOOM_LEVELS};" in header
     sync = stages[stages.index("bool PostStages::sync("):stages.index("bool PostStages::bloomBindings(")]
     assert "size = QSize(qMax(1, size.width() / 2), qMax(1, size.height() / 2));" in sync
-    assert "std::unique_ptr<QRhiTexture> levels[kBloomLevels];" in header
+    assert "RhiOwned<QRhiTexture> levels[kBloomLevels];" in header
     assert "generateMips" not in stages[stages.index("void PostStages::recordBloom("):
                                         stages.index("void PostStages::recordDefocusClip(")]
 
@@ -215,7 +215,7 @@ def test_the_defocus_layer_alone_takes_generate_mips() -> None:
     record = content[content.index("void ModeContent::recordDefocus("):content.index("bool ModeContent::syncTargets(")]
     assert record.count("->generateMips(") == 2
     # The one other generateMips is N4.a's: an item texture uploaded with its mips (not a scene target's).
-    upload = content[content.index("bool ModeContent::uploadInFrame("):content.index("std::unique_ptr<QRhiTexture> "
+    upload = content[content.index("bool ModeContent::uploadInFrame("):content.index("RhiOwned<QRhiTexture> "
                                                                                    "ModeContent::importTexture(")]
     assert content.count("->generateMips(") == 2 + upload.count("->generateMips(")
     assert "generateMips(" not in (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8").replace(

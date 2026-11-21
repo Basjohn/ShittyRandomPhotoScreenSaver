@@ -36,6 +36,7 @@
 #pragma once
 
 #include "mesh_buffers.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
@@ -211,13 +212,13 @@ public:
     {
         StorageBufferDeclaration decl;
         quint32 bytes = 0;
-        std::unique_ptr<QRhiBuffer> buffer;
+        RhiOwned<QRhiBuffer> buffer;
         quint64 fresh = 0;    // the storage serial it was made zeroed at (a resize's prefix copy keeps its source's)
     };
     struct Image
     {
         StorageImageDeclaration decl;
-        std::unique_ptr<QRhiTexture> texture;
+        RhiOwned<QRhiTexture> texture;
         qint64 bytes = 0;
         quint64 fresh = 0;    // the storage serial it was made zeroed at
     };
@@ -290,13 +291,13 @@ private:
     // The kernels (made at the first edge that needs them): their pipelines, a block per operation in one Dynamic
     // uniform buffer, and a bindings object per operation (made at the edge, released after it).
     QRhi *m_kernelRhi = nullptr;
-    std::unique_ptr<QRhiComputePipeline> m_clear;
-    std::unique_ptr<QRhiComputePipeline> m_copy;
-    std::unique_ptr<QRhiShaderResourceBindings> m_clearLayout;
-    std::unique_ptr<QRhiShaderResourceBindings> m_copyLayout;
-    std::unique_ptr<QRhiBuffer> m_opBlocks;
-    std::unique_ptr<QRhiBuffer> m_dummy;  // a 16-byte storage buffer the layouts are made over
-    std::unique_ptr<QRhiShaderResourceBindings> m_opBindings[kMaxStorageEdgeOps];
+    RhiOwned<QRhiComputePipeline> m_clear;
+    RhiOwned<QRhiComputePipeline> m_copy;
+    RhiOwned<QRhiShaderResourceBindings> m_clearLayout;
+    RhiOwned<QRhiShaderResourceBindings> m_copyLayout;
+    RhiOwned<QRhiBuffer> m_opBlocks;
+    RhiOwned<QRhiBuffer> m_dummy;  // a 16-byte storage buffer the layouts are made over
+    RhiOwned<QRhiShaderResourceBindings> m_opBindings[kMaxStorageEdgeOps];
     quint32 m_opStride = 0;
 };
 

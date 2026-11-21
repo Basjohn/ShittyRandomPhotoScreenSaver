@@ -94,9 +94,14 @@ class Host:
         """A new frame driver on the host's window (after :meth:`detach`)."""
         self._module.host_reattach(self._live())
 
-    def detach(self) -> None:
-        """The frame driver stops recording now and releases its resources on the render thread."""
-        self._module.host_detach(self._live())
+    def detach(self, *, at_frame_edge: bool = False) -> None:
+        """The frame driver stops recording now and releases its resources on the render thread. ``at_frame_edge``
+        (N3.6, harness only, a hidden host): the release waits for the next frame and runs inside it, as a window host's
+        always does (the in-frame release path, which hands raw Vulkan objects to the device's deferred queue)."""
+        if at_frame_edge:
+            self._module.host_detach(self._live(), True)
+        else:
+            self._module.host_detach(self._live())
 
     def set_probe(self, **config: Any) -> None:
         """The probe pass from the next frame, with these options (``PROBE_OPTIONS``; the defaults are the decided

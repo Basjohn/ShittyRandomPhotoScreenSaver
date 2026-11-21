@@ -281,19 +281,27 @@ PyObject *host_reattach(PyObject *, PyObject *args)
 PyObject *host_detach(PyObject *, PyObject *args)
 {
     long long handle = 0;
-    if (!PyArg_ParseTuple(args, "L", &handle))
+    int atFrameEdge = 0;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &atFrameEdge))
         return nullptr;
     srpss_core::Host *host = hostOf(handle);
     if (!host)
         return nullptr;
+    auto *hidden = dynamic_cast<srpss_core::HiddenHost *>(host);
     QString error;
     bool ok = false;
     Py_BEGIN_ALLOW_THREADS // the hidden host waits for its render thread
-    ok = host->detach(&error);
+    // N3.6: at the frame edge is how a window host always releases; on a hidden host it is the harness's in-frame path.
+    ok = (atFrameEdge && hidden) ? hidden->detachAtFrameEdge(&error) : host->detach(&error);
     Py_END_ALLOW_THREADS
     if (!ok)
         return runtimeError(error);
     Py_RETURN_NONE;
+}
+
+PyObject *raw_vulkan_counts(PyObject *, PyObject *)
+{
+    return pyJson(srpss_core::rawVulkanCountsJson());
 }
 
 PyObject *host_state(PyObject *, PyObject *args)
@@ -2869,7 +2877,11 @@ PyMethodDef methods[] = {
       "y_up_in_framebuffer, frame)." },
     { "host_reattach", host_reattach, METH_VARARGS, "(handle) -> None: a new frame driver on the host's window." },
     { "host_detach", host_detach, METH_VARARGS,
-      "(handle) -> None: the frame driver stops and releases on the render thread." },
+      "(handle, at_frame_edge=False) -> None: the frame driver stops and releases on the render thread; at_frame_edge "
+      "(N3.6, harness, a hidden host) releases inside its next frame as a window host does." },
+    { "raw_vulkan_counts", raw_vulkan_counts, METH_NOARGS,
+      "() -> JSON str: N3.6's deferred raw Vulkan objects: deferred, released at frame edges, released at idle, "
+      "pending." },
     { "host_state", host_state, METH_VARARGS, "(handle) -> JSON str: the host and its frame drivers." },
     { "host_set_content", host_set_content, METH_VARARGS,
       "(handle, quick_item_address) -> None: the hidden host renders this item (0: none)." },

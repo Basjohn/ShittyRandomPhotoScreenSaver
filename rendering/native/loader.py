@@ -312,6 +312,11 @@ class NativeCore:
         """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
         return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
 
+    def raw_vulkan_counts(self) -> dict:
+        """N3.6: the raw Vulkan objects the core retired inside a frame (``vulkan_context.h``): ``raw_vulkan_deferred``,
+        ``raw_vulkan_released_at_edges``, ``raw_vulkan_released_at_idle`` and ``raw_vulkan_pending``."""
+        return json.loads(self.module.raw_vulkan_counts())
+
     def pipeline_cache_self_test(self, directory: str | Path) -> dict:
         """N3.6, GPU-free: the core's pipeline cache file (``pipeline_cache.h``) in ``directory``: the format's accept
         and every refusal, the round trip, and two writer threads replacing the file while it is read."""

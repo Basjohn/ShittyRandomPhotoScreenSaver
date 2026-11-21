@@ -1,5 +1,6 @@
-"""N3.6's proof of the device-loss rebuild (Current_Plan.md item 8b, "N3.6 Lifetime", the device-loss box; research
-``Docs/Future_Work/Native_Core_QRhi_Research_N3.md`` section 11; ``native/core/src/host_adapter.cpp``).
+"""N3.6's lifetime proofs: the device-loss rebuild and the release timing (Current_Plan.md item 8b, "N3.6 Lifetime";
+research ``Docs/Future_Work/Native_Core_QRhi_Research_N3.md`` sections 11 and 12; ``native/core/src/host_adapter.cpp``,
+``frame_driver.cpp``, ``vulkan_context.cpp``).
 
 The core owns the ``VkDevice`` Qt adopts and Qt's recovery re-adopts the device it was given, so after a loss the core
 hands the window a new device from ``sceneGraphInvalidated`` (the render thread) before Qt's next QRhi, destroys the lost
@@ -19,6 +20,13 @@ Rounds (one child process per API):
             stays attached and records again.
   control   (Vulkan) the same loss with ``swap_device=False``: Qt's new QRhi adopts the old device again. With the
             rebuild round this shows that the slot's store is what moves Qt's rebuild to the new device.
+  release   (each API; the release-timing box, research section 12, ``rhi_owned.h``) the GPU timer timing the probe
+            pass every frame, then a detach released inside the next frame (``detach(at_frame_edge=True)``, a window
+            host's release): no wait inside that frame, and on Vulkan the timer's raw query pool handed to the device's
+            deferred queue; a driver attached again destroys it at a later edge, once Qt's frames waited for its last
+            use; a second pool left with no later frame goes at the host's close, its device idle; the scene graph
+            invalidated outside any frame (no frame follows) is met by QRhi::finish() at that edge. Its negative control
+            is the ABI 29 module, whose in-frame release waited for the queue (release_waits 1).
 On Vulkan the instance has the Khronos validation layer with synchronisation validation (``--layer-path``); every message
 is attributed (``vk_validation.py``).
 
@@ -29,7 +37,7 @@ real loss (a failed ``makeCurrent``).
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/device_loss_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds rebuild control] [--photos A.png B.png] [--label n36_device_loss]
+  [--apis opengl vulkan] [--rounds rebuild control release] [--photos A.png B.png] [--label n36_device_loss]
 Evidence: .artifacts/evidence/native_core/n3_6/<date>_<label>/ (summary.json; one PNG sheet per API: the frame before
 each loss, the lost frame, the frame after). Exit 0 whenever the harness ran; the verdict is the last printed line
 ("N36 LOSS VERDICT PASS" or "N36 LOSS VERDICT FAIL: ...").
@@ -50,9 +58,12 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("rebuild", "control")
+ROUNDS = ("rebuild", "control", "release")
 CHILD_TIMEOUT_S = 900
 LOSSES = 2              # in a row on one host: a second loss proves the first rebuild left a host that can lose again
+TIMED_FRAMES = 8        # the release round's frames with the timer writing its pool
+EDGE_FRAMES = 4         # frames after the detach: more than Vulkan's two frames in flight
+RELEASE_HOST = (64, 64)
 PROGRESS = 0.5          # both pictures show
 LOST_EDGE_FRAMES = 4    # frames waited for the lost edge's queued call to reach the owner
 SHEET_TILE = (320, 180)
@@ -208,6 +219,83 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
 
 
+def _counts_delta(after: dict, before: dict) -> dict:
+    return {key: after.get(key, 0) - before.get(key, 0) for key in after if key != "raw_vulkan_pending"}
+
+
+def judge_release(steps: dict, *, vulkan: bool) -> dict:
+    """The release round's readings, judged (GPU-free: the tests change one reading per check). ``steps``: the
+    previous driver's state after the in-frame detach (``detached``), the raw counts' deltas and pending after it
+    (``deferred``), after the edges of a driver attached again (``edges``), after a host's close (``closed``), and the
+    driver's state after an invalidation outside any frame (``invalidated``)."""
+    detached = steps.get("detached") or {}
+    last = detached.get("gpu_timer_last") or {}
+    checks = {
+        "released_inside_the_next_frame": detached.get("released") is True
+        and str(detached.get("release_reason", "")).startswith("detached: released at the frame edge"),
+        "no_wait_inside_the_frame": last.get("release_waits") == 0,
+        "finish_where_no_frame_follows": (steps.get("invalidated") or {}).get("no_frame_finishes") == 1,
+    }
+    if vulkan:
+        deferred, edges, closed = (steps.get(k) or {} for k in ("deferred", "edges", "closed"))
+        checks["pool_deferred_not_destroyed"] = (last.get("deferred_releases") == 1
+                                                 and deferred.get("raw_vulkan_deferred") == 1
+                                                 and deferred.get("pending") == 1)
+        checks["pool_destroyed_at_a_later_edge"] = (edges.get("raw_vulkan_released_at_edges") == 1
+                                                    and edges.get("pending") == 0
+                                                    and edges.get("driver_raw_vulkan_released") == 1)
+        checks["pool_left_goes_at_the_close"] = (closed.get("raw_vulkan_released_at_idle") == 1
+                                                 and closed.get("pending") == 0)
+    return checks
+
+
+def round_release(core, app, api: str) -> dict:
+    vulkan = api == "vulkan"
+    facts: dict = {}
+    steps: dict = {}
+    host = core.hidden_host(*RELEASE_HOST)
+    try:
+        start = core.raw_vulkan_counts()
+        host.set_probe()
+        host.set_gpu_timer(True)
+        host.frames(TIMED_FRAMES)
+        host.detach(at_frame_edge=True)
+        host.frames(1)                                   # the old driver's release, inside this frame
+        steps["detached"] = host.state().get("previous_driver") or {}
+        after_detach = core.raw_vulkan_counts()
+        steps["deferred"] = dict(_counts_delta(after_detach, start), pending=after_detach.get("raw_vulkan_pending"))
+        host.attach()                                    # a driver on the same window: its edges drain the queue
+        host.frames(EDGE_FRAMES)
+        after_edges = core.raw_vulkan_counts()
+        steps["edges"] = dict(_counts_delta(after_edges, after_detach), pending=after_edges.get("raw_vulkan_pending"),
+                              driver_raw_vulkan_released=(host.state().get("driver") or {}).get("raw_vulkan_released"))
+        # A second pool, left with no later frame: it goes at the host's close (its device idle).
+        host.set_probe()
+        host.set_gpu_timer(True)
+        host.frames(TIMED_FRAMES)
+        host.detach(at_frame_edge=True)
+        host.frames(1)
+        before_close = core.raw_vulkan_counts()
+        facts["pending_before_close"] = before_close.get("raw_vulkan_pending")
+        facts["host_close"] = host.close()
+        after_close = core.raw_vulkan_counts()
+        steps["closed"] = dict(_counts_delta(after_close, before_close), pending=after_close.get("raw_vulkan_pending"))
+        # No frame follows: the scene graph invalidated outside any frame, the driver still attached.
+        host = core.hidden_host(*RELEASE_HOST)
+        host.set_probe()
+        host.frames(2)
+        host.invalidate_scene_graph()
+        steps["invalidated"] = host.state().get("driver") or {}
+    finally:
+        if not host.closed:
+            facts["last_host_close"] = host.close()
+        _flush(app)
+    checks = judge_release(steps, vulkan=vulkan)
+    facts["steps"] = steps
+    facts["raw_counts_at_end"] = core.raw_vulkan_counts()
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
+
+
 def _flush(app) -> None:
     import host_check
 
@@ -270,8 +358,11 @@ def child(args) -> dict:
                 if vulkan:
                     core.set_vulkan_phase(f"n36 {name}")
                 try:
-                    record[name] = round_losses(core, engine, app, args.api, folder, photo_paths,
-                                                swap=name == "rebuild", tiles=tiles)
+                    if name == "release":
+                        record[name] = round_release(core, app, args.api)
+                    else:
+                        record[name] = round_losses(core, engine, app, args.api, folder, photo_paths,
+                                                    swap=name == "rebuild", tiles=tiles)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:

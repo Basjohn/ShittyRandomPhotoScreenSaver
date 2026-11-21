@@ -154,5 +154,8 @@
 // loss_forced_pending and vulkan_live_devices, the device facts' device_fault. A window host replaces a lost Vulkan
 // device itself (no call). Backward compatible for every earlier caller. Within 30 (N3.6's pipeline cache, the same
 // unbuilt round): pipeline_cache_self_test (GPU-free) and pipeline_cache_directory (the harness's directory of the
-// core's file); the job service's stop record's pipeline_cache_load and pipeline_cache_save.
+// core's file); the job service's stop record's pipeline_cache_load and pipeline_cache_save. Within 30 (N3.6's release
+// timing): host_detach's at_frame_edge (harness, a hidden host), raw_vulkan_counts, the frame driver state's
+// raw_vulkan_released and no_frame_finishes, the GPU timer state's deferred_releases; every QRhi resource is retired by
+// deleteLater (rhi_owned.h), the GPU timer's pool retired inside a frame goes to the device's deferred queue.
 #define SRPSS_NATIVE_CORE_ABI 30

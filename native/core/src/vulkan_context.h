@@ -33,6 +33,7 @@
 #include <memory>
 
 class QQuickWindow;
+class QVulkanDeviceFunctions;
 class QVulkanInstance;
 
 namespace srpss_core {
@@ -62,6 +63,33 @@ QJsonObject vulkanDeviceFacts(quint64 device);
 // a device that lacks the feature; false restores it. Read at each device's creation.
 void setDeviceWithoutIndependentBlend(bool without);
 bool deviceWithoutIndependentBlend();
+
+// N3.6, release timing (research N3 section 12): a raw Vulkan object the core made itself (never QRhi's, whose deferred
+// release QRhi runs), retired while a frame in flight may still use it. QRhi's own rule applied by the core: the object
+// is stamped with the window's frame edge of its retirement and destroyed at the first frame edge at least
+// FramesInFlight later (Qt's beginFrame of that frame waited for its slot's fence, so the GPU is done with it), or at
+// once after its device's queue is idle (QRhi::finish outside a frame, the device's vkDeviceWaitIdle at teardown).
+// Never a wait inside a frame. One device per window (D6), so a device's stamps are its window's edges.
+enum class RawVulkanKind {
+    QueryPool = 0, // the GPU timer's timestamp pool (gpu_timer.cpp)
+};
+struct RawVulkanObject
+{
+    quint64 device = 0;                        // VkDevice
+    QVulkanDeviceFunctions *functions = nullptr; // the adopting instance's for that device
+    RawVulkanKind kind = RawVulkanKind::QueryPool;
+    quint64 handle = 0;                        // the object (a non-dispatchable handle)
+};
+// Any thread: queued, to go at the window edge `retiredAtEdge + framesInFlight` or at the device's idle.
+void deferRawVulkanDestroy(const RawVulkanObject &object, qint64 retiredAtEdge);
+// Render thread, at the frame edge `edge` of the device's window: the entries whose frames completed go. Returns how many.
+int releaseRawVulkan(quint64 device, qint64 edge, int framesInFlight);
+// After the device's queues are idle (QRhi::finish() outside a frame, vkDeviceWaitIdle): every entry of the device goes.
+int releaseAllRawVulkan(quint64 device);
+// One atomic: whether any entry waits (the frame edge's test at rest).
+bool rawVulkanPending();
+// The process's counts: deferred, released at edges, released at idle, pending.
+QJsonObject rawVulkanCountsJson();
 
 // One VkDevice for one Qt Quick window, on the process instance.
 class VulkanDevice

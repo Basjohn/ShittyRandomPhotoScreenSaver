@@ -1,5 +1,6 @@
 // The async job service (D9, N3.8): job_service.h has the contract.
 #include "job_service.h"
+#include "rhi_owned.h"
 
 #include "mode_content.h" // TextureImage, rgba8TextureBytes
 
@@ -746,7 +747,7 @@ public:
         }
         const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                                   : QRhiTexture::Flags();
-        std::unique_ptr<QRhiTexture> texture(m_rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
+        RhiOwned<QRhiTexture> texture(m_rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
         texture->setName(QByteArrayLiteral("srpss core job texture ") + job.name);
         if (!texture->create()) {
             *error = QStringLiteral("%1 could not be created at %2 x %3 on the job queue")

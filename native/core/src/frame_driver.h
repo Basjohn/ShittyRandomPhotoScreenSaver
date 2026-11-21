@@ -94,6 +94,8 @@ private:
     void releaseLoadAndTimer(QRhi *rhi, bool outsideFrame);
     void disconnectEdges();
     void setError(const QString &error);
+    // N3.6: the window's frame edge now (the stamp of a raw object retired at it); -1 before connectTo.
+    qint64 windowEdge() const;
     int timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind);
     void timerEnd(QRhi *rhi, QRhiCommandBuffer *cb, int scope);
     // N5.7b: the window's backdrop pyramids after its background layer (each timed whole); true when one built.
@@ -113,6 +115,8 @@ private:
     QAtomicInteger<qint64> m_edgesAfterDetach { 0 };
     QAtomicInteger<qint64> m_retiredReleased { 0 }; // N3.8: retired job outputs handed back to their services
     QAtomicInteger<qint64> m_backdropBuilds { 0 };  // N5.7b: backdrop pyramid builds recorded
+    QAtomicInteger<qint64> m_rawReleased { 0 };     // N3.6: deferred raw Vulkan objects destroyed by this driver
+    QAtomicInteger<qint64> m_noFrameFinishes { 0 }; // N3.6: QRhi::finish() at an edge no frame follows
     QAtomicInteger<qint64> m_readbacksStarted { 0 };
     QAtomicInteger<int> m_detach { 0 };
     QAtomicInteger<int> m_released { 0 };

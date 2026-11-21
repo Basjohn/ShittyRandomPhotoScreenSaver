@@ -733,6 +733,18 @@ bool HiddenHost::detach(QString *error)
     return true;
 }
 
+bool HiddenHost::detachAtFrameEdge(QString *error)
+{
+    if (!m_driver) {
+        *error = QStringLiteral("the host is not attached");
+        return false;
+    }
+    m_driver->requestDetach(); // released and disconnected by its next beforeRendering, inside that frame
+    m_lastDriver = m_driver;
+    m_driver.reset();
+    return true;
+}
+
 bool HiddenHost::setContent(QQuickItem *item, QString *error)
 {
     State &s = *m_state;

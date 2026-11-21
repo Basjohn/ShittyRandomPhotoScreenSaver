@@ -138,6 +138,10 @@ public:
     // lost takes the same path by itself. `swapDevice` false (Vulkan): the rebuild keeps the device, the control of
     // the slot's setGraphicsDevice. The host's state lists each loss (device_losses).
     bool forceDeviceLoss(bool swapDevice, QString *error);
+    // N3.6, harness only: a detach whose release waits for the next frame edge (inside that frame), as a window host's
+    // does, instead of the hidden host's release outside any frame now: the in-frame release path (the GPU timer's
+    // pool to the device's deferred queue, never a wait inside the frame) on a host the harness drives.
+    bool detachAtFrameEdge(QString *error);
     // Detaches, invalidates Qt's scene graph on the render thread, deletes the render control (Qt's QRhi) and the window,
     // then destroys the device (Vulkan). Call with the GIL released. Idempotent.
     QJsonObject close();

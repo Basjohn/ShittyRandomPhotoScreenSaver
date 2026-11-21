@@ -165,6 +165,13 @@ build selection; current host and composite proof lives here.
     owned pipeline, sampler and binding wrappers, including failed partial builds until retirement; textures/storage
     have their separate counts. The transparency targets and
     the mipped layer live in `scene_targets.*`, the steps in `mode_content.*`'s record.
+  - `rhi_owned.h` (N3.6, release timing): every QRhi resource the core holds is a `RhiOwned<T>`, retired by
+    `deleteLater()` at once (deleted at the end of the current frame inside one, now outside); the native objects are
+    QRhi's deferred releases (two frames on Vulkan, one on OpenGL: accepted). The frame driver calls `QRhi::finish()`
+    only at an edge no frame follows (its window's scene graph invalidated: a window retired, the saver's exit, a lost
+    path), outside any frame and never on a lost device. A raw Vulkan object (the GPU timer's query pool) retired inside
+    a frame goes to its device's deferred queue (`vulkan_context.h`), destroyed at the window's edge `FramesInFlight`
+    later or at the device's idle; never a wait inside a frame.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.

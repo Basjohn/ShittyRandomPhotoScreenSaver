@@ -3,6 +3,7 @@
 
 #include "frame_abi_generated.h"
 #include "mode_schema.h"
+#include "rhi_owned.h"
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
@@ -561,9 +562,9 @@ bool ModeMeshes::upload(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu &gpu, c
     // N3.3: a mesh with storage usage is also a StorageBuffer (compute reads it, D3's geometry once per revision).
     const QRhiBuffer::UsageFlags usage = mesh.storage ? (QRhiBuffer::VertexBuffer | QRhiBuffer::StorageBuffer)
                                                       : QRhiBuffer::UsageFlags(QRhiBuffer::VertexBuffer);
-    std::unique_ptr<QRhiBuffer> vertices(rhi->newBuffer(QRhiBuffer::Immutable, usage, quint32(image->vertices.size())));
+    RhiOwned<QRhiBuffer> vertices(rhi->newBuffer(QRhiBuffer::Immutable, usage, quint32(image->vertices.size())));
     vertices->setName(QByteArrayLiteral("srpss core mesh ") + mesh.name);
-    std::unique_ptr<QRhiBuffer> instances;
+    RhiOwned<QRhiBuffer> instances;
     bool ok = vertices->create();
     g_buffersCreated.fetchAndAddRelaxed(1);
     if (ok && !image->instances.isEmpty()) {

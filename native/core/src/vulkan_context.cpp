@@ -971,6 +971,112 @@ bool deviceWithoutIndependentBlend()
     return g_withoutIndependentBlend.loadAcquire() != 0;
 }
 
+namespace {
+
+struct RawVulkanEntry
+{
+    RawVulkanObject object;
+    qint64 retiredAtEdge = 0;
+};
+
+QMutex g_rawMutex;
+QList<RawVulkanEntry> g_raw; // under g_rawMutex
+QAtomicInt g_rawPending { 0 };
+QAtomicInteger<qint64> g_rawDeferred { 0 };
+QAtomicInteger<qint64> g_rawReleasedAtEdges { 0 };
+QAtomicInteger<qint64> g_rawReleasedAtIdle { 0 };
+
+void destroyRaw(const RawVulkanObject &object)
+{
+    if (!object.functions || !object.device || !object.handle)
+        return;
+    const VkDevice device = reinterpret_cast<VkDevice>(quintptr(object.device));
+    switch (object.kind) {
+    case RawVulkanKind::QueryPool:
+        object.functions->vkDestroyQueryPool(device, reinterpret_cast<VkQueryPool>(quintptr(object.handle)), nullptr);
+        break;
+    }
+}
+
+// Under g_rawMutex: the device's entries `due` says may go, taken out of the queue.
+template <typename Due>
+QList<RawVulkanObject> takeRaw(quint64 device, Due due)
+{
+    QList<RawVulkanObject> taken;
+    for (qsizetype i = 0; i < g_raw.size();) {
+        if (g_raw.at(i).object.device == device && due(g_raw.at(i))) {
+            taken.append(g_raw.at(i).object);
+            g_raw.removeAt(i);
+        } else {
+            ++i;
+        }
+    }
+    g_rawPending.storeRelease(int(g_raw.size()));
+    return taken;
+}
+
+} // namespace
+
+void deferRawVulkanDestroy(const RawVulkanObject &object, qint64 retiredAtEdge)
+{
+    if (!object.handle)
+        return;
+    QMutexLocker lock(&g_rawMutex);
+    RawVulkanEntry entry;
+    entry.object = object;
+    entry.retiredAtEdge = retiredAtEdge;
+    g_raw.append(entry);
+    g_rawPending.storeRelease(int(g_raw.size()));
+    g_rawDeferred.fetchAndAddRelaxed(1);
+}
+
+int releaseRawVulkan(quint64 device, qint64 edge, int framesInFlight)
+{
+    if (!device || g_rawPending.loadAcquire() == 0)
+        return 0;
+    QList<RawVulkanObject> taken;
+    {
+        QMutexLocker lock(&g_rawMutex);
+        taken = takeRaw(device, [edge, framesInFlight](const RawVulkanEntry &entry) {
+            return edge >= entry.retiredAtEdge + qint64(framesInFlight);
+        });
+    }
+    for (const RawVulkanObject &object : taken)
+        destroyRaw(object); // their last frames completed: no wait
+    g_rawReleasedAtEdges.fetchAndAddRelaxed(taken.size());
+    return int(taken.size());
+}
+
+int releaseAllRawVulkan(quint64 device)
+{
+    if (!device || g_rawPending.loadAcquire() == 0)
+        return 0;
+    QList<RawVulkanObject> taken;
+    {
+        QMutexLocker lock(&g_rawMutex);
+        taken = takeRaw(device, [](const RawVulkanEntry &) { return true; });
+    }
+    for (const RawVulkanObject &object : taken)
+        destroyRaw(object); // the device's queues are idle
+    g_rawReleasedAtIdle.fetchAndAddRelaxed(taken.size());
+    return int(taken.size());
+}
+
+bool rawVulkanPending()
+{
+    return g_rawPending.loadAcquire() != 0;
+}
+
+QJsonObject rawVulkanCountsJson()
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("raw_vulkan_deferred"), double(g_rawDeferred.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_released_at_edges"), double(g_rawReleasedAtEdges.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_released_at_idle"), double(g_rawReleasedAtIdle.loadRelaxed()));
+    o.insert(QStringLiteral("raw_vulkan_pending"), g_rawPending.loadAcquire());
+    return o;
+}
+
 QStringList VulkanDevice::destroy()
 {
     QStringList steps;
@@ -996,6 +1102,10 @@ QStringList VulkanDevice::destroy()
         const VkResult idle = waitIdle ? waitIdle(device) : VK_ERROR_INITIALIZATION_FAILED;
         steps << (QStringLiteral("vkDeviceWaitIdle: ")
                   + (idle == VK_SUCCESS ? QStringLiteral("VK_SUCCESS") : vkResultName(idle)));
+        // N3.6: raw objects still deferred (their window rendered no later edge) go now, the device idle.
+        const int raw = releaseAllRawVulkan(m_device);
+        if (raw)
+            steps << QStringLiteral("raw Vulkan objects destroyed at idle: %1").arg(raw);
         if (destroyDevice) {
             destroyDevice(device, nullptr);
             steps << QStringLiteral("vkDestroyDevice");
