@@ -714,6 +714,8 @@ class BubbleSimulation:
                 for bb in small_pool[:promote_count]:
                     bb.promoted = True
                     bb.promote_timer = promote_duration
+        # This world's movement scale (BubbleWorld.motion_scale): 1 on every card, so card motion is unchanged.
+        motion_gain = float(self._world.motion_scale)
         # Tick down promotion timers
         for b in self._bubbles:
             if b.promoted:
@@ -1211,6 +1213,9 @@ class BubbleSimulation:
                 move_y - stream_move_y,
             )
 
+            if motion_gain != 1.0:
+                move_x *= motion_gain
+                move_y *= motion_gain
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
             if b.impulse_vx != 0.0 or b.impulse_vy != 0.0:

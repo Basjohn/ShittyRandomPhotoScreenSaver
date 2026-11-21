@@ -90,3 +90,26 @@ def test_display_wide_zooms_out_with_more_heroes_while_the_card_keeps_its_world(
 
     # Each hero breathes as much against its own size at both sizes (the drawn radius is that ratio times the zoom).
     assert _breathing(wide["frames"]) == pytest.approx(_breathing(card["frames"]), rel=0.15)
+
+
+def test_display_wide_motion_keeps_the_card_rules_on_screen_speed():
+    # On-screen speed scales with the world's zoom; the display-wide card zooms less than the card rule, so its movement
+    # per step is scaled back up by exactly the card rule's zoom over its own (operator, 22 Nov: ~20 % slow).
+    import math
+
+    from widgets.spotify_visualizer.bubble_viewport_profile import (
+        BUBBLE_LIVE_CAPACITY, DISPLAY_WIDE_ZOOM_EXPONENT, resolve_bubble_world,
+    )
+
+    extent = (1920.0, 1080.0)
+    population = 60
+    card = resolve_bubble_world(extent, authored_population=population)
+    wide = resolve_bubble_world(extent, authored_population=population, display_wide=True)
+    assert card.motion_scale == 1.0                      # every card world: motion unchanged
+    assert resolve_bubble_world((420.0, 280.0), authored_population=population).motion_scale == 1.0
+    overflow = population * (1920.0 / 420.0) * (1080.0 / 280.0) / max(population, BUBBLE_LIVE_CAPACITY)
+    assert wide.world_scale == pytest.approx(overflow ** DISPLAY_WIDE_ZOOM_EXPONENT)
+    assert wide.motion_scale == pytest.approx(math.sqrt(overflow) / wide.world_scale)
+    assert wide.motion_scale > 1.0
+    # On-screen speed (motion per step times zoom, over the cards spanned) equals the card rule's.
+    assert wide.motion_scale * wide.world_scale == pytest.approx(card.world_scale)
