@@ -84,17 +84,29 @@ class LMode:
     the renderer calls (module, name), whose results are part of the values it uses. ``positional``: members and settings
     outside L, with the reason. ``read_spans``: (pass, member, member bytes, decoded record, logical frame) -> the byte
     spans the shader reads (None: all). ``streams``: record field -> (its used-length field, the Python buffer's
-    owner path on the renderer, the attribute naming the buffer). ``ulp_field``: the record field the one-ulp control
-    perturbs (its first element)."""
+    owner path on the renderer, the attribute naming the buffer; a stream a stand-in records needs neither: ``()``,
+    ``""``). ``ulp_field``: the record field the one-ulp control perturbs (its first element).
+
+    A pass label the renderer binds more than once a draw maps to a tuple of names in bind order; a draw that binds it
+    fewer times takes the last names (a pass drawn only on some frames binds first: the Oscilloscope's graticule).
+    ``stand_ins``: (renderer, recorder) -> None, called once the renderer exists: its members that would reach GL
+    outside ``python_modules`` (a scene target, a stream ring) replaced by recording stand-ins, which put a stream's
+    bytes in ``recorder.stream_uploads``. ``drawn``: (decoded native record) -> whether the native program draws any
+    pass this frame (None: whenever shown), for a mode whose Python renderer draws nothing on some shown frames.
+    ``register``: () -> a context manager registering a mode the product's route does not draw yet, for the run only
+    (the port's registration is its last step)."""
     mode_id: str
     python_modules: tuple[str, ...]
-    passes: dict[str, str]
+    passes: dict[str, str | tuple[str, ...]]
     layouts: Callable[[], dict]
     settings_functions: tuple[tuple[str, str], ...] = ()
     positional: dict[str, str] = field(default_factory=dict)
     read_spans: Callable[..., list | None] | None = None
     streams: dict[str, tuple[str, tuple[str, ...], str]] = field(default_factory=dict)
     ulp_field: str = ""
+    stand_ins: Callable[[Any, Any], None] | None = None
+    drawn: Callable[[dict], bool] | None = None
+    register: Callable[[], Any] | None = None
 
 
 _IMPL = "rendering.quick.visualizer.implementations"
@@ -146,6 +158,73 @@ def _bubble_spans(pass_name, member, size, record, logical):
     return None
 
 
+def _oscilloscope_layouts() -> dict:
+    from rendering.quick.visualizer.implementations.oscilloscope import OSC_BEAM_BLOCK, OSC_GRATICULE_BLOCK
+
+    return {"oscilloscope_graticule": OSC_GRATICULE_BLOCK, "oscilloscope_beam": OSC_BEAM_BLOCK}
+
+
+class _NullSceneTarget:
+    """The Oscilloscope renderer's ``SceneTarget`` for a CPU run: its scope and emission writes do nothing (the target,
+    its bloom and its composite are layer P's: the core's own steps, judged by rule (a)'s and rule (b)'s pixels)."""
+
+    has_resources = False
+
+    @contextlib.contextmanager
+    def scope(self, *_args, **_kwargs):
+        yield
+
+    @contextlib.contextmanager
+    def emission_writes(self):
+        yield
+
+    def warm(self, *_args, **_kwargs) -> bool:
+        return True
+
+    def release(self) -> None:
+        pass
+
+
+class _RecordingStreamRing:
+    """A ``StreamRing`` for a CPU run: ``bound`` keeps the bytes the renderer uploads as the stream ``name``."""
+
+    has_resources = False
+
+    def __init__(self, recorder: Any, name: str) -> None:
+        self._recorder = recorder
+        self._name = name
+
+    @contextlib.contextmanager
+    def bound(self, _target, _binding, data, **_kwargs):
+        self._recorder.stream_uploads[self._name] = bytes(data)
+        yield None
+
+    def warm(self) -> bool:
+        return True
+
+    def release(self) -> None:
+        pass
+
+
+def _oscilloscope_stand_ins(renderer, recorder) -> None:
+    renderer._target = _NullSceneTarget()
+    renderer._stream = _RecordingStreamRing(recorder, "osc_points")
+
+
+@contextlib.contextmanager
+def _oscilloscope_registered():
+    """The route draws the Oscilloscope for this run only (``oscilloscope_check.owner``'s registration)."""
+    from rendering.quick.visualizer import native_route as route
+
+    saved = (route.GENERIC_MODE_SETTINGS, route.NATIVE_MODE_IDS)
+    route.GENERIC_MODE_SETTINGS = {**saved[0], "oscilloscope": route.OSCILLOSCOPE_SETTINGS}
+    route.NATIVE_MODE_IDS = saved[1] | {"oscilloscope"}
+    try:
+        yield
+    finally:
+        route.GENERIC_MODE_SETTINGS, route.NATIVE_MODE_IDS = saved
+
+
 MODES: dict[str, LMode] = {
     "spectrum": LMode(
         "spectrum", (f"{_IMPL}.spectrum",), {"Quick Spectrum pass blocks": "spectrum"}, _spectrum_layouts,
@@ -167,6 +246,16 @@ MODES: dict[str, LMode] = {
         streams={"ambient_points": ("ambient_point_floats", ("_ambient_renderer",), "_vbo"),
                  "ambient_occluders": ("ambient_occluder_floats", ("_ambient_renderer",), "_occluder_vbo")},
         ulp_field="u_bubbles_pos"),
+    # Its passes share one ring label ("Quick Oscilloscope pass blocks"): the graticule (only when it draws), then the
+    # beam. The scene target, bloom and composite are the core's own steps (stand-ins here, layer P's pixels).
+    "oscilloscope": LMode(
+        "oscilloscope", (f"{_IMPL}.oscilloscope", "rendering.quick.scene3d.resources"),
+        {"Quick Oscilloscope pass blocks": ("oscilloscope_graticule", "oscilloscope_beam")}, _oscilloscope_layouts,
+        settings_functions=((f"{_IMPL}.oscilloscope", "oscilloscope_settings_values"),),
+        positional={"uMatrix": _WINDOW},
+        streams={"osc_points": ("osc_point_floats", (), "")}, ulp_field="u_widen",
+        stand_ins=_oscilloscope_stand_ins, drawn=lambda record: int(record["osc_segments"]) > 0,
+        register=_oscilloscope_registered),
 }
 
 
@@ -259,6 +348,8 @@ class RecordingPython:
         self._bound: list[tuple[str, bytes]] = []
         self._settings: dict = {}
         self._capturing = False
+        #: A stand-in stream's bytes of this draw, by stream (``LMode.stand_ins``).
+        self.stream_uploads: dict[str, bytes] = {}
         # The shared settings functions, wrapped once: they record only inside ``draw`` (the route calls them too).
         for module_name, function_name in declaration.settings_functions:
             module = import_module(module_name)
@@ -316,22 +407,37 @@ class RecordingPython:
 
         self._bound, self._settings = [], {}
         self.gl.uploads.clear()
+        self.stream_uploads.clear()
         with self._patched():
             if self._renderer is None:
                 self._renderer = resolve_quick_visualizer_renderer(self.declaration.mode_id)
+                if self.declaration.stand_ins is not None:
+                    self.declaration.stand_ins(self._renderer, self)
             self._capturing = True
             try:
                 self._renderer.render(frame)
             finally:
                 self._capturing = False
         blocks: dict[str, bytes] = {}
+        by_label: dict[str, list[bytes]] = {}
         for label, data in self._bound:
-            name = self.declaration.passes.get(label)
-            if name is None:
+            by_label.setdefault(label, []).append(data)
+        for label, bound in by_label.items():
+            names = self.declaration.passes.get(label)
+            if names is None:
                 raise RuntimeError(f"the Python renderer bound an undeclared pass block {label!r}")
-            blocks[name] = data
-        uploads = {}
+            if isinstance(names, str):
+                blocks[names] = bound[-1]                  # one pass: its last write this draw
+                continue
+            names = tuple(names)
+            if len(bound) > len(names):
+                raise RuntimeError(f"the Python renderer bound {label!r} {len(bound)} times, declared {len(names)}")
+            for name, data in zip(names[len(names) - len(bound):], bound):
+                blocks[name] = data
+        uploads = dict(self.stream_uploads)
         for stream, (_used, path, attribute) in self.declaration.streams.items():
+            if stream in uploads or not attribute:
+                continue
             owner = self._renderer
             for step in path:
                 owner = getattr(owner, step, None) if owner is not None else None
@@ -542,8 +648,10 @@ class Comparator:
                                "pass_frames": {}, "member_bytes": {}, "stream_frames": {}, "stream_bytes": {}}
 
     # ---------------------------------------------------------------------- the native module's blocks
-    def native_blocks(self, record: bytes, settings: dict, card: dict, sizes: dict) -> tuple[dict, dict]:
-        """pass name -> block bytes (None: the pass draws nothing), and member -> source."""
+    def native_blocks(self, record: bytes, settings: dict, card: dict, sizes: dict,
+                      variant: Any = None) -> tuple[dict, dict]:
+        """pass name -> block bytes (None: the pass draws nothing), and member -> source. ``variant``: the program
+        variant the route built (``GENERIC_MODE_PROGRAM_VARIANTS``; None for a mode with one program)."""
         if self.core is None:
             return {}, {}
         mode = self.declaration.mode_id
@@ -559,16 +667,21 @@ class Comparator:
             return {"spectrum": None if block is None else bytes(block)}, sources
         from rendering.native.mode import ModePass, _card, _settings, program_json, schema_table_entry
         from rendering.native.program_values import mode_fragment_pack
-        from rendering.quick.visualizer.native_route import GENERIC_MODE_PROGRAMS
+        from rendering.quick.visualizer.native_route import GENERIC_MODE_PROGRAM_VARIANTS, GENERIC_MODE_PROGRAMS
 
-        key = tuple(sorted((k, tuple(v)) for k, v in sizes.items()))
+        key = (tuple(sorted((k, tuple(v)) for k, v in sizes.items())), variant)
         cached = self._program_cache.get(key)
         if cached is None:
-            pack = mode_fragment_pack(mode)
+            variants = GENERIC_MODE_PROGRAM_VARIANTS.get(mode)
             build = GENERIC_MODE_PROGRAMS.get(mode)
-            program = ({"passes": [ModePass(mode, pack, "alpha")], "targets": [], "streams": []} if build is None
-                       else build(pack, dict(sizes)))
-            declared, packs = program_json(program["passes"], program["targets"], program["streams"])
+            if variants is not None:
+                program = variants[1](variant)            # the route's own builder for the variant it built
+            elif build is None:
+                program = {"passes": [ModePass(mode, mode_fragment_pack(mode), "alpha")], "targets": [], "streams": []}
+            else:
+                program = build(mode_fragment_pack(mode), dict(sizes))
+            declared, packs = program_json(program["passes"], program["targets"], program["streams"],
+                                           unread=program.get("unread", ()))
             table = json.dumps(dict(schema_table_entry(self.schema)))
             cached = self._program_cache[key] = (program, declared, packs, table)
         program, declared, packs, table = cached
@@ -585,6 +698,9 @@ class Comparator:
             if stream_name:
                 stream = next(s for s in program["streams"] if s.name == stream_name)
                 drawn = int(decoded.get(stream.used, 0)) > 0
+            for count in (getattr(geometry, "vertices", None), getattr(geometry, "instances", None)):
+                if isinstance(count, str):                 # a count the record carries: 0 draws nothing
+                    drawn = drawn and int(decoded.get(count, 0)) > 0
             blocks[ps.name] = bytes(block) if drawn else None
             for member, source in (facts["passes"][index].get("sources") or {}).items():
                 sources.setdefault(member, source)
@@ -881,6 +997,9 @@ class IdentityMirror:
         if not (bound and shown and self._core_record is not None and item.settings_values is not None
                 and item.card_values is not None):
             return {"drawn": False}
+        if self.declaration.drawn is not None and not self.declaration.drawn(
+                self.comparator.schema.decode(self._core_record)):
+            return {"drawn": False}                       # shown, but the program draws no pass this frame
         settings, card = item.settings_values, item.card_values
         sizes = dict(getattr(content, "_sizes", None) or {})
         at = self.controls.get("setting")
@@ -891,15 +1010,20 @@ class IdentityMirror:
             settings = dict(settings, **{name: float(settings[name]) + 0.25})
             self.applied["setting"] = self.index
             self.applied["setting_name"] = name
-        blocks, sources = self.comparator.native_blocks(self._core_record, settings, card, sizes)
+        blocks, sources = self.comparator.native_blocks(self._core_record, settings, card, sizes,
+                                                        getattr(content, "_program_variant", None))
         at = self.controls.get("block")
         if at is not None and "block" not in self.applied and self.index >= at and blocks:
-            # The block control: one packed member of the first drawn pass raised by 1.0 for this frame (u_dpr where
-            # the pass has it, as audit 9 ran it; else its first float member).
-            pass_name = next(n for n, b in blocks.items() if b is not None)
+            # The block control: one packed member of the first drawn pass with a float member raised by 1.0 for this
+            # frame (u_dpr where the pass has it, as audit 9 ran it; else its first float member).
+            def floats(name):
+                return [m for m, (_o, _s, t) in self.comparator.layouts[name].items()
+                        if t == "float" and m not in self.declaration.positional]
+
+            pass_name = next(n for n, b in blocks.items() if b is not None and n in self.comparator.layouts
+                             and ("u_dpr" in self.comparator.layouts[n] or floats(n)))
             members = self.comparator.layouts[pass_name]
-            member = "u_dpr" if "u_dpr" in members else next(
-                m for m, (_o, _s, t) in members.items() if t == "float" and m not in self.declaration.positional)
+            member = "u_dpr" if "u_dpr" in members else floats(pass_name)[0]
             offset = members[member][0]
             data = bytearray(blocks[pass_name])
             struct.pack_into("<f", data, offset, struct.unpack_from("<f", data, offset)[0] + 1.0)
@@ -974,13 +1098,15 @@ class IdentityMirror:
 def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, variant: str = "a",
         out: Path | None = None, module_dir: Path | None = None,
         controls: tuple[tuple[str, int], ...] = (), deliveries: Path | None = None,
-        window: tuple[int, int] | None = None, restart: bool = False) -> dict:
+        window: tuple[int, int] | None = None, restart: bool = False, run_key: str | None = None) -> dict:
     """Layer L of ``mode`` over a take (``recording``, its first ``seconds``; None: the shipped Studio clip, a smoke
     check only). ``module_dir``: the native module (its GPU-free block packer); None: the block level is not run.
     ``deliveries``: a folder the run's ``DeliveryStream`` is written to (for ``native_stream_player.py``).
     ``window``: only the inputs ``[start, end)`` are written to it; the simulation still ticks every input from the
     take's first (a window is cut from one continuous run, guide section 3). ``restart``: the coverage proof's control,
-    the simulation started cold at the window's first input (the script cut there; its inputs numbered from 0)."""
+    the simulation started cold at the window's first input (the script cut there; its inputs numbered from 0).
+    ``run_key``: one run of the mode's widened set (``conventions_identity.mode_runs(mode, offers=True)``'s key suffix,
+    e.g. ``:osc_display=0``, a Choice offer) instead of ``variant``."""
     import tools.expanded_visualizer_evidence as evidence
     from tools.visualizer_replay import owner_render_parity as parity
     from tools.visualizer_replay import owner_worker_gate as gate
@@ -1017,12 +1143,23 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
                    "block_level": core is not None, "module": None if core is None else dict(core.info),
                    "positional": dict(MODES[mode].positional), "controls": [list(c) for c in controls]}
     engine_worker_link.reset_run_state_for_testing()
-    settings = parity.section_settings(mode, variant)
+    if run_key is None:
+        settings = parity.section_settings(mode, variant)
+    else:
+        from tools import conventions_identity
+
+        runs = dict(conventions_identity.mode_runs(mode, True))
+        if run_key not in runs:
+            raise ValueError(f"{mode} has the runs {sorted(runs)}, not {run_key!r}")
+        settings = runs[run_key]
+        mirror.meta["run"] = run_key
     if deliveries is not None:
         mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep)
+    register = MODES[mode].register
     try:
-        run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                       settings=settings, scene_mirror=mirror)
+        with (register() if register is not None else contextlib.nullcontext()):
+            run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                           settings=settings, scene_mirror=mirror)
     finally:
         if mirror.deliveries is not None:
             mirror.deliveries.close()
@@ -1055,6 +1192,9 @@ def main(argv=None) -> int:
                              "only); without it the shipped Studio clip (a smoke check only)")
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--variant", default="a", choices=("a", "b"))
+    parser.add_argument("--run", default=None,
+                        help="one run of the mode's widened set instead of --variant: its key suffix in "
+                             "tools/conventions_identity.mode_runs(mode, offers=True), e.g. ':osc_display=0'")
     parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
     parser.add_argument("--no-blocks", action="store_true", help="skip the block level (no native module needed)")
@@ -1075,7 +1215,7 @@ def main(argv=None) -> int:
     app = QApplication.instance() or QApplication(["native-record-identity"])
     report = run(args.mode, recording=args.recording, seconds=args.seconds, variant=args.variant, out=args.out,
                  module_dir=None if args.no_blocks else args.module_dir.resolve(), controls=tuple(args.control),
-                 deliveries=args.deliveries)
+                 deliveries=args.deliveries, run_key=args.run)
     halves = report["halves"]
     for name in ("first", "second", "switch"):
         h = halves[name]

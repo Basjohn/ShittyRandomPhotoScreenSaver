@@ -17,7 +17,8 @@ its hash. Then:
 - **native before against native after**: with ``--against``, each API's hashes against that report's, every changed
   frame listed (no tolerance).
 
-The modes: the generic modes the harnesses place (``MODES``: Spline Curve, Bubble). Spectrum's hand-written item has its
+The modes: the generic modes the harnesses place (``MODES``: Spline Curve, Bubble, the Oscilloscope, whose Glow chooses
+its program: ``oscilloscope_check.configure_from_settings``). Spectrum's hand-written item has its
 own placement (``spectrum_check.py``) and is not played yet. Hidden only, no window is shown.
 """
 from __future__ import annotations
@@ -42,7 +43,7 @@ from tools import artifact_paths  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 #: mode id -> the generic mode harness module whose ``Scene``, ``Stream`` and ``program_item`` place its item.
-MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check"}
+MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check", "oscilloscope": "oscilloscope_check"}
 CHILD_TIMEOUT_S = 7200
 #: The method proof's shader controls (guide section 7: the selected windows must catch a one-ulp shader change):
 #: mode -> name -> (shader file, the line, its replacement). ``ulp_ring``: every bubble outline's coverage one float
@@ -68,9 +69,18 @@ def _harness(mode: str):
 
     module = importlib.import_module(MODES[mode])
     base = getattr(module, "base", module)
-    if mode == "bubble":
+    if mode in ("bubble", "oscilloscope"):
         base.use_mode(SLOT_BYTES=module._slot_bytes())
     return module, base
+
+
+def _configure(module, inputs: list) -> None:
+    """A mode harness whose program follows a Setting (the Oscilloscope's Glow) reads it from the take's first
+    delivered settings (``configure_from_settings``), in the child that draws and the parent that judges."""
+    configure = getattr(module, "configure_from_settings", None)
+    first = next((line["settings"] for line in inputs if "settings" in line), None)
+    if configure is not None and first is not None:
+        configure(first)
 
 
 def read_deliveries(folder: Path):
@@ -111,6 +121,7 @@ def child(args) -> dict:
             record["error"] = f"the Vulkan instance failed: {instance}"
             return record
     module, base = _harness(mode)
+    _configure(module, inputs)
     base.SCENE_QML = SCENE_QML % {b"margin": base.MARGIN}
     if args.control:
         base.CONTROL = args.control                     # read by the mode's control_record
@@ -224,12 +235,15 @@ def _frames(out: Path, api: str):
     return rows, pixels
 
 
-def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None = None) -> dict:
+def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None = None,
+           inputs: list | None = None) -> dict:
     """Vulkan against OpenGL, frame by frame, under the mode's ``VULKAN_RULE_B``; every failing frame recorded; with
-    ``windows`` (a coverage_windows.json), each window's figures with its position in the take."""
+    ``windows`` (a coverage_windows.json), each window's figures with its position in the take. ``inputs``: the
+    delivery stream's lines (a harness configured by its settings, ``_configure``)."""
     from tools import pixel_tolerance as pt
 
     module, base = _harness(mode)
+    _configure(module, inputs or [])
     tolerance = getattr(module, "VULKAN_RULE_B", base.VULKAN_RULE_B)
     # Rule (b) judges two peers, neither the reference: its mask is the union of each frame's class (the lead, 21 Nov;
     # ``pt.peer_mask``): the translucent pixels of either frame, and the mode's own frame-side class where it has one.
@@ -326,7 +340,7 @@ def main(argv=None) -> int:
         return 0
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    header, _inputs, _records = read_deliveries(args.deliveries)
+    header, inputs, _records = read_deliveries(args.deliveries)
     mode = header["mode"]
     if mode not in MODES:
         parser.error(f"the player draws the generic modes {sorted(MODES)}, not {mode!r}")
@@ -363,7 +377,7 @@ def main(argv=None) -> int:
             report["hashes"][api] = [row.get("hash") for row in rows]
     if all(api in report["hashes"] for api in APIS):
         windows = json.loads(Path(args.windows).read_text(encoding="utf-8")) if args.windows else None
-        report["rule_b"] = rule_b(out, mode, args.switch_input, windows)
+        report["rule_b"] = rule_b(out, mode, args.switch_input, windows, inputs)
         rb = report["rule_b"]
         print(f"[PLAYER] rule (b): {rb['compared']} frames compared ({rb['hash_equal']} hash-equal), "
               f"{len(rb['failed_frames'])} failing; {'PASS' if rb['pass'] else 'FAIL'}", flush=True)

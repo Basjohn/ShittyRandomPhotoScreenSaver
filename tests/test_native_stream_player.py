@@ -54,6 +54,23 @@ def test_rule_b_judges_every_frame_and_its_controls_fail(tmp_path):
     assert not player.rule_b(tmp_path, "bubble", switch_input=4)["pass"]
 
 
+def test_the_oscilloscope_program_follows_the_glow_of_the_delivered_settings():
+    # The player draws the program the route built: the Oscilloscope's Glow chooses it (Glow 0: the plain program and
+    # translucency alone as rule (b)'s class), read from the take's first delivered settings.
+    from tools.visualizer_replay import native_stream_player as player
+
+    module, _base_module = player._harness("oscilloscope")
+    saved = dict(module.GLOW_OFF)
+    try:
+        player._configure(module, [{"input": 0, "drawn": False}, {"input": 1, "drawn": True,
+                                                                     "settings": {"uGlow": 1.0}}])
+        assert module.GLOW_OFF["on"] and module.peer_frame_mask(_base()) is None
+        player._configure(module, [{"input": 0, "drawn": True, "settings": {"uGlow": 1.0, "u_hdr_exposure": 0.0}}])
+        assert not module.GLOW_OFF["on"] and module.peer_frame_mask(_base()).all()
+    finally:
+        module.GLOW_OFF.update(saved)
+
+
 def test_against_lists_every_changed_frame(tmp_path):
     from tools.visualizer_replay import native_stream_player as player
 

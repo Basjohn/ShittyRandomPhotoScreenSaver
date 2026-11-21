@@ -232,8 +232,32 @@ def test_translucent_by_backgrounds_keeps_opaque_content_and_bare_background_out
         return np.rint(colour * alpha[..., None] + np.asarray(under, float) * (1.0 - alpha[..., None])).astype(np.uint8)
 
     first, second = draw((12, 12, 12)), draw(backdrop)
-    mask = pt.translucent_by_backgrounds(first, second, backdrop)
+    mask = pt.translucent_by_backgrounds(first, second, backdrop, (12, 12, 12))
     assert mask[1].all() and not mask[0].any() and not mask[2:].any()
+
+
+def test_a_pixel_is_bare_only_where_it_equals_its_background_in_every_draw():
+    """Spectrum's switch fade (lead's decision, 21 Nov): a bar pixel faded so far that it rounds to the magenta second
+    background exactly still reads a few levels over the card's fill in the first draw, so it is content (in the mask);
+    a fully bare pixel equals its own background in both draws and stays out. The first background may be a frame."""
+    from tools import pixel_tolerance as pt
+
+    backdrop = (255, 0, 255)
+    fill = (12, 12, 13)
+    first = np.zeros((2, 3, 3), np.uint8)
+    first[:] = fill
+    second = np.zeros_like(first)
+    second[:] = backdrop
+    first[0, 1] = (19, 12, 19)                                  # faded content: over the fill it shows ...
+    # ... and over magenta it rounds to magenta exactly (the reference's own pixel, human_heavy1 input 5311)
+    first[1, 2] = (40, 160, 90)                                 # opaque content: the same in both draws
+    second[1, 2] = (40, 160, 90)
+    for under in (fill, np.broadcast_to(np.array(fill, np.uint8), first.shape)):
+        mask = pt.translucent_by_backgrounds(first, second, backdrop, under)
+        assert mask[0, 1]                                       # the faded pixel is content
+        assert not mask[0, 0] and not mask[1, 0]                # fully bare pixels stay out
+        assert not mask[1, 2]                                   # opaque content stays out
+        assert int(mask.sum()) == 1
 
 
 def test_the_mesh_buffer_rules_judge_through_the_shared_tolerance(tmp_path):
@@ -350,11 +374,14 @@ def test_the_owner_rule_a_is_judged_pixel_by_pixel_with_the_translucency_mask():
         image[70:80, 20:180, :3] = 106                         # a translucent stroke: half of 200 over 12
         frames.append(image)
         over = image.copy()
-        over[:, :, :3] = parity.MASK_BACKDROP                   # the backdrop under the content ...
-        over[40:60, 20 + k:120 + k, :3] = 200                   # ... the opaque bar covers it ...
+        over[(image[..., :3] == 12).all(axis=2), :3] = parity.MASK_BACKDROP  # the backdrop under the content ...
+        # ... the opaque bars cover it (both draws the same there) ...
         over[70:80, 20:180, :3] = (228, 100, 228)               # ... the stroke lets it through
         backdrop.append(over)
     python, under = _run(frames), _run(backdrop)
+    fill = np.zeros_like(frames[0])
+    fill[...] = (12, 12, 12, 255)                               # what the first draw shows where nothing is drawn
+    under["under"] = _run([fill] * len(frames))["frames"]
     masks = parity.rule_a_masks(python, under)
     assert all(mask[70:80, 20:180].all() and not mask[40:60].any() and not mask[:30].any() for mask in masks.values())
 
@@ -380,6 +407,51 @@ def test_the_owner_rule_a_is_judged_pixel_by_pixel_with_the_translucency_mask():
                                pt.translucent_by_alpha(translucent))["pass"]
     assert not parity.rule_a_frame(_shift(translucent)[..., :3], translucent[..., :3],
                                    pt.translucent_by_alpha(translucent))["pass"]
+
+
+def test_the_backdrop_run_gives_the_first_draw_its_own_background_and_a_faded_row_stays_content():
+    """``SceneMirror.under_frame``: each cleared rectangle (GL bottom-up in the hidden texture) goes back into the
+    frame's region as it stood before the clear, the rest of the region stays; a capture from another target fails.
+    Through ``rule_a_masks``, Spectrum's switch-fade row (one level over the fill, exactly magenta over the second
+    background) is masked and may move a level; the fully bare fill beside it may not."""
+    import types
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    mirror = parity.SceneMirror()
+    mirror.host = types.SimpleNamespace(pixels=(8, 6))          # the hidden texture, 8 x 6
+    region = (2, 1, 5, 4)                                       # left, top, width, height (top-down)
+    backdrop_frame = np.zeros((4, 5, 4), np.uint8)
+    backdrop_frame[...] = (*parity.MASK_BACKDROP, 255)
+    taken = np.zeros((2, 3, 4), np.uint8)                       # GL rows 2-3 (bottom-up), columns 3-5
+    taken[...] = (12, 12, 13, 255)
+    taken[1, 0] = (1, 2, 3, 255)                                # GL row 3, column 3: top-down row 2
+    capture = {"rect": (3, 2, 3, 2), "target": (8, 6), "pixels": taken}
+    under = mirror.under_frame(backdrop_frame, region, [capture])
+    expected = backdrop_frame.copy()
+    expected[1:3, 1:4] = (12, 12, 13, 255)                      # top-down rows 2-3 of the texture: region rows 1-2
+    expected[1, 1] = (1, 2, 3, 255)
+    assert np.array_equal(under, expected)
+    with pytest.raises(RuntimeError):
+        mirror.under_frame(backdrop_frame, region, [dict(capture, target=(8, 7))])
+
+    first = np.zeros((4, 6, 4), np.uint8)
+    first[...] = (12, 12, 13, 255)
+    first[2, 1:4, :3] = (19, 12, 19)                            # the fading row
+    second = first.copy()
+    second[..., :3] = parity.MASK_BACKDROP                      # ... rounds to the magenta second background
+    fill = first.copy()
+    fill[...] = (12, 12, 13, 255)
+    python, over = _run([first]), _run([second])
+    over["under"] = _run([fill])["frames"]
+    masks = parity.rule_a_masks(python, over)
+    assert masks[0][2, 1:4].all() and int(masks[0].sum()) == 3
+    faded = first.copy()
+    faded[2, 1:4, 2] += 1
+    assert parity.rule_a_verdict(parity.rule_a_frames(_run([faded]), python, masks))["pass"]
+    bare = first.copy()
+    bare[0, 1:4, 2] += 1                                        # three touching fill pixels one level off
+    assert not parity.rule_a_verdict(parity.rule_a_frames(_run([bare]), python, masks))["pass"]
 
 
 def _flood_fill_largest(flags) -> int:

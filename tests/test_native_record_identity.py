@@ -40,8 +40,15 @@ def test_every_native_mode_is_declared():
         assert declaration.mode_id == mode and declaration.passes and declaration.ulp_field
 
 
+def _pass_names(declaration) -> set:
+    names = set()
+    for value in declaration.passes.values():
+        names.update((value,) if isinstance(value, str) else value)
+    return names
+
+
 @needs_module
-@pytest.mark.parametrize("mode", ["spectrum", "devcurve", "bubble"])
+@pytest.mark.parametrize("mode", ["spectrum", "devcurve", "bubble", "oscilloscope"])
 def test_the_native_path_receives_what_the_python_renderer_uses(qt_app, mode):
     report = _run(mode)
     halves = report["halves"]
@@ -59,16 +66,33 @@ def test_the_native_path_receives_what_the_python_renderer_uses(qt_app, mode):
     from tools.visualizer_replay.native_record_identity import MODES
 
     declared = MODES[mode]
-    assert set(coverage["pass_frames"]) == set(declared.passes.values())
+    assert set(coverage["pass_frames"]) == _pass_names(declared)
     assert set(coverage["stream_frames"]) == set(declared.streams)
     assert all(count > 0 for count in coverage["stream_bytes"].values())
 
 
 @needs_module
+def test_a_run_of_the_widened_set_is_judged_under_its_own_settings(qt_app):
+    # The Choice offers' runs (``--run``): every offer of the Oscilloscope's set, drawn under its own settings, and an
+    # unknown key refused.
+    from tools import conventions_identity
+    from tools.visualizer_replay import native_record_identity as layer_l
+
+    offers = [key for key, _settings in conventions_identity.mode_runs("oscilloscope", True) if key not in ("", ":b")]
+    assert offers
+    for key in offers:
+        report = layer_l.run("oscilloscope", seconds=SECONDS, module_dir=MODULE_DIR, run_key=key)
+        assert report["run"] == key and report["identical"], (key, report["mismatches"][:2])
+    with pytest.raises(ValueError):
+        layer_l.run("oscilloscope", seconds=SECONDS, module_dir=MODULE_DIR, run_key=":no_such_offer=1")
+
+
+@needs_module
+@pytest.mark.parametrize("mode", ["bubble", "oscilloscope"])
 @pytest.mark.parametrize("kind,level", [("setting", "settings"), ("block", "block")])
-def test_a_perturbed_setting_and_a_perturbed_block_member_are_caught_at_their_input(qt_app, kind, level):
+def test_a_perturbed_setting_and_a_perturbed_block_member_are_caught_at_their_input(qt_app, mode, kind, level):
     # Audit 9 L4: the settings and block levels are standing controls, as the record level's are.
-    report = _run("bubble", controls=[(kind, AT)])
+    report = _run(mode, controls=[(kind, AT)])
     applied = report["controls_applied"][kind]
     assert applied >= AT and not report["identical"]
     assert [entry["input"] for entry in report["mismatches"]] == [applied]
@@ -87,3 +111,21 @@ def test_a_one_ulp_record_change_and_a_dropped_frame_are_caught_at_their_input(q
     first = report["mismatches"][0]["first"]
     assert first["level"] == "record" and first["field"] == "u_bubbles_pos" and first["element"] == 0
     assert first["native"] != first["python"]
+
+
+@needs_module
+@pytest.mark.parametrize("kind", ["ulp", "drop"])
+def test_the_oscilloscope_catches_a_one_ulp_record_change_and_a_dropped_frame_at_their_input(qt_app, kind):
+    # The Oscilloscope's ulp field is a scalar (no element); a dropped frame leaves the core the previous record, whose
+    # first differing field is the record's own business, so only its level is pinned.
+    from tools.visualizer_replay.native_record_identity import MODES
+
+    report = _run("oscilloscope", controls=[(kind, AT)])
+    applied = report["controls_applied"][kind]
+    assert applied >= AT
+    assert not report["identical"]
+    assert [entry["input"] for entry in report["mismatches"]] == [applied]
+    first = report["mismatches"][0]["first"]
+    assert first["level"] == "record" and first["native"] != first["python"]
+    if kind == "ulp":
+        assert first["field"] == MODES["oscilloscope"].ulp_field and first["element"] is None

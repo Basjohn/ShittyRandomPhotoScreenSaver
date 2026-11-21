@@ -70,7 +70,8 @@ def _harness_sources() -> list[tuple[str, str]]:
     from tools.visualizer_replay import owner_render_parity as parity
 
     pieces = [parity.SceneMirror, parity._SpilledFrames, parity.drawn_run, parity._python_mappings_run,
-              parity._python_reference, parity._python_masks, parity.content_backdrop, parity.rule_a_masks,
+              parity._python_reference, parity._python_masks, parity.content_backdrop,
+              parity._read_bound_framebuffer, parity.rule_a_masks,
               parity.single_sample_scene_targets, parity.card_placement, parity.parity_script,
               pixel_tolerance.translucent_by_backgrounds, evidence.HiddenDisplayHost]
     return [(f"{piece.__module__}.{piece.__qualname__}", inspect.getsource(piece)) for piece in pieces]
