@@ -1459,11 +1459,6 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2b leftover: Beam. Its sparks are a second pass of their own geometry (900 instanced additive streaks from
-  their own vertex stage), which the core's full-card fragment passes cannot draw; it stays Crossfade on Vulkan.
-  Port it with the instanced-quad primitive the Oscilloscope's beam and Bubble's sprites need (N5.1), under the same
-  proof in `transition_route_check.py`. Dispatched 21 Nov: agent ada1d14b173986b3b (Opus Medium), ABI 34 reserved if
-  it needs C++.
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
