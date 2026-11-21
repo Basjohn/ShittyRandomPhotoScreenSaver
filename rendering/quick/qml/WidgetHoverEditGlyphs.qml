@@ -17,6 +17,31 @@ Item {
     // The card's shared dwell fade (HoverGlyphReveal.level, plan 1D.12 B): it multiplies the glyphs' drawing only,
     // never this item's opacity, so a faded glyph's hit area stays live and hovering it brings the set back.
     property real dwellLevel: 1.0
+    // The space a card's own control row occupies (this item's coordinates), when the card has one: the action lane
+    // and the transfer arrows keep clear of it, at any card size. Left/right/top of the row's members; unset (a very
+    // large top) means the card has no row and nothing is avoided.
+    property real avoidLeft: 0
+    property real avoidRight: 0
+    property real avoidTop: 1e9
+    readonly property real laneGap: 5
+    readonly property int laneMoveMs: 180
+    readonly property real glyphDiameter: 24
+    readonly property bool avoiding: avoidTop < height
+    // The action lane stays on the card's bottom-left line while it fits left of the row; otherwise it lifts to the
+    // line above the row.
+    readonly property bool actionsBesideRow: !avoiding || (10 + actions.width + laneGap <= avoidLeft)
+    // A transfer arrow's y (centred), lifted above the row where it would sit over it.
+    function transferY(side) {
+        const centred = Math.max(8, (height - glyphDiameter) / 2)
+        if (!avoiding) return centred
+        const x = side < 0 ? 8 : Math.max(8, width - glyphDiameter - 8)
+        const overRow = x < avoidRight && x + glyphDiameter > avoidLeft
+        if (!overRow || centred + glyphDiameter + laneGap <= avoidTop) return centred
+        return Math.max(4, avoidTop - laneGap - glyphDiameter)
+    }
+    // A lifted lane steps right of a left transfer arrow that shares its height.
+    readonly property bool actionsOverLeftTransfer: canTransferLeft && !actionsBesideRow
+        && Math.abs(actions.y - transferY(-1)) < glyphDiameter + laneGap
     // The pointer is over one of these glyphs (the card's reveal owner reads it).
     property int hoveredGlyphCount: 0
     readonly property bool glyphHovered: hoveredGlyphCount > 0
@@ -67,10 +92,14 @@ Item {
         id: actions
         // Consistent action lane across ordinary and visualizer widget cards.
         // Keep the lane inside the card, clear of its outside header chrome.
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 10  // 2 px farther inside the actual card
-        anchors.bottomMargin: 8
+        // 10 px in (2 px farther inside the actual card) and 8 px up from the bottom, unless the card's own row is
+        // there (see avoiding above).
+        x: chrome.actionsOverLeftTransfer ? 8 + chrome.glyphDiameter + chrome.laneGap : 10
+        y: chrome.actionsBesideRow ? chrome.height - 8 - height
+            : Math.max(4, chrome.avoidTop - chrome.laneGap - chrome.glyphDiameter)
+        // A lift or drop (the row's width changing under it) eases; the row has no position easing of its own.
+        Behavior on x { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
+        Behavior on y { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
         spacing: 5
         opacity: chrome.dwellLevel
         Repeater {
@@ -196,7 +225,8 @@ Item {
             height: 24
             radius: width / 2
             x: modelData < 0 ? 8 : Math.max(8, chrome.width - width - 8)
-            y: Math.max(8, (chrome.height - height) / 2)
+            y: chrome.transferY(modelData)
+            Behavior on y { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
             color: chrome.buttonSurface
             border.width: 1
             border.color: chrome.buttonBorder

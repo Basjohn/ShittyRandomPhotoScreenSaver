@@ -1080,6 +1080,10 @@ Item {
             admitted: true
             hovered: visualizerInteractionHover.hovered
             dwellLevel: visualizerGlyphReveal.level
+            // The card's own glyph row is the owner of that corner: the common set keeps clear of what it occupies.
+            avoidLeft: visualizerPresentationRoot.glyphRowRight - visualizerPresentationRoot.glyphRowCardWidth
+            avoidRight: visualizerPresentationRoot.glyphRowRight
+            avoidTop: visualizerPresentationRoot.glyphRowTop
             canRestore: true
             canRotate: false
             canTransferLeft: visualizerPresentationRoot.displayTransferLeftAvailable
