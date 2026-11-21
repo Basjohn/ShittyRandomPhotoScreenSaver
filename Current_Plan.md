@@ -744,10 +744,14 @@ the feature (D3D11 is not stated).
   - [ ] Bubble's 60 s takes under today's rules (audit 8 M2's rejudge, 20 and 21 Nov; D12's Bubble line;
     `fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`). Classify and decide;
     no bound raised.
-    - [ ] Rule (a): human_heavy1 inputs 2182 and 2223 and nightsolong input 2128 fail, each a lone 2-level tie off a
-      content edge (reference 3x3 range 31, 15 and 23) with 3 or more scatter pixels in its 3x3: the narrowed isolation
-      clause of 17 Nov, which the stored reports predate. nightsolong input 22 as accepted. ragdoll and anything_mixed2
-      pass.
+    - [ ] Rule (a) variant b on the 60 s takes (first drawn 21 Nov; the M2 runs drew variant a only): human_heavy1
+      and nightsolong each fail the same 4 cold-reveal frames, inputs 8, 12, 24 and 25 (max level 2): 926 and 882
+      ties at input 8 (a 29- and 26-pixel group, 36 and 34 in one 16x16 window), 2,136 and 2,307 ties at input 12, 92
+      and 93 at input 24, 151 and 153 scatter at input 25 (`fast_proof/20261121_rule_a_rerun_60s_<take>/`). Same
+      inputs on two different takes and all inside the reveal (scene fade below 1 until input 30): suspected the
+      scene-fade double-rounding class below, wider on variant b's settings. Classify (force scene fade 1 on both
+      paths for one take; if they pass, they join that class's tracked exceptions; if not, a new class); no bound
+      raised. Variant b on the 5.5 s Studio clip passes.
     - [ ] Rule (b) on 60 s (`native_stream_player.py`): ragdoll 18 and human_heavy1 12 of 5,313 frames fail the
       5.5 s-measured bound (32 scatter, groups of 11, no tie): scatter up to 237 a frame but spread (groups at most
       11, densest window 13), 2-level ties in 6 frames, all steady (content fade 1), 8 of ragdoll's in inputs 74-197
