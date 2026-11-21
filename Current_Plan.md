@@ -124,6 +124,14 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
+- [ ] Worktree artifacts land on F: (operator, 22 Nov: the drive is nearly full): the main checkout's `.artifacts/evidence`,
+  `scratch` and `webp` are junctions to `D:\Temp\Scratch\SRPSS\...`, but an agent's worktree gets real folders, so every
+  agent's frames (Bubble's guard alone 26 GB) fill F:. Fix at `tools/artifact_paths.py`: in a linked worktree the three
+  folders are junctions to `D:\Temp\Scratch\SRPSS\worktrees\<worktree>\<folder>`, made on first use. Then make
+  `tools/agent_handover.py --retire` copy the keep group through those junctions (it enters no links today; evidence was
+  lost that way before, R-memory) and remove the D: targets of a retired worktree. Tests with controls (a worktree
+  write lands on D:; retire copies the keep group and nothing is lost; a junction target outside D: is refused). Do
+  it when no agent is mid-run in a worktree.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
