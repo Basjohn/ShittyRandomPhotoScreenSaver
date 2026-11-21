@@ -87,6 +87,38 @@ void valueSceneItem(const ModeCard &card, const QSize &target, double *out)
         out[3] = target.height();
     }
 }
+// ABI 29: the drawn target's pixel (x right, rows down, continuous) to the scene's texel coordinate (Python's
+// SceneTarget texel: x from the item's left, rows up from its bottom, in the scene's frame), rows x then y. Unturned (and
+// under either control) the surface's own: x - left, top + height - y (ABI 28's local texel, unchanged). Under a turned
+// card, the window's frame (sceneAnchor's): the window pixel through window_from_target, less the item's window
+// origin (Python's gl_FragCoord.xy - uOrigin). Exact: a signed permutation with whole offsets.
+void valueSceneFromTarget(const ModeCard &card, const QSize &target, double *out, int row)
+{
+    double item[4];
+    valueSceneItem(card, target, item);
+    double window[4];
+    sceneWindowRect(card, window);
+    const bool turned = card.valid && (card.quarters & 3) != 0 && window[2] > 0.0 && window[3] > 0.0
+        && !bloomAtTargetOrigin() && !sceneFrameSurface();
+    if (!turned) {
+        const double surface[2][3] = { { 1.0, 0.0, -item[0] }, { 0.0, -1.0, item[1] + item[3] } };
+        for (int i = 0; i < 3; ++i)
+            out[i] = surface[row][i];
+        return;
+    }
+    const double *w = card.windowFromTarget + 3 * row;
+    out[0] = w[0];
+    out[1] = w[1];
+    out[2] = w[2] - window[row];
+}
+void valueSceneFromTargetX(const ModeCard &card, const QSize &target, double *out)
+{
+    valueSceneFromTarget(card, target, out, 0);
+}
+void valueSceneFromTargetY(const ModeCard &card, const QSize &target, double *out)
+{
+    valueSceneFromTarget(card, target, out, 1);
+}
 
 } // namespace
 
@@ -102,18 +134,62 @@ void sceneItemRect(const ModeCard &card, double *out)
         out[i] = card.valid && card.hasSceneItem ? card.sceneItem[i] : 0.0;
 }
 
+void sceneWindowRect(const ModeCard &card, double *out)
+{
+    for (int i = 0; i < 4; ++i)
+        out[i] = 0.0;
+    if (!card.valid || !card.hasSceneItem)
+        return;
+    const double *s = card.sceneItem;
+    const double *w = card.windowFromTarget;
+    const double xs[2] = { s[0], s[0] + s[2] };
+    const double ys[2] = { s[1], s[1] + s[3] };
+    double wx[2], wy[2];
+    for (int i = 0; i < 2; ++i) {
+        wx[i] = std::round(w[0] * xs[i] + w[1] * ys[i] + w[2]);
+        wy[i] = std::round(w[3] * xs[i] + w[4] * ys[i] + w[5]);
+    }
+    out[0] = std::min(wx[0], wx[1]);
+    out[1] = std::min(wy[0], wy[1]);
+    out[2] = std::abs(wx[1] - wx[0]);
+    out[3] = std::abs(wy[1] - wy[0]);
+}
+
 bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &surface, ModeCard *sceneCard,
                  QSize *sceneSize)
 {
     *sceneCard = card;
     *sceneSize = surface;
-    if (!card.valid || !card.hasSceneItem || (card.quarters & 3) != 0 || bloomAtTargetOrigin())
+    if (!card.valid || !card.hasSceneItem || bloomAtTargetOrigin())
         return false;
     bool composite = false;
     for (const ModePass &pass : program.passes)
         composite = composite || pass.stage == StageKind::Composite;
     if (!composite)
         return false;
+    const bool turned = (card.quarters & 3) != 0;
+    if (turned && !program.sceneFrameWindow())
+        return false;                         // refused at the pack (M3)
+    if (turned && !sceneFrameSurface()) {
+        // ABI 29: Python's SceneTarget of the physical frame. The scene's pixel (tx, ty) (top-first rows, the item's
+        // window rect at its content's bottom left) is the window's (left + tx, bottom + H - ty), y up.
+        double window[4];
+        sceneWindowRect(card, window);
+        const int pw = int(window[2]);
+        const int ph = int(window[3]);
+        if (pw <= 0 || ph <= 0)
+            return false;
+        const QSize size(bucketPixels(pw), bucketPixels(ph));
+        const double w[6] = { 1.0, 0.0, window[0], 0.0, -1.0, window[1] + double(size.height()) };
+        for (int i = 0; i < 6; ++i)
+            sceneCard->windowFromTarget[i] = w[i];
+        sceneCard->sceneItem[0] = 0.0;
+        sceneCard->sceneItem[1] = double(size.height() - ph);
+        sceneCard->sceneItem[2] = double(pw);
+        sceneCard->sceneItem[3] = double(ph);
+        *sceneSize = size;
+        return true;
+    }
     const int iw = int(card.sceneItem[2]);
     const int ih = int(card.sceneItem[3]);
     const QSize size(bucketPixels(iw), bucketPixels(ih));
@@ -155,6 +231,10 @@ const ModeCoreMember kModeCoreMembers[] = {
     // ABI 27: the item's cover in the target's pixels (left, top, width, height; sceneItemRect): where Python's
     // SceneTarget starts, read by the composite step (its texel, glow and dither from the item's own pixel).
     { "u_scene_item", 4, true, valueSceneItem },
+    // ABI 29: the target's pixel to the scene's texel (rows x, y; valueSceneFromTarget), read by the composite step: the
+    // surface's own unturned, the window's frame under a turned card (Python's gl_FragCoord.xy - uOrigin).
+    { "u_scene_from_target_x", 3, true, valueSceneFromTargetX },
+    { "u_scene_from_target_y", 3, true, valueSceneFromTargetY },
     // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
     // 2 L7's scan of implementations/oscilloscope.py).
     { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
@@ -2310,15 +2390,20 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             const QJsonValue scene = o.value(QStringLiteral("scene"));
             const QJsonValue glow = o.value(QStringLiteral("glow"));
             const bool withGlow = o.contains(QStringLiteral("glow"));
+            // ABI 29: the scene's frame, when declared ("window": Python's scene drawn through Quick's window, unturned).
+            const bool withFrame = o.contains(QStringLiteral("scene_frame"));
             if (!parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form)
-                || o.size() != 3 + (withGlow ? 1 : 0) || !passName(pass.name) || !fragmentPack.isEmpty()
-                || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
-                || withGlow != (form != CompositeForm::Overlay) || (withGlow && !glowOf(glow.toString().toLatin1()))) {
+                || o.size() != 3 + (withGlow ? 1 : 0) + (withFrame ? 1 : 0) || !passName(pass.name)
+                || !fragmentPack.isEmpty() || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
+                || withGlow != (form != CompositeForm::Overlay) || (withGlow && !glowOf(glow.toString().toLatin1()))
+                || (withFrame && o.value(QStringLiteral("scene_frame")) != QJsonValue(QStringLiteral("window")))) {
                 *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow or "
                                         "opaque_glow, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom step>.glow\" "
-                                        "(the glow forms only, a bloom step before it)} with an empty pack").arg(i);
+                                        "(the glow forms only, a bloom step before it), \"scene_frame\"?: \"window\"} with "
+                                        "an empty pack").arg(i);
                 return false;
             }
+            pass.sceneFrameWindow = withFrame;
             coreFragment = compositeShader(form);
             QJsonArray samplers;
             samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uScene") },
@@ -2631,6 +2716,8 @@ QJsonObject ModeProgram::toJson() const
                      QString::fromLatin1(targets.at(pass.stageSource).colour.at(pass.stageAttachment).name));
         if (pass.stage == StageKind::Composite)
             p.insert(QStringLiteral("composite"), compositeFormName(pass.compositeForm));
+        if (pass.sceneFrameWindow)
+            p.insert(QStringLiteral("scene_frame"), QStringLiteral("window")); // ABI 29
         p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
         QJsonArray outputs;
         for (const PassOutput &output : pass.outputs)
@@ -2781,15 +2868,30 @@ bool ModeProgram::drawsSurfaceSizedScene(int p) const
     return t >= 0 && t < int(targets.size()) && targets.at(t).surfaceSized();
 }
 
+bool ModeProgram::sceneFrameWindow() const
+{
+    bool composite = false;
+    for (const ModePass &pass : passes) {
+        if (pass.stage != StageKind::Composite)
+            continue;
+        if (!pass.sceneFrameWindow)
+            return false;
+        composite = true;
+    }
+    return composite;
+}
+
 QString ModeProgram::turnedStagesRefusal(const ModeCard &card) const
 {
-    if (!card.valid || (card.quarters & 3) == 0)
+    if (!card.valid || (card.quarters & 3) == 0 || sceneFrameWindow())
         return QString();
     for (const ModePass &pass : passes) {
         if (pass.stage == StageKind::Bloom || pass.stage == StageKind::Composite) {
-            return QStringLiteral("refused: pass '%1' is a %2 step under a turned card (quarters %3); the item-anchored "
-                                  "bloom and composite are built for an unturned scene only: a turned card's surface is turned "
-                                  "against Python's SceneTarget (checkpoint audit 10, M3)")
+            return QStringLiteral("refused: pass '%1' is a %2 step under a turned card (quarters %3); a turned card's "
+                                  "surface is turned against Python's SceneTarget, so the item-anchored bloom and composite "
+                                  "are anchored only for a program whose composite steps declare the scene's frame "
+                                  "(\"scene_frame\": \"window\": Python's scene drawn through Quick's window, unturned; "
+                                  "checkpoint audit 10, M3; ABI 29)")
                 .arg(QString::fromLatin1(pass.name), stageKindName(pass.stage)).arg(card.quarters);
         }
     }

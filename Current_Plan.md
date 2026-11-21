@@ -649,7 +649,7 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (unregistered on main at ABI 28; N3.4 bloom's first consumer). Python oracle:
+- [ ] N5.1 Oscilloscope (unregistered on main at ABI 29; N3.4 bloom's first consumer). Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`; shapes and reaction rules:
   `rendering/gl_programs/oscilloscope_program.py`. Follow `Docs/Guides/Native_Port_Playbook.md` and prove it under
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` (section 7's split). Harness: `native/core/python/oscilloscope_check.py`.
@@ -659,17 +659,12 @@ the feature (D3D11 is not stated).
   Oscilloscope's placement class (up to 52 one-level pixels outside the mask, Python's own placement variance) and
   rule (b) 3 ties at 2 levels. The 5.5 s `--offers` owner smoke passes every display (`20261121_owner_offers_class/`);
   controls `old_origin` and a 0.6 % brighter beam fail.
+  ABI 29: a composite step may declare `"scene_frame": "window"` (both Oscilloscope programs do), so a turned card
+  keeps Python's physical scene target; proven at quarters 0-3 on both APIs, unturned frames hash-identical to ABI 28
+  (`20261121_n51_turned_abi29_band/`). Rule (b)'s mask is the union of both peers' mask classes (`peer_mask`).
   - [ ] Layer P, the three 60 s takes (distinct regimes) under the split: full-take native-only runs judged against the
     cached Python references on both APIs, variants as Bubble's, halves reported apart, cold start; the Choice offers
     by coverage windows on the same takes. Rule (b) Vulkan against OpenGL over the same takes.
-  - [ ] L1's remaining red: rule (b) at 48/35 (a 576 x 384 item, outside the harness's ratios) fails one frame, an
-    adjacent pair of 2-level ties (Vulkan against native OpenGL), neither isolated nor on a content edge. Root cause
-    first (`n5_1_oscilloscope/20261121_n51_audit10_edge_abi28/`).
-  - [ ] Turned-card anchoring (Opus High agent a698143754befedb3, 21 Nov; required before registration: the Oscilloscope is rotatable, and ABI 28 refuses a bloom
-    or composite under a turned card, so a rotated Oscilloscope would fade out). The scene target in physical pixels,
-    or the composite and first downsample taking the turn as Python's `sceneTexel` does (`_ORIENTED_COMPOSITES`); prove
-    at quarters 1 to 3 with odd item sides against the Python renderer, with the refusal's negative control. The same
-    work serves every later turned bloom consumer (Waveform Ribbon, Extruded Bubble, Neon Lake, Extruded Spectrum).
   - [ ] Layer L: the per-frame record byte-compared with the Python renderer's values (`native_record_identity.py`).
   - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
     with `tools/quick_frame_cadence.py` on native paths.
@@ -686,6 +681,13 @@ the feature (D3D11 is not stated).
     ignores it), and `generic_mode_check.py`'s product-pack round admits it as "the Oscilloscope's" pack. Retire it with
     its registry entry once the route no longer reads a mode's pack for a mode with its own program, and move the
     harness's admission check to the beam's packs.
+  - [ ] Side defect (found 21 Nov by the turned-card agent): Python's `item_pixel_rect` (`rendering/quick/scene3d/
+    frame.py`) gives the item one device pixel more than its size at some whole-pixel origins: a card 641 x 361 at
+    (803, 517) in a 1920 x 1080 window at dpr 1 gets a SceneTarget rect 642 wide (at (801, 515) it is 641; at (800, 512)
+    641 x 362), so its float32 snap misses an edge that is a whole pixel. It is the oracle the card's `scene_item` copies,
+    so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
+    `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
+    `outer_origin=(803.0, 517.0)`, dpr 1.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
