@@ -59,6 +59,13 @@ def test_a_stored_offset_keeps_its_look_and_is_shifted_once(tmp_path):
     assert effective_opacity_adjust(again.get("widgets"), "widget") == pytest.approx(OLD_STORED)
 
 
+def test_the_old_default_moves_to_the_new_default(tmp_path):
+    manager = _old_profile(tmp_path, "olddefault", 0.0)
+    widgets = _reload(manager, tmp_path, "olddefault").get("widgets")
+    assert resolve_opacity_adjust(widgets, "widget") == 0.0
+    assert effective_opacity_adjust(widgets, "widget") == admit_opacity_adjust(WIDGET_OPACITY_BASE)
+
+
 def test_an_unset_value_takes_the_base(tmp_path):
     manager = _old_profile(tmp_path, "unset", None)
     widgets = _reload(manager, tmp_path, "unset").get("widgets")

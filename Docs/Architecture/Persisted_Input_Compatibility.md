@@ -72,8 +72,10 @@ without the safe path below.
   `widgets.global` without `opacity_base_version` holds an old-meaning value: before defaults merge
   (`SettingsManager._migrate_widget_opacity_base_before_defaults`, and the SST widgets section in `sst_io.py`) the
   value becomes stored minus the base (so its drawn look is unchanged) and the marker is written; the Style Overrides
-  save writes the marker too. A profile that saved the old default 0.0 cannot be told from a choice, so its look is
-  kept (it draws the old authored density); an absent value draws the base. Stored values above 1 - |base| clamp at
+  save writes the marker too. Decision (lead, 21 Nov): a stored 0.0 (within float tolerance) is the old default, not
+  a choice, because a Settings save writes every value; it migrates to the new default (offset 0, drawing the base)
+  so the operator's intent, the new look for everyone at default, reaches nearly every profile. The cost: a user who
+  deliberately chose exactly 0.0 gets the clearer look. An absent value draws the base. Stored values above 1 - |base| clamp at
   +1. *Blocked:* dropping the marker from the page save (the next load would shift the value again), or
   default-merging before the bridge. Tests: `tests/test_widget_opacity_base.py`.
 - **Settings theme material tag (bridge, 8 Nov 2026).** A curated Settings theme's file name ends with its

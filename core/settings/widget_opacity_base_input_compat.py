@@ -6,7 +6,8 @@ surface density: 0 was the authored look. The Widget surface now has a theme-aut
 from it, so a stored value keeps its look only when the base is added to it once. The
 profile marks that it has been written in the new meaning with ``opacity_base_version``;
 a section without the marker holds an old-meaning value (or none) and is bridged before
-current defaults are merged, because the default 0.0 would otherwise mask it.
+current defaults are merged, because the default 0.0 would otherwise mask it. An old 0.0 is
+the old default and moves to the new default (it draws the base); other values keep their look.
 
 An unset value is not touched: it is the offset 0, which now draws the base.
 """
@@ -28,9 +29,11 @@ def bridge_widget_opacity_base(global_section: Mapping[str, Any]) -> tuple[dict[
     if _version(projected.get(OPACITY_BASE_VERSION_KEY)) >= OPACITY_BASE_VERSION:
         return projected, False
     if WIDGET_OFFSET_KEY in projected:
-        # Old meaning: the stored value was the whole adjustment; the new offset adds the base back.
-        projected[WIDGET_OFFSET_KEY] = admit_opacity_adjust(
-            admit_opacity_adjust(projected[WIDGET_OFFSET_KEY]) - WIDGET_OPACITY_BASE)
+        old = admit_opacity_adjust(projected[WIDGET_OFFSET_KEY])
+        # The old default (a Settings save writes every value, so 0.0 is nearly always just the
+        # default) becomes the new default: offset 0, drawing the base. Any other value is a
+        # choice: the offset adds the base back so its drawn look is unchanged.
+        projected[WIDGET_OFFSET_KEY] = 0.0 if abs(old) < 1e-9 else admit_opacity_adjust(old - WIDGET_OPACITY_BASE)
     projected[OPACITY_BASE_VERSION_KEY] = OPACITY_BASE_VERSION
     return projected, True
 
