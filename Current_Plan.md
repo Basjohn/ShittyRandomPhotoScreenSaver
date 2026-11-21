@@ -78,8 +78,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] The Oscilloscope: accept and register (operator, 21 Nov: the mode is weak and reworked after the flip, item 9, so
   it needs no 1:1 parity polish). Rule (a) passes all six 60 s takes and 14 of 15 offers, layer L is identical; rule
   (b)'s 60 s misses (2-6 levels, isolated, on edges) and offer input 1388 are recorded in its box and go to the backlog,
-  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered 21 Nov.
-  Left: its docs.
+  not to a slot; the player-window gap is a tool note. Cost round and layer T passed; registered and documented
+  21 Nov. Left: its two side defects and the backlog line.
 - [ ] Workflow audit leftovers (one-time audit, 21 Nov), docs and tooling only:
   - [ ] Plan trim: delete the "Next, by slot" lines the resume box overrides (the Second Medium's "re-prove every
     generic mode", the Oscilloscope's 60 s takes); collapse the Oscilloscope's open parity and offer boxes into one
@@ -657,8 +657,6 @@ the feature (D3D11 is not stated).
     so both renderers agree, but the SceneTarget is a pixel larger than the item. Reproduce: `_card` and
     `_pythons_scene_rect` of `tests/test_native_oscilloscope.py` with `viewport_extent=(641.0, 361.0)`,
     `outer_origin=(803.0, 517.0)`, dpr 1.
-  - [ ] Docs: D12 "As built: Oscilloscope", Primitives, README (registered 21 Nov after layer T). Agent
-    a69ea5aa89a54b5f3 (Sonnet Medium).
 - [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
   suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
   follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
