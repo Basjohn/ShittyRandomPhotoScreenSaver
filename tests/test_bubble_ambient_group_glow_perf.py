@@ -97,16 +97,20 @@ def test_glow_controls_are_real_canonical_optional_builder_properties():
 def test_perf_huds_centered_with_independent_opacity_and_lower_visualizer_inset():
     root = Path(__file__).resolve().parents[1]
     checks = (
-        ('rendering/quick/qml/DisplayScene.qml', 'perfHud', '#99000000', 8),
-        ('rendering/quick/qml/VisualizerPresentation.qml', 'visualizerPerfHud', '#80000000', 12),
+        ('rendering/quick/qml/DisplayScene.qml', 'perfHud', '#99000000', 'anchors.topMargin: 8'),
+        ('rendering/quick/qml/VisualizerPresentation.qml', 'visualizerPerfHud', '#80000000',
+         'anchors.topMargin: visualizerPresentationRoot.expandedDisplay ? 40 : 12'),
     )
     for filename, object_name, background, top_margin in checks:
         content = (root / filename).read_text(encoding='utf-8')
         block = content.split(f'id: {object_name}', 1)[1].split('Text {', 1)[0]
         assert 'anchors.horizontalCenter: parent.horizontalCenter' in block
         assert 'anchors.left: parent.left' not in block
-        assert f'anchors.topMargin: {top_margin}' in block
+        assert top_margin in block
         assert f'color: "{background}"' in block
+    # Expanded, the visualizer counter starts below the screen HUD's bottom: its 8px inset, 8px padding and one
+    # 11px Consolas line (line height under 1.5x the pixel size).
+    assert 40 > 8 + 8 + 11 * 1.5
     # The visualizer counter keeps the 1px vertical internal-padding increase.
     viz = (root / 'rendering/quick/qml/VisualizerPresentation.qml').read_text(encoding='utf-8')
     block = viz.split('id: visualizerPerfHud', 1)[1].split('Text {', 1)[0]
