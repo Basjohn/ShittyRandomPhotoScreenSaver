@@ -62,10 +62,105 @@ SHAPES = {
 DECORATION = ("bubble_microbubble_stream", "bubble_microbubble_drift", "bubble_particle_stream",
               "bubble_particle_drift", "bubble_particle_glow")
 VARIANTS = (None, "no_points", "no_mask", "no_wake", "no_ghost", "no_heroes", "empty_twice")
-#: Candidates (``--candidate``): name -> (a line of bubble.frag found exactly once, its replacement), each timed as a
-#: variant before it lands; a landed candidate is removed (its line is gone). The hero loop's square reject was timed
-#: here as ``hero_reject_early`` (20261121_matrix_before) and landed (20261121_matrix_after).
-CANDIDATES: dict[str, tuple[str, str]] = {}
+#: Candidates (``--candidate``): name -> (a line of bubble.frag found exactly once, its replacement), or a tuple of such
+#: pairs applied in turn, each timed as a variant before it lands; a landed candidate is removed (its line is gone).
+#: Timed and landed: the hero loop's square reject (``hero_reject_early``, 20261121_matrix_before and _after) and the
+#: wake loop's per-bubble reject (``wake_union``, 20261121_matrix_wake_candidates); timed there and dropped: the same
+#: wake box with its px terms inside the loop (``wake_union_inline``: no better on OpenGL, 0.05 ms worse on Vulkan at
+#: the expanded 4K card) and a sample's early exit at a zero ring term (``wake_ring_first``: no gain anywhere). The
+#: three ghost candidates below are byte-identical by construction (``ghost_bits`` also passed the real-GL comparison)
+#: but none pays after the wake's reject (20261121_matrix_wake_after2, _ghost_scalar): ``ghost_union`` at most
+#: -0.06 ms on Vulkan and +0.1 to +0.2 ms on OpenGL and at the dense case, both bit forms 0.4 to 1.8 ms slower. Kept
+#: here to retime after a driver or compiler change.
+_GHOST_HEAD = ("        for (int i = 0; i < count; i++) {\n"
+               "            vec4 bpos = u_bubbles_pos[i];\n"
+               "            vec2 bxy = bpos.xy;\n"
+               "            float brad = bpos.z * response_scale;\n"
+               "            float balpha = bpos.w;\n"
+               "            if (balpha < 0.01 || brad < 2.0 * px) continue;\n\n"
+               "            vec3 history = u_bubbles_trail[i * 3].xyz;\n")
+#: ``ghost_union``: the ghost ring's square tested first with per-bubble values only (its stroke's px floor and the
+#: 2 px margin taken as the fragment's ± 3 px, once outside the loop).
+_GHOST_UNION = ("        vec2 ghost_frag_lo = vec2(uv.x * aspect, uv.y) - 3.0 * px;\n"
+                "        vec2 ghost_frag_hi = vec2(uv.x * aspect, uv.y) + 3.0 * px;\n"
+                "        for (int i = 0; i < count; i++) {\n"
+                "            vec4 bpos = u_bubbles_pos[i];\n"
+                "            vec2 bxy = bpos.xy;\n"
+                "            float brad = bpos.z * response_scale;\n"
+                "            float balpha = bpos.w;\n"
+                "            vec3 history = u_bubbles_trail[i * 3].xyz;\n"
+                "            vec2 ghost_at = mix(bxy, history.xy, ghost_history_weight) * vec2(aspect, 1.0);\n"
+                "            float ghost_reach = brad * 1.18 + max(0.0, clamp(1.0 * (bpos.z * 1.18 / 0.04), 0.4, 1.5)\n"
+                "                                                  * style_px - 0.5 / inner_h);\n"
+                "            if (any(lessThan(ghost_frag_hi, ghost_at - ghost_reach))\n"
+                "                || any(greaterThan(ghost_frag_lo, ghost_at + ghost_reach))) continue;\n"
+                "            if (balpha < 0.01 || brad < 2.0 * px) continue;\n\n")
+#: ``ghost_bits``: the same ghost square tested in the wake loop, where the bubble's values are already loaded, as one
+#: bit per bubble; the ghost loop skips a bubble whose bit is clear before loading anything (every bit set when the
+#: wake does not run, so the ghost loop is then as before).
+_WAKE_OPEN = "    if (u_trail_strength > 0.001 && u_tail_opacity > 0.001) {\n"
+_WAKE_FRAG = "        vec2 wake_frag_hi = vec2(fma(uv.x, aspect, 3.0 * px), uv.y + 3.0 * px);\n"
+_WAKE_REACH = "            float wake_reach = min(brad * 8.0 * trail_strength, max_ripple_radius);\n"
+_GHOST_LOOP = ("        for (int i = 0; i < count; i++) {\n"
+               "            vec4 bpos = u_bubbles_pos[i];\n"
+               "            vec2 bxy = bpos.xy;\n")
+_GHOST_BITS = (
+    (_WAKE_OPEN,
+     "    uvec4 ghost_near = uvec4(0xFFFFFFFFu);\n"
+     "    bool ghost_on = u_ghost_alpha > 0.001;\n"
+     "    float ghost_weight = mix(0.98, 0.68, clamp(u_ghost_decay, 0.1, 1.0));\n" + _WAKE_OPEN),
+    (_WAKE_FRAG, _WAKE_FRAG + "        if (ghost_on) ghost_near = uvec4(0u);\n"),
+    (_WAKE_REACH,
+     "            if (ghost_on) {\n"
+     "                vec2 ghost_at = mix(bpos.xy, u_bubbles_trail[i * 3].xy, ghost_weight) * vec2(aspect, 1.0);\n"
+     "                float ghost_reach = brad * 1.18 + max(0.0, clamp(1.0 * (bpos.z * 1.18 / 0.04), 0.4, 1.5)\n"
+     "                                                      * style_px - 0.5 / inner_h);\n"
+     "                if (!(any(lessThan(wake_frag_hi, ghost_at - ghost_reach))\n"
+     "                      || any(greaterThan(wake_frag_lo, ghost_at + ghost_reach))))\n"
+     "                    ghost_near[i >> 5] |= 1u << uint(i & 31);\n"
+     "            }\n" + _WAKE_REACH),
+    (_GHOST_LOOP,
+     "        for (int i = 0; i < count; i++) {\n"
+     "            if ((ghost_near[i >> 5] & (1u << uint(i & 31))) == 0u) continue;\n"
+     "            vec4 bpos = u_bubbles_pos[i];\n"
+     "            vec2 bxy = bpos.xy;\n"),
+)
+#: ``ghost_bits_scalar``: ``ghost_bits`` with four plain words chosen by compare and select (no dynamically indexed
+#: vector, which may sit in local memory).
+_GHOST_BITS_SCALAR = (
+    (_WAKE_OPEN,
+     "    uint ghost_w0 = 0xFFFFFFFFu, ghost_w1 = 0xFFFFFFFFu, ghost_w2 = 0xFFFFFFFFu, ghost_w3 = 0xFFFFFFFFu;\n"
+     "    bool ghost_on = u_ghost_alpha > 0.001;\n"
+     "    float ghost_weight = mix(0.98, 0.68, clamp(u_ghost_decay, 0.1, 1.0));\n" + _WAKE_OPEN),
+    (_WAKE_FRAG, _WAKE_FRAG + "        if (ghost_on) { ghost_w0 = 0u; ghost_w1 = 0u; ghost_w2 = 0u; ghost_w3 = 0u; }\n"),
+    (_WAKE_REACH,
+     "            if (ghost_on) {\n"
+     "                vec2 ghost_at = mix(bpos.xy, u_bubbles_trail[i * 3].xy, ghost_weight) * vec2(aspect, 1.0);\n"
+     "                float ghost_reach = brad * 1.18 + max(0.0, clamp(1.0 * (bpos.z * 1.18 / 0.04), 0.4, 1.5)\n"
+     "                                                      * style_px - 0.5 / inner_h);\n"
+     "                bool ghost_far = any(lessThan(wake_frag_hi, ghost_at - ghost_reach))\n"
+     "                    || any(greaterThan(wake_frag_lo, ghost_at + ghost_reach));\n"
+     "                uint ghost_bit = ghost_far ? 0u : (1u << uint(i & 31));\n"
+     "                int ghost_word = i >> 5;\n"
+     "                ghost_w0 |= ghost_word == 0 ? ghost_bit : 0u;\n"
+     "                ghost_w1 |= ghost_word == 1 ? ghost_bit : 0u;\n"
+     "                ghost_w2 |= ghost_word == 2 ? ghost_bit : 0u;\n"
+     "                ghost_w3 |= ghost_word == 3 ? ghost_bit : 0u;\n"
+     "            }\n" + _WAKE_REACH),
+    (_GHOST_LOOP,
+     "        for (int i = 0; i < count; i++) {\n"
+     "            int ghost_word = i >> 5;\n"
+     "            uint ghost_bits = ghost_word == 0 ? ghost_w0 : ghost_word == 1 ? ghost_w1\n"
+     "                            : ghost_word == 2 ? ghost_w2 : ghost_w3;\n"
+     "            if ((ghost_bits & (1u << uint(i & 31))) == 0u) continue;\n"
+     "            vec4 bpos = u_bubbles_pos[i];\n"
+     "            vec2 bxy = bpos.xy;\n"),
+)
+CANDIDATES: dict[str, tuple] = {
+    "ghost_union": (_GHOST_HEAD, _GHOST_UNION),
+    "ghost_bits": _GHOST_BITS,
+    "ghost_bits_scalar": _GHOST_BITS_SCALAR,
+}
 
 
 def _settings_overlay(case: str) -> dict:

@@ -112,15 +112,18 @@ def _shader_text(filename: str) -> str:
     return (Path(shaders.__file__).resolve().parent / filename).read_text(encoding="utf-8")
 
 
-def _control_pack(filename: str, line: str, replacement: str) -> bytes:
-    """``filename`` with ``line`` replaced, baked by the product's baker into the run's work folder."""
+def _control_pack(filename: str, line: str, replacement: str, *more: tuple[str, str]) -> bytes:
+    """``filename`` with ``line`` replaced (and each further ``(line, replacement)`` pair of ``more``, in turn), baked
+    by the product's baker into the run's work folder."""
     import probe_rings
 
     text = _shader_text(filename)
-    if text.count(line) != 1:
-        raise RuntimeError(f"{filename}: the control's line is not found exactly once")
+    for old, new in ((line, replacement), *more):
+        if text.count(old) != 1:
+            raise RuntimeError(f"{filename}: the control's line is not found exactly once")
+        text = text.replace(old, new)
     folder = base._work(Path(_OUT["dir"])) / "control_packs"
-    return probe_rings.bake(text.replace(line, replacement), filename, folder)
+    return probe_rings.bake(text, filename, folder)
 
 
 #: The child's evidence folder (the control packs are baked under its work folder).
@@ -148,7 +151,9 @@ _STAGE_PACKS: dict = {}
 
 def _stage_pack(name: str) -> bytes:
     if name not in _STAGE_PACKS:
-        _STAGE_PACKS[name] = _control_pack("bubble.frag", *STAGE_VARIANTS[name])
+        edit = STAGE_VARIANTS[name]
+        pairs = edit if isinstance(edit[0], tuple) else (edit,)      # one (line, replacement) or several in turn
+        _STAGE_PACKS[name] = _control_pack("bubble.frag", *pairs[0], *pairs[1:])
     return _STAGE_PACKS[name]
 #: The settings only the ambient points' pass reads (``bubble_ambient_settings_values``).
 _POINTS_ONLY_SETTINGS = frozenset({"uTexelScale", "uSpriteScale", "uGlowSpread", "uMicroColor", "uParticleColor"})
