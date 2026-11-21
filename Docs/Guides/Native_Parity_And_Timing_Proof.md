@@ -63,6 +63,10 @@ four layers, scaled as in section 3.
   overscan placements (and Spectrum's mapping control its maps); the stream player's rule (b) proves Vulkan at the
   harness's one placement only, so a Vulkan-only error at a fractional product placement is covered by no layer
   (checkpoint audit 9 L4).
+- **Response:** the mode's own response tool (section 4's list; Waveform `waveform_music_response.py`, Neon Lake
+  `neon_lake_music_response.py`) for every reaction mode separately, before against after, on the recorded
+  continuous-play chain; also for any later change that touches the mode's simulation or its visible response
+  (operator, 21 Nov: part of the fast proof for every mode).
 - **T:** section 4, once at acceptance.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
 
