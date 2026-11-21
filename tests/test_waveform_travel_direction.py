@@ -178,9 +178,9 @@ def test_left_to_right_is_the_mirror_image_with_its_fields_and_grade_in_place(qt
         ltr = _render(renderer, target, frame, plain, direction=-1., give=1.).astype(float)
         ltr_fields = fields()
         # The mirror is one read-only constant, never rebuilt per frame (np.diag cost ~1.5 us a frame, 11 Nov).
-        from rendering.quick.scene3d import waveform as waveform_scene
-        assert renderer._scene._history_mirror is waveform_scene._HISTORY_X_MIRROR
-        assert not waveform_scene._HISTORY_X_MIRROR.flags.writeable
+        from rendering.quick.scene3d import waveform_plan
+        assert renderer._scene._history_mirror is waveform_plan.HISTORY_X_MIRROR
+        assert not waveform_plan.HISTORY_X_MIRROR.flags.writeable
         # Judged after a 3x3 box over both pictures: the glow's 8-bit output dither (scene3d.SCENE_OUTPUT_DITHER_GLSL)
         # is one step of position-hashed noise, the same on both sides, so it never mirrors; the box averages it out
         # and leaves the picture. An unmirrored pair stays far apart through the same box (the second ratio).
@@ -203,16 +203,15 @@ def test_left_to_right_is_the_mirror_image_with_its_fields_and_grade_in_place(qt
 
 def test_the_world_grade_stays_in_the_world():
     from core.waveform_ribbon_scene import Recipe
-    from rendering.quick.scene3d.waveform import WaveformScene, colour_grade, gradient_at
-    scene = WaveformScene(); scene._history_mirror = np.diag((-1., 1., 1., 1.))
+    from rendering.quick.scene3d.waveform import colour_grade, gradient_at
+    from rendering.quick.scene3d.waveform_plan import history_grade
     nodes, (x0, x1), share = colour_grade(Recipe(grade_range=(-4., 9.)), .6)[:3]
-    mirrored, (m0, m1), _ = scene._history_grade((nodes, (x0, x1), share))
+    mirrored, (m0, m1), _ = history_grade((nodes, (x0, x1), share), np.diag((-1., 1., 1., 1.)))
     world = np.linspace(-12., 12., 97)
     def at(stops, low, high, x): return gradient_at(stops, np.clip((x-low)/(high-low), 0., 1.))
     np.testing.assert_allclose(at(mirrored, m0, m1, -world), at(nodes, x0, x1, world), atol=1e-12)
     assert np.abs(at(nodes, x0, x1, -world)-at(nodes, x0, x1, world)).max() > .1   # negative control
-    scene._history_mirror = None
-    assert scene._history_grade((nodes, (x0, x1), share)) == (nodes, (x0, x1), share)
+    assert history_grade((nodes, (x0, x1), share), None) == (nodes, (x0, x1), share)
 
 
 def test_head_enters_on_the_left_through_the_studio_projection():

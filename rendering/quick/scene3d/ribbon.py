@@ -73,18 +73,22 @@ def _floor_contact(floor, frame):
 FLOOR_GIVE_UNIT = RIBBON_FLOOR_GIVE_UNIT
 
 
-def _apply_floor_give(values, floor_give, frame):
-    """``floor_give`` = (field texture, ``uFloorGive`` vec4[, history side]) from the scene's yielding floor, or None
-    (off: the contact eases onto the rigid plane, exactly as without the option). The side (-1: the packet's x axis
-    is mirrored into the world, Travel Direction) defaults to +1. Always written: the program's values persist as its
-    uniforms did (N1.6: they are its pass block's)."""
+def _floor_give_values(values, floor_give, frame):
+    """``floor_give`` = (``uFloorGive`` vec4[, history side]) of the scene's yielding floor, or None (off: the contact
+    eases onto the rigid plane, exactly as without the option). The side (-1: the packet's x axis is mirrored into the
+    world, Travel Direction) defaults to +1."""
     if floor_give is None:
         values['uFloorGive'] = (0., 0., 1., 1.)
         return
-    texture, give, *side = floor_give
-    gl.glBindTextureUnit(FLOOR_GIVE_UNIT, int(texture))
+    give, *side = floor_give
     values['uFloorGive'] = tuple(give)
     values['uFloorGiveFrame'] = (float(frame[0]), float(frame[2]), float(side[0]) if side else 1.)
+
+
+def _bind_floor_give(floor_give):
+    """The yielding floor's field at its unit (``floor_give`` = (field texture, ...) or None)."""
+    if floor_give is not None:
+        gl.glBindTextureUnit(FLOOR_GIVE_UNIT, int(floor_give[0]))
 
 
 # Storage binding of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the packet's 0 and the
@@ -92,18 +96,15 @@ def _apply_floor_give(values, floor_give, frame):
 from rendering.gl_programs.ribbon import PULSE_RIM_BINDING  # noqa: E402
 
 
-def _apply_pulse_rim(values, pulse_rim):
-    """``pulse_rim`` = (field buffer, ``uPulseRim`` vec4, ``uPulseRimShape`` vec2) from the scene's Pulse Rim field,
-    or None (off: the rims exactly as without the option). Always written: the program's values persist. Returns
-    whether a buffer was bound."""
+def _pulse_rim_values(values, pulse_rim):
+    """``pulse_rim`` = (``uPulseRim`` vec4, ``uPulseRimShape`` vec2) of the scene's Pulse Rim field, or None (off: the
+    rims exactly as without the option)."""
     if pulse_rim is None:
         values['uPulseRim'] = (0., 0., 0., 0.)
-        return False
-    buffer, rim, shape = pulse_rim
-    gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, PULSE_RIM_BINDING, int(buffer))
+        return
+    rim, shape = pulse_rim
     values['uPulseRim'] = tuple(rim)
     values['uPulseRimShape'] = tuple(shape)
-    return True
 
 
 def _sweep_axis(value):
@@ -185,6 +186,220 @@ def _continuation_draw_ranges(packet, continuation, frame_x, cross_divisions):
 
 
 
+class RibbonValues:
+    """The ribbon's draw values, GL-free (N5.4: one owner for the Python draw and the native record): each draw's
+    pass-block members by name and its vertex range, from the packet and the draw's inputs. It holds the per-packet
+    caches: the culled draw intervals (every pass of a frame asks for the same ones), the material's view values (a
+    frame's body and light passes share them) and the strand cohorts' bounds."""
+
+    def __init__(self):
+        self._ranges_payload=None
+        self._ranges={}
+        self._material_cache=None
+        self._strand_bounds_payload=None
+        self._strand_bounds=(0.,0.)
+
+    def draw_ranges(self,packet,continuation,frame_x,cross_divisions):
+        """``_continuation_draw_ranges`` of this packet, computed once per payload and query."""
+        if packet.payload is not self._ranges_payload:
+            self._ranges_payload,self._ranges=packet.payload,{}
+        key=(tuple(continuation),frame_x,cross_divisions)
+        ranges=self._ranges.get(key)
+        if ranges is None:
+            ranges=self._ranges[key]=_continuation_draw_ranges(packet,continuation,frame_x,cross_divisions)
+        return ranges
+
+    def ribbon(self, packet, mvp, *, shading, viewport=None, diagnostic=0, view=None, material=None, age_fade=None,
+               mist=None, mist_frame=(0., 0., 0.), sweep_axis=None, grade=None, floor=None, continuation=None,
+               floor_give=None, pulse_rim=None):
+        """(values, vertices) of one ribbon draw (``RibbonPrimitive.draw``'s inputs; ``floor_give`` = (``uFloorGive``[,
+        side]) and ``pulse_rim`` = (``uPulseRim``, ``uPulseRimShape``) without their GL objects; ``viewport`` the bound
+        target's (width, height), needed by a shaded draw), or None when the packet is empty. The body and both
+        continuation extensions are one draw of consecutive vertex ranges."""
+        if shading not in _FRAGMENTS:
+            raise ValueError(f'Unknown ribbon shading: {shading}')
+        if packet.instances == 0:
+            if packet.vertices != 0:
+                raise ValueError('Empty packet cannot draw vertices')
+            return None
+        if packet.vertices % 6 or not 0 < packet.vertices <= (MAX_STRIP_STATIONS-1)*6:
+            raise ValueError('Ribbon draw exceeds vertex capacity')
+        if len(mvp) != 16 or not all(math.isfinite(v) for v in mvp) or diagnostic not in (0, 1, 2):
+            raise ValueError('Finite MVP and admitted diagnostic required')
+        origin = np.asarray(packet.world_origin, dtype=float)
+        if origin.shape != (3,) or not np.isfinite(origin).all():
+            raise ValueError('Finite packet world origin required')
+        translate = np.array((*origin, 1.))
+        matrix = np.asarray(mvp, dtype=float).reshape(4, 4, order='F').copy()
+        matrix[:, 3] = matrix @ translate
+        matrix = matrix.astype(np.float32)
+        if not np.isfinite(matrix).all():
+            raise ValueError('Rebased MVP exceeds float32 range')
+        shaded = None
+        material = material or RibbonMaterial()
+        cross_divisions = 8 if material.cross_curve > 0 else 1
+        axis = _sweep_axis(sweep_axis)
+        if continuation is not None and axis!=(1.,0.,0.):
+            raise ValueError('Continuation requires the monotone world-x cloth sweep')
+        ranges=None
+        if continuation is not None:
+            frame=origin+np.asarray(mist_frame,float)
+            ranges=self.draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
+        if shading != 'diagnostic':
+            shaded = self.material(view, translate, material)
+            shaded['uAge'] = (0., 0., 0., 0.)
+            shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
+            if mist is not None:
+                shaded.update(mist)
+            frame = np.asarray(packet.world_origin, float) + np.asarray(mist_frame, float)
+            if frame.shape != (3,) or not np.isfinite(frame).all():
+                raise ValueError('Finite mist frame required')
+            shaded['uMistOrigin'] = tuple(frame.tolist())
+            shaded['uFloorContact'] = _floor_contact(floor, frame)
+            if age_fade is not None:
+                now, fade_in, max_age, fade_out = (float(v) for v in age_fade)
+                if not all(math.isfinite(v) for v in (now, fade_in, max_age, fade_out)) or min(fade_in, max_age, fade_out) < 0:
+                    raise ValueError('Ribbon age fade needs finite non-negative times')
+                shaded['uAge'] = (now - float(packet.coordinate_origin), fade_in, max_age, fade_out)
+            # Edge-on widening works in pixels: the bound target's viewport.
+            shaded['uViewport'] = tuple(float(v) for v in viewport)
+        values = {}
+        values['uMvp'] = tuple(matrix.flatten(order='F'))
+        values['uSurface'] = (material.cross_curve, float(cross_divisions))
+        values['uSweepAxis'] = axis
+        _floor_give_values(values, floor_give, origin+np.asarray(mist_frame, float))
+        if shading == 'light':_pulse_rim_values(values, pulse_rim)
+        body,span,extensions=(ranges if ranges is not None else
+            ((0,packet.vertices*cross_divisions),None,()))
+        drawn=body[1]
+        if continuation is not None:
+            # One draw (N5.4): the culled body, then each extension, as consecutive vertex ranges.
+            counts,bases,parts=[body[1],0,0],[body[0],0,0],{-1.:(0.,0.,0.,0.),1.:(0.,0.,0.,0.)}
+            for side,divisions,first,count in extensions:
+                part=1 if side<0 else 2
+                counts[part],bases[part]=count,first
+                parts[side]=(*span,float(divisions),side)
+            values['uDrawCounts']=(*(int(v) for v in counts),0)
+            values['uDrawBases']=(*(int(v) for v in bases),0)
+            values['uContinuationBefore'],values['uContinuationAfter']=parts[-1.],parts[1.]
+            drawn=sum(counts)
+        if shaded is None:
+            values['uDiagnostic'] = diagnostic
+            values['uFloorContact'] = _floor_contact(floor,origin+np.asarray(mist_frame,float))
+        else:
+            values.update(shaded)
+        return values, drawn
+
+    def strand_bounds(self, strand_births):
+        """The strand cohorts' (length, reach) bounds of these births, found once per payload."""
+        if strand_births is not self._strand_bounds_payload:
+            held=np.frombuffer(strand_births,np.float32).reshape(-1,COHORT_ROWS,4)
+            self._strand_bounds=(float(held[:,1,0].max()),float(held[:,1,1].max()))
+            self._strand_bounds_payload=strand_births
+        return self._strand_bounds
+
+    def sparks(self, packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis, floor=None,
+               strays=None, strand_births=None, strand_origin=0., continuation=None, floor_give=None, viewport=None):
+        """(values, first knot, knots) of a sparks or (with ``strays``) strays draw (``RibbonPrimitive.draw``'s
+        inputs, ``floor_give`` without its texture, ``viewport`` the bound target's for the strays), or None when
+        nothing draws (an empty packet, or cohorts with no births)."""
+        if packet.instances == 0:
+            return None
+        cohorts=strays is not None and strand_births is not None
+        if cohorts:
+            if not isinstance(strand_births,bytes) or len(strand_births) not in (0,packet.instances*COHORT_BYTES):
+                raise ValueError('Strand cohorts must match the packet physical knot slots')
+            if not strand_births:return None
+            self.strand_bounds(strand_births)
+        if now is None or not math.isfinite(float(now)):
+            raise ValueError('Sparks need the absolute now of the ribbon clock')
+        origin = np.asarray(packet.world_origin, dtype=float)
+        matrix = np.asarray(mvp, dtype=float).reshape(4, 4, order='F').copy()
+        matrix[:, 3] = matrix @ np.array((*origin, 1.))
+        frame = origin + np.asarray(mist_frame, float)
+        u = {}
+        u['uMvp'] = tuple(matrix.astype(np.float32).flatten(order='F'))
+        u['uSweepAxis'] = sweep_axis
+        u['uSurface'] = (material.cross_curve,1.)
+        clock = (float(now) - float(packet.coordinate_origin), float(packet.coordinate_origin) % 1000.)
+        if strays is None:
+            u['uSpark'] = (float(sparks.per_knot), sparks.lifetime, sparks.drift, sparks.rise)
+            u['uSparkLook'] = (sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
+            u['uSparkClock'] = clock
+            u['uSparkWhite'] = sparks.white
+        else:
+            u['uStray'] = (float(strays.per_knot), strays.length, strays.reach, strays.chance)
+            u['uStrayLook'] = (strays.width, strays.light, strays.beads, strays.peel_time)
+            u['uStrayClock'] = clock
+            u['uStrayGlow'] = (strays.halo, strays.glow)
+            u['uStrayAdmission'] = strays.admission_softness
+            if cohorts:
+                u['uStrayBirthNow'] = float(now)-float(strand_origin)
+                u['uStrayPulse'] = (strays.pulse_growth,strays.pulse_glow)
+            u['uViewport'] = tuple(float(v) for v in viewport)
+        mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
+        u['uMist'] = mist_values['uMist']
+        u['uMistShape'] = mist_values['uMistShape']
+        u['uFogRange'] = mist_values['uFogRange']
+        if 'uFogView' in mist_values:
+            u['uFogView'] = mist_values['uFogView']
+            u['uFogLens'] = mist_values['uFogLens']
+        u['uMistOrigin'] = tuple(frame)
+        u['uFloorContact'] = _floor_contact(floor, frame)
+        _floor_give_values(u, floor_give, frame)
+        u.update({**GRADE_OFF, **(grade or {})})
+        first,count=0,MAX_PATH_SAMPLES*(sparks.per_knot if strays is None else 1)
+        if strays is not None:
+            first,count=self._stray_range(packet,strays,cohorts,continuation,frame)
+            u['uVertexBase']=first*strays.per_knot*STRAY_SEGMENTS*6   # every draw counts from vertex 0 (N5.4)
+        return u, first, count
+
+    def _stray_range(self,packet,strays,cohorts,continuation,frame):
+        """(first knot, knot count) the strays' draw covers: every knot, or with cohorts under continuation the culled
+        knots of the visible span widened by the strands' reach."""
+        first,count=0,MAX_PATH_SAMPLES
+        if cohorts and continuation is not None:
+            rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
+            step=0.
+            for path in rows:
+                n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
+                a=path[4+start*KNOT_ROWS,0];b=path[4+((start+n-1)%cap)*KNOT_ROWS,0]
+                step=max(step,float(b-a)/max(n-1,1))
+            length,reach=self._strand_bounds
+            length*=1.+strays.pulse_growth
+            span=(continuation[0]-length*step-1.25*reach,
+                  continuation[1]+1.25*reach,continuation[2])
+            body,_,_=self.draw_ranges(packet,span,float(frame[0]),1)
+            subdivisions=int(rows[0,0,1])
+            first=body[0]//(6*subdivisions)
+            count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
+        return first,count
+
+    def material(self, view, translate, material):
+        """``material_uniforms``, once per (view, origin, material): a frame's body and light passes share them."""
+        key = (tuple(view) if view is not None else None, tuple(translate), material)
+        cached = self._material_cache
+        if cached is None or cached[0] != key:
+            cached = self._material_cache = (key, self.material_uniforms(view, translate, material))
+        return dict(cached[1])
+
+    @staticmethod
+    def material_uniforms(view, translate, material):
+        if view is None or len(view) != 16 or not all(math.isfinite(v) for v in view):
+            raise ValueError('Material shading needs the finite world view matrix')
+        rebased = np.asarray(view, dtype=float).reshape(4, 4, order='F').copy()
+        rebased[:, 3] = rebased @ translate
+        forward = -rebased[2, :3]
+        length = float(np.linalg.norm(forward))
+        if not length > 0:
+            raise ValueError('View matrix has no forward axis')
+        eye = np.linalg.inv(rebased) @ np.array((0., 0., 0., 1.))
+        values = dict(uViewZ=tuple(rebased[2]), uEye=tuple(eye[:3]/eye[3]), **material.uniforms())
+        if not all(np.isfinite(v).all() for v in values.values()):
+            raise ValueError('Rebased view exceeds finite range')
+        return values
+
+
 class RibbonPrimitive:
     def __init__(self):
         # Every program's values are one pass block (N1.6); a continuation draw gives its body and two extensions
@@ -195,13 +410,8 @@ class RibbonPrimitive:
         self._context_ref = None
         self._held_packet = self._lease = None
         self.strand_resources = self.strand_stream = None
-        self._strand_bounds_payload=None
-        self._strand_bounds=(0.,0.)
-        # Culled draw intervals of the bound packet: every pass of a frame (body, light, reflected light) asks for the
-        # same ones, so they are found once per packet payload.
-        self._ranges_payload=None
-        self._ranges={}
-        self._material_cache=None
+        # The draws' values (GL-free, shared with the native record) and their per-packet caches.
+        self.values = RibbonValues()
 
     @property
     def has_resources(self):
@@ -257,16 +467,6 @@ class RibbonPrimitive:
             try:yield
             finally:self._held_packet=self._lease=None
 
-    def _draw_ranges(self,packet,continuation,frame_x,cross_divisions):
-        """``_continuation_draw_ranges`` of this packet, computed once per payload and query."""
-        if packet.payload is not self._ranges_payload:
-            self._ranges_payload,self._ranges=packet.payload,{}
-        key=(tuple(continuation),frame_x,cross_divisions)
-        ranges=self._ranges.get(key)
-        if ranges is None:
-            ranges=self._ranges[key]=_continuation_draw_ranges(packet,continuation,frame_x,cross_divisions)
-        return ranges
-
     @contextmanager
     def _packet_bound(self,packet):
         if self._held_packet is not None:
@@ -303,93 +503,33 @@ class RibbonPrimitive:
                                      material or RibbonMaterial(), _sweep_axis(sweep_axis), floor,
                                      (strays or RibbonStrays()) if shading == 'strays' else None,
                                      strand_births,strand_origin,continuation,floor_give,viewport,restore)
-        if shading not in _FRAGMENTS:
-            raise ValueError(f'Unknown ribbon shading: {shading}')
-        if packet.instances == 0:
-            if packet.vertices != 0:
-                raise ValueError('Empty packet cannot draw vertices')
+        if shading != 'diagnostic' and viewport is None and packet.instances:
+            self._check_context(admit=True)
+            viewport = tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4])
+        found = self.values.ribbon(packet, mvp, shading=shading, viewport=viewport, diagnostic=diagnostic, view=view,
+                                   material=material, age_fade=age_fade, mist=mist, mist_frame=mist_frame,
+                                   sweep_axis=sweep_axis, grade=grade, floor=floor, continuation=continuation,
+                                   floor_give=None if floor_give is None else tuple(floor_give[1:]),
+                                   pulse_rim=None if pulse_rim is None else tuple(pulse_rim[1:]))
+        if found is None:
             return
-        if packet.vertices % 6 or not 0 < packet.vertices <= (MAX_STRIP_STATIONS-1)*6:
-            raise ValueError('Ribbon draw exceeds vertex capacity')
-        if len(mvp) != 16 or not all(math.isfinite(v) for v in mvp) or diagnostic not in (0, 1, 2):
-            raise ValueError('Finite MVP and admitted diagnostic required')
-        origin = np.asarray(packet.world_origin, dtype=float)
-        if origin.shape != (3,) or not np.isfinite(origin).all():
-            raise ValueError('Finite packet world origin required')
-        translate = np.array((*origin, 1.))
-        matrix = np.asarray(mvp, dtype=float).reshape(4, 4, order='F').copy()
-        matrix[:, 3] = matrix @ translate
-        matrix = matrix.astype(np.float32)
-        if not np.isfinite(matrix).all():
-            raise ValueError('Rebased MVP exceeds float32 range')
-        shaded = None
-        material = material or RibbonMaterial()
-        cross_divisions = 8 if material.cross_curve > 0 else 1
-        axis = _sweep_axis(sweep_axis)
-        if continuation is not None and axis!=(1.,0.,0.):
-            raise ValueError('Continuation requires the monotone world-x cloth sweep')
-        ranges=None
-        if continuation is not None:
-            frame=origin+np.asarray(mist_frame,float)
-            ranges=self._draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
-        if shading != 'diagnostic':
-            shaded = self._material(view, translate, material)
-            shaded['uAge'] = (0., 0., 0., 0.)
-            shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
-            if mist is not None:
-                shaded.update(mist)
-            frame = np.asarray(packet.world_origin, float) + np.asarray(mist_frame, float)
-            if frame.shape != (3,) or not np.isfinite(frame).all():
-                raise ValueError('Finite mist frame required')
-            shaded['uMistOrigin'] = tuple(frame.tolist())
-            shaded['uFloorContact'] = _floor_contact(floor, frame)
-            if age_fade is not None:
-                now, fade_in, max_age, fade_out = (float(v) for v in age_fade)
-                if not all(math.isfinite(v) for v in (now, fade_in, max_age, fade_out)) or min(fade_in, max_age, fade_out) < 0:
-                    raise ValueError('Ribbon age fade needs finite non-negative times')
-                shaded['uAge'] = (now - float(packet.coordinate_origin), fade_in, max_age, fade_out)
+        values, drawn = found
         self._check_context(admit=True)
-        if shaded is not None:
-            # Edge-on widening works in pixels: the caller's current viewport is the scene target's.
-            shaded['uViewport'] = (tuple(float(v) for v in viewport) if viewport is not None else
-                                   tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING) if restore else None
-        rim_bound = False
+        rim_bound = shading == 'light' and pulse_rim is not None
         try:
             key=shading+('_continuous' if continuation is not None else '')
             vertex=RIBBON_CONTINUOUS_VERTEX if continuation is not None else RIBBON_VERTEX
             program = self.resources.program(key, vertex, _FRAGMENTS[shading])
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            # The program's values as its uniforms held them, one pass block (N1.6); the samplers carry their units.
-            values = self.resources.values(key)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
-            values['uMvp'] = tuple(matrix.flatten(order='F'))
-            values['uSurface'] = (material.cross_curve, float(cross_divisions))
-            values['uSweepAxis'] = axis
-            _apply_floor_give(values, floor_give, origin+np.asarray(mist_frame, float))
-            if shading == 'light':rim_bound = _apply_pulse_rim(values, pulse_rim)
-            body,span,extensions=(ranges if ranges is not None else
-                ((0,packet.vertices*cross_divisions),None,()))
-            drawn=body[1]
-            if continuation is not None:
-                # One draw (N5.4): the culled body, then each extension, as consecutive vertex ranges.
-                counts,bases,parts=[body[1],0,0],[body[0],0,0],{-1.:(0.,0.,0.,0.),1.:(0.,0.,0.,0.)}
-                for side,divisions,first,count in extensions:
-                    part=1 if side<0 else 2
-                    counts[part],bases[part]=count,first
-                    parts[side]=(*span,float(divisions),side)
-                values['uDrawCounts']=(*(int(v) for v in counts),0)
-                values['uDrawBases']=(*(int(v) for v in bases),0)
-                values['uContinuationBefore'],values['uContinuationAfter']=parts[-1.],parts[1.]
-                drawn=sum(counts)
-            if shaded is None:
-                values['uDiagnostic'] = diagnostic
-                values['uFloorContact'] = _floor_contact(floor,origin+np.asarray(mist_frame,float))
-            else:
-                values.update(shaded)
+            _bind_floor_give(floor_give)
+            if rim_bound:
+                gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, PULSE_RIM_BINDING, int(pulse_rim[0]))
+            # The program's values, one pass block (N1.6); the samplers carry their units.
             with self._packet_bound(packet), self.resources.pass_blocks.bound(pack_block(RIBBON_BLOCK, values)):
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
@@ -409,79 +549,36 @@ class RibbonPrimitive:
                      restore=True):
         """Additive point sprites, or with ``strays`` free strands, on the bound target (the caller sets blending,
         as for the light pass). Strands are triangles: program point size is left alone for them."""
-        if packet.instances == 0:
+        if strays is not None and viewport is None and packet.instances:
+            self._check_context(admit=True)
+            viewport = tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4])
+        found = self.values.sparks(packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis, floor,
+                                   strays, strand_births, strand_origin, continuation,
+                                   None if floor_give is None else tuple(floor_give[1:]), viewport)
+        if found is None:
             return
-        cohorts=strays is not None and strand_births is not None
-        if cohorts:
-            if not isinstance(strand_births,bytes) or len(strand_births) not in (0,packet.instances*COHORT_BYTES):
-                raise ValueError('Strand cohorts must match the packet physical knot slots')
-            if not strand_births:return
-            if strand_births is not self._strand_bounds_payload:
-                held=np.frombuffer(strand_births,np.float32).reshape(-1,COHORT_ROWS,4)
-                self._strand_bounds=(float(held[:,1,0].max()),float(held[:,1,1].max()))
-                self._strand_bounds_payload=strand_births
-        if now is None or not math.isfinite(float(now)):
-            raise ValueError('Sparks need the absolute now of the ribbon clock')
-        origin = np.asarray(packet.world_origin, dtype=float)
-        matrix = np.asarray(mvp, dtype=float).reshape(4, 4, order='F').copy()
-        matrix[:, 3] = matrix @ np.array((*origin, 1.))
-        frame = origin + np.asarray(mist_frame, float)
+        u, _first, count = found
         self._check_context(admit=True)
+        cohorts = strays is not None and strand_births is not None
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING) if restore else None
         points = strays is None
         point_size_before = gl_query.is_enabled(gl.GL_PROGRAM_POINT_SIZE) if points else None
         try:
-            kind = 'sparks' if strays is None else 'strays'
             resources=self._strand_resources() if cohorts else self.resources
             program = (resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT) if strays is None
                        else resources.program('strays',RIBBON_COHORT_STRAY_VERTEX if cohorts else RIBBON_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT if cohorts else RIBBON_STRAY_FRAGMENT))
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            # The program's values as its uniforms held them, one pass block (N1.6); the samplers carry their units.
-            u = resources.values(kind)
             block = (RIBBON_SPARK_BLOCK if strays is None else RIBBON_COHORT_STRAY_BLOCK if cohorts
                      else RIBBON_STRAY_BLOCK)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             if points:gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
-            u['uMvp'] = tuple(matrix.astype(np.float32).flatten(order='F'))
-            u['uSweepAxis'] = sweep_axis
-            u['uSurface'] = (material.cross_curve,1.)
-            clock = (float(now) - float(packet.coordinate_origin), float(packet.coordinate_origin) % 1000.)
-            if strays is None:
-                u['uSpark'] = (float(sparks.per_knot), sparks.lifetime, sparks.drift, sparks.rise)
-                u['uSparkLook'] = (sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
-                u['uSparkClock'] = clock
-                u['uSparkWhite'] = sparks.white
-            else:
-                u['uStray'] = (float(strays.per_knot), strays.length, strays.reach, strays.chance)
-                u['uStrayLook'] = (strays.width, strays.light, strays.beads, strays.peel_time)
-                u['uStrayClock'] = clock
-                u['uStrayGlow'] = (strays.halo, strays.glow)
-                u['uStrayAdmission'] = strays.admission_softness
-                if cohorts:
-                    u['uStrayBirthNow'] = float(now)-float(strand_origin)
-                    u['uStrayPulse'] = (strays.pulse_growth,strays.pulse_glow)
-                u['uViewport'] = (tuple(float(v) for v in viewport) if viewport is not None else
-                                  tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
-            mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
-            u['uMist'] = mist_values['uMist']
-            u['uMistShape'] = mist_values['uMistShape']
-            u['uFogRange'] = mist_values['uFogRange']
-            if 'uFogView' in mist_values:
-                u['uFogView'] = mist_values['uFogView']
-                u['uFogLens'] = mist_values['uFogLens']
-            u['uMistOrigin'] = tuple(frame)
-            u['uFloorContact'] = _floor_contact(floor, frame)
-            _apply_floor_give(u, floor_give, frame)
-            u.update({**GRADE_OFF, **(grade or {})})
-            if strays is not None:
-                first,count=self._stray_range(packet,strays,cohorts,continuation,frame)
-                u['uVertexBase']=first*strays.per_knot*STRAY_SEGMENTS*6   # every draw counts from vertex 0 (N5.4)
+            _bind_floor_give(floor_give)
             with self._packet_bound(packet), resources.pass_blocks.bound(pack_block(block, u)):
                 if strays is None:
-                    gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
+                    gl.glDrawArraysInstanced(gl.GL_POINTS, 0, count, packet.instances)
                 else:
                     stride=strays.per_knot*STRAY_SEGMENTS*6
                     if cohorts:
@@ -499,51 +596,6 @@ class RibbonPrimitive:
             if restore:
                 gl.glBindVertexArray(vao_before)
                 gl.glUseProgram(program_before)
-
-    def _stray_range(self,packet,strays,cohorts,continuation,frame):
-        """(first knot, knot count) the strays' draw covers: every knot, or with cohorts under continuation the culled
-        knots of the visible span widened by the strands' reach."""
-        first,count=0,MAX_PATH_SAMPLES
-        if cohorts and continuation is not None:
-            rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
-            step=0.
-            for path in rows:
-                n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
-                a=path[4+start*KNOT_ROWS,0];b=path[4+((start+n-1)%cap)*KNOT_ROWS,0]
-                step=max(step,float(b-a)/max(n-1,1))
-            length,reach=self._strand_bounds
-            length*=1.+strays.pulse_growth
-            span=(continuation[0]-length*step-1.25*reach,
-                  continuation[1]+1.25*reach,continuation[2])
-            body,_,_=self._draw_ranges(packet,span,float(frame[0]),1)
-            subdivisions=int(rows[0,0,1])
-            first=body[0]//(6*subdivisions)
-            count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
-        return first,count
-
-    def _material(self, view, translate, material):
-        """``_material_uniforms``, once per (view, origin, material): a frame's body and light passes share them."""
-        key = (tuple(view) if view is not None else None, tuple(translate), material)
-        cached = self._material_cache
-        if cached is None or cached[0] != key:
-            cached = self._material_cache = (key, self._material_uniforms(view, translate, material))
-        return dict(cached[1])
-
-    @staticmethod
-    def _material_uniforms(view, translate, material):
-        if view is None or len(view) != 16 or not all(math.isfinite(v) for v in view):
-            raise ValueError('Material shading needs the finite world view matrix')
-        rebased = np.asarray(view, dtype=float).reshape(4, 4, order='F').copy()
-        rebased[:, 3] = rebased @ translate
-        forward = -rebased[2, :3]
-        length = float(np.linalg.norm(forward))
-        if not length > 0:
-            raise ValueError('View matrix has no forward axis')
-        eye = np.linalg.inv(rebased) @ np.array((0., 0., 0., 1.))
-        values = dict(uViewZ=tuple(rebased[2]), uEye=tuple(eye[:3]/eye[3]), **material.uniforms())
-        if not all(np.isfinite(v).all() for v in values.values()):
-            raise ValueError('Rebased view exceeds finite range')
-        return values
 
     def _check_context(self, *, admit=False):
         current = QOpenGLContext.currentContext()
@@ -575,5 +627,5 @@ class RibbonPrimitive:
             except Exception as error:errors.append(error)
         if errors:raise ExceptionGroup('Strand resources remain for retry',errors)
         self.strand_resources=self.strand_stream=None
-        self._strand_bounds_payload=None
-        self._strand_bounds=(0.,0.)
+        self.values._strand_bounds_payload=None
+        self.values._strand_bounds=(0.,0.)

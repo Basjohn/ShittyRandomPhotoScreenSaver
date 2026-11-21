@@ -23,6 +23,13 @@ SPREAD = .75
 REFERENCE, CEILING = .12, 2.
 
 
+def pulse_rim_values(strength) -> tuple[tuple, tuple]:
+    """(``uPulseRim``, ``uPulseRimShape``) of the light pass at Pulse Rim ``strength`` (GL-free, N5.4)."""
+    length = LAST-FIRST+STEP
+    # Sample i's centre is PULSE_GRID[i]; beyond the grid the edge value continues (as ``pulse_at`` does).
+    return (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length), (1./REFERENCE, CEILING)
+
+
 class PulseRimField:
     """Caller owns the current GL context; ``update`` once per frame returns the light pass's
     (buffer, uPulseRim, uPulseRimShape)."""
@@ -57,9 +64,7 @@ class PulseRimField:
         if payload is not self._payload:
             gl.glNamedBufferSubData(self.buffer, 0, SAMPLES*4, np.frombuffer(payload, np.float32))
             self._payload = payload
-        length = LAST-FIRST+STEP
-        # Sample i's centre is PULSE_GRID[i]; beyond the grid the edge value continues (as ``pulse_at`` does).
-        return self.buffer, (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length), (1./REFERENCE, CEILING)
+        return (self.buffer, *pulse_rim_values(strength))
 
     def release(self):
         if self.buffer:

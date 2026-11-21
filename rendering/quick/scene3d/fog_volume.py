@@ -33,6 +33,29 @@ from .uniforms import PassBlocks
 MAX_FOG_CELLS = 256*256*128
 
 
+def fog_volume_values(*, view, lens, depth_range, grid, focus_depth=0.):
+    """(the dispatches' volume members, the receivers' mist members) of one camera's volume (GL-free, N5.4: the Python
+    dispatch's and the native record's one owner). ``view``: world->view (4x4, numpy row-major); ``lens``: Perspective
+    (tangent x, y); ``depth_range``: positive (near, far) view depth; ``grid``: the volume's (x, y, slices)."""
+    view = np.asarray(view, float)
+    near, far = (float(v) for v in depth_range)
+    if (view.shape != (4, 4) or not np.isfinite(view).all() or not near < far
+            or not all(math.isfinite(v) for v in (near,far)) or near<=0):
+        raise ValueError('Fog update needs a finite ordered positive depth range')
+    ext_x, ext_y = float(lens[0]), float(lens[1])
+    if not (ext_x > 0 and ext_y > 0 and math.isfinite(ext_x) and math.isfinite(ext_y)):
+        raise ValueError('Fog lens extents must be finite and positive')
+    focus=float(focus_depth)
+    if not math.isfinite(focus) or (focus!=0. and not near<focus<far):
+        raise ValueError('Fog focus must lie inside the admitted depth interval')
+    lens4 = (ext_x, ext_y, 0., 4. if focus else 0.)  # .z unused (was the retired Orthographic flag)
+    range4 = (near, far, float(grid[2]), 1.+focus)
+    # std140 mat4 is column-major: the inverse view's columns (as glUniformMatrix4fv with transpose did).
+    inverse = tuple(np.linalg.inv(view).astype(np.float32).flatten(order='F'))
+    return ({"uFogInvView": inverse, "uFogLens": lens4, "uFogRange": range4},
+            dict(uFogVolume=FOG_TEXTURE_UNIT, uFogView=tuple(view.flatten(order='F')), uFogLens=lens4, uFogRange=range4))
+
+
 class FogVolume:
     def __init__(self, label: str) -> None:
         self.label = label
@@ -133,28 +156,14 @@ class FogVolume:
         units left unbound)."""
         self._check_context(admit=True)
         grid = self._admit_grid(grid)
-        view = np.asarray(view, float)
-        near, far = (float(v) for v in depth_range)
-        if (view.shape != (4, 4) or not np.isfinite(view).all() or not near < far
-                or not all(math.isfinite(v) for v in (near,far)) or near<=0):
-            raise ValueError('Fog update needs a finite ordered positive depth range')
-        ext_x, ext_y = float(lens[0]), float(lens[1])
-        if not (ext_x > 0 and ext_y > 0 and math.isfinite(ext_x) and math.isfinite(ext_y)):
-            raise ValueError('Fog lens extents must be finite and positive')
+        values, uniforms = fog_volume_values(view=view, lens=lens, depth_range=depth_range, grid=grid,
+                                             focus_depth=focus_depth)
         if self._grid != grid or not self._integrated:
             self._allocate(grid)
         if not self._integrate_program:
             self._integrate_program = compile_compute_program(FOG_INTEGRATE_COMPUTE, label=f'{self.label} integrate')
-        focus=float(focus_depth)
-        if not math.isfinite(focus) or (focus!=0. and not near<focus<far):
-            raise ValueError('Fog focus must lie inside the admitted depth interval')
-        lens4 = (ext_x, ext_y, 0., 4. if focus else 0.)  # .z unused (was the retired Orthographic flag)
-        range4 = (near, far, float(grid[2]), 1.+focus)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
-            # std140 mat4 is column-major: the inverse view's columns (as glUniformMatrix4fv with transpose did).
-            inverse = tuple(np.linalg.inv(view).astype(np.float32).flatten(order='F'))
-            values = {"uFogInvView": inverse, "uFogLens": lens4, "uFogRange": range4}
             gl.glUseProgram(inject_program)
             with inject_block(values), \
                     bound_image(2, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
@@ -170,8 +179,7 @@ class FogVolume:
         finally:
             if program_before is not None:
                 gl.glUseProgram(program_before)
-        self._uniforms = dict(uFogVolume=FOG_TEXTURE_UNIT, uFogView=tuple(view.flatten(order='F')),
-                              uFogLens=lens4, uFogRange=range4)
+        self._uniforms = uniforms
 
     @contextmanager
     def bound(self, *, restore: bool = True):

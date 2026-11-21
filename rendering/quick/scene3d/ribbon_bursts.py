@@ -17,6 +17,12 @@ from rendering.quick.scene3d.ribbon import GRADE_OFF
 from rendering.quick.scene3d.uniforms import PassBlocks
 
 
+def burst_values(*,mvp,now,viewport,mist,grade):
+    """The event sparks' pass-block members (GL-free, N5.4: the Python draw's and the native record's one owner)."""
+    return {'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade,
+            'uMvp':tuple(mvp),'uNow':now,'uViewport':tuple(viewport)}
+
+
 class RibbonBurstRenderer:
     def __init__(self):
         self.resources=MeshResources('ribbon event sparks')
@@ -62,8 +68,7 @@ class RibbonBurstRenderer:
         program=self.resources.program('bursts',VERTEX,FRAGMENT)
         gl.glUseProgram(program)
         # The mist volume samples unit FOG_TEXTURE_UNIT (its binding); every other value travels in the pass block.
-        values={'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade,
-                'uMvp':tuple(mvp),'uNow':now,'uViewport':tuple(viewport)}
+        values=burst_values(mvp=mvp,now=now,viewport=viewport,mist=mist,grade=grade)
         vao,_=self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,))
         stream=self._stream();stream.warm()
         with self.blocks.bound(pack_block(BURSTS_BLOCK,values)), \

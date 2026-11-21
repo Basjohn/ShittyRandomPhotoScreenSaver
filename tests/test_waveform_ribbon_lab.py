@@ -80,10 +80,17 @@ def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path
         result=create(*args)
         created.append(int(args[2][0]))
         return result
+    from rendering.gl_programs.mip_chain import MIP_BOX_TEXTS
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
     monkeypatch.setattr(gl,'glCreateTextures',record)
     with lab.target.current():
-        with pytest.raises(FileNotFoundError):
-            lab_module.load_floor_textures(replace(lab.recipe.floor,**{missing:str(tmp_path/'missing.png')}))
+        # The maps' chains are the box kernel's (N5.4): its programs by format, as the scene's resources hold them.
+        chains={fmt:compile_compute_program(text,label=f'lab {fmt} chain') for fmt,text in MIP_BOX_TEXTS.items()}
+        try:
+            with pytest.raises(FileNotFoundError):
+                lab_module.load_floor_textures(replace(lab.recipe.floor,**{missing:str(tmp_path/'missing.png')}),chains)
+        finally:
+            for program in chains.values():delete_program(program)
         assert len(created)==allocated and all(not gl.glIsTexture(name) for name in created)
 
 
