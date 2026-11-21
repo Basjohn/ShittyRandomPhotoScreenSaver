@@ -667,7 +667,6 @@ the feature (D3D11 is not stated).
   - [ ] Layer P, the three 60 s takes (distinct regimes) under the split: full-take native-only runs judged against the
     cached Python references on both APIs, variants as Bubble's, halves reported apart, cold start; the Choice offers
     by coverage windows on the same takes. Rule (b) Vulkan against OpenGL over the same takes.
-  - [ ] Layer L: the per-frame record byte-compared with the Python renderer's values (`native_record_identity.py`).
   - [ ] Layer T (lead, Display 1): the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row,
     with `tools/quick_frame_cadence.py` on native paths.
   - [ ] Layer C cost on a quiet machine (lead): `python native/core/python/oscilloscope_check.py --module-dir
