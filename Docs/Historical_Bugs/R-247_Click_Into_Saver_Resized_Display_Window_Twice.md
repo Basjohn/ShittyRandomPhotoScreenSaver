@@ -1,4 +1,4 @@
-# R-NEW | Clicking into the saver resized its display window twice (a black flicker on every activation)
+# R-247 | Clicking into the saver resized its display window twice (a black flicker on every activation)
 
 **Status:** fixed 21 Nov 2026 (operator report the same day). `QuickDisplayWindow._apply_screen_geometry` leaves a
 shown window that already sits at its placement alone (`_placement_is_current`, `rendering/quick/window.py`).

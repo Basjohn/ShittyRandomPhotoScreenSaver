@@ -89,12 +89,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   - [ ] `tools/agent_handover.py --retire --keep <paths file>`: copy only the listed evidence paths, with a test;
     one handbook line in the retire step to use it. (Plan trim: agent dispatched 21 Nov; --keep: agent dispatched
     21 Nov, both Sonnet Medium.)
-- [ ] Bug, big (operator 21 Nov): clicking into the application gives a slight black flicker; it repeats on clicking
-  out and back in, about every second try (seen while logging). Agent a892f0de61cd0838f (Opus Medium).
-- [ ] Bug (operator 21 Nov): Achievement Pulse's extra surface controls were wired to the card. They belong to the
-  pulse ring and, separately, the ring's inner circle; the card itself behaves like any normal card with materials.
-  The pulse circle must also draw when borderless is on (it is a special object, not a border). Agent
-  a1a0de469911351fc (Sonnet Medium).
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
