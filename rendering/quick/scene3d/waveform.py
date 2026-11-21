@@ -380,7 +380,7 @@ class WaveformScene:
         recipe, (width, height) = self.recipe, self.size
         environment = recipe.environment
         with self.scene.scope(card, SCENE_SAMPLES, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
-                              oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
+                              oit=True, hdr=None if flat else recipe.exposure, bloom_stage=not flat):
             gl.glViewport(0, 0, width, height)
             # The finite ground dissolves into the mist's far colour, including above its Perspective horizon.
             background = environment.backdrop if flat else tuple(c*.35 for c in environment.backdrop)

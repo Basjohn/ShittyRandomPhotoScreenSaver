@@ -36,8 +36,8 @@ class QuickWaveformRibbonRenderer:
         if recipe.fog is not None:
             programs.extend(((scene.fog_resources,'fog medium',MEDIUM_INJECT_SOURCE),
                              (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))
-        programs.extend((scene.resources,*entry) for entry in scene_target_programs(SCENE_SAMPLES,recipe.bloom>0.,False,
-            overlay=True,oit=True,hdr=recipe.bloom>0.,rotation=frame.scene_output_rotation))
+        programs.extend((scene.resources,*entry) for entry in scene_target_programs(SCENE_SAMPLES,True,False,
+            overlay=True,oit=True,hdr=True,rotation=frame.scene_output_rotation))
         if not warm_programs(programs):return False
         # The floor's, the sky's and the medium's pass block rings (N1.6), one allocation a step.
         if not scene.resources.pass_blocks.warm():return False
@@ -49,7 +49,7 @@ class QuickWaveformRibbonRenderer:
         if recipe.floor.give>0. and not scene.floor_give.prepare_step():return False
         if not state.ready:return False
         signature=(*item_pixel_rect(frame)[2:],recipe.fog is not None,recipe.sparks is not None,
-                   recipe.strays is not None,recipe.bloom>0.,recipe.floor.give>0.)
+                   recipe.strays is not None,recipe.floor.give>0.)
         if signature!=self._prepared_signature:
             self._draw(frame,opacity=0.)
             self._prepared_signature=signature
