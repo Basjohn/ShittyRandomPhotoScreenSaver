@@ -114,6 +114,43 @@ def test_a_lost_devices_teardown_stops_its_job_service_before_the_device():
     assert not dlc.teardown_ok([])
 
 
+def mix_owners(spec) -> set[str]:
+    """The owners the M3 program crosses a loss with (checkpoint audit 11 M3), read from its declaration."""
+    from rendering.native.mode import BloomStep, CompositeStep, ComputePass, ModePass
+
+    found = set()
+    if spec.images or spec.buffers:
+        if any(isinstance(p, ComputePass) for p in spec.passes):
+            found.add("storage_and_compute")
+    if any(getattr(t, "depth", False) for t in spec.targets):
+        found.add("scene_target_with_depth")
+    if spec.meshes and any(isinstance(p, ModePass) and p.geometry is not None and p.geometry.mesh for p in spec.passes):
+        found.add("mesh")
+    if any(isinstance(p, BloomStep) for p in spec.passes):
+        found.add("bloom")
+    if any(isinstance(p, CompositeStep) for p in spec.passes):
+        found.add("composite")
+    return found
+
+
+MIX_OWNERS = {"storage_and_compute", "scene_target_with_depth", "mesh", "bloom", "composite"}
+
+
+def test_the_m3_program_holds_every_owner_the_crossfade_round_never_crossed_a_loss_with():
+    from dataclasses import replace
+
+    from rendering.native.mode import BloomStep
+
+    packs = {name: b"pack" for name in ("field.comp", "sample.frag", "box.vert", "box.frag")}
+    spec = dlc.mix_spec(packs, "vulkan")
+    assert mix_owners(spec) == MIX_OWNERS
+    assert set(dlc.SCENES) == {"program", "spectrum", "background"}
+    # Negative controls: the program without its bloom step, and without its mesh.
+    no_bloom = replace(spec, passes=tuple(p for p in spec.passes if not isinstance(p, BloomStep)))
+    assert mix_owners(no_bloom) == MIX_OWNERS - {"bloom"}
+    assert mix_owners(replace(spec, meshes=())) == MIX_OWNERS - {"mesh"}
+
+
 # ------------------------------------------------------------------------------------------- the source's order
 
 

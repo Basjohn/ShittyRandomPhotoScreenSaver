@@ -27,6 +27,13 @@ Rounds (one child process per API):
             use; a second pool left with no later frame goes at the host's close, its device idle; the scene graph
             invalidated outside any frame (no frame follows) is met by QRhi::finish() at that edge. Its negative control
             is the ABI 29 module, whose in-frame release waited for the queue (release_waits 1).
+  scenes    (checkpoint audit 11 M3) the same forced losses, LOSSES in a row, across the owners the Crossfade never
+            crosses one with, each frame after a loss equal to the frame before (nothing published): "program", one mode
+            program with a compute kernel writing mode storage, a scene target with depth, a mesh, a bloom step and the
+            composite (mix_spec; the mesh sent again by its owner, which has no lost edge; the storage's lost edge told
+            once a loss); "spectrum", the native Spectrum on a frame the Python renderer drew (captured by the OpenGL
+            child, spectrum_check's capture, shared with the Vulkan child); "background", the background layer with a
+            backdrop pyramid and material cards over it (the layer sends its photo again through its own lost edge).
 On Vulkan the instance has the Khronos validation layer with synchronisation validation (``--layer-path``); every message
 is attributed (``vk_validation.py``).
 
@@ -58,7 +65,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("rebuild", "control", "release")
+ROUNDS = ("rebuild", "control", "release", "scenes")
 CHILD_TIMEOUT_S = 900
 LOSSES = 2              # in a row on one host: a second loss proves the first rebuild left a host that can lose again
 TIMED_FRAMES = 8        # the release round's frames with the timer writing its pool
@@ -227,6 +234,314 @@ def round_losses(core, engine, app, api: str, folder: Path, photo_paths, *, swap
     return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
 
 
+# ----------------------------------------------------------------------- M3: the other owners across a loss
+
+#: Checkpoint audit 11 M3: the owners the Crossfade round never crosses a loss with. "program": one mode program with
+#: mode storage and its compute kernel, a scene target with depth, a mesh, a bloom step and the composite (owners:
+#: ModeStorage and compute, SceneTargets, ModeMeshes, PostStages); "spectrum": the native Spectrum (SpectrumContent);
+#: "background": the background layer with a backdrop pyramid and material cards over it (BackdropPyramid, the
+#: layer's own lost edge).
+SCENES = ("program", "spectrum", "background")
+MIX_CODE = 239                 # outside the product's mode table and every harness scene's code
+SCENE_SETTLE_FRAMES = 6        # frames after the re-send: the commit, the pyramid's rebuild, Spectrum's record
+SPECTRUM_RECORD_INDEX = 45     # the captured Spectrum frame (its bars up)
+
+
+def mix_packs(folder: Path) -> dict:
+    """The mix program's four shaders, baked by tools/regen_qrc.py's baker (compute_passes' and mesh_buffers' own)."""
+    import compute_passes as cp
+    import mesh_buffers as mb
+    import probe_rings
+
+    folder.mkdir(parents=True, exist_ok=True)
+    return {"field.comp": probe_rings.bake(cp.FIELD_COMP, "field.comp", folder),
+            "sample.frag": probe_rings.bake(cp.SAMPLE_FRAG, "sample.frag", folder),
+            "box.vert": probe_rings.bake(mb.compose(mb.BOX_VERT), "box.vert", folder),
+            "box.frag": probe_rings.bake(mb.compose(mb.BOX_FRAG), "box.frag", folder)}
+
+
+def mix_spec(packs: dict, api: str):
+    """compute_passes' field (a compute kernel writing a storage image from a stream) sampled into a scene target with
+    depth, mesh_buffers' box bars (a mesh, instances from a stream) drawn over it with the depth test, a bloom chain of
+    the target and the composite of both onto the card."""
+    import compute_passes as cp
+    import mesh_buffer_check as mbc
+    import mesh_buffers as mb
+    import post_stages as ps
+    from rendering.native.mode import (BloomStep, CompositeStep, ComputeBinding, ComputePass, ModePass, ModeStream,
+                                       ModeTarget, PassGeometry, PassSampler, StorageImage, TargetAttachment)
+
+    target = ModeTarget("scene", (TargetAttachment("colour", "rgba8"),), depth=True)
+    box = PassGeometry(packs["box.vert"], mesh="box", instances="bar_count", storage=(("Bars", "bars"),), cull="back",
+                       front_face="u_front_cw")
+    passes = (
+        ComputePass("field", packs["field.comp"], bindings=(ComputeBinding("Knots", "knots", "stream"),
+                                                            ComputeBinding("uField", "field", "image", "write")),
+                    over="field"),
+        ModePass("sample", packs["sample.frag"], "replace", target="scene",
+                 samplers=(PassSampler("uImage", "field", filter="nearest"),)),
+        ModePass("box", packs["box.frag"], "replace", target="scene", depth_test="less", depth_write=True, geometry=box),
+        BloomStep("bloom", "scene.colour"),
+        CompositeStep("show", "opaque_glow", "scene.colour", "bloom.glow"))
+    entries = (("knot_rows", "f32", 4 * cp.KNOTS), ("knot_floats", "u32", 1), ("u_frame", "f64", 1),
+               ("bar_rows", "f32", 4 * 64), ("bar_count", "u32", 1), ("bar_floats", "u32", 1))
+    checks = (("knot_floats", "at_most", 4 * cp.KNOTS), ("bar_count", "at_most", 64), ("bar_floats", "at_most", 4 * 64))
+    settings = {"u_field": [0.5, 0.25, 0.0, 0.0], "u_scale": [0.125, 0.125, 0.125, 0.0],
+                "u_box": [11.3, 249.71, 0.6, 0.55], "u_light": [0.4, -0.6, 0.7, 0.0], "u_front_cw": mbc._front_cw(api),
+                "u_bloom_strength": ps.SETTINGS["u_bloom_strength"]}
+    record = {"knot_rows": cp._f32(cp.knots()), "knot_floats": 4 * cp.KNOTS, "u_frame": 0.0,
+              "bar_rows": mb._f32(mb.bars()), "bar_count": mb.BARS, "bar_floats": 4 * mb.BARS}
+    return cp.SceneSpec("loss_mix", passes, (target,),
+                        (ModeStream("knots", "knot_rows", used="knot_floats"),
+                         ModeStream("bars", "bar_rows", used="bar_floats")),
+                        settings, mb.schema("loss_mix", entries, checks, code=MIX_CODE), record,
+                        images=(StorageImage("field", cp.FIELD_SIZE, "rgba32f"),),
+                        meshes=(("box", mb.box_mesh(), mb.box_layout(), None, None),))
+
+
+def _item_rows(host, card, margin: int):
+    """The item's device pixels in one frame the host renders and reads (nothing published)."""
+    from dataclasses import asdict
+
+    from composite_analysis import frame_rows
+
+    rows = frame_rows(asdict(host.read()))
+    return rows[margin:margin + card[1], margin:margin + card[0]].copy()
+
+
+def cross_losses(host, app, *, read, resend, settle, vulkan: bool, tiles: list) -> tuple[dict, dict]:
+    """LOSSES forced losses in a row on a drawn scene: after each, the owner's re-send (``resend``: what no lost edge
+    sends by itself), ``settle`` and a frame that must equal the frame before the losses (nothing published), the loss
+    judged as the rebuild round judges it."""
+    fsc = _fsc()
+    checks: dict = {}
+    facts: dict = {"losses": []}
+    before = read()
+    checks["drawn_before_the_loss"] = float(before[..., :3].max()) > 0.0
+    checks["no_driver_error_before_the_loss"] = not (host.state().get("driver") or {}).get("error")
+    for index in range(LOSSES):
+        prefix = f"loss_{index}_"
+        edges_before = int((host.state().get("driver") or {}).get("edges", 0))
+        host.force_device_loss(swap_device=True)
+        lost_frame = read()
+        for _ in range(LOST_EDGE_FRAMES):        # queued lost edges reach their owners on the GUI thread
+            app.processEvents()
+            host.frames(1)
+        resend()
+        settle()
+        after = read()
+        state = host.state()
+        losses = state.get("device_losses") or []
+        loss = losses[-1] if losses else {}
+        checks[prefix + "recorded"] = len(losses) == index + 1
+        for key, ok in judge_loss(loss, state, vulkan=vulkan, swap=True).items():
+            checks[prefix + key] = ok
+        comparison = fsc.compare(after, before)
+        checks[prefix + "frame_equals_the_one_before"] = comparison["equal"]
+        driver = state.get("driver") or {}
+        checks[prefix + "driver_attached_and_recording"] = (
+            driver.get("released") is False and not driver.get("error") and int(driver.get("edges", 0)) > edges_before)
+        facts["losses"].append({"loss": loss, "comparison": comparison, "lost_frame_lit": float(lost_frame[..., :3].max()),
+                                "driver": {k: driver.get(k) for k in ("released", "error", "edges", "frames_recorded")},
+                                "vulkan_live_devices": state.get("vulkan_live_devices")})
+        tiles.extend([_tile(before), _tile(lost_frame), _tile(after)])
+    return checks, facts
+
+
+def scene_program(core, engine, app, api: str, folder: Path, tiles: list) -> dict:
+    import compute_pass_check as cpc
+    import compute_passes as cp
+    import mesh_buffer_check as mbc
+
+    spec = mix_spec(mix_packs(folder / "mix_packs"), api)
+    host = mbc._host(core, 1.0, cp.CARD)
+    scene = None
+    facts: dict = {}
+    try:
+        scene = cpc.Scene(core, engine, host, spec)
+        scene.send_meshes()                        # the mesh owner's copy, uploaded at the next record
+        states_lost: list = []
+        textures_lost: list = []
+        scene.mode.on_state_lost(lambda names: states_lost.append(sorted(names)))
+        scene.mode.on_textures_lost(lambda names: textures_lost.append(sorted(names)))
+        scene.draw(1)
+        host.frames(2)
+
+        def resend() -> None:
+            scene.send_meshes()                    # meshes have no lost edge: their owner sends them again
+            scene.mode.update()
+
+        checks, facts = cross_losses(host, app, read=lambda: _item_rows(host, cp.CARD, mbc.MARGIN), resend=resend,
+                                     settle=lambda: host.frames(SCENE_SETTLE_FRAMES), vulkan=api == "vulkan",
+                                     tiles=tiles)
+        state = scene.mode.state()
+        facts.update(states_lost=states_lost, textures_lost=textures_lost, records_published=scene.step,
+                     storage=state.get("storage"), meshes=state.get("meshes"), scene_targets=state.get("scene_targets"),
+                     last_reason=state.get("last_reason"))
+        # The storage's owner was told once per loss that its contents went (zeroed, dispatched fresh).
+        checks["storage_lost_edge_each_loss"] = len(states_lost) == LOSSES and all(
+            "field" in "".join(names) for names in states_lost)
+        checks["nothing_published_across_the_losses"] = scene.step == 1
+    finally:
+        if scene is not None:
+            mbc._close(scene, host, app)
+        core.wait_jobs_idle(20000)
+        facts["host_close"] = host.close()
+        _flush(app)
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
+
+
+def spectrum_capture(out: Path) -> Path:
+    """One Spectrum frame of the Python renderer (spectrum_check's capture, its first run only, the frame
+    SPECTRUM_RECORD_INDEX): the record and the card, saved for both APIs' children (the OpenGL child runs it)."""
+    import base64
+
+    from core.visualizer_engine import spectrum_native_schema
+    from rendering.native.composite import composite_geometry
+    from rendering.native.spectrum import spectrum_presentation
+    from rendering.quick.visualizer.implementations import spectrum as python_spectrum
+    from tools import conventions_identity
+    import tools.expanded_visualizer_evidence as evidence
+    from tools.visualizer_replay import owner_render_parity as parity
+    from tools.visualizer_replay import owner_worker_gate as gate
+    from widgets.spotify_visualizer import engine_worker_link
+
+    clip = evidence.shipped_clip(5.5)
+    found: dict = {}
+    renderer = python_spectrum.QuickSpectrumRenderer
+    original = renderer.render
+    seen = {"index": 0}
+
+    def capturing(self, frame):
+        original(self, frame)
+        if found:
+            return
+        logical = frame.snapshot.logical
+        if int(logical.common.bar_count) <= 0:
+            return
+        if seen["index"] < SPECTRUM_RECORD_INDEX:
+            seen["index"] += 1
+            return
+        presentation = frame.snapshot.presentation
+        dpr = float(presentation.dpr)
+        pixels = (int(frame.viewport[2]), int(frame.viewport[3]))
+        card = spectrum_presentation(presentation, composite_geometry(presentation),
+                                     window_size=(pixels[0] / dpr, pixels[1] / dpr), window_pixels=pixels)
+        card["settings"] = python_spectrum.spectrum_settings_values(
+            logical, presentation, item_size=card["item_size"], oriented_size=card["oriented_size"],
+            content_rotation_quarters=card["quarters"], content_rect=card["content_rect"],
+            item_from_window=card["item_from_window"], window_from_target=card["window_from_target"],
+            target_px=card["target_size"])
+        found.update(card=card, record=base64.b64encode(spectrum_native_schema.encode(logical)).decode("ascii"))
+
+    renderer.render = capturing
+    try:
+        _suffix, settings = conventions_identity.mode_runs("spectrum", False)[0]
+        engine_worker_link.reset_run_state_for_testing()
+        script = parity.parity_script(clip.frames, "spectrum")
+        with parity.single_sample_scene_targets():
+            gate.identity_run("spectrum", script, worker=False, supervisor=None, namespace=None, settings=settings,
+                              scene_mirror=parity.SceneMirror())
+    finally:
+        renderer.render = original
+    if not found:
+        raise RuntimeError("the Python Spectrum renderer drew no frame with bars to capture")
+    path = out / "work" / "spectrum_frame.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(found, default=list), encoding="utf-8")
+    return path
+
+
+def scene_spectrum(core, engine, app, api: str, out: Path, tiles: list) -> dict:
+    import base64
+
+    import spectrum_check as sc
+
+    path = out / "work" / "spectrum_frame.json"
+    if api == "opengl" or not path.is_file():
+        path = spectrum_capture(out)
+    captured = json.loads(path.read_text(encoding="utf-8"))
+    record = base64.b64decode(captured["record"])
+    host = core.hidden_host(*sc.HOST_PIXELS)
+    scene = stream = None
+    facts: dict = {}
+    try:
+        card = sc._card_for_item(captured["card"])
+        host.set_device_pixel_ratio(float(card["dpr"]))
+        scene = sc.Scene(core, engine, host)
+        stream = sc.Stream()
+        scene.spectrum.bind(stream.name, expect=stream.expect)
+        scene.place(card)
+        stream.publish(record, 1.0)
+        scene.spectrum.update()
+        host.frames(2)
+        checks, facts = cross_losses(host, app, read=lambda: scene.read(card).copy(), resend=lambda: None,
+                                     settle=lambda: (scene.spectrum.update(), host.frames(SCENE_SETTLE_FRAMES)),
+                                     vulkan=api == "vulkan", tiles=tiles)
+        facts["spectrum_state"] = {k: v for k, v in scene.spectrum.composite.state().items()
+                                   if k in ("refused_frames", "last_refusal", "content_failures", "shown")}
+        checks["one_record_published"] = stream.consumed() >= 1
+    finally:
+        if stream is not None:
+            stream.close()
+        if scene is not None:
+            scene.close(app)
+        host.frames(2)
+        _flush(app)
+        core.wait_jobs_idle(20000)
+        facts["host_close"] = host.close()
+        _flush(app)
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
+
+
+def scene_background(core, engine, app, api: str, photo_paths, tiles: list) -> dict:
+    import background_layer_check as blc
+    import backdrop_pyramid_check as bpc
+
+    photo = blc.processed(Path(photo_paths[0]), "fill", blc.DISPLAY)[0]
+    host = bpc._host(core, blc.WINDOW, 1.0)
+    scene = None
+    facts: dict = {}
+    try:
+        scene = bpc.BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="layer", backdrop="native")
+        scene.add_cards()                          # the material cards read the backdrop's pyramid
+        scene.present(photo)
+        scene.settle()
+        scene.frames(2)
+        checks, facts = cross_losses(host, app, read=scene.read, resend=lambda: None,   # the layer's own lost edge
+                                     settle=lambda: (scene.settle(), scene.frames(SCENE_SETTLE_FRAMES)),
+                                     vulkan=api == "vulkan", tiles=tiles)
+        layer = scene.base.layer
+        facts["layer_resent"] = getattr(layer, "resent", None)
+        facts["backdrop_state"] = scene.native.state() if scene.native is not None else None
+        checks["layer_sent_its_image_again_each_loss"] = int(getattr(layer, "resent", 0) or 0) >= LOSSES
+    finally:
+        if scene is not None:
+            scene.close(app)
+        facts["host_close"] = bpc._close_host(app, host)
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_scenes(core, engine, app, api: str, out: Path, folder: Path, photo_paths, scenes) -> dict:
+    """M3: each scene of ``scenes`` across LOSSES forced losses, each frame after a loss equal to the frame before."""
+    results: dict = {}
+    for name in scenes:
+        tiles: list = []
+        try:
+            if name == "program":
+                results[name] = scene_program(core, engine, app, api, folder, tiles)
+            elif name == "spectrum":
+                results[name] = scene_spectrum(core, engine, app, api, out, tiles)
+            else:
+                results[name] = scene_background(core, engine, app, api, photo_paths, tiles)
+        except Exception:
+            results[name] = {"pass": False, "checks": {"ran": False}, "error": traceback.format_exc()}
+        if tiles:
+            _sheet(out / f"device_loss_{api}_{name}.png", tiles)
+    checks = {f"{name}_{key}": ok for name, result in results.items() for key, ok in result.get("checks", {}).items()}
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "scenes": results}
+
+
 def _counts_delta(after: dict, before: dict) -> dict:
     return {key: after.get(key, 0) - before.get(key, 0) for key in after if key != "raw_vulkan_pending"}
 
@@ -368,6 +683,9 @@ def child(args) -> dict:
                 try:
                     if name == "release":
                         record[name] = round_release(core, app, args.api)
+                    elif name == "scenes":
+                        record[name] = round_scenes(core, engine, app, args.api, out, folder, photo_paths,
+                                                    args.scenes)
                     else:
                         record[name] = round_losses(core, engine, app, args.api, folder, photo_paths,
                                                     swap=name == "rebuild", tiles=tiles)
@@ -418,6 +736,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
     parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--scenes", nargs="+", default=list(SCENES), choices=SCENES,
+                        help="the scenes round's scenes (checkpoint audit 11 M3)")
     parser.add_argument("--photos", nargs=2, default=[str(p) for p in _fsc().PHOTOS],
                         help="two real photos (default: fullscreen_pass_check's PERSONALSET pair)")
     parser.add_argument("--label", default="n36_device_loss")
@@ -457,7 +777,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds, "--photos", *args.photos]
+                   "--rounds", *args.rounds, "--scenes", *args.scenes, "--photos", *args.photos]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
@@ -473,6 +793,9 @@ def main(argv: list[str] | None = None) -> int:
             record["stderr_tail"] = (stderr or "")[-4000:]
         results[api] = record
 
+    import shutil
+
+    shutil.rmtree(out / "work", ignore_errors=True)   # the captured Spectrum frame the children shared
     verdicts = {api: api_verdict(api, record, args.require_validation) for api, record in results.items()}
     failed = [reason for _ok, reasons in verdicts.values() for reason in reasons]
     if not environment["clean"]:
