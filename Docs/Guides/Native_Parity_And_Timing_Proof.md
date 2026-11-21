@@ -95,7 +95,9 @@ L, response tools, timing parity) applies to it.
   - Rule (b) admits the rasterisers' flips on geometry edges by name (`N52C_RULE_B`: at most 3 a frame, each isolated
     on an edge: Cube Turn's slanted silhouette, a Jigsaw piece's outline, a Cascade card's edge), as `BEAM_RULE_B`.
 - **Performance:** C per pass at 2560 x 1440 and 4K on both backends (`transition_route_check.py --cost`, Crossfade
-  the control), and one native Vulkan run for hitches and stalls (`preflip_pack.py --rows "transition/<id>/*" --name
+  the control). A scene transition's C is per record, not per pass: the core's GPU timer times the layer's whole record
+  of the run (its photo environment's copy and chain at the run's first record, the scene's passes, the composite), so
+  a scene's figure is the sum of its passes. Then one native Vulkan run for hitches and stalls (`preflip_pack.py --rows "transition/<id>/*" --name
   <post> --backend native-vulkan --app-arg=--graphics-backend=vulkan`, with `--per-row` for a one-transition session
   each). Read the row's hitch figures, never its fps or late %: the render thread's frame gaps inside each run (median,
   p90, max, the count over 33 ms; the startup reveal and the destination's handover lie outside the run's window, and its

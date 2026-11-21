@@ -58,9 +58,12 @@ namespace srpss_core {
 constexpr int kBloomLevels = 4;            // post.py BLOOM_LEVELS
 constexpr int kMaxBloomStages = 2;
 constexpr int kMaxDefocusStages = 2;
-constexpr int kMaxStageAllocationAttempts = 2 * (kMaxBloomStages * kBloomLevels + kMaxDefocusStages);
-constexpr int kMaxStageBuildAttempts = kMaxBloomStages * (2 * kBloomLevels + 3) + kMaxDefocusStages * 8;
 constexpr int kMaxEnvironmentStages = 2;   // N5.2c: a program's photo environments (Python's two roles)
+// fail_allocation's ordinals: a bloom level's texture and target, a defocus step's two, and (N5.2c audit) an
+// environment's texture, chain bindings and target, counted on from the same record's sync.
+constexpr int kMaxStageAllocationAttempts = 2 * (kMaxBloomStages * kBloomLevels + kMaxDefocusStages)
+                                            + 3 * kMaxEnvironmentStages;
+constexpr int kMaxStageBuildAttempts = kMaxBloomStages * (2 * kBloomLevels + 3) + kMaxDefocusStages * 8;
 constexpr int kMaxEnvironmentSide = 4096;
 
 // A pass entry's stage (mode_content.h ModePass::stage); None for a mode's own pass.
@@ -372,6 +375,25 @@ private:
         }
         return resource->create();
     }
+    // The harness's allocation fault (fail_allocation): one count across a record's sync and syncEnvironments (each
+    // create or bind attempt an ordinal; the snapshot taken and the count reset at sync). False: the injected failure.
+    bool allocationAllowed()
+    {
+        if (m_failAllocation && ++m_allocationAttempt == m_failAllocation) {
+            m_allocationInjected = true;
+            return false;
+        }
+        return true;
+    }
+    template<typename Resource> bool createAllocation(Resource *resource)
+    {
+        if (!allocationAllowed()) {
+            resource->destroy();                // a resize fault retires its previous storage too
+            return false;
+        }
+        return resource->create();
+    }
+    QString allocationFault() const;            // " [harness fail_allocation=N]" when the injected failure was met
     void countPipelineObjects(int delta);
     void releaseBloomPipelines(Bloom &b);
     void releaseDefocusPipelines(Defocus &d);
@@ -395,6 +417,9 @@ private:
     quint32 m_conventionsBytes = 0;
     quint32 m_defocusBlockBytes = 0;
     int m_pipelineObjects = 0;
+    int m_failAllocation = 0;       // harness snapshot at sync; only create/bind attempts advance it
+    int m_allocationAttempt = 0;
+    bool m_allocationInjected = false;
     int m_failBuild = 0;            // harness snapshot; only build/rebind edges advance attempts
     int m_buildAttempt = 0;
     bool m_buildInjected = false;
