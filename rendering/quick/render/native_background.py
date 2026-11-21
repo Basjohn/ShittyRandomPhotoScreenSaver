@@ -71,6 +71,7 @@ SCENE_MOTION_TABLE = "motion_table"
 #: The frame trace's records of a run on the layer (``FrameTraceEvent.NATIVE_TRANSITION_TICK`` / ``_END``; a test holds
 #: them equal).
 _TRACE_TICK, _TRACE_END = 81, 82
+_TRACE_WAITING_KEPT = 83                 # FrameTraceEvent.NATIVE_TRANSITION_WAITING_KEPT (ABI 39's waiting_kept)
 
 
 def _other_slot(slot: str) -> str:
@@ -370,6 +371,7 @@ class NativeBackgroundLayer:
         self._meshes: list[str] = []
         self._run_textures: list[str] = []   # N5.2d: a scene run's own textures (Crumble's motion table)
         self.runs = 0                    # runs the core drew
+        self._waiting_kept_seen = 0      # the core's waiting_kept at the last traced run's end (--frame-trace only)
         self.ticks = 0                   # frames of a run given their progress
         self._settings: dict | None = None
         self._placed: tuple | None = None
@@ -582,9 +584,34 @@ class NativeBackgroundLayer:
         except Exception:
             pass                                                  # a diagnostic record never stops the run
 
+    def _waiting_kept(self) -> int | None:
+        """The core's ``waiting_kept`` (ABI 39), read only with a frame trace sink (a diagnostic: nothing at rest)."""
+        if self._trace is None or self._mode is None:
+            return None
+        try:
+            value = self._mode.state().get("waiting_kept")
+        except Exception:
+            return None
+        return int(value) if isinstance(value, (int, float)) else None
+
+    def _trace_waiting_kept(self, run: Any) -> None:
+        """The run's records kept while it waited for its textures (``NATIVE_TRANSITION_WAITING_KEPT``), read once at
+        its end, after its END record (outside its window: the core's state read at a run's start stalled the run, A/B
+        22 Nov, max gap 136 ms with it against 43 without), against the last traced run's end; never raises."""
+        end = self._waiting_kept() if run is not None else None
+        if end is None:
+            return
+        start, self._waiting_kept_seen = self._waiting_kept_seen, end
+        try:
+            self._trace.record(_TRACE_WAITING_KEPT, screen_index=self._trace_screen, revision=end - start,
+                               auxiliary=int(run.run_id))
+        except Exception:
+            pass
+
     def _end_run(self) -> None:
         run, self._run = self._run, None
         self._trace_run(_TRACE_END, run)
+        self._trace_waiting_kept(run)
         self._disconnect_clock()
         self._renderer = None
         meshes, self._meshes = self._meshes, []                   # N5.2c: a scene run's, removed once not drawn

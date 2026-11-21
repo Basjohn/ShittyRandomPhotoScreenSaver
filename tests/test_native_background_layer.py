@@ -667,3 +667,50 @@ def test_a_content_waiting_for_its_textures_keeps_its_frame_instead_of_a_black_o
     start = source.index("    if (m_draw && !withPasses && !readback && holdsFrame(target)) {")
     end = source.index("    if (draw && m_source->drawnStill()) {", start)
     assert not _keeps_the_frame_while_waiting(source[:start] + source[end:])
+
+
+def test_a_traced_run_ends_with_the_frames_the_core_kept_while_it_waited(clocked_layer):
+    """ABI 39 (black flicker): with a frame trace, a run's end also records the core's waiting_kept over the run (the
+    frames held while the destination's job uploaded, black before), which the transition session reports per run."""
+    from core.performance.frame_trace import FrameTraceEvent
+    from rendering.quick.render import native_background as nb
+
+    assert nb._TRACE_WAITING_KEPT == FrameTraceEvent.NATIVE_TRANSITION_WAITING_KEPT
+    made, mode, _calls, window, now = clocked_layer
+    kept = {"n": 5}
+    mode.state = lambda: {"waiting_kept": kept["n"]}
+    records: list = []
+    made._trace = SimpleNamespace(record=lambda event, **kw: records.append((int(event), kw["revision"],
+                                                                             kw["auxiliary"])))
+    source, destination = _image("a"), _image("b")
+    made.present(source)
+    run = _run("burn", source, destination, run_id=7)
+    now["ns"] = run.start_ns
+    made._waiting_kept_seen = 5                                     # the previous traced run's end
+    made.transition(run)
+    kept["n"] = 6                                                   # the first frame kept while the job uploaded
+    reads = {"n": 0}
+    state = mode.state
+    mode.state = lambda: (reads.__setitem__("n", reads["n"] + 1), state())[1]
+    window.afterAnimating.slots[0]()
+    assert reads["n"] == 0                                          # never read inside the run's window
+    made.transition(None)
+    assert records[-1] == (nb._TRACE_WAITING_KEPT, 1, 7) and reads["n"] == 1
+    # Control: without a trace the core's state is never read for it (nothing at rest, nothing recorded).
+    made._trace = None
+    mode.state = lambda: (_ for _ in ()).throw(AssertionError("state read without a trace"))
+    made.present(destination)
+    second = _run("burn", destination, source, run_id=8)
+    made.transition(second)
+    made.transition(None)
+
+
+def test_the_session_reports_each_native_runs_kept_frames():
+    from tools import live_check_transition_session as session
+
+    events = [(10, session.NATIVE_TRANSITION_TICK, 0, 0, 3), (20, session.NATIVE_TRANSITION_END, 0, 0, 3),
+              (20, session.NATIVE_TRANSITION_WAITING_KEPT, 0, 2, 3)]
+    assert session.cut_windows(events)[3]["waiting_kept"] == 2
+    # Control: a run without the record (an older module, or no wait) reports none.
+    assert session.cut_windows(events[:2])[3]["waiting_kept"] is None
+

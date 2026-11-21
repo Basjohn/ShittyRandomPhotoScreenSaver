@@ -89,8 +89,13 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   build does (M4); `waiting_kept` counts it. Test: `test_a_content_waiting_for_its_textures_keeps_its_frame_instead_of_a_black_one`
   (control: the old record); live check: the route check's `first_frame_not_black` (control on the old core,
   `flicker/20261122_control_old_core`: Burn 100 % black, FAIL).
-  - [ ] Build (lead), then the route check on both APIs (`first_frame_not_black` over every variant) and the trace-checked
-    Vulkan session on Display 1 (`preflip_pack.py --frame-trace`, Usu wallpaper), then merge.
+  - [ ] Merge (lead): ABI 39 built and proved on the branch of agent-a52b367bbd9c11f5c.
+  - [ ] Side defect (found 22 Nov): `transition_route_check.py`'s Warp variant names the stale id `warp`
+    (`fullscreen_pass_check.FULLSCREEN_TRANSITIONS`; registered as `warp_dissolve`), so a default run of the route check
+    stops at "unavailable transition warp"; rename it there (with its stored frame keys) and run the seven again.
+  - [ ] Watch (not this fix's): Vulkan sessions at 2160p show occasional frame gaps of 35-55 ms inside runs (22 Nov, one
+    or two runs a session, a missed vsync at 60 Hz); the N5.2d session of 21 Nov had none. Record the display mode and
+    take one session again before the next transition batch.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
