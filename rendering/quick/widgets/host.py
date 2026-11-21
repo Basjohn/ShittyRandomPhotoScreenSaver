@@ -190,6 +190,9 @@ class OverlayCardStyle:
     # Only the Media card uses this demand hint; the QML bar receives its mode
     # separately through the existing Media model.
     media_controls_surface_mode: str = "inherit"
+    # Explicit child materials (Achievement Pulse's ring and circle) that need the
+    # shared backdrop although the card itself may be Normal. Demand only.
+    child_surface_modes: tuple[str, ...] = ()
     header_surface_opacity_adjust: float = 0.0
     media_controls_opacity_adjust: float = 0.0
     surface_opacity_adjust: float = 0.0
@@ -386,7 +389,8 @@ class RetainedOverlayWidget:
         self._surface_material = str(style.surface_material)
         # A separately selected header or Media bar material also needs the
         # existing shared backdrop when its parent card happens to be Normal.
-        demanded = [self._surface_material, style.header_surface_mode, style.media_controls_surface_mode]
+        demanded = [self._surface_material, style.header_surface_mode, style.media_controls_surface_mode,
+                    *style.child_surface_modes]
         # A material border cannot need the backdrop if its shell or stroke is
         # absent. In particular, Normal + a 0 px explicit Glass border stays dormant.
         if style.shell_enabled and style.border_width > 0.0:

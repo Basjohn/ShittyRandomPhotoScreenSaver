@@ -62,7 +62,10 @@ def test_circle_uses_only_the_card_backdrop_with_original_ring_and_pulse() -> No
     # exercised by the live Qt presentation tests.
     assert 'fillColor: achievementRoot.achievementModel.progressDiscMaterialColor' in circle
     assert 'achievementRoot.scaleAwareStrokeWidthForScale(' in circle
-    assert 'border.color: achievementRoot.achievementModel.capsuleBorderColor' in circle
+    # The ring is a special object, not a border: it reads its own colour field so
+    # Borderless (which hides border-named fields) cannot erase it.
+    assert 'border.color: achievementRoot.achievementModel.progressRingColor' in circle
+    assert 'capsuleBorderColor' not in circle
     assert 'ShaderEffectSource' not in circle
     assert 'Timer {' not in circle
     assert 'id: pulseAnimation' in source

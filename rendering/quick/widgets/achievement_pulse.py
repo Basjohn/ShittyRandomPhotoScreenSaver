@@ -61,6 +61,7 @@ from .theme_projection import (
     resolve_primary_text_color,
     resolve_rgba_role,
 )
+from .surface_material import normalize_pulse_child_surface_mode
 from .steam_common import (
     SteamCardFieldListModel,
     SteamSemanticPalette,
@@ -125,11 +126,18 @@ class AchievementPulsePresentationConfig:
     double_capsules: bool
     progress_pulse: bool
     progress_circle_material: bool
+    # The pulse ring's and its inner circle's own surfaces: a material id or
+    # "inherit" (follow the card). Never card settings.
+    progress_ring_surface_material: str
+    progress_circle_surface_material: str
     shelf_style: bool
     capsule_font_size: int
     capsule_fill_color: tuple[int, int, int, int]
     capsule_border_color: tuple[int, int, int, int]
     progress_disc_material_color: tuple[int, int, int, int]
+    # The pulse circle's ring colour. Deliberately not named "border": Borderless
+    # hides border fields, and the pulse circle is a special object, not a border.
+    progress_ring_color: tuple[int, int, int, int]
     refresh_minutes: int
     show_connection_info_icon: bool
 
@@ -255,6 +263,12 @@ class AchievementPulsePresentationConfig:
                 merged_card.get("progress_circle_material"),
                 bool(default_card["progress_circle_material"]),
             ),
+            progress_ring_surface_material=normalize_pulse_child_surface_mode(
+                merged_card.get("progress_ring_surface_material")
+            ),
+            progress_circle_surface_material=normalize_pulse_child_surface_mode(
+                merged_card.get("progress_circle_surface_material")
+            ),
             shelf_style=_as_bool(
                 merged_card.get("shelf_style"),
                 bool(default_card["shelf_style"]),
@@ -276,6 +290,7 @@ class AchievementPulsePresentationConfig:
             # This colour is resolved against the active theme below. It is
             # used only when the optional material progress-disc is admitted.
             progress_disc_material_color=tuple(default_card["capsule_border_color"]),
+            progress_ring_color=tuple(default_card["capsule_border_color"]),
             refresh_minutes=_bounded_int(
                 merged_shared.get("refresh_minutes"),
                 int(default_shared["refresh_minutes"]),
@@ -359,6 +374,7 @@ class AchievementPulsePresentationConfig:
             capsule_fill_color=capsule_fill,
             capsule_border_color=capsule_border,
             progress_disc_material_color=progress_disc_material,
+            progress_ring_color=capsule_border,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,
@@ -1219,6 +1235,18 @@ class AchievementPulsePresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def capsuleBorderColor(self) -> QColor:
         return QColor(*self.config.capsule_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def progressRingColor(self) -> QColor:
+        return QColor(*self.config.progress_ring_color)
+
+    @Property(str, notify=stateChanged)
+    def progressRingSurfaceMaterial(self) -> str:
+        return self.config.progress_ring_surface_material
+
+    @Property(str, notify=stateChanged)
+    def progressCircleSurfaceMaterial(self) -> str:
+        return self.config.progress_circle_surface_material
 
     @Property(QColor, notify=stateChanged)
     def progressDiscMaterialColor(self) -> QColor:

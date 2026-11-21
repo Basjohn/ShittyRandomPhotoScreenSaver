@@ -1071,7 +1071,7 @@ OverlayWidget {
                         progressPulse.height / progressPulse.glowScale
                     )
                     property real cornerRadius: progressPulse.width * 0.5 / progressPulse.glowScale
-                    property color glowColor: achievementRoot.achievementModel.capsuleBorderColor
+                    property color glowColor: achievementRoot.achievementModel.progressRingColor
                     opacity: progressPulse.pulseLevel * 0.82
                     visible: opacity > 0.001
                     fragmentShader: "shaders/widget_glow.frag.qsb"
@@ -1096,13 +1096,21 @@ OverlayWidget {
                     // ChildMaterialSurface path). On Normal, or before the card's
                     // backdrop is bound, nothing is added and the ring stays the
                     // authored flat stroke.
-                    readonly property bool ringIsMaterial: achievementRoot.cardSurfaceMaterialActive === true
-                        && achievementRoot.cardSurfaceMaterial !== "normal"
+                    // The ring's material is its own choice (Progress Ring Material):
+                    // "inherit" follows the card's material, an explicit one stands on
+                    // its own even over a Normal card. It is never a card setting.
+                    readonly property string ringMaterialChoice: achievementRoot.achievementModel.progressRingSurfaceMaterial
+                    readonly property string ringResolvedMaterial: ringMaterialChoice !== "inherit"
+                        ? ringMaterialChoice : achievementRoot.cardSurfaceMaterial
+                    readonly property bool ringIsMaterial: ringResolvedMaterial !== "normal"
                         && achievementRoot.cardSurfaceBackdrop !== null
+                        && (ringMaterialChoice !== "inherit" || achievementRoot.cardSurfaceMaterialActive === true)
                     color: ringIsMaterial ? "transparent"
                         : (progressCircleMaterial.active ? "transparent" : originalFill)
+                    // The pulse circle's ring is a special object, not a border: it
+                    // draws when Borderless is on (progressRingColor is not a border field).
                     border.color: ringIsMaterial ? "transparent"
-                        : achievementRoot.achievementModel.capsuleBorderColor
+                        : achievementRoot.achievementModel.progressRingColor
                     border.width: ringWidth
 
                     // The ring's inside: the authored flat fill, inset to the ring.
@@ -1132,7 +1140,8 @@ OverlayWidget {
                             id: progressRingMaterial
                             objectName: "achievementProgressRingMaterial"
                             card: achievementRoot
-                            fillColor: achievementRoot.achievementModel.capsuleBorderColor
+                            materialOverride: progressCircleFace.ringMaterialChoice
+                            fillColor: achievementRoot.achievementModel.progressRingColor
                             cornerRadius: progressCircleFace.width * 0.5
                             tintAlphaScale: 0.4
                             legibilityPanel: false
@@ -1159,7 +1168,7 @@ OverlayWidget {
                         border.width: achievementRoot.scaleAwareStrokeWidthForScale(
                             1.5, achievementRoot.contentScale
                         )
-                        border.color: achievementRoot.achievementModel.capsuleBorderColor
+                        border.color: achievementRoot.achievementModel.progressRingColor
                     }
 
                     // A material-filled disc, not an extra blur/capture. The ring
@@ -1169,6 +1178,7 @@ OverlayWidget {
                         id: progressCircleMaterial
                         objectName: "achievementProgressCircleMaterial"
                         card: achievementRoot
+                        materialOverride: achievementRoot.achievementModel.progressCircleSurfaceMaterial
                         anchors.fill: undefined
                         x: progressCircleFace.ringIsMaterial ? progressCircleFace.ringWidth : 0.0
                         y: x
@@ -1195,10 +1205,10 @@ OverlayWidget {
                     radius: width * 0.5
                     color: "transparent"
                     border.color: Qt.rgba(
-                        achievementRoot.achievementModel.capsuleBorderColor.r,
-                        achievementRoot.achievementModel.capsuleBorderColor.g,
-                        achievementRoot.achievementModel.capsuleBorderColor.b,
-                        achievementRoot.achievementModel.capsuleBorderColor.a * 0.38
+                        achievementRoot.achievementModel.progressRingColor.r,
+                        achievementRoot.achievementModel.progressRingColor.g,
+                        achievementRoot.achievementModel.progressRingColor.b,
+                        achievementRoot.achievementModel.progressRingColor.a * 0.38
                     )
                     border.width: achievementRoot.scaleAwareStrokeWidthForScale(
                         1.0, achievementRoot.contentScale
@@ -1208,7 +1218,7 @@ OverlayWidget {
                 ThemedText {
                     anchors.fill: parent
                     text: achievementRoot.achievementModel.progressText
-                    color: achievementRoot.achievementModel.capsuleBorderColor
+                    color: achievementRoot.achievementModel.progressRingColor
                     opacity: progressPulse.pulseLevel * 0.16
                     scale: progressPulse.progressTextVisualScale * 1.11
                     sourceFont.family: achievementRoot.achievementModel.fontFamily
@@ -1224,7 +1234,7 @@ OverlayWidget {
                 ThemedText {
                     anchors.fill: parent
                     text: achievementRoot.achievementModel.progressText
-                    color: achievementRoot.achievementModel.capsuleBorderColor
+                    color: achievementRoot.achievementModel.progressRingColor
                     opacity: progressPulse.pulseLevel * 0.44
                     scale: progressPulse.progressTextVisualScale * 1.045
                     sourceFont.family: achievementRoot.achievementModel.fontFamily

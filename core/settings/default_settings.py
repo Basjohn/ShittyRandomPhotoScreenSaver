@@ -483,6 +483,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                    'preferred_width': 600,
                                    'progress_pulse': True,
                                    'progress_circle_material': False,
+                                   'progress_circle_surface_material': 'inherit',
+                                   'progress_ring_surface_material': 'inherit',
                                    'selection_mode': 'most_recent',
                                    'shelf_style': False,
                                    'show_artwork': True,

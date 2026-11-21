@@ -555,6 +555,8 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "achievement_pulse_capsule_fill_color_btn",
             "achievement_pulse_capsule_border_color_btn",
             "achievement_pulse_double_capsules",
+            "achievement_pulse_progress_ring_surface",
+            "achievement_pulse_progress_circle_surface",
             "achievement_pulse_capsule_font_size",
             "achievement_pulse_latest_unlock_count",
             "achievement_pulse_show_latest_artwork",
