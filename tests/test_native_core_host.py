@@ -579,6 +579,31 @@ def test_the_validation_rule_excuses_only_qts_recorded_defects():
     assert validation.validation_summary(dropped)["clean"] is False
 
 
+def test_the_injected_losss_fault_query_is_excused_only_in_the_lost_and_retry_phases():
+    """Checkpoint audit 11: the core's fault query on a device the harness's injected loss left alive
+    (VUID-vkGetDeviceFaultInfoEXT-device-07336) is excused, with its reason, only in device_loss_check's 'n36 lost' and
+    'n36 retry' phases; anywhere else, or from another caller, it is counted."""
+    import vk_validation as validation
+
+    vuid = "VUID-vkGetDeviceFaultInfoEXT-device-07336"
+
+    def messages(phase, caller="_srpss_native_core.pyd", count=2):
+        return {"errors": count, "entries": [{"phase": phase, "source": "our_instance", "severity": "error", "id": vuid,
+                                              "message": "device has not been found to be in a lost state",
+                                              "count": count,
+                                              "stack": ["VkLayer_khronos_validation.dll+0x10", f"{caller}+0x20"]}]}
+
+    for phase in ("n36 lost", "n36 retry"):
+        summary = validation.validation_summary(messages(phase))
+        assert summary["clean"] is True and summary["recorded_qt_defects_excused"] == {"E": 2}
+        assert summary["groups"][0]["excuse_reason"] == validation.HARNESS_ARTEFACTS["E"]
+    # Counted everywhere else: the forced rounds, a real loss, a phase that merely contains the words, and from any
+    # other caller (Qt's own query) even in the injected phases.
+    for phase in ("n36 rebuild", "n36 scenes", "create", "hidden", "n36 lost again", "lost"):
+        assert validation.validation_summary(messages(phase))["unexplained_errors"] == 2, phase
+    assert validation.validation_summary(messages("n36 lost", caller="Qt6Gui.dll"))["unexplained_errors"] == 2
+
+
 def test_the_n06_spike_reads_the_cores_validation_rule(monkeypatch):
     """One source for the ``QT_DEFECTS`` rule: the spike's ``run_n06.py`` reads the core's ``vk_validation`` at each
     call, so the edit that drops A's excuse at the next Qt patch drops it in both (its copy had to be edited twice)."""

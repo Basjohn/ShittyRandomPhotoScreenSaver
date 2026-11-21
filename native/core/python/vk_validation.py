@@ -43,6 +43,19 @@ QT_DEFECTS = {
          "spike's translucent round); the core never grabs a window.",
 }
 
+#: Messages the harness itself causes, recorded beside Qt's defects and excused by the same rule (``classify_group``,
+#: ``excused``), each only in the phases named with it.
+HARNESS_ARTEFACTS = {
+    "E": "VUID-vkGetDeviceFaultInfoEXT-device-07336 from the core's VulkanDevice::faultReport "
+         "(native/core/src/vulkan_context.cpp): device_loss_check's lost and retry rounds inject the loss "
+         "(HiddenHost.inject_device_loss: Qt's queue answers its submits with VK_ERROR_DEVICE_LOST, the device stays "
+         "alive), so the fault query the core makes for a lost device runs on one the driver never lost, which the spec "
+         "forbids. Checkpoint audit 11 M1 (the lead's decision, 21 Nov). Excused only in the phases 'n36 lost' and "
+         "'n36 retry'; anywhere else (a real loss, any other harness) it is counted.",
+}
+#: The phases each harness artefact is excused in (exact phase names, never a substring).
+HARNESS_ARTEFACT_PHASES = {"E": ("n36 lost", "n36 retry")}
+
 # Frames of the layer, the loader and the messenger callback sit on top of the caller's stack in a message entry.
 _NOT_CALLER = ("VkLayer_", "vulkan-1.dll")
 
@@ -63,9 +76,12 @@ def environment_record(allowed: set[str] | frozenset[str] = frozenset()) -> dict
 
 
 def classify_group(g: dict) -> str | None:
-    """Which recorded Qt 6.12.0 defect a message group is, by its id, text and Qt caller; None when it is none."""
+    """Which recorded Qt 6.12.0 defect (``QT_DEFECTS``) or harness artefact (``HARNESS_ARTEFACTS``) a message group
+    is, by its id, text and caller; None when it is none."""
     gid, msg, callers = g.get("id") or "", g.get("message") or "", g.get("caller_modules") or []
     qt_call = "Qt6Gui.dll" in callers[:2]
+    if gid == "VUID-vkGetDeviceFaultInfoEXT-device-07336" and callers[:1] == ["_srpss_native_core.pyd"]:
+        return "E"
     if gid == "VUID-VkImageCreateInfo-initialLayout-12478" and callers[:1] == ["Qt6Gui.dll"]:
         return "A"
     if (gid == "SYNC-HAZARD-WRITE-AFTER-WRITE" and qt_call and "vkCmdBeginRenderPass" in msg
@@ -81,10 +97,13 @@ def classify_group(g: dict) -> str | None:
 
 
 def excused(g: dict) -> bool:
-    """Whether a classified group is excused where it is: A everywhere, B in 'discard' phases, D in 'grab' phases."""
+    """Whether a classified group is excused where it is: A everywhere, B in 'discard' phases, D in 'grab' phases, a
+    harness artefact only in its own phases (``HARNESS_ARTEFACT_PHASES``)."""
     phase = g.get("phase") or ""
-    return (g.get("qt_defect") == "A" or (g.get("qt_defect") == "B" and "discard" in phase)
-            or (g.get("qt_defect") == "D" and "grab" in phase))
+    defect = g.get("qt_defect")
+    if defect in HARNESS_ARTEFACTS:
+        return phase in HARNESS_ARTEFACT_PHASES.get(defect, ())
+    return (defect == "A" or (defect == "B" and "discard" in phase) or (defect == "D" and "grab" in phase))
 
 
 def message_groups(messages: dict) -> list[dict]:
@@ -133,6 +152,7 @@ def validation_summary(messages: dict) -> dict:
             continue  # the loader's general warnings are not validation findings; a loader error is counted
         g["excused"] = excused(g)
         if g["excused"]:
+            g["excuse_reason"] = HARNESS_ARTEFACTS.get(g["qt_defect"]) or QT_DEFECTS.get(g["qt_defect"])
             recorded[g["qt_defect"]] = recorded.get(g["qt_defect"], 0) + g["count"]
         elif g.get("severity") == "error":
             unexplained_errors += g["count"]
