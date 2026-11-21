@@ -46,8 +46,9 @@ found in this kind of code: the port proves it absent, with the negative control
     graphics configuration is entered there, and a hidden host calls the product's Quick graphics configuration
     (`Docs/Guardrails/Agent_Worktree_Rules.md`, Environment; the test is the list).
 11. **Cost by absolute times**, GPU median and p90 per pass over at least 90 frames on the GPU timer, the GPU state
-    recorded (`nvidia-smi`, other processes, the display state); a figure taken on a busy GPU is evidence, not a
-    verdict (D14 point 13; D16 "Cost"; Lessons "Measuring"; memory notes on display state).
+    recorded (`nvidia-smi`, other processes, the display state); timing and cost run as soon as they are due (the operator
+    is not using the machine; never wait for a "quiet machine"); rerun only a figure that fails and whose recorded
+    conditions show load from another run (D14 point 13; D16 "Cost"; Lessons "Measuring"; memory notes on display state).
 12. **Declared data, one owner per name.** Every member, count and selector is filled by name from exactly one of the
     core's conventions, the settings or a record field; unknown, unfilled and doubly owned names are refused with a
     reason (D12 point 2; D15 point 1). A record field fills a block member or a stream, never both.
