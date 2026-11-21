@@ -82,9 +82,10 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   layer L go to a Medium. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
 - [ ] Medium (Opus Medium agent a97dd7a04456b42c8): Spectrum's judge fix, then the Oscilloscope's 60 s takes and
-  layer L; the lead runs layer T. Then Spline Curve's two steady classes.
-- [ ] Second Medium (Opus Medium): step 3 continues: the hero reject is merged (-40 % OpenGL, -52 % Vulkan at 4K);
-  next the wake loop's byte-identical bound, now the largest stage (agent abbcd68ea9219da70).
+  layer L; the lead runs layer T.
+- [ ] Second Medium (Opus Medium agent aea35d28be699535f): Spline Curve's two steady classes. Step 3's offline work is
+  done: the hero and wake rejects halve the bubble pass at 4K (5.10 to 2.43 ms OpenGL, 4.61 to 1.75 ms Vulkan); the
+  lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   and hygiene (item 6).
