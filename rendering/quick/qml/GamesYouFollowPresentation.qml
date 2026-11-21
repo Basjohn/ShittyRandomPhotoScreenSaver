@@ -269,22 +269,8 @@ OverlayWidget {
                 width: storyGroup.tileWidth
                 height: storyGroup.tileHeight
                 clip: false
-                RectangularShadow {
-                    objectName: "followedStoryShadow" + storySlot
-                    visible: tile.visible && followsRoot.cardShadowEnabled
-                    x: 0.0
-                    y: 0.0
-                    width: tile.width
-                    height: tile.height
-                    radius: 7.0
-                    color: Qt.rgba(followsRoot.cardShadowColor.r,
-                        followsRoot.cardShadowColor.g, followsRoot.cardShadowColor.b,
-                        followsRoot.cardShadowColor.a * 0.35)
-                    blur: Math.max(2.0, Math.min(5.0, followsRoot.cardShadowBlur * 0.2))
-                    offset: Qt.vector2d(followsRoot.cardShadowOffsetX * 0.5,
-                        followsRoot.cardShadowOffsetY * 0.5)
-                    cached: true
-                }
+                // No shadow slab under the tile: the Feed story tile has none, and under
+                // its translucent wash a shadow rectangle showed through as a darker backdrop.
                 Rectangle {
                     id: tileFrame
                     objectName: "followedStoryFrame" + storySlot
@@ -295,8 +281,9 @@ OverlayWidget {
                     readonly property Item textLegibilityRow: storyLegibility
                     // The accepted Steam artwork interaction contract: the
                     // whole story is the link target, not just its image.
-                    border.color: followedModel.accentColor
-                    border.width: followsRoot.scaleAwareStrokeWidth(1.25)
+                    // The Feed story tile's hairline (its hover outline sits above).
+                    border.color: followedModel.headerBorderColor
+                    border.width: followsRoot.scaleAwareStrokeWidth(1.0)
                     clip: true
 
                     // On a surface material: one rounded box filling the story tile
