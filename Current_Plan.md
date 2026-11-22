@@ -1518,9 +1518,10 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     durations, both dprs; the job form equal to the in-frame form (hashes), a deadline control (a job held past it runs
     in-frame, same pixels); `--cost` at 1440p and 4K both backends, the run's first effect record included; the D1
     hitch rows; registration last.
-  - Stop (agent, 22 Nov): weekly usage 94 % at stop point 1, so the ABI 43 C++ (about 1,500 lines: recipe, recorder,
-    `FieldJob` and its backend method, the content's commit and deadline, R32F, the ready edge, the module API) is not
-    written; nothing is built or changed but this box.
+  - Open for the lead: the two statistical bounds `transition_route_check.py` proposes (`N52G_STATISTICS`: Capillary
+    rules (a) and (b), Edge Bloom rule (b)), the reasons beside them. A run's first effect frame on a cold driver
+    shader cache compiles its pipeline on the render thread (one 39-41 ms gap a row, then clean): N3.6's warm-up
+    policy, not this box's.
 - [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):
   captured while the Python renderers are still the product, and **before N5.2h deletes them** (after that the
   "before" side cannot be measured). One script (extending `tools/visualizer_live_check.py` and

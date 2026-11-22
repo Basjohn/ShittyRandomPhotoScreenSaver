@@ -18,7 +18,12 @@ from rendering.gl_programs.photo_colour import photo_accent_colour, photo_glow_c
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.edge_field import EdgeField, edge_field_size, edge_field_warm_entries
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass, NativeFieldRequest
 from ..render_contract import QuickTransitionRenderFrame
+
+#: N5.2g: the item textures the native core makes the run's two edge fields into (field recipes, ABI 43).
+NATIVE_NEW_FIELD = "edge_field_new"
+NATIVE_OLD_FIELD = "edge_field_old"
 
 # Texture units 0-1 hold the photographs (bind_frame); the host fence restores units 0-2, so the
 # new picture's field takes unit 2 and the old picture's field unit 3, handed back after the draw.
@@ -46,10 +51,50 @@ def edge_bloom_parameters(parameters: Mapping[str, object]) -> tuple[tuple[float
     return (float(color[0]), float(color[1]), float(color[2])), source, float(glow), float(detail), seed
 
 
-class QuickEdgeBloomRenderer:
+def _shown(progress: float) -> int:
+    if progress <= 0.0:
+        return SHOW_OLD
+    if progress >= EDGE_BLOOM_SETTLED:
+        return SHOW_NEW
+    return SHOW_EFFECT
+
+
+class QuickEdgeBloomRenderer(NativeFragmentPass):
     transition_id = "edge_bloom"
+    fragment_source = EDGE_BLOOM_FRAGMENT_SOURCE
+    #: N5.2g: the fields' samplers on the native core (linear and clamped, as the fields' own textures).
+    native_samplers = (("uNewField", NATIVE_NEW_FIELD, "linear"), ("uOldField", NATIVE_OLD_FIELD, "linear"))
+    native_settled = EDGE_BLOOM_SETTLED       # the eased progress from which the frame is the new picture
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # the fields' samplers are bound in the source; values in EDGE_BLOOM_BLOCK
+
+    @classmethod
+    def native_field_sources(cls) -> dict[str, str]:
+        from rendering.quick.scene3d.native_fields import edge_field_sources
+
+        return edge_field_sources()
+
+    def native_fields(self, run, pixels: tuple[int, int]) -> tuple[NativeFieldRequest, ...]:
+        """N5.2g: the run's two edge fields as field recipes: the new picture's and the old picture's, each over its own
+        photograph (``EdgeField._build``'s dispatches at the render's device ``pixels``)."""
+        from rendering.quick.scene3d.native_fields import edge_field_recipe
+
+        _color, _source, _glow, detail, _seed = edge_bloom_parameters(run.request.parameter_dict())
+        low, high = edge_bloom_thresholds(detail)
+        return (NativeFieldRequest("new", edge_field_recipe(pixels, low, high, input_texture="", output=NATIVE_NEW_FIELD)),
+                NativeFieldRequest("old", edge_field_recipe(pixels, low, high, input_texture="", output=NATIVE_OLD_FIELD)))
+
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame (no GL): the one owner, packed by ``_draw`` and filled by the
+        native core (N5.2g)."""
+        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
+        color, source, glow, _detail, seed = edge_bloom_parameters(frame.run.request.parameter_dict())
+        new, old = self._glow_colours(frame, color, source)
+        size = tuple(frame.viewport[2:])
+        return {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size, "uProgress": progress,
+                "uTime": progress * frame.run.request.duration_ms / 1000.0,
+                "uLineWidth": EDGE_BLOOM_LINE_TEXELS / edge_field_size(size)[1], "uGlow": glow,
+                "uSeed": float(seed), "uColor": new, "uOldColor": old, "uShow": _shown(progress)}
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Edge Bloom Reveal")
@@ -145,6 +190,7 @@ class QuickEdgeBloomRenderer:
         values["uSeed"] = float(seed)
         values["uColor"] = color
         values["uOldColor"] = old_color
+        values["uShow"] = SHOW_EFFECT              # N5.2g: the native core's ends (this renderer draws its own)
         gl.glBindVertexArray(frame.quad_vao)
         try:
             with r.pass_blocks.bound(pack_block(EDGE_BLOOM_BLOCK, values)):

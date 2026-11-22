@@ -304,7 +304,8 @@ Native: **N4.g** (Edge Bloom and Capillary Bloom only), N5.2g, and the heavy job
 31 ms on Qt's queue in the frame, 0 late frames as a job; Decisions lines 578-584). No class stated. Notes: seeded
 differently it could serve organic fills (`Scene3D_Resources.md:391-392`); the flood buffers were widened from RG32F
 to RGBA32F by N1.7 (bit-identical; QRhi lacks RG formats).
-Native status: not built (N4.g).
+Native status: built 22 Nov at ABI 43 (N5.2g): a field recipe the core runs as an async job on Vulkan and in the frame
+on OpenGL (`native_fields.py` `edge_field_recipe`; playbook [E16 and E17](../Guides/Native_Port_Playbook.md#pb-e16)).
 
 <a id="e17"></a>
 ### E17. Propagation field
@@ -314,7 +315,9 @@ stencil and a reduction; three R32F textures at 256 px. Consumer: Capillary Bloo
 `test_propagation_field.py`. Native: **N4.g**, N5.2g (the first transition preparation run as an async job, D9
 consumer class a, N5.2g's box). No class stated. Notes: fingering needs the true cheapest way, a geodesic arrival map,
 not a point or line average (Lessons lines 366-368).
-Native status: not built (N4.g).
+Native status: built 22 Nov at ABI 43 (N5.2g): the same field recipe form, two R32F item textures (the arrival and its
+extent), no input picture (`native_fields.py` `propagation_recipe`; playbook
+[E16 and E17](../Guides/Native_Port_Playbook.md#pb-e16)).
 
 <a id="e18"></a>
 ### E18. Sphere impostors, optics and water
@@ -474,7 +477,7 @@ the product module holds today.
 | **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
 | **Per-sample reads** (D5.3 row 4) | line 220; N1.8; D14 point 10 | **decided 15 Nov** (the lead, after N3.1's build round 2: QRhi's depth resolve gave wrong values on both backends): the scene target's nearest resolve, a QRhi pass reading every sample (`scene_nearest.frag`), built and proved in N3.1's round 3 on both backends (the multisampled D32F sampled directly; an R32F attachment declared "nearest" beside it) | Extruded Bubble's nearest-depth `background()` (N1.8's A/B settled: the nearest depth, as Python) |
 | **Formats service** (D5.3 row 5) | line 221; N1.7 widened first | one listed use, the multisampled velocity attachment (N1.7's box); natively two R16F, since QRhi has no RG16F (Plan, formats box; Research section 14) | RG16F, RG32F, R11G11B10F without doubling memory |
-| **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (N3.8's box) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8 | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
+| **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (N3.8's box) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8; ABI 43 (N5.2g, consumer class a): field recipes as jobs, a core-owned deadline falling back to the in-frame form, and the `on_textures_ready` edge (`field_check.py`) | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
 | **Vulkan device ownership** (D6) | line 240+ | **proved N0.6** (our instance and device host Qt Quick pixel-identical; teardown, resize, second queue) | one device per window; Vulkan by default at NF |
 | **Backdrop pyramid** (D7) | line 383+; N5.7b | built 14 Nov (N5.7b; D7 "as built"; `backdrop_pyramid_check.py`) | materials that follow a transition frame; true glass over the Visualizer (N5.9) |
 | **Conventions include** `srpss_conventions.glsl` (N0.3) | `rendering/gl_programs/conventions.py`; Decisions line 1358-1371 | built in Python (N1.4: OpenGL values make it an identity); the three backend scenes proved 12 Nov (Vulkan, OpenGL, D3D11, D3D12; Metal on the Watchlist) | the only place a shader learns a backend convention: `fragPixel/fragTexel/fragUv`, `ndcToUv/uvToNdc`, `viewDepthFromDepthTexture`; `SrpssConventions` block at binding 17, written once per context |
@@ -517,7 +520,7 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 ### Unbuilt N4 items (ported with their consumer, or on the primitives track)
 
 Existing in Python (section 3) but not yet native: N4.b (E12), N4.c (E11), N4.d (E13, E14), N4.e (E24), N4.f1 and N4.f2 (E15),
-N4.g (E16 to E18), N4.h/N4.l (E21, E22, E23), N4.i (E5, E6), N4.j (E7), N4.k (E20), N4.m (E25). Class as stated by
+N4.g's E18 (E16 and E17 built at ABI 43, N5.2g), N4.h/N4.l (E21, E22, E23), N4.i (E5, E6), N4.j (E7), N4.k (E20), N4.m (E25). Class as stated by
 the plan: high potential for N4.c, N4.d's wet-surface masks, N4.h, N4.k, N4.m (D8 row 6 lists N4.c, N4.h, N4.k, N4.m,
 N6.1 to N6.3, so it omits N4.d; see contradictions).
 

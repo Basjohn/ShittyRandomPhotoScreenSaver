@@ -127,6 +127,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Edge Bloom Reveal",
         stable_id="edge_bloom",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -168,6 +169,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Capillary Bloom",
         stable_id="capillary_bloom",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),

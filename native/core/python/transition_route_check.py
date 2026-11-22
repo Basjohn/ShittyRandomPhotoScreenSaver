@@ -98,7 +98,8 @@ REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options",
-                  "block_spins_both", "exploding_tiles_both", "disintegrate_fine", "volumetric_dissolve_center")
+                  "block_spins_both", "exploding_tiles_both", "disintegrate_fine", "volumetric_dissolve_center",
+                  "edge_bloom_fine", "capillary_bloom_six")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -332,6 +333,50 @@ N52F_VARIANTS = {
     "volumetric_dissolve_flat": {"request_direction": "up", "mist": 0.0, "depth": 0.0, "particle_size": 8, "seed": 5,
                                  "samples": 0},
 }
+#: N5.2g (N4.g, ABI 43): the two fragments that read per-run fields the core makes from recipes (Edge Bloom's two edge
+#: fields, Capillary Bloom's arrival field and extent). Each at its production defaults, and at the options' extremes:
+#: Edge Bloom's detail 0 and 1, glow 0 and 1, every colour source; Capillary Bloom's fewest and most sources, fibres 0
+#: and 1, other seeds. Judged as fragment passes (their effect is one fragment between the pictures).
+N52G_TRANSITIONS = ("edge_bloom", "capillary_bloom")
+N52G_VARIANTS = {
+    "edge_bloom": {},
+    "edge_bloom_fine": {"detail": 1.0, "glow": 1.0, "color_source": "each", "seed": 7},
+    "edge_bloom_bold": {"detail": 0.0, "glow": 0.0, "color_source": "custom", "color": (0.2, 0.8, 1.0), "seed": 3},
+    "edge_bloom_next": {"detail": 0.5, "glow": 1.0, "color_source": "next", "seed": 11},
+    "capillary_bloom": {},
+    "capillary_bloom_one": {"sources": 1, "fibres": 0.0, "seed": 3},
+    "capillary_bloom_six": {"sources": 6, "fibres": 1.0, "seed": 11},
+}
+#: N5.2g's bounds, PROPOSED (agent, 22 Nov; the lead decides): the statistical bound (``tools/pixel_tolerance.py``,
+#: "Statistics", the lead's form for Waveform Ribbon) at 1.5 times the measured worst frame (n52g_stats, both dprs).
+#: - Capillary Bloom, rule (a) and (b): the wet front's distance is ``g / |grad g|`` over screen derivatives, and its
+#:   rim and meniscus are steep in it (``exp(-(d / 0.006)^2)``, a refraction offset along the gradient), so the two
+#:   compilers' rounding of ``g`` moves the rim by a fraction of a pixel all along the front: hundreds of one-level
+#:   pixels and touching ties a frame along it (r1: up to 524 and 34 a frame, one pixel 17 levels at the rim's crest),
+#:   where its single fragment otherwise matches. The fields are not the cause (field_check: the arrival field equal
+#:   across forms, 3e-7 across APIs); nor the derivatives' precision (dFdxFine/dFdyFine bake byte-identical frames:
+#:   n52g_fine); the gradient's dFdy sign is measured (+1; -1 puts up to 140 levels on the front: n52g_sign_neg).
+#: - Edge Bloom, rule (b) only (rule a holds the fragment pass's bound, worst 1 level): Vulkan's and OpenGL's compute
+#:   round the edge field's luma and blur (r16f) apart by a hair, and at fine detail a contour's hysteresis then keeps or
+#:   drops a few texels on one API (field_check: 3 texels of the edge field differ, 0.057), so a short line segment
+#:   lights on one side only (r1, detail 1: 23 touching pixels past 2 levels, 11 levels at most).
+#: Measured worst frames (n52g_stats, 460,800 pixels a frame, one pixel a share of 2.2e-6), each figure times 1.5:
+#: Capillary over rules (a) and (b) together, mean |d| 3.37e-4 and its tie share 4.12e-5 (six sources at 0.35, rule a),
+#: mean signed 4.5e-5 (six sources at 0.20), past 3 levels one pixel (the defaults at 0.35, the rim's crest); Edge
+#: Bloom fine (rule b, dpr 1) mean |d| 1.89e-4, signed 1.06e-4, ties 3.04e-5, past 3 levels 1.63e-5 (7 pixels). The
+#: wrong dFdy sign (n52g_sign_neg, 38,012 pixels off a frame, up to 140 levels) is the negative control.
+N52G_STATISTICS = {
+    "capillary_bloom": pt.FrameStatistics(mean_abs=5.1e-4, mean_signed=6.8e-5, tie_share=6.2e-5, flip_share=3.3e-6),
+    "edge_bloom": pt.FrameStatistics(mean_abs=2.9e-4, mean_signed=1.6e-4, tie_share=4.6e-5, flip_share=2.5e-5),
+}
+CAPILLARY_RULE_A = pt.Tolerance("Capillary Bloom, a fragment pass, against its Python renderer (rule a; the wet front)",
+                                statistics=N52G_STATISTICS["capillary_bloom"])
+N52G_RULE_B = {
+    "capillary_bloom": pt.Tolerance("Capillary Bloom, Vulkan against OpenGL (rule b; the wet front)",
+                                    statistics=N52G_STATISTICS["capillary_bloom"]),
+    "edge_bloom": pt.Tolerance("Edge Bloom, Vulkan against OpenGL (rule b; a contour's hysteresis)",
+                               statistics=N52G_STATISTICS["edge_bloom"]),
+}
 SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS + N52F_TRANSITIONS
 SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS, **N52F_VARIANTS}
 #: N5.2e: the piece-edge flip class (N5.2d's rule, for the lead) for Exploding Tiles' tiles (moving pieces; the gather
@@ -376,8 +421,8 @@ EDGE_FLIPS_B = {**N52D_EDGE_FLIPS_B, **N52E_EDGE_FLIPS_B, **N52F_EDGE_FLIPS_B}
 #: (measured 2 a frame past one level).
 MEMBRANE_RULE_B = pt.Tolerance("Membrane 4x, Vulkan against OpenGL (rule b)", scatter_pixels=14_544,
                                tie_pixels=TIE_PIXELS, flip_pixels=3)
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS + N52G_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS, **N52G_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
@@ -661,6 +706,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 entry["first_frame_not_black"] = entry["first_frame_black"] <= FIRST_FRAME_BLACK
                 entry["first_frame_waiting_kept"] = scene.mode_state().get("waiting_kept")
                 scene.settle()                                   # the destination's upload job committed
+                entry["fields_in"] = _await_fields(scene)        # N5.2g: a run's fields committed
                 ticks_before = scene.layer.ticks
                 scene.frames(2)
                 entry["clock_edge_ticks_over_2_frames"] = scene.layer.ticks - ticks_before
@@ -740,7 +786,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
             for k, _p, e in judged)
         facts["rule_a_tolerance"] = {
             "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A.bound(), JIGSAW_RULE_A.bound(),
-                       BLINDS_FLAT_RULE_A.bound()],
+                       BLINDS_FLAT_RULE_A.bound(), CAPILLARY_RULE_A.bound()],
             "not_judged": sorted({k for k, _p, e in judged if e["tolerance"].get("judged") is False}),
             **pt.summarise(e["tolerance"] for _k, _p, e in judged if e["tolerance"].get("judged") is not False)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
@@ -793,11 +839,15 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.present(photos[0][0])
                 scene.settle()
                 clock.at(run, 0.1)
+                host.set_gpu_timer(True)                         # N5.2g: the fields' frames timed too (OpenGL's
+                host.gpu_samples()                               # in-frame form records them at the commit)
+                started = time.perf_counter()
                 scene.layer.transition(run)
                 scene.settle()
+                fields_in = _await_fields(scene)                 # N5.2g: a run's fields committed
+                ready_ms = (time.perf_counter() - started) * 1000.0
                 scene.frames(4)
-                host.set_gpu_timer(True)
-                host.gpu_samples()
+                start_records = [s.nanoseconds / 1e6 for s in host.gpu_samples() if s.kind == 2]
                 walls = []
                 for frame in range(COST_FRAMES):
                     clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
@@ -813,7 +863,13 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
                                                "qrhi_frame_gpu": blc._ms_stats(frame_gpu),
                                                "gui_tick_and_frame_wall": blc._ms_stats(walls),
-                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0)}
+                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0),
+                                               # N5.2g: the run's start to its fields' commit (the job's build and
+                                               # upload, wall; 0 fields: the settle alone), and the core's field count.
+                                               "fields_ready_wall_ms": round(ready_ms, 3),
+                                               "start_record_gpu_max_ms": round(max(start_records, default=0.0), 4),
+                                               "fields": (scene.layer.state().get("mode") or {}).get("fields")}
+                checks[f"{label}_{variant}_fields_in"] = fields_in
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
@@ -872,6 +928,7 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
         clock.at(run, PROGRESS[0])
         scene.item.set_transition_run(run)
         scene.settle()
+        _await_fields(scene)                                     # N5.2g: a run's fields committed
         same = {}
         for progress in variant_progress(route_variant):
             clock.at(run, progress)
@@ -968,7 +1025,21 @@ N52C_FRAGMENT_VARIANTS = ("blinds_flat",)
 
 def _is_fragment_pass(variant: str) -> bool:
     drawn = variant.split("@", 1)[0]
-    return drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
+    return (drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
+            or drawn in N52G_VARIANTS)
+
+
+def _await_fields(scene, frames: int = 600) -> bool:
+    """N5.2g: frames until the run's fields are committed (the layer's ready edge started its effect); the harness then
+    holds the run's clock itself, so the effect's clock offset is zeroed (the layer test proves the offset). True when
+    they were in (a run without fields: at once)."""
+    layer = scene.layer if getattr(scene, "layer", None) is not None else scene.item.native_layer
+    for _ in range(frames):
+        if not layer._fields_pending:
+            break
+        scene.frames(1)
+    layer._clock_offset_ns = 0
+    return not layer._fields_pending
 
 
 def _multisampled_scene(entry: dict) -> bool:
@@ -983,6 +1054,8 @@ def _rule_a(variant: str, entry: dict):
     drawn = variant.split("@", 1)[0]
     if drawn in N52C_FRAGMENT_VARIANTS:
         return BLINDS_FLAT_RULE_A
+    if drawn in N52G_VARIANTS and variant_transition(drawn) == "capillary_bloom":
+        return CAPILLARY_RULE_A
     if _is_fragment_pass(variant):
         return FRAGMENT_PASS_RULE_A
     if not entry.get("scene"):
@@ -1046,6 +1119,7 @@ def vulkan_against_opengl(work: Path) -> dict:
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
                      MEMBRANE_RULE_B if drawn == "membrane" else
                      N52C_RULE_B if drawn in SCENE_VARIANTS else
+                     N52G_RULE_B[variant_transition(drawn)] if drawn in N52G_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         if drawn in EDGE_FLIPS_B:               # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
             moved = velocity[key] if key in velocity else None
@@ -1060,7 +1134,8 @@ def vulkan_against_opengl(work: Path) -> dict:
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound(),
+                       *(t.bound() for t in N52G_RULE_B.values())]}
 
 
 # --------------------------------------------------------------------------------------------------- the child

@@ -65,6 +65,16 @@ class NativeQuadInstances:
     blend: str = "additive"
 
 
+@dataclass(frozen=True)
+class NativeFieldRequest:
+    """N5.2g (ABI 43): a field a native transition's run needs before its effect starts: its recipe
+    (``rendering/quick/scene3d/native_fields.NativeFieldRecipe``) over the run's ``role`` picture (``"old"``, ``"new"``,
+    or None: it samples none; the layer names the picture's slot)."""
+
+    role: str | None
+    recipe: object
+
+
 class NativeFragmentPass:
     """A transition the native core can draw as one fragment between its two pictures (N5.2a, N5.2b): its
     ``fragment_source`` (baked into its pack by ``tools/regen_qrc.py --shaders``) and ``block_values``, every value of
@@ -78,6 +88,13 @@ class NativeFragmentPass:
     fragment_source: str = ""
     #: Every instanced pass the transition may draw after its fragment (their packs are baked from these, discovered).
     instanced_passes: tuple[NativeQuadInstances, ...] = ()
+    #: N5.2g: the fragment's samplers beyond the two pictures: (shader name, item texture, filter) (a field's output).
+    native_samplers: tuple[tuple[str, str, str], ...] = ()
+
+    def native_fields(self, run, pixels: tuple[int, int]) -> tuple[NativeFieldRequest, ...]:
+        """N5.2g: the fields the run's effect reads (made by the core from their recipes; the effect starts once they
+        are committed: the layer's ready edge). None for most transitions."""
+        return ()
 
     def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         raise NotImplementedError
