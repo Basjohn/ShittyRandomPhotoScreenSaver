@@ -45,7 +45,7 @@ import vk_validation  # noqa: E402
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("limits", "skip", "readback")
+ROUNDS = ("limits", "skip", "readback", "geometry")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
 OUT: Path | None = None     # the child's evidence folder (set by child)
@@ -53,7 +53,8 @@ API = [""]
 CARD = (64, 64)
 FILL = [0.25, 0.5, 0.75, 1.0]
 EXTRA = [0.5, 0.25, 0.0, 0.0]
-CODES = {"skip": 210, "skip_plain": 211, "defocus": 212, "defocus_plain": 213}
+CODES = {"skip": 210, "skip_plain": 211, "defocus": 212, "defocus_plain": 213, "geometry": 214,
+         "geometry_none": 215}
 
 FILL_FRAG = """#version 440
 layout(std140, binding = 18) uniform Fill { vec4 u_fill; };
@@ -67,7 +68,18 @@ layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 colour;
 void main() { colour = u_extra; }
 """
-SHADERS = {"fill.frag": FILL_FRAG, "extra.frag": EXTRA_FRAG}
+GEOMETRY_COMP = """#version 440
+layout(local_size_x = 64) in;
+layout(std430, binding = 1) readonly buffer Current { vec4 cur[]; };
+layout(std430, binding = 2) readonly buffer Previous { vec4 prev[]; };
+layout(std430, binding = 3) writeonly buffer Result { vec4 result[]; };
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    result[i] = cur[i];
+    result[64u + i] = prev[i];
+}
+"""
+SHADERS = {"fill.frag": FILL_FRAG, "extra.frag": EXTRA_FRAG, "geometry.comp": GEOMETRY_COMP}
 
 
 class Raw:
@@ -473,6 +485,195 @@ def round_readback(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# --------------------------------------------------------------------------------------------------- geometry
+
+GEO_ROWS = 64                     # the vec4 rows the copy entry reads of each key
+
+
+class Arena:
+    """The main process's geometry arena (geometry_arena.h's layout; this harness is its writer): two banks a family,
+    each written whole under its sequence (odd while written) before a record names its key."""
+
+    HEADER = 64
+    BANK_HEADER = 64
+
+    def __init__(self, families: int = 1, bank_bytes: int = 4096) -> None:
+        import struct
+        from multiprocessing import shared_memory
+
+        self.families, self.bank_bytes = families, bank_bytes
+        self.memory = shared_memory.SharedMemory(create=True, size=self._offset(families, 0))
+        self.buf = self.memory.buf
+        struct.pack_into("<IIIIQII", self.buf, 0, 0x41475253, 1, families, 2, bank_bytes, self.HEADER,
+                         self.BANK_HEADER)
+
+    def _offset(self, family: int, bank: int) -> int:
+        return self.HEADER + (family * 2 + bank) * (self.BANK_HEADER + self.bank_bytes)
+
+    @property
+    def name(self) -> str:
+        return self.memory.name
+
+    def write(self, bank: int, key: tuple, payload: bytes, *, declared_bytes: int | None = None) -> None:
+        import struct
+
+        ns, engine, activation, family, capacity, revision = key
+        at = self._offset(family, bank)
+        sequence = struct.unpack_from("<I", self.buf, at)[0]
+        struct.pack_into("<I", self.buf, at, sequence + 1)          # odd: being written
+        self.buf[at + self.BANK_HEADER:at + self.BANK_HEADER + len(payload)] = payload
+        struct.pack_into("<IQIIIIQ", self.buf, at + 4, len(payload) if declared_bytes is None else declared_bytes,
+                         ns, engine, activation, family, capacity, revision)
+        struct.pack_into("<I", self.buf, at, sequence + 2)          # even and advanced: whole
+
+    def close(self) -> None:
+        self.buf = None
+        self.memory.close()
+        self.memory.unlink()
+
+
+def _key_words(key: tuple) -> tuple:
+    ns, engine, activation, family, capacity, revision = key
+    return (ns & 0xFFFFFFFF, ns >> 32, engine, activation, family, revision & 0xFFFFFFFF, revision >> 32, capacity)
+
+
+def _rows(tag: float, rows: int) -> bytes:
+    import numpy as np
+
+    data = np.zeros((rows, 4), np.float32)
+    data[:, 0] = tag
+    data[:, 1] = np.arange(rows)
+    return data.tobytes()
+
+
+def round_geometry(core, engine, app, api: str, packs: dict) -> dict:
+    """D3's tests on the built module: one revision under two namespaces draws each its own geometry; one upload a key
+    (the record carries 8 words whatever the capacity); the old key bound as "@previous" at the swap's record and
+    retired after it; a capacity growth as a new key; a key whose bank is invalid failed once, logged, the old drawn;
+    zero residencies after a mode switch and after teardown (the item destroyed, the host closed)."""
+    import numpy as np
+    from rendering.native.mode import ComputeBinding, ComputePass, StorageBuffer
+
+    checks, facts = {}, {}
+    copy = ComputePass("copy", packs["geometry.comp"], groups=(1, 1, 1),
+                       bindings=(ComputeBinding("Current", "geo", "buffer", "read"),
+                                 ComputeBinding("Previous", "geo@previous", "buffer", "read"),
+                                 ComputeBinding("Result", "result", "buffer", "write")))
+    geo = Raw({"name": "geo", "geometry": {"family": 0, "key": "geo_key"}})
+    result = StorageBuffer("result", 2 * GEO_ROWS * 16)
+    entries = (("geo_key", "u32", 8),)
+    ns_a, ns_b = (7 << 32) | 1, (8 << 32) | 1
+    key_a = (ns_a, 2, 9, 0, 64, 5)
+    key_b = (ns_b, 2, 9, 0, 64, 5)          # the same revision under another worker's namespace
+    key_c = (ns_b, 2, 9, 0, 128, 6)         # a capacity growth: a new key
+    key_d = (ns_b, 2, 9, 0, 128, 7)         # its bank invalid (a size past the bank): failed
+    arena = Arena(bank_bytes=4096)
+    host = _host(core, CARD)
+
+    def result_rows(scene):
+        got = scene.storage(app)["result"][3]
+        rows = np.frombuffer(got, np.float32).reshape(-1, 4)
+        return rows[:GEO_ROWS], rows[GEO_ROWS:2 * GEO_ROWS]
+
+    def tag(rows) -> float:
+        values = set(rows[:, 0].tolist())
+        return values.pop() if len(values) == 1 else float("nan")
+
+    try:
+        arena.write(0, key_a, _rows(1.0, 64))
+        arena.write(1, key_b, _rows(2.0, 64))
+        base = _live(core)
+        scene, unread = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
+                                  {"geo_key": _key_words(key_a)}, buffers=(geo, result), unread_retry=("geo_key",))
+        facts["key_field_declared_unread"] = unread
+        try:
+            scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
+            for _ in range(50):
+                scene.draw(1, geo_key=_key_words(key_a))
+            cur, prev = result_rows(scene)
+            live = _live(core)
+            facts["a"] = {"tag": tag(cur), "previous_tag": tag(prev), "uploads": _delta(live, base, "geometry_uploads"),
+                          "resident": live.get("geometry_resident"), "arenas": live.get("geometry_arenas"),
+                          "state": scene.mode.state().get("last_reason")}
+            checks["key_a_drawn"] = facts["a"]["tag"] == 1.0
+            checks["one_upload_for_fifty_records"] = facts["a"]["uploads"] == 1
+            checks["one_residency_at_rest"] = facts["a"]["resident"] == 1
+            # Key B: the same revision, another namespace (D3 test 1): its own bytes, the old bound as previous at the
+            # swap's record, retired after it.
+            scene.draw(1, geo_key=_key_words(key_b))
+            cur, prev = result_rows(scene)
+            facts["b_swap"] = {"tag": tag(cur), "previous_tag": tag(prev)}
+            scene.draw(1, geo_key=_key_words(key_b))
+            scene.draw(1, geo_key=_key_words(key_b))
+            cur, prev = result_rows(scene)
+            live = _live(core)
+            facts["b_after"] = {"tag": tag(cur), "previous_tag": tag(prev), "resident": live.get("geometry_resident"),
+                                "uploads": _delta(live, base, "geometry_uploads"),
+                                "released": _delta(live, base, "geometry_released")}
+            checks["same_revision_other_namespace_draws_its_own_geometry"] = facts["b_swap"]["tag"] == 2.0
+            checks["old_key_bound_as_previous_at_the_swap"] = facts["b_swap"]["previous_tag"] == 1.0
+            checks["old_key_retired_after_a_drawn_record"] = (facts["b_after"]["previous_tag"] == 2.0
+                                                              and facts["b_after"]["resident"] == 1
+                                                              and facts["b_after"]["released"] >= 1)
+            # Key C: a capacity growth (a bank of 128 rows), a new key; the record is the same 8 words.
+            arena.write(0, key_c, _rows(3.0, 128))
+            for _ in range(3):
+                scene.draw(1, geo_key=_key_words(key_c))
+            cur, _prev = result_rows(scene)
+            live = _live(core)
+            facts["c"] = {"tag": tag(cur), "uploads": _delta(live, base, "geometry_uploads"),
+                          "resident": live.get("geometry_resident")}
+            checks["capacity_growth_is_a_new_key"] = facts["c"]["tag"] == 3.0 and facts["c"]["uploads"] == 3
+            # Key D: its bank's size past the bank (invalid): failed once, logged, never retried; C still drawn.
+            arena.write(1, key_d, _rows(4.0, 16), declared_bytes=8192)
+            failed_before = _live(core).get("geometry_failed") or 0
+            for _ in range(20):
+                scene.draw(1, geo_key=_key_words(key_d))
+            cur, _prev = result_rows(scene)
+            live = _live(core)
+            facts["d"] = {"tag": tag(cur), "failed": (live.get("geometry_failed") or 0) - failed_before,
+                          "resident": live.get("geometry_resident"), "content_failing":
+                          scene.mode.state().get("content_failing")}
+            checks["failed_key_once_old_drawn"] = (facts["d"]["failed"] == 1 and facts["d"]["tag"] == 3.0
+                                                   and not facts["d"]["content_failing"])
+            # A mode switch: a program without geometry; every residency goes.
+            plain = ComputePass("plain", packs["geometry.comp"], groups=(1, 1, 1),
+                                bindings=(ComputeBinding("Current", "result", "buffer", "read"),
+                                          ComputeBinding("Previous", "result", "buffer", "read"),
+                                          ComputeBinding("Result", "other", "buffer", "write")))
+            facts["switch_refusal"] = _refusal(lambda: scene.mode.program(
+                (plain,), {}, buffers=(result, StorageBuffer("other", 2 * GEO_ROWS * 16)),
+                unread=("geo_key",)))
+            for _ in range(3):
+                scene.draw(1, geo_key=_key_words(key_c))
+            facts["after_switch"] = {"resident": _live(core).get("geometry_resident")}
+            checks["zero_residencies_after_a_mode_switch"] = facts["after_switch"]["resident"] == 0
+        finally:
+            _close(scene, host, app)
+        # A second item: resident again, then torn down with its host (window destruction).
+        scene, _u = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
+                              {"geo_key": _key_words(key_c)}, buffers=(geo, result), unread_retry=("geo_key",))
+        try:
+            scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
+            for _ in range(5):
+                scene.draw(1, geo_key=_key_words(key_c))
+            facts["second_item_resident"] = _live(core).get("geometry_resident")
+        finally:
+            _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+        arena.close()
+    live = _live(core)
+    facts["after_teardown"] = {k: live.get(k) for k in ("geometry_resident", "geometry_arenas", "geometry_uploads",
+                                                        "geometry_released", "geometry_failed", "geometry_waits",
+                                                        "geometry_reads_found", "geometry_reads_torn")}
+    checks["second_item_resident"] = facts["second_item_resident"] == 1
+    checks["zero_residencies_and_arenas_after_teardown"] = (live.get("geometry_resident") == 0
+                                                            and live.get("geometry_arenas") == 0)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- the children
 
 def child(args) -> dict:
@@ -516,7 +717,7 @@ def child(args) -> dict:
         record["instance_created"] = True
     engine = QQmlEngine()
     packs = load_packs(out)
-    rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback}
+    rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry}
     try:
         for name in args.rounds:
             if vulkan:
