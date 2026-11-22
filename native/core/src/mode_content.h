@@ -418,6 +418,10 @@ struct ModePass
     quint32 localSize[3] = { 1, 1, 1 };              // reflected
     int computeMemberOffset = -1;                    // u_srpss_compute's offset in its block (-1: not declared)
     QByteArray readback;                             // ABI 42: a "once" check entry's results buffer, read once
+    // ABI 42 (N5.6): "when": a record u32 scalar; at a record whose field is 0 the entry records nothing (a pass
+    // draws nothing in its run; a defocus step makes none of its passes). The program puts it
+    // on every entry of work that may be absent (the near layer's passes and its defocus step at zero shells).
+    QByteArray when;
     // N3.4 (D17): a stage entry (post_stages.h). A resolve's `target` is the owner and `stageSource` the transparency
     // target; a bloom's `stageSource` and `stageAttachment` its source (`target` -1: it has its own); a defocus's
     // `target` the onto target and `stageSource` the layer; a composite is a surface pass with the core's fragment.
@@ -1036,6 +1040,8 @@ private:
     std::shared_ptr<CheckReadback> m_check;
     bool m_checkRefusedNoted = false;
     void reportCheck();
+    // ABI 42 (N5.6): the entry's "when" field is 0 at this record (counted: mode_entries_skipped).
+    bool entrySkipped(int index) const;
     ComputeTrack m_compute[kMaxModePasses];
     bool m_dispatch[kMaxModePasses] = {};
     quint64 m_computeProgram = 0;            // the program the tracks are of

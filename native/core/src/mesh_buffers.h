@@ -208,9 +208,11 @@ struct MeshBufferCounts
     qint64 recordNs = 0;
     qint64 streamWriteNs = 0;
     qint64 drawsRefused = 0;    // audit 4: pass draws refused for a count their buffers do not hold (H2, M1)
+    qint64 entriesSkipped = 0;  // ABI 42 (N5.6): entries a record skipped (its "when" field 0: no work)
 };
 MeshBufferCounts meshBufferCounts();
 void countDrawRefused();
+void countEntrySkipped();
 void countIndirectDraw();
 void countBatched(bool indirect);
 void countRecordTime(qint64 recordNs, qint64 streamWriteNs);

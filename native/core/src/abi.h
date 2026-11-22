@@ -246,5 +246,8 @@
 // at a later record and reported once (the content's state "check": floats and hex; one log line); composite_live's
 // check_readbacks, check_readback_bytes and check_reports. (4) The limits: kMaxModePasses 28 to 48 (the missing-mesh
 // mask one bit a pass) and kMaxSceneTargets 4 to 6 (the probe cube among them); the face's MAX_PASSES and MAX_TARGETS.
+// (5) A pass's "when": a record u32 scalar; at a record where it is 0 a draw pass draws nothing and a defocus step makes
+// none of its passes (never on a compute entry, capture, cube face, prefilter, bloom or environment step);
+// composite_live's mode_entries_skipped.
 // Backward compatible for every earlier program (none declares a cube or a geometry buffer).
 #define SRPSS_NATIVE_CORE_ABI 42

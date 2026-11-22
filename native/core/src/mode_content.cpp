@@ -2683,6 +2683,16 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         QJsonObject o = declared.at(i).toObject();
         ModePass pass;
         pass.name = o.value(QStringLiteral("name")).toString().toLatin1();
+        if (o.contains(QStringLiteral("when"))) {
+            // ABI 42 (N5.6): the entry's own parser never sees it (each holds its exact keys).
+            pass.when = o.value(QStringLiteral("when")).toString().toLatin1();
+            o.remove(QStringLiteral("when"));
+            if (!passName(pass.when)) {
+                *error = QStringLiteral("pass %1: \"when\" names a record u32 scalar (the entry records only at a "
+                                        "record where it is not 0)").arg(i);
+                return false;
+            }
+        }
         const QByteArray fragmentPack = packs.at(packIndex++);
         const bool vertex = o.value(QStringLiteral("vertex")).toBool(false); // N3.2
         const QByteArray vertexPack = vertex ? packs.at(packIndex++) : QByteArray();
@@ -2997,6 +3007,19 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     // captures the owner, or blooms from it, between the target's first pass and its resolve.
     if (!checkTransparencyOrder(program, error))
         return false;
+    // ABI 42 (N5.6): "when" skips a draw pass (a resolve and a composite among them) or a defocus step, whose work
+    // adds onto a target only (skipped, it adds nothing). Never a compute entry (its trigger says when it has work), a
+    // capture, a cube face or a prefilter (a cube is whole every record), a bloom or an environment step (what they
+    // make is read later: skipped, the last record's would be).
+    for (const ModePass &pass : program.passes) {
+        if (!pass.when.isEmpty() && (pass.compute || pass.capture || pass.face >= 0 || pass.prefilter
+                                     || pass.stage == StageKind::Bloom || pass.stage == StageKind::Environment)) {
+            *error = QStringLiteral("pass '%1': \"when\" is a draw pass's or a defocus step's (not a compute "
+                                    "entry, capture, cube face, prefilter, bloom or environment step)")
+                         .arg(QString::fromLatin1(pass.name));
+            return false;
+        }
+    }
     // ABI 42 (N5.6): at most one check entry ("readback") a program, its buffer not a geometry buffer.
     int checks = 0;
     for (const ModePass &pass : program.passes) {
@@ -3287,6 +3310,8 @@ QJsonObject ModeProgram::toJson() const
             g.insert(QStringLiteral("draw_parameters_pack"), pass.vertexDrawParameters.isValid());
             p.insert(QStringLiteral("geometry"), g);
         }
+        if (!pass.when.isEmpty())
+            p.insert(QStringLiteral("when"), QString::fromLatin1(pass.when)); // ABI 42 (N5.6)
         if (pass.compute) {
             // N3.3 (D16): a compute entry.
             QJsonObject c;
@@ -3871,6 +3896,19 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 field = pass.batches == schema->fields[i].name;
             if (!field)
                 waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name), QString::fromLatin1(pass.batches)));
+        }
+        // ABI 42 (N5.6): a pass's "when" is a u32 scalar of the record.
+        if (!pass.when.isEmpty()) {
+            const fa::Field *when = nullptr;
+            for (quint32 i = 0; i < schema->fieldCount; ++i) {
+                if (pass.when == schema->fields[i].name)
+                    when = &schema->fields[i];
+            }
+            if (!when || when->kind != fa::FieldKind::U32 || when->count != 1) {
+                *error = QStringLiteral("pass '%1''s \"when\" '%2' is not a u32 scalar of the record")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(pass.when));
+                return false;
+            }
         }
         if (pass.compute) {
             // N3.3: its group counts (the record or the settings) and its field trigger (the record only).
@@ -6117,6 +6155,8 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
                            quint32 triangleVertices)
 {
     Q_UNUSED(rhi);
+    if (entrySkipped(index))
+        return;                               // ABI 42 (N5.6): no work this record (its "when" field is 0)
     const ModeProgram &program = m_source->drawnProgram();
     const ModePass &pass = program.passes.at(index);
     Resources &r = *m_res;
@@ -6367,6 +6407,21 @@ quint32 ModeContent::computeGroups(QRhi *rhi, const ModePass &pass, int axis) co
     }
     const int limit = rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension);
     return limit > 0 && groups > quint32(limit) ? ~0u : groups; // ~0: past the device's limit (not dispatched)
+}
+
+bool ModeContent::entrySkipped(int index) const
+{
+    const ModePass &pass = m_source->drawnProgram().passes.at(index);
+    if (pass.when.isEmpty())
+        return false;
+    const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    const fa::Field *field = schema ? schema->field(pass.when) : nullptr;
+    if (!field || field->kind != fa::FieldKind::U32 || field->count != 1)
+        return false;                         // refused at the accept; drawn as declared
+    if (recordU32At(m_source->frameRecord(), field->offset) != 0)
+        return false;
+    countEntrySkipped();
+    return true;
 }
 
 void ModeContent::reportCheck()
@@ -7505,6 +7560,10 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                                       : quint32(kTriangleFloats * sizeof(float)));
             m_post.recordBloom(rhi, cb, i, ownInput, firstInput, &pending);
             ++i;
+            continue;
+        }
+        if (pass.stage == StageKind::Defocus && entrySkipped(i)) {
+            ++i;                              // ABI 42: no work this record ("when" 0): none of its passes
             continue;
         }
         if (pass.stage == StageKind::Defocus) {

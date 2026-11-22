@@ -791,6 +791,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mesh_buffers_record_ns"), double(mb.recordNs));
     o.insert(QStringLiteral("mesh_buffers_stream_write_ns"), double(mb.streamWriteNs));
     o.insert(QStringLiteral("mesh_buffers_draws_refused"), double(mb.drawsRefused)); // audit 4 H2, M1
+    o.insert(QStringLiteral("mode_entries_skipped"), double(mb.entriesSkipped));   // ABI 42 (N5.6)
     // N3.3 (D16): the storage (resident buffers and images, bytes), the dispatches and compute passes recorded, the
     // entries a drawn record did not dispatch, the edge kernels, every object created (flat at rest), the states found
     // lost and the harness's readbacks in flight.

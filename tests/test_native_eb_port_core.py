@@ -516,3 +516,46 @@ def test_waveforms_one_past_programs_follow_the_raised_limits():
     check = (ROOT / "native" / "core" / "python" / "scene_target_check.py").read_text(encoding="utf-8")
     assert 'f"{MAX_PASSES} passes" in refusals["one_pass_past"]' in check
     assert "for n in range(MAX_TARGETS + 1 - len(targets)))" in check
+
+
+# ------------------------------------------------------------------ box 5: an entry skipped for a record with no work
+
+def skip_is_wired(mode_cpp: str) -> bool:
+    """A pass's "when" (a record u32) is read at each record: 0 skips a draw (inside drawPass, so a run's passes, a
+    resolve and a composite alike) and a defocus step before any of its passes; the entry's own parser never sees it."""
+    draw = _function(mode_cpp, "void ModeContent::drawPass(", "const ModeProgram &program = m_source->drawnProgram();")
+    skipped = _function(mode_cpp, "bool ModeContent::entrySkipped(int index) const", "void ModeContent::reportCheck()")
+    record = _function(mode_cpp, "void ModeContent::recordPasses(", "bool ModeContent::record(")
+    defocus_skip = record.find("if (pass.stage == StageKind::Defocus && entrySkipped(i)) {")
+    defocus = record.find("recordDefocus(rhi, cb, i, &pending, cleared, readback);")
+    return ("if (entrySkipped(index))\n        return;" in draw
+            and "if (recordU32At(m_source->frameRecord(), field->offset) != 0)\n        return false;" in skipped
+            and "countEntrySkipped();" in skipped
+            and 0 <= defocus_skip < defocus
+            and 'o.remove(QStringLiteral("when"));' in mode_cpp)
+
+
+def test_a_record_with_no_work_skips_the_entries_that_say_so():
+    mode_cpp = _source("mode_content.cpp")
+    assert skip_is_wired(mode_cpp)
+    # Negative control (the box's): the program-only form, whose zero-shell record still pays (the defocus step and the
+    # draws recorded whatever the record holds).
+    program_only = mode_cpp.replace("        if (pass.stage == StageKind::Defocus && entrySkipped(i)) {",
+                                    "        if (false) {").replace("    if (entrySkipped(index))\n        return;",
+                                                                   "")
+    assert not skip_is_wired(program_only)
+    assert not skip_is_wired(mode_cpp.replace("        if (pass.stage == StageKind::Defocus && entrySkipped(i)) {",
+                                              "        if (false) {"))
+    assert '"mode_entries_skipped"' in _source("module.cpp")
+
+
+def test_when_is_a_record_u32_on_a_draw_or_a_defocus_step_only():
+    mode_cpp = _source("mode_content.cpp")
+    rule = mode_cpp[mode_cpp.index("    // ABI 42 (N5.6): \"when\" skips a draw pass"):]
+    rule = rule[:rule.index("    // ABI 42 (N5.6): at most one check entry")]
+    for refused in ("pass.compute", "pass.capture", "pass.face >= 0", "pass.prefilter", "pass.stage == StageKind::Bloom",
+                    "pass.stage == StageKind::Environment"):
+        assert refused in rule, refused
+    check = _function(mode_cpp, "bool ModeProgram::check(", "\n}\n")
+    assert "if (!when || when->kind != fa::FieldKind::U32 || when->count != 1) {" in check
+    assert 'p.insert(QStringLiteral("when"), QString::fromLatin1(pass.when));' in mode_cpp
