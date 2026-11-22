@@ -1293,13 +1293,17 @@ class DisplayManager(QObject):
         section = settings.get("widgets.spotify_visualizer")
         if not isinstance(section, Mapping):
             return
-        from core.settings.visualizer_view_orbit import starting_camera_pose
+        from core.settings.framed_camera import home_view
+        from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys
         from core.settings.visualizer_presets import VISUALIZER_CUSTOM_STORAGE_KEY
-        from core.settings.default_contract import require_canonical_default
         from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
         pres = owner.controller.presentation_state
         preset_index = int(section.get(f"preset_{mode}", 0))
-        home = starting_camera_pose(mode, preset_index)
+        # The one home record (framed_camera.home_view): the pose AND the lens/eye offset the preset's save wrote.
+        camera = home_view(mode, preset_index)
+        pose_keys = frozenset(get_visualizer_view_pose_keys(mode))
+        home = {key: value for key, value in camera.items() if key in pose_keys}
+        lens = {key: value for key, value in camera.items() if key not in pose_keys}
         for display in tuple(self.displays):
             if isinstance(display, QuickDisplayUnit) and not display.is_retired:
                 display.runtime.input_controller.cancel_view_orbit_for_camera_reset()
@@ -1309,18 +1313,6 @@ class DisplayManager(QObject):
         self._quick_scene_view_gesture = None
         self._quick_view_orbit_pending = None
         self._quick_view_pose_owner = None
-        # Reset of the lens is explicit, not a preset artwork rewrite. The
-        # old 62-degree projection must not survive the Home command unnoticed.
-        lens = {}
-        from core.settings.framed_camera import spec_for_mode
-        spec = spec_for_mode(mode)
-        if spec is not None:
-            lens[spec.key("camera_fov")] = float(require_canonical_default(
-                "widgets.spotify_visualizer." + spec.key("camera_fov")))
-            # The editable 3D position is a physical camera translation, not
-            # preset artwork. R/home must restore it with the same authority.
-            lens[spec.key("camera_position")] = list(require_canonical_default(
-                "widgets.spotify_visualizer." + spec.key("camera_position")))
         apply_presentation_vis_mode_kwargs(pres, {**home, **lens})
         from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
         custom = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
@@ -1383,7 +1375,8 @@ class DisplayManager(QObject):
         from core.settings.framed_camera import spec_for_mode
         spec = spec_for_mode(mode_id)
         if spec is not None:
-            # Persistent camera translation belongs to live view, never a curated preset.
+            # A gesture moves the pose and the eye offset (never the lens). They belong to the live view, never a
+            # curated preset: only a preset save moves the home (framed_camera.home_view) that Reset returns to.
             position_key = spec.key('camera_position')
             config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))
             saved_view[position_key] = config[position_key]

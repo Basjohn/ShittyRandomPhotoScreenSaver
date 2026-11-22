@@ -108,6 +108,40 @@ def FRAMED_CAMERA_SPECS() -> tuple[FramedCameraSpec, ...]:
     return tuple(_hook(d.framed_camera) for d in iter_all_visualizer_mode_descriptors() if d.framed_camera)
 
 
+LENS_SUFFIXES = ('camera_fov', 'camera_position')
+
+
+def home_view(mode_id: str, preset_index: int) -> dict[str, object]:
+    """The ONE camera home of a mode's preset slot: what Reset Camera returns to and what selecting the preset seeds.
+
+    A curated preset's home is the record its save wrote (Studio Save To Preset, Save Preset As): the pose from its
+    ``starting_view`` and, for a framed camera, the lens (``camera_fov``) and eye offset (``camera_position``) from
+    the same preset's authored settings, canonical where the preset leaves one out. Custom, a missing slot and a
+    preset without a starting view use the canonical home. Read-only: no preset or Custom snapshot is touched.
+    Before this owner Reset took the pose from the preset and the lens from the canonical defaults, so a saved
+    camera came back somewhere else (operator, 22 Nov)."""
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_presets import get_custom_preset_index, get_presets
+    from core.settings.visualizer_view_orbit import starting_camera_pose
+    home: dict[str, object] = dict(starting_camera_pose(mode_id, preset_index))
+    spec = spec_for_mode(mode_id)
+    if spec is None:
+        return home
+    presets = get_presets(mode_id)
+    curated = 0 <= preset_index < len(presets) and preset_index != get_custom_preset_index(mode_id)
+    authored = presets[preset_index].settings if curated else {}
+    has_view = curated and presets[preset_index].starting_view is not None
+    for suffix in LENS_SUFFIXES:
+        key = spec.key(suffix)
+        # The eye offset is relative to the pose, so it belongs to the saved view: a preset saved without its
+        # camera view ("Include current camera view" off) has the canonical pose AND offset; its lens stays.
+        value = authored.get(key) if suffix == 'camera_fov' or has_view else None
+        if value is None:
+            value = require_canonical_default('widgets.spotify_visualizer.' + key)
+        home[key] = float(value) if suffix == 'camera_fov' else [float(v) for v in value]
+    return home
+
+
 def pitch_radians(spec: FramedCameraSpec, tilt: float) -> float:
     low, high = spec.tilt_range
     return math.radians(spec.pitch_base_degrees + spec.pitch_span_degrees * max(low, min(high, float(tilt))))

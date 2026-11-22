@@ -1157,23 +1157,18 @@ def apply_preset_starting_view(mode: str, index: int, config: Dict[str, Any]) ->
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
     if not get_visualizer_mode_descriptor(mode).view_orbit_settings or index == get_custom_preset_index(mode):
         return config
-    from core.settings.visualizer_view_orbit import (
-        resolve_visualizer_view_orbit, validate_visualizer_starting_view,
-    )
+    from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
+    from core.settings.framed_camera import home_view
     if not 0 <= index < get_preset_count(mode):
         raise IndexError(f"visualizer preset index out of range for {mode}: {index}")
-    preset = get_presets(mode)[index]
-    values = preset.starting_view
-    if values is None:
-        values = {key: require_canonical_default(f"widgets.spotify_visualizer.{key}")
-                  for key in get_visualizer_view_pose_keys(mode)}
-    values = validate_visualizer_starting_view(mode, values)
-    seeded = resolve_visualizer_view_orbit(config, {}, mode=mode, values=values)[0]
-    from core.settings.framed_camera import spec_for_mode
-    camera = spec_for_mode(mode)
-    if camera is not None:
-        key = camera.key("camera_position")
-        seeded[key] = deepcopy(preset.settings.get(key, require_canonical_default(f"widgets.spotify_visualizer.{key}")))
+    # The same home record Reset Camera returns to: pose, lens and eye offset from one owner.
+    camera = home_view(mode, index)
+    pose_keys = frozenset(get_visualizer_view_pose_keys(mode))
+    seeded = resolve_visualizer_view_orbit(
+        config, {}, mode=mode, values={key: value for key, value in camera.items() if key in pose_keys})[0]
+    for key, value in camera.items():
+        if key not in pose_keys:
+            seeded[key] = deepcopy(value)
     return seeded
 
 
