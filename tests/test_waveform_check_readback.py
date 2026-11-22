@@ -44,3 +44,8 @@ def test_a_target_is_judged_as_a_single_slice():
     assert wc.compare_readback({"reflection@0": target}, {"reflection@0": target})["pass"]
     flipped = ("rgba8", (6, 5), 0, rows[::-1].copy().tobytes())
     assert not wc.compare_readback({"reflection@0": target}, {"reflection@0": flipped})["pass"]
+    # A chain's last level (one texel) has no rows to reverse: judged by its values alone, never failed for that.
+    texel = ("rgba16f", (1, 1), 7, np.array([.5, .25, .125, 1.], np.float16).tobytes())
+    near = ("rgba16f", (1, 1), 7, np.array([.5, .25, .125 + 2 ** -10, 1.], np.float16).tobytes())
+    judged = wc.compare_readback({"reflection@7": texel}, {"reflection@7": near})
+    assert judged["pass"] and judged["resources"]["reflection@7"]["row_reversed_mean_abs"] is None

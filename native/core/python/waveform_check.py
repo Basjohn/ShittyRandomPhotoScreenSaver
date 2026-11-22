@@ -663,7 +663,7 @@ def _readback(scene, card: dict) -> tuple[dict, dict]:
     if targets is None or storage is None:
         raise RuntimeError(f"the readback did not complete (targets {targets is not None}, storage "
                            f"{storage is not None}; {scene.mode.state().get('last_reason')})")
-    return ({f"{t['name']}@{t.get('level', 0)}": (t["format"], tuple(t["size"]), int(t.get("level", 0)),
+    return ({(t["name"] if "@" in t["name"] else f"{t['name']}@{t.get('level', 0)}"): (t["format"], tuple(t["size"]), int(t.get("level", 0)),
                                                   bytes(t["data"])) for t in targets},
             {s["name"]: (s["format"], tuple(s["size"]), 0, bytes(s["data"])) for s in storage if s["kind"] == "image"})
 
@@ -705,11 +705,12 @@ def compare_readback(a: dict, b: dict) -> dict:
             out[name] = {"pass": a[name][3] == b[name][3], "exact": a[name][3] == b[name][3], "format": a[name][0]}
             continue
         delta = np.abs(x - y)
-        row_flip = float(np.abs(x - y[:, ::-1]).mean())
+        # A resource one row (or one slice) deep cannot show that axis's orientation: only the axes it has are judged.
+        row_flip = float(np.abs(x - y[:, ::-1]).mean()) if x.shape[1] > 1 else None
         slice_flip = float(np.abs(x - y[::-1]).mean()) if x.shape[0] > 1 else None
         mean = float(delta.mean())
         spread = float(np.abs(x - x.mean()).mean())          # content that does not vary cannot show an orientation
-        oriented = (mean < row_flip or spread == 0.0) and (slice_flip is None or mean < slice_flip or spread == 0.0)
+        oriented = all(flip is None or mean < flip or spread == 0.0 for flip in (row_flip, slice_flip))
         out[name] = {"format": a[name][0], "size": list(a[name][1]), "exact": a[name][3] == b[name][3],
                      "max_abs": float(delta.max()), "mean_abs": mean, "row_reversed_mean_abs": row_flip,
                      "slice_reversed_mean_abs": slice_flip, "content_spread": spread, "pass": bool(oriented)}
