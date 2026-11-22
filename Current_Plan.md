@@ -83,7 +83,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     Journal `.artifacts/handover/JOURNAL.md` in the worktree (its `.artifacts` has no D: junctions: evidence it makes
     stays in the worktree on F:, copy it out before retiring). Doing: the ABI 43 C++ (field recipes as item textures,
     the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
-    part; then the lead builds; then stop point 2 and the N5.2f hitch attribution (its box).
+    part; built clean at 6e8f36059 (72 module tests pass); now its built proofs, stop point 2, the N5.2f hitch
+    attribution (its box).
   - Widget geometry defects (Now Playing artwork width and side flip, Achievement Pulse shelves; box below), agent
     a033a7fb2fcd1e6bf (Sonnet Medium; operator go 22 Nov). Worktree
     `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-a033a7fb2fcd1e6bf`, branch
