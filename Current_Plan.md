@@ -355,6 +355,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   itself stays in the worker until it returns.
 - [~] D1 run (1B.14 harness), lead review of grabbed frames: a mode switch on the engine worker leaves no ghost
   of the outgoing mode after its fade-out (R-184: Sphere, Extruded Spectrum, Waveform Ribbon switches).
+- [ ] **"Visualizer swaps are pretty bad into 3D modes (they fade back in long before they are ready to show frames)"**
+  (operator, 22 Nov). Obey the fade: the incoming mode's fade-in starts on its first drawn frame (a completion edge from
+  the renderer, Python and native alike), never on the swap; until then the outgoing mode holds (fade, never vanish).
+  Proof on Display 1 under load: frame-by-frame captures of swaps into each 3D mode (Waveform, Extruded Bubble, Neon
+  Lake, Extruded Spectrum, Sphere), no faded-in empty or partial frame; control: the old start-on-swap. Later helper:
+  N5.2g's field-job machinery (off-frame preparation with a ready edge) to warm the incoming mode before the swap.
 
 **N0. Decisions, contracts and proofs (design and harness only; can start now)**
 
