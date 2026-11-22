@@ -153,7 +153,8 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   `.artifacts/evidence/widgets/media/20261122_operator_geometry/`; the operator's `--geo` logs and the evidence chest
   hold more runs):
   - [ ] Now Playing: the square artwork does not widen with the card, leaving a lot of empty text space; the card
-    needs excess width before the artwork can grow.
+    needs excess width before the artwork can grow. Also (operator, 22 Nov): "The seek bar should also widen as the
+    box widens naturally."
   - [ ] Now Playing side flip: flipping the artwork to the other side is a move, not a mirrored layout, so after a
     CUSTOM edit the artwork overlaps the title, artist, progress and controls; the flip must mirror the resolved
     layout (artwork and text column swap sides, keeping each child's custom offsets relative to its column).
