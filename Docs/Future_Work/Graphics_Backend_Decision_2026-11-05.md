@@ -298,3 +298,30 @@ taken only on a measurement.
 composited as a scene-graph texture and the core independent of Qt Quick's frame (D5); the card-material backdrop
 from the core's own background layer (D7); what Parity+ means and the ranked plus (D8); the Qt version chosen
 once (D11); the long-term risks and what holds each.
+
+
+## Addendum, 23 Nov 2026: separate port parity from new Vulkan-native art
+
+**Operator direction (supersedes only the blanket scope of 12 Nov D5.3):** The paired Vulkan/OpenGL requirement
+continues for *all existing Visualizer modes as they port* and for later optional accelerations that promise the
+same accepted output. After the native-core parity and Vulkan-default flip, **new** modes may be Vulkan-only and
+may use mesh shaders or other native Vulkan capabilities for fidelity without creating a visually equivalent
+OpenGL renderer. The legacy OpenGL backend stays selectable for modes it supports; an explicitly Vulkan-only mode
+is unavailable there, with a clear capability reason, not an automatic low-fidelity substitution.
+
+The first newly authored post-flip Vulkan-native mode is **Reactive Liquid / Audio Melt Pool**, followed by
+**Concrete Rain**. Preserve both documents' established visual, musical and performance contracts. For N6.7,
+optionally use *accepted/ported* Extruded Bubble as an early proof with switchable kelp stalks that drift and
+carry independently trailing leaves, only if the mesh pipeline needs a real consumer before those new modes.
+Its existing look, presets, parity and OpenGL output stay unchanged with the optional experiment off.
+
+**Early device gate:** The native module owns `VkDevice`; before the flip, probe and optionally enable
+`VK_EXT_mesh_shader` and its supported mesh/task features during `vkCreateDevice`, record actual enablement and
+limits, and leave non-supporting devices working. The pipeline/renderer and Vulkan-only `.mesh/.task` SPIR-V
+compilation enter at N6.7, under the same pass ownership, command-buffer, warm-up, validation and retirement
+rules as the core. No separate host, compositor, frame loop or Blender requirement is introduced.
+
+This addendum overrides the 12 Nov phrases “Only an opt-in extra that changes nothing by default may exist on
+Vulkan alone” and “each service ... must ship its OpenGL twin” **only for newly authored post-flip
+Vulkan-exclusive modes**; it changes nothing about the parity gates for existing ports or their accepted looks.
+The executable order and full acceptance list remain in `Current_Plan.md` N6.7, §7.2 and §7.3.
