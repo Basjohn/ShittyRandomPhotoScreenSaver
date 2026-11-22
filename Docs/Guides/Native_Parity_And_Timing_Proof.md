@@ -284,6 +284,10 @@ decision, recorded with its reason.
     changes. The slow full-path replay (Python drawn alongside) exists only to draw or redraw them.
   - Coverage windows: for record- and settings-driven classes (settings sweeps, offers, partner and switch frames),
     where a full take per setting is unaffordable; the late-song window stays required.
+  - Take length (operator, 22 Nov, after N5.4's runs): the per-reaction-mode, per-placement and control runs of a
+    mode use 30 s of each recorded take (`--seconds 30`), not 60; the late-song window stays required and is taken
+    from the take's end, so adaptive drift is still covered. Full 60 s takes remain only where this guide names an
+    acceptance or regression-guard take.
 - **Once proven, it is the default** (operator, 20 Nov). After the fast tools pass their identical-verdict check and
   the method proof above, every port and every optimisation uses them: the cheaper judge, cached Python references,
   native-only hash runs and coverage windows, each for what the split above gives it. The slow full-path replay
