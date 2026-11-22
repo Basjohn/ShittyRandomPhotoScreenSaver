@@ -1717,6 +1717,12 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
+- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step, REOPENED 22 Nov):** agent
+  ac5f7832a73527151 found every free living bubble moving at exactly the stream speed in WORLD space (Presets 9 and 1,
+  ratio 1.000; test `tests/test_extruded_bubble_stream_transport.py` pins that) and changed nothing, but the operator
+  still sees older bubbles not answering the music. Not measured: on-screen speed (projection, depth), sway and drift,
+  and whether the music's boost visibly reaches bubbles already alive. Needs the operator's preset and description
+  (which bubbles, idle or loud), then measure what is on screen, fix at the owner, before the port's references.
 - [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera:** not reproduced (agent
   ac5f7832a73527151, 22 Nov): wake veils end-on, the shaft shadow casters swapping, chains converging on a vanishing
   point, the deep light and ray source, and Stream Lanes' short-track chains all ruled out; 5 s and 3 s at 60 fps and a
