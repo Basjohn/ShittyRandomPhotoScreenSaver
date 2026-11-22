@@ -325,3 +325,22 @@ This addendum overrides the 12 Nov phrases “Only an opt-in extra that changes 
 Vulkan alone” and “each service ... must ship its OpenGL twin” **only for newly authored post-flip
 Vulkan-exclusive modes**; it changes nothing about the parity gates for existing ports or their accepted looks.
 The executable order and full acceptance list remain in `Current_Plan.md` N6.7, §7.2 and §7.3.
+
+
+## Addendum, 23 Nov 2026 (later operator sequencing supersession): defer SMP behind the art and QoL programme
+
+The 5/12 November "SMP foundations immediately after NF" order, and any earlier wording that places SMP before
+new 3D modes, are **superseded**. After the Vulkan-default flip, complete the first two newly authored
+Vulkan-native modes **Reactive Liquid / Audio Melt Pool**, then **Concrete Rain**, followed by a substantial,
+operator-reviewed programme of product quality-of-life improvements. SMP stays entirely **deferred** in
+`Future_Work.md` §2.5, with its full original implementation detail in SMP plan 02. It must be explicitly
+readmitted by the operator after that review; a completed native flip, a pre-SMP primitive or a date does
+not trigger its M0.
+
+**Work retained on the live track:** current-product theme/material unification, Context Menu and
+Now Playing surfaces, material borders, and the Appearance Theme Studio after the flip and M4. Those
+improvements are independently valuable to Standard and MC, without importing an SMP library/audio
+service, skin ZIP loader, desktop host or extra renderer. Keep Media/Visualizer, Qt Quick Edit and the
+native core host-agnostic for future SMP, but do not build speculative SMP implementations.
+This later scheduling decision does not undo the 23 Nov permission for **new** Vulkan-only mesh-shader modes,
+and changes none of the port parity obligations for existing Visualizers.
