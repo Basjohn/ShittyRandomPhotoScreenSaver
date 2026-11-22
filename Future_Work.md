@@ -40,7 +40,11 @@ Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_
 (Expanded Visualizer is accepted and is no longer a gate; the port-readiness rules of
 `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md` still bind new GPU code). Their contracts:
 `Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
-`Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). Other mode concepts were dropped on 2026-10-25; the
+`Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). **23 Nov 2026 implementation refinement:**
+existing modes retain OpenGL/native-Vulkan port parity; the first two *new* modes after the Vulkan-default flip,
+Melt Pool then Concrete Rain, may be Vulkan-only and use the N6.7 mesh-shader route without a forced OpenGL twin.
+Optional drifting kelp/leaves in accepted Extruded Bubble is only a conditional N6.7 proof, off by default, never a
+flip blocker. Other mode concepts were dropped on 2026-10-25; the
 architecture they called for is the shared step in `Current_Plan.md` §6.
 
 ### Usu Moonscape: character/world foundations (deferred until §7.4)
