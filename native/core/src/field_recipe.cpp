@@ -438,9 +438,19 @@ FieldRecorder::~FieldRecorder()
     release();
 }
 
+void FieldRecorder::releasePipes()
+{
+    for (int i = 0; i < m_pipeCount; ++i) {
+        m_pipes[i].pipeline.reset();          // the pipeline before the layout it was made over
+        m_pipes[i].layout.reset();
+        m_pipes[i].key = 0;
+    }
+    m_pipeCount = 0;
+}
+
 void FieldRecorder::release()
 {
-    m_pipes.clear();
+    releasePipes();
     m_sampler.reset();
     m_placeholder.reset();
     m_placeholderBlock.reset();
@@ -486,12 +496,12 @@ QRhiComputePipeline *FieldRecorder::pipelineFor(QRhi *rhi, const FieldRecipe &re
     quint64 key = recipe.packKeys.at(d.pack) ^ (quint64(d.blockBinding + 1) * 0x9e3779b97f4a7c15ull);
     for (const FieldBinding &b : d.bindings)
         key = (key ^ (quint64(b.binding) << 8 | quint64(quint8(bindingKind(b))))) * 1099511628211ull;
-    for (const std::unique_ptr<Pipe> &pipe : m_pipes) {
-        if (pipe->key == key)
-            return pipe->pipeline.get();
+    for (int i = 0; i < m_pipeCount; ++i) {
+        if (m_pipes[i].key == key)
+            return m_pipes[i].pipeline.get();
     }
-    if (m_pipes.size() >= 32)
-        m_pipes.clear();                     // bounded: a recorder keeps the shapes of the fields it records
+    if (m_pipeCount >= kMaxPipelines)
+        releasePipes();                      // bounded: a recorder keeps the shapes of the fields it records
     const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
     QList<QRhiShaderResourceBinding> layout;
     if (d.blockBinding >= 0)
@@ -508,21 +518,24 @@ QRhiComputePipeline *FieldRecorder::pipelineFor(QRhi *rhi, const FieldRecipe &re
         else
             layout.append(QRhiShaderResourceBinding::imageLoadStore(b.binding, cs, t, 0));
     }
-    auto pipe = std::make_unique<Pipe>();
-    pipe->key = key;
-    pipe->layout.reset(rhi->newShaderResourceBindings());
-    pipe->layout->setBindings(layout.cbegin(), layout.cend());
-    pipe->pipeline.reset(rhi->newComputePipeline());
-    pipe->pipeline->setName(QByteArrayLiteral("srpss core field pipeline"));
-    pipe->pipeline->setShaderStage({ QRhiShaderStage::Compute, recipe.packs.at(d.pack) });
-    pipe->pipeline->setShaderResourceBindings(pipe->layout.get());
-    if (!pipe->layout->create() || !pipe->pipeline->create()) {
+    Pipe &pipe = m_pipes[m_pipeCount];
+    pipe.key = key;
+    pipe.layout.reset(rhi->newShaderResourceBindings());
+    pipe.layout->setBindings(layout.cbegin(), layout.cend());
+    pipe.pipeline.reset(rhi->newComputePipeline());
+    pipe.pipeline->setName(QByteArrayLiteral("srpss core field pipeline"));
+    pipe.pipeline->setShaderStage({ QRhiShaderStage::Compute, recipe.packs.at(d.pack) });
+    pipe.pipeline->setShaderResourceBindings(pipe.layout.get());
+    if (!pipe.layout->create() || !pipe.pipeline->create()) {
+        pipe.pipeline.reset();
+        pipe.layout.reset();
+        pipe.key = 0;
         *error = QStringLiteral("a field pipeline (pack %1) could not be created").arg(d.pack);
         return nullptr;
     }
     g_pipelines.fetchAndAddRelaxed(1);
-    m_pipes.push_back(std::move(pipe));
-    return m_pipes.back()->pipeline.get();
+    ++m_pipeCount;
+    return pipe.pipeline.get();
 }
 
 bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &recipe, QRhiTexture *input,
@@ -547,17 +560,16 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
     if (!ensurePlaceholders(rhi, error))
         return false;
     // The images of this record (each sampled where it is an output; QRhi tracks them from creation).
-    std::vector<RhiOwned<QRhiTexture>> images;
-    images.reserve(size_t(recipe.images.size()));
-    for (const FieldImage &i : recipe.images) {
-        RhiOwned<QRhiTexture> t(rhi->newTexture(i.format, i.size, 1, QRhiTexture::UsedWithLoadStore));
-        t->setName(QByteArrayLiteral("srpss core field image ") + i.name);
-        if (!t->create()) {
+    RhiOwned<QRhiTexture> images[kMaxFieldImages];
+    for (int n = 0; n < int(recipe.images.size()) && n < kMaxFieldImages; ++n) {
+        const FieldImage &i = recipe.images.at(n);
+        images[n].reset(rhi->newTexture(i.format, i.size, 1, QRhiTexture::UsedWithLoadStore));
+        images[n]->setName(QByteArrayLiteral("srpss core field image ") + i.name);
+        if (!images[n]->create()) {
             *error = QStringLiteral("field image '%1' could not be created at %2 x %3").arg(QString::fromLatin1(i.name))
                          .arg(i.size.width()).arg(i.size.height());
             return false;
         }
-        images.push_back(std::move(t));
     }
     // The blocks, each once at its aligned offset in one Static buffer.
     QList<quint32> offsets;
@@ -577,7 +589,10 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
     }
     // The bindings, one object per distinct set, and the pipelines (kept by the recorder).
     const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
-    std::vector<RhiOwned<QRhiShaderResourceBindings>> sets;
+    // At most one set a dispatch; a recipe has few distinct ones (192 relax dispatches over two).
+    std::unique_ptr<RhiOwned<QRhiShaderResourceBindings>[]> sets(
+        new RhiOwned<QRhiShaderResourceBindings>[size_t(recipe.dispatches.size())]);
+    int setCount = 0;
     QList<QByteArray> setKeys;
     QList<int> setOf;
     QList<QRhiComputePipeline *> pipelines;
@@ -608,7 +623,7 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
                 list.append(QRhiShaderResourceBinding::sampledTexture(b.binding, cs, input, m_sampler.get()));
                 continue;
             }
-            QRhiTexture *t = images.at(size_t(b.image)).get();
+            QRhiTexture *t = images[b.image].get();
             if (b.access == StorageAccess::Read)
                 list.append(QRhiShaderResourceBinding::imageLoad(b.binding, cs, t, 0));
             else if (b.access == StorageAccess::Write)
@@ -616,15 +631,15 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
             else
                 list.append(QRhiShaderResourceBinding::imageLoadStore(b.binding, cs, t, 0));
         }
-        RhiOwned<QRhiShaderResourceBindings> set(rhi->newShaderResourceBindings());
+        RhiOwned<QRhiShaderResourceBindings> &set = sets[size_t(setCount)];
+        set.reset(rhi->newShaderResourceBindings());
         set->setBindings(list.cbegin(), list.cend());
         if (!set->create()) {
             *error = QStringLiteral("a field dispatch's bindings could not be created");
             return false;
         }
-        setOf.append(int(sets.size()));
+        setOf.append(setCount++);
         setKeys.append(key);
-        sets.push_back(std::move(set));
     }
     // Everything exists: record. The blocks join the record's uploads; the first pass takes them.
     QRhiResourceUpdateBatch *batch = *pending ? *pending : rhi->nextResourceUpdateBatch();
@@ -636,13 +651,13 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
         cb->beginComputePass(batch);
         batch = nullptr;
         cb->setComputePipeline(pipelines.at(i));
-        cb->setShaderResources(sets.at(size_t(setOf.at(i))).get());
+        cb->setShaderResources(sets[size_t(setOf.at(i))].get());
         cb->dispatch(int(d.groups[0]), int(d.groups[1]), int(d.groups[2]));
         cb->endComputePass();
     }
     *pending = nullptr;                       // taken by the first pass (a recipe has at least one dispatch)
     for (int o = 0; o < int(recipe.outputs.size()); ++o)
-        out->textures[o] = std::move(images.at(size_t(recipe.outputs.at(o).image)));
+        out->textures[o] = std::move(images[recipe.outputs.at(o).image]);
     // The scratch images, the blocks and the bindings go with their owners here (deleteLater: after this frame).
     g_recorded.fetchAndAddRelaxed(1);
     g_dispatches.fetchAndAddRelaxed(recipe.dispatches.size());

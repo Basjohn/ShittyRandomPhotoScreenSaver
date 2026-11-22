@@ -4361,10 +4361,14 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
                      .arg(modeTextureFormatName(format).toUpper());
         return false;
     }
-    if (mips && (format == ModeTextureFormat::RGBA32F || format == ModeTextureFormat::R32F)) {
+    if (mips && format == ModeTextureFormat::RGBA32F) {
         // ABI 37: the box kernel makes RGBA8 and RGBA16F chains only (mip_chain.h); a float table has no levels.
-        *error = QStringLiteral("texture '%1': an %2 texture has no mips").arg(QString::fromLatin1(name),
-                                                                              modeTextureFormatName(format));
+        *error = QStringLiteral("texture '%1': an rgba32f texture has no mips").arg(QString::fromLatin1(name));
+        return false;
+    }
+    if (mips && format == ModeTextureFormat::R32F) {
+        // ABI 43: likewise a field's r32f output.
+        *error = QStringLiteral("texture '%1': an r32f texture has no mips").arg(QString::fromLatin1(name));
         return false;
     }
     QMutexLocker lock(&m_mutex);

@@ -35,7 +35,6 @@
 #include <rhi/qshader.h>
 
 #include <memory>
-#include <vector>
 
 namespace srpss_core {
 
@@ -137,7 +136,9 @@ public:
                 QRhiResourceUpdateBatch **pending, FieldOutputs *out, QString *error);
     // The pipelines and placeholders go (the QRhi's invalidation, the content's release, the job QRhi's teardown).
     void release();
-    int pipelines() const { return int(m_pipes.size()); }
+    int pipelines() const { return m_pipeCount; }
+
+    static constexpr int kMaxPipelines = 32; // the shapes of the fields a recorder records (then made again)
 
 private:
     struct Pipe
@@ -148,12 +149,14 @@ private:
     };
     bool ensurePlaceholders(QRhi *rhi, QString *error);
     QRhiComputePipeline *pipelineFor(QRhi *rhi, const FieldRecipe &recipe, const FieldDispatch &d, QString *error);
+    void releasePipes();
 
     QRhi *m_rhi = nullptr;
     RhiOwned<QRhiSampler> m_sampler;          // the input's: linear, clamped, no mips
     RhiOwned<QRhiTexture> m_placeholder;      // a 1 x 1 load-store texture the layouts are made over
     RhiOwned<QRhiBuffer> m_placeholderBlock;  // a uniform buffer of kMaxFieldBlockBytes the layouts are made over
-    std::vector<std::unique_ptr<Pipe>> m_pipes;
+    Pipe m_pipes[kMaxPipelines];              // Qt containers and fixed arrays only (the core's rule: no STL container)
+    int m_pipeCount = 0;
     bool m_counted = false;
 };
 

@@ -312,6 +312,17 @@ class NativeCore:
         """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
         return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
 
+    def field_recipe_check(self, recipe: dict, packs: list[bytes], blocks: list[bytes]) -> dict:
+        """ABI 43, GPU-free: a field recipe's admission against its packs' reflection (``field_recipe.h``): ``{"ok",
+        "error"?, "recipe"?}`` with the reflected bindings per dispatch."""
+        return json.loads(self.module.field_recipe_check(json.dumps(dict(recipe)), [bytes(p) for p in packs],
+                                                         [bytes(b) for b in blocks]))
+
+    def field_counts(self) -> dict:
+        """ABI 43: the field recorders' counts (``fields_recorded``, ``field_dispatches``, ``field_pipelines``,
+        ``field_recorders``)."""
+        return json.loads(self.module.field_counts())
+
     def raw_vulkan_counts(self) -> dict:
         """N3.6: the raw Vulkan objects the core retired inside a frame (``vulkan_context.h``): ``raw_vulkan_deferred``,
         ``raw_vulkan_released_at_edges``, ``raw_vulkan_released_at_idle`` and ``raw_vulkan_pending``."""
