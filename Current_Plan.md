@@ -1808,6 +1808,15 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
+- [ ] **"I have noticed reset camera in preset 9 is different from where I save the camera ... I even resaved in the
+  studio, reset again and got the wrong camera location." "Probably a more widespread issue."** (operator, 22 Nov).
+  Log 16:02-16:04 (`logs/screensaver.log`, `[VIS_ORBIT]`/`[STUDIO]`): the Studio save wrote the preset's camera
+  (`extruded_bubble_camera_position` (-1.006, -2.806, -3.395), fov 22 to 45, pan) while reset reads the orbit home
+  (`extruded_bubble_turn` 0.0789, `_tilt` -0.4889, `_scene_scale`, unchanged), and the in-saver orbit save (16:04:08,
+  turn 0.566) did not move the home either. Two camera records with no single owner. Fix: one owner for the home view
+  per the framed camera standard (`core/settings/framed_camera.py`), so every save (Studio and in-saver) and reset agree;
+  audit every framed-camera mode (Extruded Bubble, Waveform, Neon Lake, Extruded Spectrum, Sphere, ...) for the same
+  split; test save-then-reset round trips per mode with a control; presets stay authored (repair fill, never pinned).
 - [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step, REOPENED 22 Nov; the
   "constantly pinned" clumps were R-250's short-path bead chains, fixed; still to show on screen that older bubbles
   speed up with the music as newborns do, a music-response trace of on-screen speed by age):** agent
