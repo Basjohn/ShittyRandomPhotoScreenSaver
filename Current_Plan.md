@@ -67,11 +67,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] One agent at a time (operator, 22 Nov, weekly usage 93 %): N5.6's easiest, time-wasting parts first (the built
-  measurements, docs and the like), agent ac5f7832a73527151 at a0230959d; its journal holds the GPU proof plan
-  (`eb_core_check.py`, limits then skip, readback, geometry, probe). At its prepped checkpoint (evidence, hashes and
-  journal saved) it pauses and N5.2g (Edge Bloom, Capillary Bloom) takes the slot, so transitions finish 28 of 28
-  first (operator, 22 Nov).
+- [ ] One agent at a time (operator, 22 Nov, weekly usage 94 %): N5.2g (Edge Bloom, Capillary Bloom), agent
+  ac3072f8bea57441b (Opus Medium, ABI 43 reserved), so transitions finish 28 of 28. N5.6 paused at its prepped
+  checkpoint (agent ac5f7832a73527151, branch merged at c0abd4c55, journal copy
+  `D:\Temp\Scratch\SRPSS\worktreesgent-ac5f7832a73527151\JOURNAL.md`): limits, skip, readback, geometry PASS; the
+  probe needs the build of main's three core fixes (lead), then `eb_core_check.py ... --label n56_rebuilt` (all five).
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
