@@ -16,6 +16,7 @@ import pytest
 
 from core.settings import visualizer_presets as vp
 from core.settings import visualizer_preset_file as preset_file
+from core.settings.framed_camera import spec_for_mode
 from core.settings.visualizer_mode_registry import (
     get_visualizer_view_pose_keys, iter_visualizer_mode_descriptors,
 )
@@ -180,21 +181,51 @@ def test_custom_home_is_the_canonical_camera(preset_root, mode):
 
 
 @pytest.mark.parametrize("mode", ORBITING)
-def test_the_in_saver_save_writes_the_whole_live_camera_and_leaves_the_home(manager, mode):
-    """A finished gesture saves the live view (the same record shape as the home) and never the curated preset."""
+def test_the_in_saver_save_writes_the_flown_camera_and_leaves_the_home(manager, mode):
+    """A finished gesture saves what it moves (pose and eye offset; the lens is never a gesture's) into the live view,
+    never into the curated preset, and Reset still returns to the preset's home."""
     from core.settings.framed_camera import home_view
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
     index = _curated_slot(mode)
     home = home_view(mode, index)
     controller = manager.own(mode, index)
-    flown = _moved_camera(mode, home)
-    apply_presentation_vis_mode_kwargs(controller.presentation_state, flown)
     pose_keys = set(get_visualizer_view_pose_keys(mode))
+    spec = spec_for_mode(mode)
+    flown = {key: value for key, value in _moved_camera(mode, home).items()
+             if key in pose_keys or spec is not None and key == spec.key("camera_position")}
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, flown)
     manager._quick_view_orbit_pending = (mode, {key: flown[key] for key in pose_keys})
     manager._persist_quick_visualizer_view(settle_motion=False)
     persisted = manager.settings_manager.get("widgets.spotify_visualizer")
     assert _flat({key: persisted[key] for key in flown}) == _close((_live_camera(controller, mode, flown))), \
-        f"{mode}: the in-saver save left part of the live camera unsaved"
+        f"{mode}: the in-saver save left part of the flown camera unsaved"
     assert _flat(home_view(mode, index)) == _close((home)), f"{mode}: a gesture moved the preset's home"
     manager._reset_quick_visualizer_camera()
     assert _flat(_live_camera(controller, mode, home)) == _close((home))
+
+
+FRAMED = tuple(mode for mode in ORBITING if spec_for_mode(mode) is not None)
+
+
+@pytest.mark.parametrize("mode", FRAMED)
+def test_a_preset_saved_without_its_view_keeps_its_lens_but_no_eye_offset(preset_root, mode):
+    """Save Preset As with "Include current camera view" off drops the starting view; the eye offset is relative to
+    that view, so the home is the canonical pose and offset, and only the lens comes from the preset."""
+    import json
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.framed_camera import home_view
+    spec = spec_for_mode(mode)
+    index = _curated_slot(mode)
+    saved = _moved_camera(mode, home_view(mode, index))
+    _save_into_preset(mode, index, saved)
+    path = vp.get_preset_file_path(mode, index)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.pop("starting_view")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    vp.reload_presets(mode)
+    home = home_view(mode, index)
+    canonical = {key: require_canonical_default("widgets.spotify_visualizer." + key) for key in home}
+    fov = spec.key("camera_fov")
+    assert home[fov] == pytest.approx(saved[fov]), f"{mode}: the preset's lens was dropped"
+    canonical[fov] = saved[fov]
+    assert _flat(home) == _close(canonical), f"{mode}: a view-less preset kept an eye offset from another view"

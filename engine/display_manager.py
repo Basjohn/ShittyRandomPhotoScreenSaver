@@ -1372,16 +1372,14 @@ class DisplayManager(QObject):
             section, custom_presets, mode=mode_id, values=values
         )
         saved_view = dict(values)
-        from core.settings.framed_camera import LENS_SUFFIXES, spec_for_mode
+        from core.settings.framed_camera import spec_for_mode
         spec = spec_for_mode(mode_id)
         if spec is not None:
-            # The live view saves the same camera record as the home (framed_camera.home_view): pose, lens and eye
-            # offset. It belongs to the live view, never a curated preset; only a preset save moves the home.
-            for suffix in LENS_SUFFIXES:
-                key = spec.key(suffix)
-                value = getattr(owner.controller.presentation_state, '_' + key)
-                config[key] = float(value) if suffix == 'camera_fov' else list(value)
-                saved_view[key] = config[key]
+            # A gesture moves the pose and the eye offset (never the lens). They belong to the live view, never a
+            # curated preset: only a preset save moves the home (framed_camera.home_view) that Reset returns to.
+            position_key = spec.key('camera_position')
+            config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))
+            saved_view[position_key] = config[position_key]
         settings.replace_visualizer_runtime_preset_state(config, cache)
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(config)
         self._refresh_all_quick_context_menus()

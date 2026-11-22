@@ -130,9 +130,12 @@ def home_view(mode_id: str, preset_index: int) -> dict[str, object]:
     presets = get_presets(mode_id)
     curated = 0 <= preset_index < len(presets) and preset_index != get_custom_preset_index(mode_id)
     authored = presets[preset_index].settings if curated else {}
+    has_view = curated and presets[preset_index].starting_view is not None
     for suffix in LENS_SUFFIXES:
         key = spec.key(suffix)
-        value = authored.get(key)
+        # The eye offset is relative to the pose, so it belongs to the saved view: a preset saved without its
+        # camera view ("Include current camera view" off) has the canonical pose AND offset; its lens stays.
+        value = authored.get(key) if suffix == 'camera_fov' or has_view else None
         if value is None:
             value = require_canonical_default('widgets.spotify_visualizer.' + key)
         home[key] = float(value) if suffix == 'camera_fov' else [float(v) for v in value]
