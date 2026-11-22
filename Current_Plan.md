@@ -566,6 +566,15 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     vendor, device, cache UUID). A mismatch is a silent recompile. It is loaded at creation and saved at orderly
     shutdown, written to a temporary file and renamed, so two windows or processes never leave a torn file. The last
     writer wins, as with Qt's.
+  - [ ] Defect (lead, 22 Nov, operator asked "No Vulkan pipeline cache?"): Qt Quick's Vulkan cache file is never
+    written for SRPSS (`%LOCALAPPDATA%/ShittyRandomPhotoScreenSaver/SRPSS/cache/qtpipelinecache-*/` holds `qqpc_opengl`
+    and the core's job-thread `srpss_core_vulkan`, no `qqpc_vulkan`), so every pipeline the core builds on Qt's QRhi
+    (nearly all mode and transition pipelines) compiles from scratch on each Vulkan launch, a likely share of first-use
+    stalls. Find why (Qt's automatic cache off for an adopted device, `QQuickGraphicsConfiguration` settings, or the
+    exit path skipping `finalizePipelineCache`) and fix at the owner: either Qt's file is written, or the core's file
+    also carries Qt's QRhi's `pipelineCacheData()` (load at creation, save at orderly shutdown, same header check).
+    Proof: a second Vulkan launch's pipeline creation times (first frame of each mode and transition) against the
+    first, file present and absent; a control with the file deleted.
   - [ ] Device loss: the core owns the `VkDevice` Qt adopts, and Qt's recovery re-adopts the same device. So on
     `sceneGraphInvalidated` after a loss (`FrameOpDeviceLost` or `VK_ERROR_DEVICE_LOST`), the core destroys its dead
     device and hands the window a new one before Qt's next frame. Then it rebuilds every core object from the last
