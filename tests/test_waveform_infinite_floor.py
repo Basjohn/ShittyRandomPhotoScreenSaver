@@ -10,10 +10,13 @@ pytestmark=pytest.mark.qt
 
 def probe_floor_vertex():
     """The floor's vertex stage without its WaveformFloor block: a probe fragment built on FLOOR_WORLD_GLSL declares
-    those values as loose uniforms of its own (a test-only OpenGL program)."""
+    those values as loose uniforms of its own (a test-only OpenGL program). The vertex stage itself reads the block's
+    target-clip pair (``srpssTargetClip``, N5.4), which stays declared here as loose uniforms; on OpenGL's Python path
+    the conventions leave the clip unscaled, so their values do not matter."""
     from rendering.gl_programs.portable import block_declaration
     from rendering.gl_programs.waveform_ribbon import FLOOR_BLOCK,FLOOR_VERTEX
-    return FLOOR_VERTEX.replace(block_declaration(FLOOR_VERTEX,FLOOR_BLOCK.name),'')
+    return FLOOR_VERTEX.replace(block_declaration(FLOOR_VERTEX,FLOOR_BLOCK.name),
+                                'uniform vec2 uViewport;\nuniform vec2 u_target_px;\n')
 
 
 class GroundProbe:
