@@ -245,34 +245,28 @@ def _targets(scene, timeout_s: float = 10.0, publish: dict | None = None) -> dic
 
 
 def _streamed(core, engine, host, name, passes, targets, settings, entries, record, *, buffers=(), streams=(),
-              unread_retry=()):
-    """A streamed scene (compute_pass_check's host) with raw ABI 42 entries. A built module before the "when" reader fix
-    refuses a field only "when" reads as unknown; the scene is then made again with it declared unread (a fact)."""
+              unread=()):
+    """A streamed scene (compute_pass_check's host) with raw ABI 42 entries; ``unread``: record fields its program reads
+    nowhere (a control's program without the "when" that reads them)."""
     import compute_pass_check as cpc
     import compute_passes as cp
     import mesh_buffers
+    from rendering.native import mode as face
 
     schema = mesh_buffers.schema(name, entries, code=CODES[name])
     spec = cp.SceneSpec(name, tuple(passes), tuple(targets), tuple(streams), settings, schema, record,
                         buffers=tuple(buffers))
-    try:
-        return cpc.Scene(core, engine, host, spec), False
-    except ValueError as exc:
-        if not unread_retry or "no pass's member" not in str(exc):
-            raise
-
-    # The face's program() takes unread=: the spec's program sent with it.
-    from rendering.native import mode as face
-
+    if not unread:
+        return cpc.Scene(core, engine, host, spec)
     real = face.NativeMode.program
 
     def program(self, passes, settings=None, **kw):
-        kw.setdefault("unread", tuple(unread_retry))
+        kw.setdefault("unread", tuple(unread))
         return real(self, passes, settings, **kw)
 
-    face.NativeMode.program = program
+    face.NativeMode.program = program          # compute_pass_check's scene sends its program through the face
     try:
-        return cpc.Scene(core, engine, host, spec), True
+        return cpc.Scene(core, engine, host, spec)
     finally:
         face.NativeMode.program = real
 
@@ -392,9 +386,8 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
     alone = to8(FILL)
     host = _host(core, CARD)
     try:
-        scene, unread = _streamed(core, engine, host, "skip", (base, _with(extra, when="w")), (target,), settings,
-                                  entries, {"w": 1}, unread_retry=("w",))
-        facts["when_field_declared_unread"] = unread
+        scene = _streamed(core, engine, host, "skip", (base, _with(extra, when="w")), (target,), settings,
+                                  entries, {"w": 1})
         try:
             on = _targets(scene, publish={"w": 1})["scene.colour"]
             before = _live(core)
@@ -414,8 +407,8 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _close(scene, host, app)
         # Control: the program-only form (no "when") still draws at 0.
-        scene, _u = _streamed(core, engine, host, "skip_plain", (base, extra), (target,), settings, entries, {"w": 1},
-                              unread_retry=("w",))
+        scene = _streamed(core, engine, host, "skip_plain", (base, extra), (target,), settings, entries, {"w": 1},
+                          unread=("w",))
         try:
             plain = _targets(scene, publish={"w": 0})["scene.colour"]
             checks["control_program_only_form_still_draws_at_0"] = near(plain, both)
@@ -454,8 +447,7 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
         cp_card = cp.CARD
         cp.CARD = card                       # the streamed host's card (compute_pass_check reads it at the scene)
         try:
-            scene, unread = _streamed(core, engine, small, "defocus", gated, targets, settings, entries, {"w": 1},
-                                      unread_retry=("w",))
+            scene = _streamed(core, engine, small, "defocus", gated, targets, settings, entries, {"w": 1})
         finally:
             cp.CARD = cp_card
         try:
@@ -474,8 +466,8 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
             _close(scene, small, app)
         cp.CARD = card
         try:
-            scene, _u = _streamed(core, engine, small, "defocus_plain", plain_passes, plain_targets, plain_settings,
-                                  entries, {"w": 0}, unread_retry=("w",))
+            scene = _streamed(core, engine, small, "defocus_plain", plain_passes, plain_targets, plain_settings,
+                          entries, {"w": 0}, unread=("w",))
         finally:
             cp.CARD = cp_card
         try:
@@ -501,7 +493,6 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
     checks["defocus_shown_at_1_differs"] = facts["max_difference_shown_vs_no_layer"] > 0.0
     checks["no_defocus_record_at_0"] = facts["defocus_records_at_0"] == 0
     checks["a_defocus_record_at_1"] = facts["defocus_records_at_1"] >= 1
-    facts["when_field_declared_unread"] = unread
     return facts
 
 
@@ -659,9 +650,8 @@ def round_geometry(core, engine, app, api: str, packs: dict) -> dict:
         arena.write(0, key_a, _rows(1.0, 64))
         arena.write(1, key_b, _rows(2.0, 64))
         base = _live(core)
-        scene, unread = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
-                                  {"geo_key": _key_words(key_a)}, buffers=(geo, result), unread_retry=("geo_key",))
-        facts["key_field_declared_unread"] = unread
+        scene = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
+                                  {"geo_key": _key_words(key_a)}, buffers=(geo, result))
         try:
             scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
             for _ in range(50):
@@ -727,8 +717,8 @@ def round_geometry(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _close(scene, host, app)
         # A second item: resident again, then torn down with its host (window destruction).
-        scene, _u = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
-                              {"geo_key": _key_words(key_c)}, buffers=(geo, result), unread_retry=("geo_key",))
+        scene = _streamed(core, engine, host, "geometry", (copy,), (), {}, entries,
+                              {"geo_key": _key_words(key_c)}, buffers=(geo, result))
         try:
             scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
             for _ in range(5):
@@ -877,21 +867,10 @@ def round_probe(core, engine, app, api: str, packs: dict) -> dict:
     host = _host(core, CARD)
     got = {}
     try:
-        mips = "linear"
         for label, swap, matrix in (("probe", False, False), ("swapped", True, False), ("matrix", False, True)):
-            passes, targets = _probe_program(packs, swap=swap, mips=mips, matrix=matrix)
+            passes, targets = _probe_program(packs, swap=swap, matrix=matrix)
             before = _live(core)
-            try:
-                scene = _still(core, engine, host, CARD, packs, passes, targets, {})
-            except ValueError as exc:
-                # A module before the fix refuses a cube's mipped sampler (as a defocus layer's): a fact; the level
-                # lookups wait for the rebuild, the faces and levels are still read back.
-                if "reads mips of the defocus layer" not in str(exc):
-                    raise
-                facts["mipped_cube_sampler_refused"] = str(exc)
-                mips = "none"
-                passes, targets = _probe_program(packs, swap=swap, mips=mips, matrix=matrix)
-                scene = _still(core, engine, host, CARD, packs, passes, targets, {})
+            scene = _still(core, engine, host, CARD, packs, passes, targets, {})
             try:
                 got[label] = _targets(scene)
                 state = scene.mode.state()
@@ -977,17 +956,13 @@ def round_probe(core, engine, app, api: str, packs: dict) -> dict:
     box_error = max(float(np.abs(texels(f, 3) - box[3][f]).max()) for f in range(6)) if read else 0.0
     facts["face_level_3_box_twin_error"] = box_error
     checks["control_box_mips_leave_the_bound_at_level_3_texels"] = box_error > 0.03
-    if "mipped_cube_sampler_refused" in facts:
-        facts["lookups_at_levels_2_and_3"] = "not run: this module refuses a cube's mipped sampler (fixed, rebuild)"
-        checks["mipped_cube_sampler_admitted"] = False
-    else:
-        for level in PROBE_LEVELS[1:]:
-            e = errors[f"l{level}_cone"]
-            checks[f"level_{level}_lookups_match_the_cone_twin"] = max(e["interior_max"], e["edge_max"]) <= tol[level]
-        checks["control_box_mips_leave_the_bound_at_level_3"] = errors["l3_box"]["interior_max"] > tol[3]
-        checks["no_seam_at_level_3"] = facts["seam"]["native_edge_over_interior"] < 2.0
-        checks["control_a_clamped_read_shows_the_seam"] = (facts["seam"]["clamped_edge_over_interior"]
-                                                           > facts["seam"]["native_edge_over_interior"])
+    for level in PROBE_LEVELS[1:]:
+        e = errors[f"l{level}_cone"]
+        checks[f"level_{level}_lookups_match_the_cone_twin"] = max(e["interior_max"], e["edge_max"]) <= tol[level]
+    checks["control_box_mips_leave_the_bound_at_level_3"] = errors["l3_box"]["interior_max"] > tol[3]
+    checks["no_seam_at_level_3"] = facts["seam"]["native_edge_over_interior"] < 2.0
+    checks["control_a_clamped_read_shows_the_seam"] = (facts["seam"]["clamped_edge_over_interior"]
+                                                       > facts["seam"]["native_edge_over_interior"])
     checks["control_swapped_faces_leave_the_bound"] = facts["swapped_l0_max_error"] > 0.2
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
