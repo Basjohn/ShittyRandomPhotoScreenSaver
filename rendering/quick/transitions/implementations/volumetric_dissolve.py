@@ -33,7 +33,7 @@ from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, w
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..native_scene import (QUAD_MESH, NativeScene, NativeScenePass, NativeScenePasses, NativeScenePopulation,
-                            eased_show, native_one_block, population_values)
+                            eased_show, native_one_block, population_packs, population_values)
 from ..render_contract import QuickTransitionRenderFrame
 
 _DIRECTION_CODES = frozenset(VOLUMETRIC_DIRECTIONS.values())
@@ -54,7 +54,9 @@ _SCENE_PASSES = (
                     None, "triangle_strip", VOLUMETRIC_VERTICES,
                     samplers=(("uOldTex", "old"), ("uOldCopy", "source_environment")), blend=_OVER),
 )
-_POPULATION = NativeScenePopulation("particles", VOLUMETRIC_HOOKS, _FRAME, "particles")
+_POPULATION_COUNT, _POPULATION_SCATTER = population_packs(VOLUMETRIC_HOOKS, _FRAME)
+_POPULATION = NativeScenePopulation("particles", VOLUMETRIC_HOOKS, _FRAME, "particles", _POPULATION_COUNT,
+                                    _POPULATION_SCATTER)
 
 
 def volumetric_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float, float]:

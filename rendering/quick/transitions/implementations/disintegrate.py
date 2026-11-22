@@ -28,7 +28,7 @@ from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, w
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..native_scene import (QUAD_MESH, NativeScene, NativeScenePass, NativeScenePasses, NativeScenePopulation,
-                            eased_show, native_one_block, population_values)
+                            eased_show, native_one_block, population_packs, population_values)
 from ..render_contract import QuickTransitionRenderFrame
 
 # N5.2f: the native scene's passes (the intact picture with the frame block merged into its pass block, the grains'
@@ -43,7 +43,9 @@ _SCENE_PASSES = (
     NativeScenePass("grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE, None,
                     "triangle_strip", DISINTEGRATE_VERTICES, samplers=(("uOldTex", "old"),), blend=_OVER),
 )
-_POPULATION = NativeScenePopulation("grains", DISINTEGRATE_HOOKS, _FRAME, "grains")
+_POPULATION_COUNT, _POPULATION_SCATTER = population_packs(DISINTEGRATE_HOOKS, _FRAME)
+_POPULATION = NativeScenePopulation("grains", DISINTEGRATE_HOOKS, _FRAME, "grains", _POPULATION_COUNT,
+                                    _POPULATION_SCATTER)
 
 
 def disintegrate_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float]:

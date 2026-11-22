@@ -140,23 +140,32 @@ class NativeScenePopulation:
     hooks: str
     frame_block: str
     draw: str
+    # The native count and scatter packs, composed at the transition module's top level (``population_packs``) so the
+    # Vulkan readiness check sees the product's own texts (a composition inside a method is only ever forwarded).
+    count: str
+    scatter: str
 
     def resource(self, suffix: str) -> str:
         return f"{self.name}_{suffix}"
 
     def count_source(self) -> str:
-        from rendering.quick.scene3d.population import population_count_source
-
-        return native_one_block((population_count_source(self.hooks),), self.frame_block)[0]
+        return self.count
 
     def scatter_source(self) -> str:
-        from rendering.quick.scene3d.population import population_scatter_source
-
-        return native_one_block((population_scatter_source(self.hooks),), self.frame_block)[0]
+        return self.scatter
 
     def settings(self) -> tuple[str, ...]:
         """The settings that size its storage and its dispatches (no block member: the core's sizes and counts)."""
         return tuple(self.resource(s) for s in ("groups", "group_bytes", "id_bytes", "state_bytes"))
+
+
+def population_packs(hooks: str, frame_block: str) -> tuple[str, str]:
+    """The native count and scatter packs of a population with these hooks: ``population.py``'s count and scatter
+    sources with the transition's frame block merged into their dispatch block (``native_one_block``)."""
+    from rendering.quick.scene3d.population import population_count_source, population_scatter_source
+
+    return (native_one_block((population_count_source(hooks),), frame_block)[0],
+            native_one_block((population_scatter_source(hooks),), frame_block)[0])
 
 
 def population_values(population: NativeScenePopulation, members: int, vertices: int) -> dict[str, object]:
