@@ -75,9 +75,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     `.artifacts/handover/JOURNAL.md` in the worktree, copy `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/JOURNAL.md`. Evidence and
     scratch (junctions to D:): `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/evidence/` (`native_core/n5_6/20261122_n56_rebuilt`,
     `visualizers/extruded_bubble/n56_flicker`, `n56_wake_teleport`, `n56_living_acceleration`) and `.../scratch/n56/`
-    (probe scripts: `orbit_points.py`, `flicker_map.py`, `veil_probe.py`, `eb_probe.py`). Doing: the operator's two
-    defects (the emission starfish while orbiting Preset 9 with music, the Deep Light shaft convergence first; then
-    pinned / non-accelerating bubbles, per-bubble on-screen speed against age); then the port proper.
+    (probe scripts: `orbit_points.py`, `flicker_map.py`, `veil_probe.py`, `eb_probe.py`). Done 22 Nov: camera home
+    (a9d471c94), the music trace, port preparation (N5.6 box); wound down for the port proper.
   - N5.2g Edge Bloom and Capillary Bloom, agent ac3072f8bea57441b (Opus Medium, ABI 43). Worktree
     `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-ac3072f8bea57441b`, branch `worktree-agent-ac3072f8bea57441b` (pushed; design merged 8451b34c4).
     Journal `.artifacts/handover/JOURNAL.md` in the worktree (its `.artifacts` has no D: junctions: evidence it makes
@@ -92,7 +91,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     `.artifacts/evidence/widgets/`.
   - All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
-  merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
+  merged and built at ABI 42 (6e9093f7a) with their GPU proofs; R-250 and the camera home merged; port preparation
+  done (the N5.6 box lists the next steps). Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
     54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
     C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
@@ -788,10 +788,54 @@ the feature (D3D11 is not stated).
   `core/settings/visualizer_mode_settings.py`); reaction check with `waveform_music_response.py`.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
-  - [ ] First, before any port reference is recorded (operator, 21 Nov): root-cause and fix on the Python side the three
-    Extruded Bubble defects in section 1B (the wake-teleport box, Preset 9's flickering star of bubble lines, living
-    bubbles not accelerated by music), so the port copies the fixed behaviour and its references are right the first
-    time. Each fix gets its own tests and evidence as its box says; then the port's references are taken.
+  - Port preparation (agent ac5f7832a73527151, 22 Nov; the three 1B defects before it are closed: R-249, R-250, and
+    the music trace below). What is ready, under `Docs/Guides/Native_Parity_And_Timing_Proof.md`:
+    - Music response: `tools/visualizer_replay/extruded_bubble_music_response.py` (the take's PCM envelope above each age
+      band's projected on-screen speed through the preset's own camera). Presets 9 and 1 on ragdoll and human (60 s):
+      newborn, 5-15 s and older bands all follow the stream speed (corr 0.79-1.00, p90/p10 1.29-1.56, lag 0.0 s); no band
+      lags. The port's response comparison runs it before and after. Evidence
+      `visualizers/extruded_bubble/music_response/20261122_onscreen/`.
+    - Frozen settings and run keys (`conventions_identity.mode_runs('extruded_bubble', offers=True)`, the canonical spec's
+      variants; adaptive state on as set): EB has no reaction modes; its emission modes are `extruded_bubble_emission_geometry`
+      SCENE (variants `""` and `:b`) and BEAM (`:extruded_bubble_emission_geometry=0`); the light (`:extruded_bubble_light_type=0`,
+      Sunlit Surface) and lighting coverage (`:extruded_bubble_lighting_coverage=0`, BEAM) change the passes drawn, so they
+      run too. The other offers (drift direction 0 and 2-7, collision scope 0 and 2, audio block size 0, 2, 3) are
+      record- and settings-driven classes: coverage windows only.
+    - Cached Python references (`owner_render_parity.py --references-only`, the same run, masks, single sampling and cache
+      key as `native_parity`; stored in `D:\Temp\Scratch\SRPSS\fast_proof\references\extruded_bubble_<key>`, the
+      index with keys, folders and frame counts in `native_core/n5_6/20261122_refs_<take>_<length>/python_references.json`):
+      `""` over each full 60 s take (ragdoll, human, nightsolong: the full take and its late-song window), and `:b`, BEAM,
+      Sunlit, lighting BEAM and `""@overscan` over 30 s of each take. NOTE: the key holds the Python renderer's sources,
+      so the conversions box below draws them again once (the guide's section 3); drawing is unattended (6 s = 47 s).
+  - [ ] C++ (found by the design check against the built ABI 42 core): storage buffers counted per compute entry, not
+    per program. EB's drift declares 12 storage buffers (geometry, state and aux for each of chains, snow and specks;
+    one output; the check's cases and results: `extruded_bubble_drift_solver.py:166-191,244-248,310-311`), and D3's
+    geometry buffers count among them (`compute_passes.h:87-92`), but the program's list is refused past
+    `kMaxStorageBuffers` 8 (`mode_content.cpp:2613`). An entry binds at most 6 (chains: steps, geometry, old geometry,
+    state, aux, out), within today's 8, so the limit belongs on each entry's bindings; the program's
+    list rises to 16. Proof: EB's real program admitted; an entry binding 9 refused with its reason; nothing at rest.
+    Negative control: the program-wide count refuses EB's list. (Or merge each role's three families into one buffer
+    with offsets; the lead decides.)
+  - [ ] Python conversions first (playbook checklist 16), with stills before and after and the showcase WebP, so the
+    core draws the same files: the backdrop's `Emission` output and the near passes' `gl_FragDepth` behind fragment
+    variants (`prog.py:1048,1066,1217`), the probe backdrop without the shafts sampler, `uEnvironment` removed or bound
+    (`prog.py:714,1997`), the traced glass's loose uniforms to a block (`prog.py:2017-2019`; one 8-bit level on 1-2
+    pixels alone, decide with the beads' binding-6 note in 1D.11), the shaft and blur reads from `u_target_px` and
+    clamped inside the content (`prog.py:195,586`). Then redraw the references above once (`--references-only`, the
+    same commands).
+  - [ ] The native record and route (the port's first code): `core/visualizer_engine/extruded_bubble_native_schema.py`
+    from the reading's per-frame list, the route's program, `native_record_identity.MODES['extruded_bubble']` (its
+    passes, read spans, streams and positional members). Then L: `native_record_identity.py --mode extruded_bubble
+    --recording <take> --seconds 30 --run <key> --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>` for
+    every run key above and each take (60 s for `""`), every frame identical.
+  - [ ] Coverage windows from those deliveries (`coverage_windows.py --mode extruded_bubble`), the late window from each
+    take's last 15 s. EB keeps GPU history: the drift state integrates every step from the cold start, and a render gap
+    past 128 steps (about 1.4 s) restarts a family from zero (`extruded_bubble_drift_solver.py:799-801`, reading above),
+    so a window cannot start its drawing late. Its warm-up is "compute every input, draw from the window": the native
+    stream player dispatches the drift each input with the draws skipped (the ABI 42 `when` skip) and draws the window;
+    `coverage_windows.WARMUP_INPUTS['extruded_bubble']` records that rule, with the continuity test and its restart
+    control.
+  - [ ] P, T and C as the guide's section 3 for a port; registration last.
   - Reading (reference; Sonnet agent a531eca73061cfa21, 21 Nov, merged), as Waveform's reading above: the record per frame and
     per Settings or card change, each stream's size rule, every pass with its targets, formats and attachments (the
     drift compute, transparency/OIT, HDR, the depth texture and background capture, the probe, defocus, impostors and
@@ -914,59 +958,6 @@ the feature (D3D11 is not stated).
       - Already in the plan: the four-sample capture cost on Vulkan (N3.1b, before this item), N3.3's L2 to L5 leftovers
         (before the first compute consumer), the display move's history copy with the drift as its first consumer (N3.9),
         the turned-card box, and the Light Shafts owner merged with Neon Lake's (N4.k, ported with this item).
-  - [ ] C++: the scene probe (N4.d's EB half). The core has no cube: a sampler is `sampler2D`, or `sampler3D` for an image
-    (`mode_content.h:28,282`), a scene target has no layers (`scene_targets.h:74-130`) and nothing in `native/core/src`
-    mentions a cube or a layer write. Needed: a cube colour target (RGBA16F, exact size per tier, a full chain, its own
-    clear value, one D32F shared by the six face passes, cleared per face), the face passes (a pass drawn per face with
-    the face's block, or twelve entries: the pass budget decides), the core's own prefilter (N4.d's lead decision, the
-    plan's N4.d box: six passes a face, never `generateMips`; no geometry-shader `gl_Layer`, which D3D lacks, the plan's
-    1D.11 note), a `samplerCube` bound by name with a mip filter, seamless across faces, and the chain's rule under
-    QRhi's whole-texture tracking (a level written from the level above of the same texture, D17 point 4's one texture a
-    level: per-level cubes copied into the one mipped cube the shells read trilinearly, or another form; measured).
-    Proof, both backends, each tier size: every face read back against Python's capture of the same scene (the face
-    orientation per backend first, N4.d), every prefilter level against Python's, a lookup across a face edge (no seam),
-    the shells' mirrored light inside rule (a) of D12 on recorded frames, the clear and the depth per face, objects
-    released at retirement, the capture's cost against Python's. Negative controls: a swapped or mirrored face, a chain
-    built by per-face box mips (the blurred lookups leave the bound), a non-seamless read.
-  - [ ] C++: geometry once per key (D3). Decided (`Native_Core_P3_Decisions.md:2615-2647`), not built: the frame still
-    carries the families' geometry (`frame_capacity.py:12-42`, 8.4 MB a slot at most), and the core's meshes are sent from
-    the GUI thread (`mesh_buffers.h:4-11`), which does not hold the worker's bytes. Needed: the geometry arena (a second
-    mapping, two banks a family, written before the frame that names its key), the reader uploading a key it first sees
-    into a storage mesh, residency per key (requested, uploading, resident, failed, retiring), the old key kept until the
-    new is resident and one frame used it, a failed swap keeping the old drawn, capacity growth as a new key with the
-    history copied (the copy kernel, D16 C), and the previous key bound to the compute entry for the rebase record
-    (`solver.py:263-271,757-776`). Proof: D3's four tests (two streams publishing one revision with different geometry;
-    one upload a key and a frame size independent of capacity; an allocation failure injected, the old drawn, logged once;
-    zero residencies after teardown, drop, mode switch, window destruction), and a drifted run through an edit and a
-    capacity growth equal to `MaterialDriftReference` (`log.py:238-272`) and to the Python solver's output, both backends.
-    Negative controls as D3's (the key on revision alone; delete before allocate; the retire job skipped).
-  - [ ] C++: the drift pair check's readback, the one named exception. Only the harness reads storage back
-    (`compute_passes.h:177-203`, `compute_passes.cpp:425-465`); the product's once-per-program check of D4's `precise`
-    arithmetic (`solver.py:555-614`; `Docs/Guardrails/Performance_Optimization_Contract.md:450-465`) has no route. Needed:
-    a check entry's one-shot result read through `readBackBuffer` at the program's first record, the completion taken at a
-    later frame, never waited on, reported once in the content's state and the log. Proof: about 1 KB read once per program
-    build on both backends, the readback counter flat over a steady minute, no frame waits on it, N3.3's L5 test (nothing
-    else in the product reads storage) still green. Negative control: the check program compiled without `precise` is
-    reported as inexact.
-  - [ ] C++: Extruded Bubble's limits beyond Waveform's limits box. Targets: `kMaxSceneTargets` 4 to at least 5 (6 if the
-    cube counts), Waveform's box leaving it at 4. Passes: Waveform's box raises 16 to 28; this mode needs 32 (33 with the
-    check as a pass) and the mesh mask holds 32, so either the mask widens or the cube's faces and the check take
-    fewer entries (the cube box decides); raise once for both. Storage buffers stay 8, at the limit with the check's results.
-    Proof: the real program (every layer on, drift on, High tier) admitted on both backends with its warm-up counted
-    (pipelines a step) and nothing at rest; one target or pass past the new limits refused with its reason; the targets'
-    bytes at 4K recorded (`SceneTargetCounts`).
-  - [ ] C++: a stage or pass entry skipped for a record with no work. A defocus step (its target's clear, mips, clip,
-    gather and sprites) records on every accepted record (`mode_content.h:151-155`; D17 E, `Native_Core_P3_Decisions.md:2263-2266`,
-    skips a stage only by program), where Python runs the whole near layer only when a shell or cluster exists
-    (`eb.py:751`); an empty layer composites to nothing, so only the cost differs. Needed: a record u32 that skips an
-    entry. Proof: frames equal with the skip taken and not taken, GPU time at zero shells no worse than Python's, no
-    recorded work for the skipped entry (the stage counters). Negative control: the program-only form, whose zero-shell
-    record still pays. If the lead judges the zero-shell cost immaterial, this box is dropped.
-  - Shared with Waveform's boxes: the pass limit (its limits box, with this mode's higher count), and the exact-size,
-    mipped, drawable target (its first box: the probe cube is the same rule across six faces, and the shaft targets
-    follow its answer on exact sizes). Not shared: anisotropy (every sampler here is linear or trilinear), the half-float
-    mode texture (no mode texture), 32-bit float image filtering (no storage image; the capture depth is read nearest),
-    bloom and HDR off per record (bloom is the constant 0.55, never 0), the backdrop clear (every clear is a constant).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
@@ -1809,23 +1800,6 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
-- [ ] **"I have noticed reset camera in preset 9 is different from where I save the camera ... I even resaved in the
-  studio, reset again and got the wrong camera location." "Probably a more widespread issue."** (operator, 22 Nov).
-  Log 16:02-16:04 (`logs/screensaver.log`, `[VIS_ORBIT]`/`[STUDIO]`): the Studio save wrote the preset's camera
-  (`extruded_bubble_camera_position` (-1.006, -2.806, -3.395), fov 22 to 45, pan) while reset reads the orbit home
-  (`extruded_bubble_turn` 0.0789, `_tilt` -0.4889, `_scene_scale`, unchanged), and the in-saver orbit save (16:04:08,
-  turn 0.566) did not move the home either. Two camera records with no single owner. Fix: one owner for the home view
-  per the framed camera standard (`core/settings/framed_camera.py`), so every save (Studio and in-saver) and reset agree;
-  audit every framed-camera mode (Extruded Bubble, Waveform, Neon Lake, Extruded Spectrum, Sphere, ...) for the same
-  split; test save-then-reset round trips per mode with a control; presets stay authored (repair fill, never pinned).
-- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step, REOPENED 22 Nov; the
-  "constantly pinned" clumps were R-250's short-path bead chains, fixed; still to show on screen that older bubbles
-  speed up with the music as newborns do, a music-response trace of on-screen speed by age):** agent
-  ac5f7832a73527151 found every free living bubble moving at exactly the stream speed in WORLD space (Presets 9 and 1,
-  ratio 1.000; test `tests/test_extruded_bubble_stream_transport.py` pins that) and changed nothing, but the operator
-  still sees older bubbles not answering the music. Not measured: on-screen speed (projection, depth), sway and drift,
-  and whether the music's boost visibly reaches bubbles already alive. Agent ac5f7832a73527151 measures what is on
-  screen itself (no operator input), fixes it at the owner, before the port's references; the Preset 9 flicker too.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
