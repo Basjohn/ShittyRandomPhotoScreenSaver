@@ -17,7 +17,45 @@ The framework is mode-neutral: nothing outside an adapter module names a mode's 
 registering an adapter; every other piece (shell, session, transport, viewport host, Settings link, theme) is shared
 and must not be copied per mode.
 
-## 2. Module ownership
+## 2. Module ownership### Studio admission for the six approved primitive integrations (23 Nov 2026)
+
+When the already-native Extruded Bubble, Waveform Ribbon and Neon Lake receive
+the **six optional** integrations documented in Current Plan's N4/N6 art box,
+the new features **must appear inside their existing registered Studios** as
+real production controls. This is not deferred UI polish. A feature is not
+finished with just shader flags, a screenshot or a saved demonstration preset.
+
+Every integration has one canonical typed mode-settings owner and proper
+Studio adapter bindings/instruments. The Studio must expose enable/availability,
+useful independent visual controls (geometry, distribution, material, light,
+colour, depth and quality as relevant), as well as **distinct controllable
+musical-response mappings** for the particular effects (quiet-to-peak
+influence, timing and motion/emission/intensity where physically meaningful).
+Group controls discoverably; resolve any unavailable Vulkan-only feature
+through the normal capability rules instead of silently dropping a control
+or disabling the whole legacy mode. Preview, response curves, live recorded
+music, undo/redo, Save/Cancel, Custom, Save To Preset and restart follow
+the same values through one production renderer/logical owner.
+Synthetic engine-owned fixture/control traces prove binding and dynamic
+response. Avoid fixed visualizer-specific DSP assumptions, invented clocks
+and UI-only defaults.
+
+**Presets are not tests (operator, 23 Nov):** the eventual six new
+demonstration presets are mutable artistic examples. No test may open,
+read, snapshot, count, hash, compare, pin or depend on the contents,
+schema, filename/slot or pixels of ANY real curated/operator preset,
+including the new six. Tests requiring save-as or schema cases must
+write their own synthetic ephemeral preset-shaped files and drive the
+real production Studio code through them. Real presets can be changed
+without changing tests. Any WebPs of real looks are optional human
+inspection records, not automated image goldens.
+
+**Ordering:** native port of the original host mode, N5.8 native
+Studio preview/capture path and NF must be accepted **before** these
+six integrations enter product work. Building/proving independent
+high-potential GPU primitives on the parallel track does not block NF.
+
+
 
 | Module | Owns |
 | --- | --- |
