@@ -12,7 +12,7 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - [ ] A spec'd mode's Settings (membership from `iter_mode_settings()`) are declared once in `core/settings/visualizer_mode_settings.py`: a new setting is its canonical default plus one control there (a `Slider` reads as decimals + suffix or as a whole percent, may be a whole number, carry ticks or show signed offsets; grouped `Toggle` controls share one aligned row; a `Choice` persists its label or, `indexed`, its position; `when` shows a control only while a toggle holds a value). The model field, clamp, serializer, appliers, renderer parameter and the body come from it; only parts no control describes are `Custom`. New Visualizers start there. `tests/test_visualizer_mode_settings_spec.py` covers every spec'd mode at once.
 - [ ] Audio-analysis (technical) controls are spec entries too: `audio_analysis_entries(mode, block_size=..., agc=...)` appends one control per key the registry says the mode owns (suffix map plus transient mixes) in the non-body `technical` bucket, with its range and recommended marks. The registry keeps membership and `technical_hidden_suffixes` is the only offered/hidden mechanism; a mode with its own `technical_setting_suffixes` subset owns only what its frame reads, so an inert key there is retired (`visualizer_retired_modes`), not hidden (Waveform's sensitivity and floor keys, 8 Nov 2026). The model, the Settings value cache (`spec_mode_builder`), the Studio (`ui/studio/technical.py`, `control.admit`) and `preset_artwork_keys` all read them from the spec; no surface restates a range, and a worker's wider domain is declared with `runtime_low/high`. A new technical control is a suffix in the contract plus a candidate in that helper, filled into every curated preset (`--repair-all`). In-range values must admit byte-identically across the change (`tests/test_audio_analysis_spec_fold.py`).
 - [ ] A mode with a registered Studio adapter (`ui/studio/registry.py`) exposes every new or renamed control in its adapter schema; the adapter's registry-derived coverage test fails otherwise. The Studio previews through the production logical owner and renderer, so a runtime change also re-runs that adapter's parity test (`Docs/Reference/Visualizer_Studio.md`).
-- [ ] Synthetic test-owned fixtures assert exact behavior; operator-authored Organs, Sphere or other curated preset contents are tested for schema/round-trip/preservation, never frozen as historical response-oracle bytes.
+- [ ] **Absolute preset-test ban (operator, 23 Nov):** NEVER load, read, pin, hash, inspect, count or assert anything about **any actual shipped/operator-authored preset** in automated tests, including its schema, file presence, slot number, names, exact JSON, round-trip, persistence, response pixels or values. This extends to newly authored demonstration presets. All schema/IO/round-trip/migration tests must create **ephemeral, fully synthetic test-owned preset-shaped data** with distinct invented settings, seeds and storage roots. Response/performance/parity tests use synthetic mode configs and synthetic/recorded test-controlled musical inputs, not curated preset contents. Presets are editable artwork; no test must require updating when an operator changes one.
 - [ ] Descriptor-projected source controls use `source=True` and create no unused private logical/presentation attributes;
       aliases still reach their existing consumers once. Availability metadata keeps unavailable controls disabled on
       build/load/reset without discarding saved intent. Bucketless typed orbit fields retain their body/preset exclusions.
@@ -24,7 +24,32 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
       still an absolute gate. Derived declaration membership is immutable/cached; configuration-owned bundles stay off
       per-frame rebuild paths. Recommended slider marks never supply defaults.
 
-## New bordered 3D Visualizers | shared-camera / graphics preflight
+## New bordered 3D Visualizers | shared-camera / graphics preflight## Approved post-flip optional primitive features and demonstration presets (operator, 23 Nov)
+
+- [ ] For any of the **six approved visualizer enhancements** in Current Plan's N4/N6 artistic
+  integration box, do not begin production integration until its existing host mode is
+  accepted on native Vulkan, the native Studio N5.8 migration and the NF Vulkan-default
+  flip have passed. Primitive harness work is independent and non-blocking before then.
+  None of these features or demonstration presets is an NF/port-parity gate.
+- [ ] Deliver a mode-local **optional feature** through canonical typed settings and
+  the SAME production-renderer Studio. Its Studio exposes real, independently useful
+  appearance/shape/material/placement parameters AND musical reactivity, attack/decay,
+  quiet-to-peak intensity and temporal response controls appropriate to its elements,
+  with tooltips, admission ranges and save/undo/reload. One toggle or general reactive
+  strength slider is not sufficient. Don't create a shadow Studio or private render pass.
+- [ ] Compare feature OFF with the accepted original mode using **synthetic test-owned
+  settings**, not an operator preset. Test each control's effect, bounded population,
+  response continuity to test-controlled music, performance at 4K/card, dormancy,
+  backend availability and device-loss/host retirement. A Vulkan-only mesh option must
+  never make the pre-existing OpenGL mode unavailable.
+- [ ] Only after independent proof, use actual production authoring to ADD a new
+  **freely mutable** demonstration preset. It is an operator-editable artistic
+  example and must **never** be read, depended on, snapshotted, pinned, restored
+  or asserted against in automated tests. Supplementary stills/WebPs are for
+  human judgment of fidelity; moving music-driven production output is the
+  visual acceptance, not a fixed image.
+  
+
 
 - [ ] Bordered/`CARD_INTERIOR` 3D modes declare `geometry_kind="planar"` and `layout_profile="planar"`; they
   reuse the exact framed-Visualizer CUSTOM rectangle/viewport and never gain special per-mode layout positions.
@@ -63,7 +88,7 @@ When changing mode registry, mode enablement, mode cycling or the current Visual
 - [ ] Common registry imports remain light; disabled heavy implementation modules are fresh-process dormant.
 - [ ] Existing mode-specific branches that encode real physics/render semantics were not generified merely to make the registry look uniform.
 - [ ] The existing preset slider and mode-level `Custom` system are preserved. Do not confuse mode preset Custom with global layout CUSTOM.
-- [ ] Treat **every** preset as operator-authored, freely editable data, regardless of slot number or visual acceptance. Never freeze today's contents into test goldens, restore an older copy or silently overwrite current edits during schema migration or experimental preset generation. Use test-owned fixtures for exact behavior assertions.
+- [ ] Treat **every** actual preset as operator-authored, freely editable demonstration artwork, regardless of slot number or visual acceptance. Never use an actual preset as **any** test input/oracle, even just schema/round-trip/preservation, never freeze or re-create its contents, and never silently overwrite one during feature admission. Use invented test-owned ephemeral fixtures for **all** test assertions.
 - [ ] The global CUSTOM three-entry contract remains untouched: persisted/effective Custom, live Edit Layout start, and number-key saved-layout load all keep authored stacking/Media↔Visualizer adjacency dormant.
 - [ ] Media dependency remains one-way admission. If Media is disabled, the Visualizers tab greys out with `Enable Media In Widgets`; it must not auto-enable or own Media.
 - [ ] Before/after evidence covers canonical + wide + tall geometry for every affected mode. Registry/UI refactoring is never permission to retune scaling/reactivity.
@@ -88,7 +113,7 @@ threaded loop couples the GUI and render threads. Extruded Bubble passed every o
 a game at ~40 ms frame age (2026-10-31, `Docs/Audits/EB_Performance_Investigation_2026-10-29.md`). Design against
 these traps from the first slice, not after:
 
-- [ ] **Live check before acceptance:** `tools/visualizer_live_check.py --mode <mode> --preset N` (the lead adds `--load game60` only after the operator's yes)
+- [ ] **Live check before acceptance:** `tools/visualizer_live_check.py` with a mode-specific **test-owned synthetic configuration** (adapt/create a harness option for this where necessary; never use `--preset N` to load operator-authored presets) (the lead adds `--load game60` only after the operator's yes)
       (recorded music, invisible window, game-shaped load) for each preset that differs materially in population or
       effects. No `FLAG` lines, or each one explained in the mode's own doc with the run's `summary.json`.
 - [ ] **Logical tick budget:** median 2.5 ms or less live at the ~90 Hz cadence (about a quarter of the GIL). Under a
