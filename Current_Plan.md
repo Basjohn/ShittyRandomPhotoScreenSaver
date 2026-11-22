@@ -90,10 +90,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   - [ ] N5.4's T, taken with it (Waveform registered 22 Nov without it): `preflip_pack.py --name n54_native_vulkan
     --rows "*waveform*" --backend native-vulkan --app-arg=--graphics-backend=vulkan` (CPU under 40 % first), then
     `--compare-only` against `20261115_modes_python_gl.json`.
-- [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
-  crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
-  "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
-  over 33 ms; render 0.43/0.69 ms; CPU 32.9 % of a core inside the run.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
