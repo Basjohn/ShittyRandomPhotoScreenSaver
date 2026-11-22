@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,7 @@ SHADERS = ROOT / "native" / "core" / "shaders"
 
 
 def _source(name: str) -> str:
-    return (SRC / name).read_text(encoding="utf-8")
+    return (SRC / name).read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
 def _function(text: str, start: str, end: str) -> str:
@@ -173,7 +174,7 @@ def test_the_rows_up_triangle_puts_uv_zero_at_the_faces_bottom_row():
 
 def test_a_face_pass_and_the_prefilter_are_checked_at_the_parse():
     cpp = _source("mode_content.cpp")
-    assert 'QStringLiteral("face") };   // ABI 42' in cpp
+    assert 'QStringLiteral("face"), // N3.4; ABI 42' in cpp
     assert "a pass into a cube target declares its \\\"face\\\" (0 to 5)" in cpp
     assert "each of its six faces is drawn by a pass, then one prefilter step" in cpp
     assert "a transparency, mipped or cube target has no capture" in cpp
@@ -186,3 +187,201 @@ def test_the_abi_is_42_and_the_loader_speaks_it():
     assert "#define SRPSS_NATIVE_CORE_ABI 42" in _source("abi.h")
     assert loader.EXPECTED_ABI == 42
     assert "src/cube_prefilter.cpp" in (ROOT / "native" / "core" / "CMakeLists.txt").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------------------- box 2: geometry once per key (D3)
+
+def _arena_constants(header: str) -> dict:
+    return {name: int(value, 0) for name, value in re.findall(
+        r"constexpr quint(?:32|64) (kGeometry\w+) = (0x[0-9A-Fa-f]+|\d+)u?;", header)}
+
+
+def _bank_offset(family: int, bank: int, bank_bytes: int, c: dict) -> int:
+    """geometryBankOffset as geometry_arena.h's layout states it."""
+    return (c["kGeometryHeaderBytes"]
+            + (family * c["kGeometryBanks"] + bank) * (c["kGeometryBankHeaderBytes"] + bank_bytes))
+
+
+def _write_arena(families: int, bank_bytes: int, banks: dict, c: dict) -> bytearray:
+    """A twin of the main process's writer from the header comment's layout: `banks` maps (family, bank) to
+    (sequence, key (ns, engine, activation, family, capacity, revision), payload)."""
+    data = bytearray(_bank_offset(families, 0, bank_bytes, c))
+    struct.pack_into("<IIIIQII", data, 0, c["kGeometryArenaMagic"], c["kGeometryArenaVersion"], families,
+                     c["kGeometryBanks"], bank_bytes, c["kGeometryHeaderBytes"], c["kGeometryBankHeaderBytes"])
+    for (family, bank), (sequence, key, payload) in banks.items():
+        at = _bank_offset(family, bank, bank_bytes, c)
+        struct.pack_into("<IIQIIIIQ", data, at, sequence, len(payload), *key)
+        start = at + c["kGeometryBankHeaderBytes"]
+        data[start:start + len(payload)] = payload
+    return data
+
+
+_KEY_FIELDS = ("ns", "engine", "activation", "family", "capacity", "revision")
+
+
+def _core_read(cpp: str, data: bytes, key: tuple, c: dict):
+    """GeometryArena::read's header offsets, taken from the source, applied to an arena: the payload of the even bank
+    holding every word of `key`, else None (a reader that reads fewer words than the key never matches)."""
+    body = _function(cpp, "GeometryArena::Read GeometryArena::read(", "\n} // namespace srpss_core")
+    reads = {field: int(off) for field, off in re.findall(r"held\.(\w+) = u(?:32|64)At\(header \+ (\d+)\);", body)}
+    families = struct.unpack_from("<I", data, 8)[0]
+    bank_bytes = struct.unpack_from("<Q", data, 16)[0]
+    want = dict(zip(_KEY_FIELDS, key))
+    if want["family"] >= families or set(reads) != set(_KEY_FIELDS):
+        return None
+    for bank in range(c["kGeometryBanks"]):
+        at = _bank_offset(want["family"], bank, bank_bytes, c)
+        if struct.unpack_from("<I", data, at)[0] & 1:
+            continue
+        held = {f: struct.unpack_from("<Q" if f in ("ns", "revision") else "<I", data, at + off)[0]
+                for f, off in reads.items()}
+        if held == want:
+            start = at + c["kGeometryBankHeaderBytes"]
+            return bytes(data[start:start + struct.unpack_from("<I", data, at + 4)[0]])
+    return None
+
+
+def test_the_arena_reader_takes_the_bank_the_writer_wrote_by_its_whole_key():
+    header = _source("geometry_arena.h")
+    cpp = _source("geometry_arena.cpp")
+    c = _arena_constants(header)
+    assert c["kGeometryBanks"] == 2 and '"SRGA"' in header
+    offset = _function(cpp, "quint64 geometryBankOffset(", "quint64 geometryArenaBytes(")
+    assert "(quint64(family) * kGeometryBanks + bank) * (quint64(kGeometryBankHeaderBytes) + bankBytes)" in offset
+    a = (7 << 32 | 1, 3, 9, 1, 4096, 5)
+    b = (8 << 32 | 1, 3, 9, 1, 4096, 5)       # D3 test 1: another worker's namespace publishing the same revision
+    data = _write_arena(2, 64, {(1, 0): (2, a, b"\x01" * 16), (1, 1): (4, b, b"\x02" * 32)}, c)
+    assert _core_read(cpp, data, a, c) == b"\x01" * 16
+    assert _core_read(cpp, data, b, c) == b"\x02" * 32
+    assert _core_read(cpp, data, a[:5] + (6,), c) is None                  # a revision no bank holds
+    assert _core_read(cpp, _write_arena(2, 64, {(1, 0): (3, a, b"\x01" * 16)}, c), a, c) is None  # odd: being written
+    body = _function(cpp, "GeometryArena::Read GeometryArena::read(", "\n} // namespace srpss_core")
+    assert "if (sequenceAt(header) != before) {" in body          # rewritten under the copy: never trusted
+    # Negative control: a reader that skips the namespace word (the key on fewer words) never matches.
+    assert _core_read(cpp.replace("held.ns = u64At(header + 8);", ""), data, a, c) is None
+
+
+def key_is_every_word(header: str) -> bool:
+    eq = header[header.index("bool operator==(const GeometryKey &o) const"):]
+    eq = eq[:eq.index("}")]
+    return all(f"{field} == o.{field}" in eq for field in _KEY_FIELDS)
+
+
+def test_a_geometry_key_is_its_six_words_never_a_bare_revision():
+    header = _source("geometry_arena.h")
+    assert key_is_every_word(header)
+    words = _function(_source("geometry_arena.cpp"), "GeometryKey GeometryKey::fromWords(", "quint64 geometryBankOffset(")
+    assert "k.ns = quint64(w[0]) | (quint64(w[1]) << 32);" in words
+    assert "k.revision = quint64(w[5]) | (quint64(w[6]) << 32);" in words and "k.capacity = w[7];" in words
+    # Negative control (D3's): the key on revision alone.
+    start = header.index("return ", header.index("bool operator==(const GeometryKey &o) const"))
+    alone = header[:start] + "return revision == o.revision" + header[header.index(";", start):]
+    assert not key_is_every_word(alone)
+
+
+def _sync_geometry(cpp: str) -> str:
+    return _function(cpp, "bool ModeStorage::syncGeometry(", "void ModeStorage::geometryRecorded()")
+
+
+def residency_holds(cpp: str) -> bool:
+    """Once per key, failures never retried, nothing deleted before its replacement exists: a held key is skipped
+    before any read, a failed key too; the failure branch releases nothing; the new buffer is made before the slot's
+    current moves to previous, and the oldest residency retires only through the retiring list."""
+    sync = _sync_geometry(cpp)
+    held = sync.find("if (slot->current && slot->currentKey == key)")
+    failed = sync.find("if (slot->failed.contains(key))")
+    read = sync.find("arena->read(key, &bytes, &readError)")
+    made = sync.find("rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::StorageBuffer")
+    moved = sync.find("slot->previous = slot->current;")
+    failure = sync[sync.find("if (!ok) {"):sync.find("updates->uploadStaticBuffer(")]
+    keys = sync[sync.find("for (const StorageBufferDeclaration &decl : declared) {\n        if (!decl.geometry)"):]
+    return (0 <= held < read and 0 <= failed < read and 0 <= read < made < moved
+            and "releaseGeometryBuffer" not in failure and "slot->failed.append(key);" in failure
+            and "releaseGeometryBuffer(slot->current)" not in keys
+            and "m_geometryRetiring.append(slot->previous);" in sync)
+
+
+def test_a_key_uploads_once_a_failed_swap_keeps_the_old_and_nothing_goes_first():
+    cpp = _source("compute_passes.cpp")
+    assert residency_holds(cpp)
+    # Negative controls: an upload every record (no held-key skip), a failed key retried every record, delete before
+    # allocate (D3's), the old key dropped on a failure.
+    assert not residency_holds(cpp.replace("if (slot->current && slot->currentKey == key)", "if (false)"))
+    assert not residency_holds(cpp.replace("if (slot->failed.contains(key)) {", "if (false) {"))
+    allocate = "RhiOwned<QRhiBuffer> made;"
+    assert not residency_holds(cpp.replace(allocate, "releaseGeometryBuffer(slot->current);\n        " + allocate))
+    failure = "            slot->failed.append(key);\n            g_geometryFailed.fetchAndAddRelaxed(1);\n            qWarning"
+    norm = cpp.replace("\r\n", "\n")
+    assert norm.count(failure) == 1
+    assert not residency_holds(norm.replace(failure, failure.replace(
+        "slot->failed.append(key);", "slot->failed.append(key);\n            releaseGeometryBuffer(slot->current);")))
+    assert "qWarning(\"srpss core: geometry buffer '%s' key %s failed: %s\"" in _sync_geometry(cpp)  # logged once
+
+
+def retire_follows_a_recorded_frame(mode_cpp: str, storage_cpp: str) -> bool:
+    recorded = _function(storage_cpp, "void ModeStorage::geometryRecorded()", "void ModeStorage::releaseGeometry()")
+    return ("    recordPasses(rhi, cb, target, updates, draw, readback);\n    if (draw)\n"
+            "        m_storage.geometryRecorded();" in mode_cpp.replace("\r\n", "\n")
+            and "m_geometryRetiring.append(slot->previous);" in recorded
+            and "releaseGeometryBuffer" not in recorded)
+
+
+def test_the_old_key_retires_only_after_a_frame_using_the_new_one_was_recorded():
+    mode_cpp = _source("mode_content.cpp")
+    storage_cpp = _source("compute_passes.cpp")
+    assert retire_follows_a_recorded_frame(mode_cpp, storage_cpp)
+    # Negative controls: retired at a record that drew nothing (waiting or kept), released in the same record.
+    assert not retire_follows_a_recorded_frame(
+        mode_cpp.replace("\r\n", "\n").replace("    if (draw)\n        m_storage.geometryRecorded();",
+                                               "    m_storage.geometryRecorded();"), storage_cpp)
+    assert not retire_follows_a_recorded_frame(mode_cpp, storage_cpp.replace(
+        "m_geometryRetiring.append(slot->previous);   // D3", "releaseGeometryBuffer(slot->previous);   // D3"))
+    # A record with no resident key keeps its frame (never an empty one).
+    assert "const bool withPasses = texturesReady() && meshesReady() && !m_geometryWaiting;" in mode_cpp
+
+
+def teardown_releases_every_residency(storage_cpp: str, mode_cpp: str) -> bool:
+    release = _function(storage_cpp, "void ModeStorage::release()", "\n}\n")
+    every = _function(storage_cpp, "void ModeStorage::releaseGeometry()", "\n}\n")
+    arena = _function(mode_cpp, "bool ModeContent::syncGeometry(", "void ModeContent::decideDispatches()")
+    return ("releaseGeometry();" in release
+            and "m_geometryRetiring.clear();" in every and "m_geometry.clear();" in every
+            and "for (Buffer *b : { slot->current, slot->previous })" in every
+            and "m_storage.releaseGeometry();" in arena)
+
+
+def test_teardown_a_mode_switch_and_a_new_activation_release_every_residency():
+    storage_cpp = _source("compute_passes.cpp").replace("\r\n", "\n")
+    mode_cpp = _source("mode_content.cpp").replace("\r\n", "\n")
+    assert teardown_releases_every_residency(storage_cpp, mode_cpp)
+    # A program no longer declaring the buffer drops its slot (the mode switch); a program without storage still syncs
+    # while residencies remain; the content's live objects count them.
+    assert "// Slots of geometry buffers no longer declared go with their residencies." in _sync_geometry(storage_cpp)
+    assert "&& m_geometry.isEmpty()\n            && m_geometryRetiring.isEmpty();" in _source("compute_passes.h")
+    # Negative controls (D3's retire job skipped): the content's release without the geometry; a new arena keeping the
+    # old activation's keys.
+    assert not teardown_releases_every_residency(
+        storage_cpp.replace("    releaseGeometry();                        // ABI 42", "    // ABI 42"), mode_cpp)
+    assert not teardown_releases_every_residency(
+        storage_cpp, mode_cpp.replace("        m_storage.releaseGeometry();          // D3 point 3", ""))
+
+
+def test_a_geometry_buffer_is_read_only_its_key_a_record_array_and_previous_bindable():
+    storage_cpp = _source("compute_passes.cpp").replace("\r\n", "\n")
+    mode_cpp = _source("mode_content.cpp")
+    parse = _function(storage_cpp, "bool parseStorageBuffer(", "const bool withUsage")
+    assert "family >= double(kMaxGeometryFamilies)" in parse and "!identifier(b.geometryKey)" in parse
+    assert "key->kind != fa::FieldKind::U32 || key->count != quint32(kGeometryKeyWords)" in mode_cpp
+    assert "decl && decl->geometry && b.access != StorageAccess::Read" in mode_cpp
+    assert "declared = decl != nullptr && (!previous || decl->geometry);" in mode_cpp
+    resolve = _function(storage_cpp, "// ABI 42 (D3): a geometry buffer is its current key's residency",
+                        "void ModeStorage::releaseGeometryBuffer(")
+    assert "previous && slot->previous ? slot->previous : slot->current" in resolve
+    assert "if (key.family != decl.geometryFamily) {" in _sync_geometry(storage_cpp)
+    # The plain buffers' sync never sees a geometry buffer (never zeroed or sized by bytes).
+    assert "if (!decl.geometry)\n                m_plainBuffers.append(decl);" in storage_cpp
+    module = _source("module.cpp")
+    assert '"composite_mode_geometry_arena", composite_mode_geometry_arena' in module
+    assert all(f'QStringLiteral("geometry_{n}")' in module
+               for n in ("resident", "uploads", "failed", "released", "waits", "arenas", "reads_found", "reads_torn"))
+    assert "src/geometry_arena.cpp" in (ROOT / "native" / "core" / "CMakeLists.txt").read_text(encoding="utf-8")

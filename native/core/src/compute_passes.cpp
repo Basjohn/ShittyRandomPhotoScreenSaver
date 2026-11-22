@@ -673,6 +673,14 @@ bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, cons
             *waiting = *waiting || !slot->current;
             continue;                         // failed: never retried; the old key is still drawn
         }
+        if (key.family != decl.geometryFamily) {
+            slot->failed.append(key);         // another family's key: the worker's mapping is wrong (logged once)
+            g_geometryFailed.fetchAndAddRelaxed(1);
+            qWarning("srpss core: geometry buffer '%s' (family %u) was named key %s of another family",
+                     decl.name.constData(), decl.geometryFamily, qPrintable(key.text()));
+            *waiting = *waiting || !slot->current;
+            continue;
+        }
         // No arena yet (the owner names it with the activation; a name that did not open was logged once): the key waits
         // as one the arena does not hold.
         QByteArray bytes;

@@ -237,5 +237,9 @@
 // step ({"name", "prefilter": <cube>}, an empty pack: probe.py's 32-tap cone filter per level and face into a stage
 // cube, copied into the cube's level), a samplerCube reading "<cube>.<attachment>" with mips; the readback's
 // "<target>.<attachment>#<face>@<level>"; composite_live's scene_cube_face_runs, scene_cube_prefilters and
-// scene_cube_level_copies. Backward compatible for every earlier program (none declares a cube).
+// scene_cube_level_copies. (2) Geometry once per key (D3, geometry_arena.h): a storage buffer's {"name", "geometry":
+// {"family", "key"}} form (read only; its key the record's u32 array of 8 words), composite_mode_geometry_arena(handle,
+// name) naming the activation's arena, "<name>@previous" bindable by a compute entry (the rebase record), and
+// composite_live's geometry_resident, _uploads, _failed, _released, _waits, _arenas, _reads_found and _reads_torn.
+// Backward compatible for every earlier program (none declares a cube or a geometry buffer).
 #define SRPSS_NATIVE_CORE_ABI 42

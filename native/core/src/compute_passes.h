@@ -288,7 +288,11 @@ public:
     bool holds() const { return !m_buffers.isEmpty() || !m_images.isEmpty(); }
     // Nothing held at all: no resource, no replaced buffer awaiting its release, no kernel (audit 5 M1: a sync is still
     // needed while any is held, so a program without storage releases the last one's).
-    bool empty() const { return !holds() && m_retiring.isEmpty() && !m_clear && !m_copy && !m_opBlocks; }
+    // ABI 42: the geometry residencies count (a program without storage still syncs while they remain).
+    bool empty() const {
+        return !holds() && m_retiring.isEmpty() && !m_clear && !m_copy && !m_opBlocks && m_geometry.isEmpty()
+            && m_geometryRetiring.isEmpty();
+    }
     void release();
     QJsonObject stateJson() const;
 

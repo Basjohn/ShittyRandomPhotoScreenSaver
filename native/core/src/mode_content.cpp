@@ -1094,7 +1094,9 @@ bool checkTargetSampler(const ModePass &pass, const PassSampler &s, QList<Target
     // ABI 33: a mipped target's colour attachments have their levels (a defocus layer's are refused once the steps are
     // known: ModeProgram::fromJson); a depth, a capture and any other target's texture have none.
     // ABI 42: a cube target's attachment has its levels too (its prefilter step makes them).
-    if (s.mips != SamplerMips::None && (!(t.mips || t.cube) || capture || attachment == "depth")) {
+    // ABI 42: a cube always holds its prefiltered chain (its colour), so only its depth refuses mips.
+    if (s.mips != SamplerMips::None
+        && (t.cube ? attachment == "depth" : (!t.mips || capture || attachment == "depth"))) {
         *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3', which has none (a scene target's colour "
                                 "attachments have levels only when it is declared with \"mips\": true)")
                      .arg(label, QString::fromLatin1(s.name), QString::fromLatin1(s.texture));
@@ -1637,7 +1639,8 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
         for (const ComputeBinding &earlier : pass.computeBindings)
             twice = twice || earlier.name == binding.name;
         if (!entry.isObject() || b.size() != 3 || found != 1 || !shaderIdentifier(binding.name)
-            || !passName(binding.resource) || twice
+            || !passName(binding.resource.endsWith("@previous") ? binding.resource.chopped(9) : binding.resource)
+            || twice
             || !parseStorageAccess(b.value(QStringLiteral("access")).toString(), &binding.access)) {
             *error = QStringLiteral("compute entry '%1': a binding is {\"name\": the shader's buffer block or image, named "
                                     "once, one of \"buffer\", \"image\", \"stream\" or \"mesh\": the resource, "
@@ -1788,9 +1791,21 @@ bool checkComputePass(ModePass &pass, const ModeProgram &program, QString *error
         }
         bool declared = true;
         switch (b.kind) {
-        case ComputeResource::Buffer:
-            declared = program.storageBuffer(b.resource) != nullptr;
+        case ComputeResource::Buffer: {
+            // ABI 42 (D3): "<geometry>@previous" is the key a geometry buffer replaces (the rebase record's); a geometry
+            // buffer is the arena's bytes, so every binding of one reads.
+            const bool previous = b.resource.endsWith("@previous");
+            const StorageBufferDeclaration *decl = program.storageBuffer(previous ? b.resource.chopped(9) : b.resource);
+            declared = decl != nullptr && (!previous || decl->geometry);
+            if (decl && decl->geometry && b.access != StorageAccess::Read) {
+                *error = QStringLiteral("compute entry '%1' binds '%2' to geometry buffer '%3' for %4: a geometry buffer "
+                                        "is read only (its key's bytes, uploaded once)")
+                             .arg(name, QString::fromLatin1(b.name), QString::fromLatin1(b.resource),
+                                  storageAccessName(b.access));
+                return false;
+            }
             break;
+        }
         case ComputeResource::Image:
             declared = program.storageImage(b.resource) != nullptr;
             break;
@@ -2831,9 +2846,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                  QStringLiteral("cull"), QStringLiteral("front_face"),
                                                  QStringLiteral("indirect"), QStringLiteral("draw_count"),
                                                  QStringLiteral("batches"), QStringLiteral("batch_count"),
-                                                 QStringLiteral("sorted"),   // N3.4: a transparent pass's
-                                                 QStringLiteral("viewport"), // ABI 37: "content" or "allocation"
-                                                 QStringLiteral("face") };   // ABI 42: a cube target's face
+                                                 QStringLiteral("sorted"), QStringLiteral("face"), // N3.4; ABI 42
+                                                 QStringLiteral("viewport") }; // ABI 37: "content" or "allocation"
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
@@ -6315,8 +6329,7 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
         retrackCompute(program);
     }
     // Audit 5 M1: empty() counts the buffers a program without storage replaced, until the next sync releases them.
-    if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty()
-        && m_storage.geometryResidencies() == 0)
+    if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty())
         return true;                          // nothing declared, nothing held: no work
     QRhiResourceUpdateBatch *edgeUpdates = rhi->nextResourceUpdateBatch(); // its own: the record's batch is still filling
     bool fresh = false;
