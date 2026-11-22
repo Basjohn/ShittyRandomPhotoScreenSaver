@@ -13,6 +13,7 @@ from rendering.gl_programs.capillary_bloom_program import (
     CAPILLARY_COST_GLSL,
     CAPILLARY_SETTLE,
     CAPILLARY_SOURCES_RANGE,
+    capillary_native_fragment,
     capillary_sources,
 )
 from rendering.gl_programs.capillary_field import CAPILLARY_COST
@@ -20,7 +21,20 @@ from rendering.quick import gl_query
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.propagation_field import PropagationField
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFieldRequest, NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
+
+#: N5.2g: the item textures the native core makes the run's arrival field and its extent into (ABI 43).
+NATIVE_ARRIVAL = "capillary_arrival"
+NATIVE_EXTENT = "capillary_extent"
+
+
+def _shown(progress: float) -> int:
+    if progress <= 0.0:
+        return SHOW_OLD
+    if progress >= CAPILLARY_SETTLE[1]:
+        return SHOW_NEW
+    return SHOW_EFFECT
 
 
 def capillary_bloom_parameters(parameters: Mapping[str, object]) -> tuple[int, float, int]:
@@ -36,10 +50,39 @@ def capillary_bloom_parameters(parameters: Mapping[str, object]) -> tuple[int, f
     return sources, float(fibres), seed
 
 
-class QuickCapillaryBloomRenderer:
+class QuickCapillaryBloomRenderer(NativeFragmentPass):
     transition_id = "capillary_bloom"
+    #: N5.2g: the native pack's text (the native define and the gradient's dFdy sign, capillary_native_fragment).
+    fragment_source = capillary_native_fragment()
+    native_samplers = (("uArrival", NATIVE_ARRIVAL, "linear"), ("uExtent", NATIVE_EXTENT, "nearest"))
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in CAPILLARY_BLOOM_BLOCK
+
+    @classmethod
+    def native_field_sources(cls) -> dict[str, str]:
+        from rendering.quick.scene3d.native_fields import propagation_sources
+
+        return propagation_sources("capillary", CAPILLARY_COST_GLSL)
+
+    def native_fields(self, run, pixels: tuple[int, int]) -> tuple[NativeFieldRequest, ...]:
+        """N5.2g: the run's arrival field and extent as one field recipe (``PropagationField``'s dispatches), sampling
+        no picture."""
+        from rendering.quick.scene3d.native_fields import propagation_recipe
+
+        count, fibres, seed = capillary_bloom_parameters(run.request.parameter_dict())
+        size = (int(pixels[0]), int(pixels[1]))
+        _key, sources, bound, cost_values = self._field_inputs(count, fibres, seed, size)
+        return (NativeFieldRequest(None, propagation_recipe("capillary", CAPILLARY_COST_GLSL, size, sources, bound,
+                                                            cost_values, arrival=NATIVE_ARRIVAL,
+                                                            extent=NATIVE_EXTENT)),)
+
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame (no GL): the one owner, packed by ``_draw`` and filled by the
+        native core (N5.2g)."""
+        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
+        _count, _fibres, seed = capillary_bloom_parameters(frame.run.request.parameter_dict())
+        return {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size, "uProgress": progress,
+                "uSeed": float(seed % 65536), "uShow": _shown(progress)}
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Capillary Bloom")
@@ -107,6 +150,7 @@ class QuickCapillaryBloomRenderer:
         bind_frame(program, uniforms, frame, values)
         values["uProgress"] = progress
         values["uSeed"] = float(seed % 65536)
+        values["uShow"] = SHOW_EFFECT              # N5.2g: the native core's ends (this renderer draws its own)
         # Units 0 and 1 hold the photographs (bind_frame); the field goes on 2 and 3 (the program's sampler
         # bindings). The host fence restores units 0-2; unit 3 is handed back here.
         gl.glActiveTexture(gl.GL_TEXTURE2)

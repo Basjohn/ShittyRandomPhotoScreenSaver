@@ -518,12 +518,25 @@ def transition_scene_sources() -> dict[str, str]:
     return found
 
 
+def transition_field_sources() -> dict[str, str]:
+    """N5.2g (ABI 43): every compute pack a native transition's field recipes name (``native_field_sources``:
+    ``rendering/quick/scene3d/native_fields.py``), by file name; shared packs (the edge field's stages, the relax and
+    extent) are baked once."""
+    found: dict[str, str] = {}
+    for cls in _native_transition_classes():
+        sources = getattr(cls, "native_field_sources", None)
+        if sources is not None:
+            found.update(sources())
+    return found
+
+
 def transition_shader_sources() -> dict[str, str]:
     """Every pack the native transitions draw, by its source's file name: each fragment (``<id>.frag``), each
-    instanced pass's two stages and (N5.2c) each scene pass's two stages."""
+    instanced pass's two stages and (N5.2c) each scene pass's two stages; (N5.2g) each field recipe's compute packs."""
     sources = {f"{transition_id}.frag": text for transition_id, text in transition_fragment_sources().items()}
     sources.update(transition_instanced_sources())
     sources.update(transition_scene_sources())
+    sources.update(transition_field_sources())
     return sources
 
 

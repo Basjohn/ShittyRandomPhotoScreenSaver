@@ -77,7 +77,7 @@ EDGE_BLOOM_FRAGMENT_SOURCE = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform sampler2D uOldField;\nuniform sampler2D uNewField;\n"
     "uniform float uProgress;\nuniform float uTime;\nuniform float uLineWidth;\n"
-    "uniform float uGlow;\nuniform float uSeed;\nuniform vec3 uColor;\nuniform vec3 uOldColor;\n"
+    "uniform float uGlow;\nuniform float uSeed;\nuniform vec3 uColor;\nuniform vec3 uOldColor;\nuniform int uShow;\n"
     + ANALOG_SIGNAL_GLSL
     + EDGE_FIELD_GLSL
     + f"""
@@ -93,6 +93,10 @@ float bloomNoise(vec2 x, uint salt, uint seed) {{
 
 void main() {{
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // N5.2g (checklist 16): the frames the Python renderer draws as one photograph, on the native core's one pass
+    // (uShow 1 the old picture, 2 the new; the Python renderer draws them itself and passes 0).
+    if (uShow == 1) {{ FragColor = vec4(texture(uOldTex, uv).rgb, 1.0); return; }}
+    if (uShow == 2) {{ FragColor = vec4(texture(uNewTex, uv).rgb, 1.0); return; }}
     uint seed = uint(uSeed);
     float p = uProgress;
     vec3 oldColour = texture(uOldTex, uv).rgb;

@@ -74,7 +74,7 @@ CAPILLARY_COST_GLSL = (SCENE3D_GLSL + CAPILLARY_FIELD_GLSL
 CAPILLARY_BLOOM_FRAGMENT_SOURCE = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform sampler2D uArrival;\nuniform sampler2D uExtent;\n"
-    "uniform vec2 uItemSize;\nuniform float uProgress;\nuniform float uSeed;\n"
+    "uniform vec2 uItemSize;\nuniform float uProgress;\nuniform float uSeed;\nuniform int uShow;\n"
     + SCENE3D_GLSL + CAPILLARY_FIELD_GLSL + MENISCUS_FIELD_GLSL + REFRACTION_GLSL
     + f"""
 const float WARP = {CAPILLARY_WARP:.6f};
@@ -91,6 +91,10 @@ vec3 saturate3(vec3 c, float amount) {{
 
 void main() {{
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // N5.2g (checklist 16): the frames the Python renderer draws as one photograph, on the native core's one pass
+    // (uShow 1 the old picture, 2 the new; the Python renderer draws them itself and passes 0).
+    if (uShow == 1) {{ FragColor = vec4(texture(uOldTex, uv).rgb, 1.0); return; }}
+    if (uShow == 2) {{ FragColor = vec4(texture(uNewTex, uv).rgb, 1.0); return; }}
     float aspect = uItemSize.x / uItemSize.y;
     vec2 p = vec2((uv.x - 0.5) * aspect, 0.5 - uv.y);
     uint seed = uint(uSeed);
@@ -104,7 +108,12 @@ void main() {{
     float g = extent * pow(clamp(uProgress / FILL, 0.0, 1.0), GROWTH) - arrival;
     g = max(g, (uProgress - FILL) / FLOOD * 0.05);
     // Screen-space derivatives give the front's gradient for one evaluation per pixel.
+#ifdef SRPSS_NATIVE_CORE
+    // N5.2g: the core draws its targets top row first, so its screen y (and dFdy) runs the other way from Python's.
+    vec2 gradient = vec2(dFdx(g), CAPILLARY_NATIVE_DFDY_SIGN * dFdy(g)) * uItemSize.y;
+#else
     vec2 gradient = vec2(dFdx(g), -dFdy(g)) * uItemSize.y;
+#endif
     float d = g / max(length(gradient), 1e-3);                     // picture heights behind the front
 
     // The wet edge: a shallow meniscus that bends both pictures a little.
@@ -132,3 +141,14 @@ void main() {{
 CAPILLARY_BLOOM_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE, CAPILLARY_BLOOM_BLOCK = item_quad_program(
     CAPILLARY_BLOOM_FRAGMENT_SOURCE, block="CapillaryBloomPass",
     samplers={"uOldTex": 0, "uNewTex": 1, "uArrival": 2, "uExtent": 3})
+
+#: N5.2g: the sign the native core's dFdy takes in the front's gradient (Python's is -1: its rows run bottom first).
+#: Measured on both backends (``Current_Plan.md`` N5.2g, the dFdy box): the core's rows run top first.
+CAPILLARY_NATIVE_DFDY_SIGN = 1.0
+
+
+def capillary_native_fragment(sign: float = CAPILLARY_NATIVE_DFDY_SIGN) -> str:
+    """The fragment the native core draws (its pack ``capillary_bloom.frag.qsb``): Python's text with the native
+    define and the gradient's dFdy sign."""
+    head, newline, rest = CAPILLARY_BLOOM_FRAGMENT_SOURCE.partition("\n")
+    return f"{head}\n#define SRPSS_NATIVE_CORE\n#define CAPILLARY_NATIVE_DFDY_SIGN {float(sign):.1f}\n{rest}"
