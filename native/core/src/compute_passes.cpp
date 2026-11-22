@@ -446,6 +446,10 @@ QJsonObject computeDeviceFacts(QRhi *rhi)
     o.insert(QStringLiteral("float32_linear_control"), computeNoFloat32Linear());
     o.insert(QStringLiteral("compute"), rhi->isFeatureSupported(QRhi::Compute));
     o.insert(QStringLiteral("three_dimensional_textures"), rhi->isFeatureSupported(QRhi::ThreeDimensionalTextures));
+    // ABI 41 (N5.2f, N4.c): the indirect draw's answers, as the core's admission reads them (the harness control
+    // hides both), so a population chooses its indirect draw or its cull path and the port records each backend's.
+    o.insert(QStringLiteral("draw_indirect"), drawIndirectAvailable(rhi));
+    o.insert(QStringLiteral("draw_indirect_multi"), drawIndirectMultiAvailable(rhi));
     o.insert(QStringLiteral("max_thread_groups_per_dimension"),
              rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension));
     o.insert(QStringLiteral("max_threads_per_thread_group"), rhi->resourceLimit(QRhi::MaxThreadsPerThreadGroup));

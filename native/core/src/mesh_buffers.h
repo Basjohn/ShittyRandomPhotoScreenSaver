@@ -232,9 +232,19 @@ void setSkipMeshRelease(bool skip);
 bool skipMeshRelease();
 void setInstancesPastUsed(bool past);
 bool instancesPastUsed();
+// - ABI 41 (N5.2f, N4.c): hide QRhi::DrawIndirect (and with it DrawIndirectMulti and the draw-parameters forms): an
+//   indirect pass is refused with its reason and computeDeviceFacts reports both false, so a population's cull path
+//   (drawn where the device reports no DrawIndirect) is proved on a device that has it.
+void setHideDrawIndirect(bool hide);
+bool hideDrawIndirect();
+
+// ABI 41: what this device reports for QRhi::DrawIndirect and DrawIndirectMulti, less the harness control (the one
+// answer the core's admission, its device facts and the draw-parameters forms all read).
+bool drawIndirectAvailable(QRhi *rhi);
+bool drawIndirectMultiAvailable(QRhi *rhi);
 
 // The draw-parameters forms this device can record (D15 point 6): DrawIndirect, DrawIndirectMulti and
-// ShaderDrawParameters, less the harness control.
+// ShaderDrawParameters, less the harness controls.
 bool drawParametersAvailable(QRhi *rhi);
 
 // ------------------------------------------------------------------------------------------- render thread
