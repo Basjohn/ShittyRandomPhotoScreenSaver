@@ -1,5 +1,10 @@
 # SMP | Existing P2 worker and future P3 native-core integration seams
 
+**Deferred status (23 Nov 2026):** this remains the complete prospective audio/PCM/host seam contract, not
+active work. SMP M0-M10 begins only after the Vulkan flip, Melt Pool, Concrete Rain, substantial QoL and explicit
+operator admission (`Future_Work.md` §2.5). Keep the existing core interfaces extensible, without
+instantiating an SMP decoder, audio service or desktop host now.
+
 **Status:** implementation-facing supplement to `02_ShittyMusicPlayer_Implementation_Plan.md`, 9 Nov 2026; source baseline `9872ca18140c`. **No SMP `PlaybackService`, library workspace, decoded PCM source or `core/smp.py` product gate exists yet.** These are contracts and future integration points, not completed SMP functionality.
 **Audio decision (16 Nov 2026):** direct native C++ audio engine at M3; no Qt Multimedia playback prototype, fallback-first plan or migration phase. This changes the backend choice, not the M1/M2 prerequisites or post-native-flip start gate.
 
