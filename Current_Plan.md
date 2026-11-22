@@ -1435,6 +1435,72 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     (ABI 41's facts record the answer). N4.c's one-million-sprite cost check runs on the indirect form only.
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
+  Reading (agent ac3072f8bea57441b, 22 Nov; `implementations/edge_bloom.py`, `capillary_bloom.py`, their `gl_programs`
+  programs, `scene3d/edge_field.py`, `scene3d/propagation_field.py`, `native_background.py`, `job_service.h/.cpp`,
+  `mode_content.h/.cpp` advanceTextures, `compute_passes.h`, `transitions/controller.py`, D9):
+  - Both are one 2D fragment over the item quad (`item_quad_program`, as Liquid Lens: a `NativeFragmentPass`, no scene
+    target), with `uv = (vUv.x, 1 - vUv.y)`, plus per-run fields sampled linear. Python draws the photo itself at
+    progress 0 and from `EDGE_BLOOM_SETTLED` 0.97 / `CAPILLARY_SETTLE[1]` 0.94.
+  - Edge Bloom: two edge fields (new picture, old picture), each built from its lent photo at `edge_field_size` (768
+    on the longer side, the render's aspect): luma (16 linear taps of the photo, r16f), blur twice (r16f), edges (r16f
+    strength, rgba32f seeds), jump flood (`edge_field_jumps`: 11 dispatches at 768, uJump per dispatch, rgba32f
+    ping-pong), resolve (rgba16f field, sampled linear): 16 dispatches a field, one block `EdgeFieldDispatch` each. The
+    glow colours are CPU (`photo_accent_colour` of each picture's rgba8, once per run). Thresholds from `detail`.
+  - Capillary Bloom: one propagation field, photo-independent (seed, count, fibres, aspect) at `propagation_size` (256
+    on the longer side): seed (cost + arrival, r32f; two blocks: `PropagationDispatch` and the consumer's
+    `PropagationCost`, so `native_one_block`), 192 relax dispatches (two programs alternating over the same two
+    images; after the even count the newest is the "arrival" texture), extent (one group of 256, a 1 x 1 r32f).
+    The fragment samples arrival linear (r32f: the ABI 33 linear-filter fact) and the extent by `texelFetch`, and
+    takes its front gradient from `dFdx` / `-dFdy`.
+  - What the core lacks: (1) 192 + 4 dispatches exceed `kMaxModePasses` (48) as program entries; (2) a still admits only
+    the "draw" trigger, so program entries would rebuild the fields every drawn frame; (3) the job service runs uploads
+    only (`UploadJob`, `RhiUploadBackend::upload`); (4) no Python edge tells the layer that textures committed (only
+    `on_textures_lost`); (5) mode textures are RGBA8 / RGBA16F / RGBA32F, no R32F.
+  Design (agent, 22 Nov; ABI 43, written by no one yet, see the stop note below):
+  - Fields are item textures made from a recipe, not program entries: `mode.field(name, recipe, packs, input=<item
+    texture>, pixels=<the input's rgba8 or None>, deadline_ms)`. A recipe is plain data Python builds from the field
+    owners' own texts and values: images ({name, format r16f/r32f/rgba16f/rgba32f, size}), a flat list of dispatches
+    ({pack index, block bytes packed by Python's own `Scene3DBlockLayout`, checked against the reflected size, groups,
+    bindings by shader name to an image with its access or to the input photo as a linear clamped sampler}) and the
+    outputs (image -> item texture name). A flat list needs no repeat or per-dispatch scoping: the 192 relax dispatches
+    are 192 entries over two packs, the 11 flood dispatches 11 blocks. Packs are baked by `tools/regen_qrc.py --shaders`
+    from `EDGE_FIELD_PROGRAMS` and `propagation_programs("capillary", CAPILLARY_COST_GLSL)` (`native_one_block` for the
+    seed), shipped beside the transitions' packs and counted by `native_transition_renderer`'s shipped check.
+  - One recorder, two forms (D9 point 5): `FieldRecorder` (new, QRhi-agnostic: pipelines cached per pack, images,
+    one uniform buffer of every dispatch's block at `ubufAligned` offsets uploaded once, SRBs cached per binding set,
+    each dispatch its own QRhi compute pass) runs (a) on the job QRhi as a `FieldJob` (a ticket like `UploadJob`: it
+    owns its pixels, uploads its input photo itself, waits on its fence, publishes each output's VkImage and layout),
+    or (b) in the frame on Qt's QRhi at the commit, its input the item's resident texture (OpenGL, no service, a failed
+    job, the deadline). Outputs import with `createFrom` like a job's upload and commit together with the item's other
+    textures (D9 as built point 3: the destination photo and its fields switch in one record), retire through the
+    window's list, cancel by compare-and-set, quiesce at teardown; the destruction barrier counts them.
+  - The deadline is the core's: a field job not done by `deadline_ms` after its submit is cancelled at the next record
+    and its in-frame form recorded there (the run ticks every frame, so a record follows). No Python timer.
+  - The start edge: `mode.on_textures_ready(listener)`, queued to the GUI thread through the item notifier like
+    `texturesLost`, once per commit with the names committed. The layer keeps the background's program on the old
+    picture and pauses its own effect clock until the edge naming every field of the run, then samples the run at
+    `now - (edge - run.start_ns)`. The controller is not touched: Python sets `deadline_ms` to half the run's settled
+    margin (the duration times one minus the linear time at which the easing reaches the settled value), so the shifted
+    run still reaches its settled frame before the controller ends it, and the end stays the exact new picture.
+  - Inputs: the destination's pixels are the bytes the same `_start_run` hands `mode.texture` (one shared
+    `TextureImage`, no second copy); the old picture's field needs its pixels again (one copy of the PresentationImage
+    at the run's start, Edge Bloom only; recorded as a cost). Capillary's job has no input.
+  - The drawing: each transition a `NativeFragmentPass` with extra samplers (`native_samplers(run)`: the field
+    textures by name, linear clamped) that `transition_program` binds. Checklist 16 conversion first: Edge Bloom's and
+    Capillary's fragments take `uShow` (old and new photos exactly, as Liquid Lens), and Capillary's native text
+    corrects `dFdy`'s sign under `SRPSS_NATIVE_CORE` if the harness shows the core's rows reverse it (trap to read back
+    first on both backends; `anisotropic.py` notes Vulkan's).
+  - Formats: R32F joins `ModeTextureFormat` for the imported arrival and extent; RGBA16F fields exist.
+  - Proof (proof guide section 3): the field textures read back against Python's on both backends (edge fields
+    against `edge_field_reference` where small, propagation against `propagation_reference`), then rule (a) / (b)
+    through `transition_route_check.py` variants (each default; Edge Bloom detail 0 and 1, every colour source, glow 0
+    and 1; Capillary sources at both ends of `CAPILLARY_SOURCES_RANGE`, fibres 0 and 1), several image pairs, full
+    durations, both dprs; the job form equal to the in-frame form (hashes), a deadline control (a job held past it runs
+    in-frame, same pixels); `--cost` at 1440p and 4K both backends, the run's first effect record included; the D1
+    hitch rows; registration last.
+  - Stop (agent, 22 Nov): weekly usage 94 % at stop point 1, so the ABI 43 C++ (about 1,500 lines: recipe, recorder,
+    `FieldJob` and its backend method, the content's commit and deadline, R32F, the ready edge, the module API) is not
+    written; nothing is built or changed but this box.
 - [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):
   captured while the Python renderers are still the product, and **before N5.2h deletes them** (after that the
   "before" side cannot be measured). One script (extending `tools/visualizer_live_check.py` and
