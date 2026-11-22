@@ -1,0 +1,274 @@
+{
+ "schema": 1,
+ "name": "n52f_native_vulkan",
+ "commit": "ca63ccc14",
+ "created": "2026-11-22T14:26:18",
+ "updated": "2026-11-22T14:29:12",
+ "backend": "native-vulkan",
+ "clip": "anything_mixed2.jsonl",
+ "wallpaper": "D:\\Temp\\Scratch\\SRPSS\\wallpaper_usu",
+ "load": null,
+ "controls": {
+  "2160p": {
+   "size": "3840x2160",
+   "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+   "commit": "ca63ccc14",
+   "control_gpu_quiet_ms": 0.064,
+   "control_gpu_min_ms": 0.064,
+   "control_gpu_max_ms": 0.081152,
+   "admitted": 3,
+   "controls": 3,
+   "cpu_others_median": 4.1,
+   "gpu_clock_mhz_median": 900.0
+  }
+ },
+ "rows": {
+  "transition/volumetric_dissolve/2160p/idle": {
+   "key": "transition/volumetric_dissolve/2160p/idle",
+   "kind": "transition",
+   "id": "volumetric_dissolve",
+   "label": "Volumetric Dissolve",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 3,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-abfa6e30ec8e2366d\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_n52f_native_vulkan_session_2160p_idle",
+   "measured_in_s": 85.6,
+   "conditions_before": {
+    "captured_at": "2026-11-22T14:26:24",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 2339.5
+     },
+     {
+      "pid": 10480,
+      "name": "SystemInformer.exe",
+      "cpu_core_pct": 4.0
+     },
+     {
+      "pid": 22288,
+      "name": "claude.exe",
+      "cpu_core_pct": 4.0
+     },
+     {
+      "pid": 2632,
+      "name": "NVDisplay.Container.exe",
+      "cpu_core_pct": 2.7
+     },
+     {
+      "pid": 22380,
+      "name": "firefox.exe",
+      "cpu_core_pct": 2.7
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 1608,
+      "name": "csrss.exe",
+      "gpu_pct": 0.84
+     },
+     {
+      "pid": 4,
+      "name": "System",
+      "gpu_pct": 0.18
+     },
+     {
+      "pid": 6636,
+      "name": "claude.exe",
+      "gpu_pct": 0.08
+     },
+     {
+      "pid": 1116,
+      "name": "dwm.exe",
+      "gpu_pct": 0.03
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P8",
+     "util_pct": 7.0,
+     "clocks_gr_mhz": 270.0,
+     "clocks_mem_mhz": 405.0,
+     "temp_c": 46.02,
+     "power_w": 35.91,
+     "memory_used_mb": 1545.0,
+     "throttle_reasons": "0x0000000000000001"
+    },
+    "gpu_clock_mhz": 270.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 8.1,
+    "cpu_others_max": 25.0,
+    "cpu_system_median": 8.3,
+    "cpu_system_max": 25.2,
+    "gpu_clock_mhz_median": 210.0,
+    "gpu_clock_mhz_max": 2790.0,
+    "gpu_temp_c_median": 45.9,
+    "gpu_temp_c_max": 47.8,
+    "gpu_util_median": 1.0,
+    "gpu_util_max": 2.0,
+    "memory_used_median": 38.3,
+    "memory_used_max": 39.5
+   },
+   "status": "failed",
+   "figures": null,
+   "failure": "no transition run for this name was recorded after startup",
+   "commit": "ca63ccc14",
+   "backend": "native-vulkan"
+  },
+  "transition/disintegrate/2160p/idle": {
+   "key": "transition/disintegrate/2160p/idle",
+   "kind": "transition",
+   "id": "disintegrate",
+   "label": "Disintegrate",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 3,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-abfa6e30ec8e2366d\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_n52f_native_vulkan_session_2160p_idle",
+   "measured_in_s": 73.4,
+   "conditions_before": {
+    "captured_at": "2026-11-22T14:27:53",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 2152.3
+     },
+     {
+      "pid": 4,
+      "name": "System",
+      "cpu_core_pct": 70.9
+     },
+     {
+      "pid": 4432,
+      "name": "SearchHost.exe",
+      "cpu_core_pct": 52.3
+     },
+     {
+      "pid": 5144,
+      "name": "StartMenuExperienceHost.exe",
+      "cpu_core_pct": 20.1
+     },
+     {
+      "pid": 3236,
+      "name": "svchost.exe",
+      "cpu_core_pct": 9.4
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 4432,
+      "name": "SearchHost.exe",
+      "gpu_pct": 85.86
+     },
+     {
+      "pid": 4,
+      "name": "System",
+      "gpu_pct": 0.4
+     },
+     {
+      "pid": 19344,
+      "name": "claude.exe",
+      "gpu_pct": 0.05
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P0",
+     "util_pct": 17.0,
+     "clocks_gr_mhz": 2790.0,
+     "clocks_mem_mhz": 10501.0,
+     "temp_c": 49.25,
+     "power_w": 105.95,
+     "memory_used_mb": 1014.0,
+     "throttle_reasons": "0x0000000000000400"
+    },
+    "gpu_clock_mhz": 2790.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 5.8,
+    "cpu_others_max": 13.3,
+    "cpu_system_median": 6.0,
+    "cpu_system_max": 14.2,
+    "gpu_clock_mhz_median": 607.5,
+    "gpu_clock_mhz_max": 2790.0,
+    "gpu_temp_c_median": 48.2,
+    "gpu_temp_c_max": 49.8,
+    "gpu_util_median": 3.5,
+    "gpu_util_max": 19.0,
+    "memory_used_median": 38.5,
+    "memory_used_max": 39.0
+   },
+   "status": "failed",
+   "figures": null,
+   "failure": "no transition run for this name was recorded after startup",
+   "commit": "ca63ccc14",
+   "backend": "native-vulkan"
+  }
+ },
+ "settings": {
+  "viz_seconds": 45.0,
+  "transition_seconds": 75.0,
+  "transition_interval_s": 8,
+  "session_transitions": [
+   "exploding_tiles",
+   "volumetric_dissolve",
+   "disintegrate",
+   "jigsaw",
+   "crossfade"
+  ]
+ }
+}
