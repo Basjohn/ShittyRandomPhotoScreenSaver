@@ -76,8 +76,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
-- [ ] Background track: N5.2e landed 22 Nov; agent abfa6e30ec8e2366d (Opus Medium, ABI 41 reserved): the Exploding Tiles
-  stall (watch item below), then N5.2f to stop point 1 (its frame blocks take N5.2e's `native_one_block` helper).
+- [ ] Background track: agent abfa6e30ec8e2366d (Opus Medium) on N5.2f's ABI 41 C++ (the `draw_indirect` device facts),
+  built in one batch with N5.6's ABI 42. Exploding Tiles' stall (the Steam refresh outside the transition gate) fixed
+  and passing on Display 1, 22 Nov.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
