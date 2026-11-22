@@ -191,6 +191,8 @@ measures the real process:
   - Bubble: `bubble_judder.py` and `bubble_breathing_continuity.py`.
   - Waveform: `waveform_music_response.py`.
   - Neon Lake: `neon_lake_music_response.py`.
+  - Extruded Bubble: `extruded_bubble_music_response.py` (on-screen speed by bubble age through the preset's camera,
+    under the take's PCM envelope).
   - A mode without one gets one only when its port finds a smoothness question. The music-response traces are evidence
     of reactivity shape, never the only proof.
 - **Load:** game60 is the operator's yes each time, at most 10 minutes, lead only, and the rare end-of-chain
@@ -214,7 +216,7 @@ The acceptance figures:
 |---|---|---|---|---|
 | Oscilloscope (N5.1) | its variants | glow history (bloom per frame) | the live run | First consumer of N3.4 bloom; the glow strength is per frame. |
 | Waveform Ribbon (N5.4) | four reaction modes, each run separately | ribbon history buffer, rings, five compute passes | `waveform_music_response.py` | The heaviest coverage case; the reason for the fast proof. |
-| Extruded Bubble (N5.6) | its variants | drift compute, defocus, transparency (OIT) | its response comparison | Heavy render; less variance, so coverage windows are fewer. |
+| Extruded Bubble (N5.6) | its emission modes (SCENE: variants a and b; BEAM), Sunlit and lighting BEAM | the drift state, integrated from the cold start (a gap past 128 steps restarts it): compute every input, draw from the window | `extruded_bubble_music_response.py` | Heavy render; less variance, so coverage windows are fewer. |
 | Neon Lake (N5.5) | its variants | reaction and growth arrays, terrain | `neon_lake_music_response.py` | Persisted id `shockwave_grid`. |
 | Extruded Spectrum, Sphere (N5.3) | their variants | none beyond the frame | the live run | Meshes, lighting, silhouette shadows. |
 | Transitions (N5.2) | not a mode: fidelity and performance only (section 3) | none | none (one Vulkan hitch run) | Full canonical duration over several image pairs; no music, no layers. |
@@ -242,6 +244,8 @@ decision, recorded with its reason.
 ## 7. What exists and what is still to build
 
 - **Exists:**
+  - `owner_render_parity.py --references-only`: a mode's cached Python references drawn before it has a native route
+    (port preparation; the same key, so the port's first native run reads them);
   - `owner_render_parity.py`: `--recording`, frames spilled to disk, the switch moved to the end of a clip,
     `rule_a_halves`, `failed_frames` (only the first eight are listed in detail);
   - the per-mode `*_check.py` harnesses (rule (b));
