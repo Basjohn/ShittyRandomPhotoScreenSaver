@@ -67,10 +67,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Resumed after the restart (operator, 22 Nov): N5.2f agent abfa6e30ec8e2366d only (bounds accepted by the lead:
-  N52F_EDGE_FLIPS_A/B, N52F_SAMPLER_RULE_B 4305), to registration and the D1 hitch rows. Then, once it merges, N5.6's
-  easiest, time-wasting parts first (the built measurements, docs and the like; operator): agent ac5f7832a73527151 at
-  a0230959d, its journal holds the GPU proof plan (`eb_core_check.py`, limits then skip, readback, geometry, probe).
+- [ ] One agent at a time (operator, 22 Nov, weekly usage 93 %): N5.6's easiest, time-wasting parts first (the built
+  measurements, docs and the like), agent ac5f7832a73527151 at a0230959d; its journal holds the GPU proof plan
+  (`eb_core_check.py`, limits then skip, readback, geometry, probe).
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
@@ -80,9 +79,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
-- [ ] Background track: agent abfa6e30ec8e2366d (Opus Medium) on N5.2f's ABI 41 C++ (the `draw_indirect` device facts),
-  built in one batch with N5.6's ABI 42. Exploding Tiles' stall (the Steam refresh outside the transition gate) fixed
-  and passing on Display 1, 22 Nov.
+- [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
+  box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
