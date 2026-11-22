@@ -49,6 +49,24 @@ RESPONSE_COLUMNS = ("t", "song", "song_time", "level", "view", "live", "height",
 BORN_WINDOW = 4.0   # scene units inside the view edge (or about the centre) where a travelling swell is new
 
 
+def pcm_envelope(history, previous):
+    """The INDEPENDENT music envelope of one feature frame's capture history: (rms dBFS over the newest 1024 samples,
+    30-150 Hz energy dB and positive spectral flux over 2048, spectrum for the next frame's flux). Shared by every
+    music-response trace (Waveform, Extruded Bubble)."""
+    import numpy as np
+    pcm = np.frombuffer(history.pcm_f32le, "<f4").astype(np.float64)
+    rate = history.sample_rate
+    recent = pcm[-1024:]
+    rms_db = 20.0 * np.log10(max(1e-6, float(np.sqrt(np.mean(recent * recent)))))
+    window = pcm[-2048:] if pcm.size >= 2048 else np.pad(pcm, (2048 - pcm.size, 0))
+    spectrum = np.abs(np.fft.rfft(window * np.hanning(window.size)))
+    freqs = np.fft.rfftfreq(window.size, 1.0 / rate)
+    bass = spectrum[(freqs >= 30) & (freqs <= 150)]
+    bass_db = 10.0 * np.log10(max(1e-9, float(np.sum(bass * bass))))
+    flux = 0.0 if previous is None else float(np.sum(np.maximum(0.0, spectrum - previous)))
+    return rms_db, bass_db, flux, spectrum
+
+
 def music(clips: list[Path], out: Path) -> None:
     import numpy as np
     from widgets.spotify_visualizer.feature_frame import load_jsonl
@@ -62,17 +80,7 @@ def music(clips: list[Path], out: Path) -> None:
             real = frame.real
             if history is None or real is None:
                 continue
-            pcm = np.frombuffer(history.pcm_f32le, "<f4").astype(np.float64)
-            rate = history.sample_rate
-            recent = pcm[-1024:]
-            rms_db = 20.0 * np.log10(max(1e-6, float(np.sqrt(np.mean(recent * recent)))))
-            window = pcm[-2048:] if pcm.size >= 2048 else np.pad(pcm, (2048 - pcm.size, 0))
-            spectrum = np.abs(np.fft.rfft(window * np.hanning(window.size)))
-            freqs = np.fft.rfftfreq(window.size, 1.0 / rate)
-            bass = spectrum[(freqs >= 30) & (freqs <= 150)]
-            bass_db = 10.0 * np.log10(max(1e-9, float(np.sum(bass * bass))))
-            flux = 0.0 if previous is None else float(np.sum(np.maximum(0.0, spectrum - previous)))
-            previous = spectrum
+            rms_db, bass_db, flux, previous = pcm_envelope(history, previous)
             loudness, presence = real.musical_level
             rows.append((song, (frame.timestamp_us - origin) / 1e6, rms_db, bass_db, flux, loudness, presence))
     out.parent.mkdir(parents=True, exist_ok=True)
