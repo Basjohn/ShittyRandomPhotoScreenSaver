@@ -347,6 +347,36 @@ N52G_VARIANTS = {
     "capillary_bloom_one": {"sources": 1, "fibres": 0.0, "seed": 3},
     "capillary_bloom_six": {"sources": 6, "fibres": 1.0, "seed": 11},
 }
+#: N5.2g's bounds, PROPOSED (agent, 22 Nov; the lead decides): the statistical bound (``tools/pixel_tolerance.py``,
+#: "Statistics", the lead's form for Waveform Ribbon) at 1.5 times the measured worst frame (n52g_stats, both dprs).
+#: - Capillary Bloom, rule (a) and (b): the wet front's distance is ``g / |grad g|`` over screen derivatives, and its
+#:   rim and meniscus are steep in it (``exp(-(d / 0.006)^2)``, a refraction offset along the gradient), so the two
+#:   compilers' rounding of ``g`` moves the rim by a fraction of a pixel all along the front: hundreds of one-level
+#:   pixels and touching ties a frame along it (r1: up to 524 and 34 a frame, one pixel 17 levels at the rim's crest),
+#:   where its single fragment otherwise matches. The fields are not the cause (field_check: the arrival field equal
+#:   across forms, 3e-7 across APIs); nor the derivatives' precision (dFdxFine/dFdyFine bake byte-identical frames:
+#:   n52g_fine); the gradient's dFdy sign is measured (+1; -1 puts up to 140 levels on the front: n52g_sign_neg).
+#: - Edge Bloom, rule (b) only (rule a holds the fragment pass's bound, worst 1 level): Vulkan's and OpenGL's compute
+#:   round the edge field's luma and blur (r16f) apart by a hair, and at fine detail a contour's hysteresis then keeps or
+#:   drops a few texels on one API (field_check: 3 texels of the edge field differ, 0.057), so a short line segment
+#:   lights on one side only (r1, detail 1: 23 touching pixels past 2 levels, 11 levels at most).
+#: Measured worst frames (n52g_stats, 460,800 pixels a frame, one pixel a share of 2.2e-6), each figure times 1.5:
+#: Capillary over rules (a) and (b) together, mean |d| 3.37e-4 and its tie share 4.12e-5 (six sources at 0.35, rule a),
+#: mean signed 4.5e-5 (six sources at 0.20), past 3 levels one pixel (the defaults at 0.35, the rim's crest); Edge
+#: Bloom fine (rule b, dpr 1) mean |d| 1.89e-4, signed 1.06e-4, ties 3.04e-5, past 3 levels 1.63e-5 (7 pixels). The
+#: wrong dFdy sign (n52g_sign_neg, 38,012 pixels off a frame, up to 140 levels) is the negative control.
+N52G_STATISTICS = {
+    "capillary_bloom": pt.FrameStatistics(mean_abs=5.1e-4, mean_signed=6.8e-5, tie_share=6.2e-5, flip_share=3.3e-6),
+    "edge_bloom": pt.FrameStatistics(mean_abs=2.9e-4, mean_signed=1.6e-4, tie_share=4.6e-5, flip_share=2.5e-5),
+}
+CAPILLARY_RULE_A = pt.Tolerance("Capillary Bloom, a fragment pass, against its Python renderer (rule a; the wet front)",
+                                statistics=N52G_STATISTICS["capillary_bloom"])
+N52G_RULE_B = {
+    "capillary_bloom": pt.Tolerance("Capillary Bloom, Vulkan against OpenGL (rule b; the wet front)",
+                                    statistics=N52G_STATISTICS["capillary_bloom"]),
+    "edge_bloom": pt.Tolerance("Edge Bloom, Vulkan against OpenGL (rule b; a contour's hysteresis)",
+                               statistics=N52G_STATISTICS["edge_bloom"]),
+}
 SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS + N52F_TRANSITIONS
 SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS, **N52F_VARIANTS}
 #: N5.2e: the piece-edge flip class (N5.2d's rule, for the lead) for Exploding Tiles' tiles (moving pieces; the gather
@@ -756,7 +786,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
             for k, _p, e in judged)
         facts["rule_a_tolerance"] = {
             "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound(), N52C_RULE_A.bound(), JIGSAW_RULE_A.bound(),
-                       BLINDS_FLAT_RULE_A.bound()],
+                       BLINDS_FLAT_RULE_A.bound(), CAPILLARY_RULE_A.bound()],
             "not_judged": sorted({k for k, _p, e in judged if e["tolerance"].get("judged") is False}),
             **pt.summarise(e["tolerance"] for _k, _p, e in judged if e["tolerance"].get("judged") is not False)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
@@ -1015,6 +1045,8 @@ def _rule_a(variant: str, entry: dict):
     drawn = variant.split("@", 1)[0]
     if drawn in N52C_FRAGMENT_VARIANTS:
         return BLINDS_FLAT_RULE_A
+    if drawn in N52G_VARIANTS and variant_transition(drawn) == "capillary_bloom":
+        return CAPILLARY_RULE_A
     if _is_fragment_pass(variant):
         return FRAGMENT_PASS_RULE_A
     if not entry.get("scene"):
@@ -1078,6 +1110,7 @@ def vulkan_against_opengl(work: Path) -> dict:
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
                      MEMBRANE_RULE_B if drawn == "membrane" else
                      N52C_RULE_B if drawn in SCENE_VARIANTS else
+                     N52G_RULE_B[variant_transition(drawn)] if drawn in N52G_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         if drawn in EDGE_FLIPS_B:               # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
             moved = velocity[key] if key in velocity else None
@@ -1092,7 +1125,8 @@ def vulkan_against_opengl(work: Path) -> dict:
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound(), N52C_RULE_B.bound(),
+                       *(t.bound() for t in N52G_RULE_B.values())]}
 
 
 # --------------------------------------------------------------------------------------------------- the child
