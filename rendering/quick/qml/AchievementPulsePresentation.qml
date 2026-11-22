@@ -97,6 +97,16 @@ OverlayWidget {
         headerFlipped !== (achievementModel.customFirstAchievementAlignment === "right")
     readonly property bool achievementListFlipped:
         headerFlipped !== (achievementModel.customAchievementListAlignment === "right")
+    // A child is never drawn outside the card's content rectangle (operator, 22 Nov: a resize cut the shelves out of the
+    // widget). Offsets are stored against the authored canvas and the card can be made smaller than where an offset put
+    // a child, so the projection keeps the drawn rectangle inside the visible canvas: the far edge first, then the near
+    // one (a child wider than the card sits on its near edge). The visible canvas starts at the trimmed leading gutter.
+    function containCanvasX(x, extent) {
+        return Math.max(0.0, Math.min(leadingTrim + authoredWidth - extent, x))
+    }
+    function containCanvasY(y, extent) {
+        return Math.max(0.0, Math.min(authoredHeight - extent, y))
+    }
     function semanticRailX(baseX, baseWidth, onAuthoredRail) {
         return headerFlipped && onAuthoredRail
             ? baseAuthoredWidth - baseX - baseWidth : baseX
@@ -988,17 +998,17 @@ OverlayWidget {
                         achievementRoot.progressOnAuthoredRail)
                 property real customEditPlacementCompensationY:
                     achievementRoot.progressParentReflowY
-                x: achievementRoot.semanticRailX(
+                x: achievementRoot.containCanvasX(achievementRoot.semanticRailX(
                         achievementRoot.canonicalProgressX,
                         achievementRoot.canonicalProgressSize,
                         achievementRoot.progressOnAuthoredRail)
                     + achievementRoot.achievementModel.customProgressCircleXOffset
-                        * achievementRoot.baseAuthoredWidth
-                y: achievementRoot.baseAuthoredHeight
+                        * achievementRoot.baseAuthoredWidth, visualSize)
+                y: achievementRoot.containCanvasY(achievementRoot.baseAuthoredHeight
                     - achievementRoot.canonicalProgressSize - 20.0
                     + achievementRoot.progressParentReflowY
                     + achievementRoot.achievementModel.customProgressCircleYOffset
-                        * achievementRoot.baseAuthoredHeight
+                        * achievementRoot.baseAuthoredHeight, visualSize)
                 width: achievementRoot.canonicalProgressSize
                 height: achievementRoot.canonicalProgressSize
                 scale: achievementRoot.achievementModel.customProgressCircleScale
@@ -1310,7 +1320,7 @@ OverlayWidget {
                 property real customEditPlacementCompensationY:
                     achievementRoot.fieldGroupParentReflowY
                 visible: fieldRepeater.count > 0
-                x: achievementRoot.semanticRailX(
+                x: achievementRoot.containCanvasX(achievementRoot.semanticRailX(
                         canonicalX, canonicalWidth,
                         achievementRoot.fieldGroupOnAuthoredRail)
                     + (achievementRoot.fieldGroupOnAuthoredRail
@@ -1318,13 +1328,19 @@ OverlayWidget {
                             && !achievementRoot.headerFlipped
                         ? achievementRoot.progressLayoutWidthDelta : 0.0)
                     + achievementRoot.achievementModel.customFieldGroupXOffset
-                        * achievementRoot.baseAuthoredWidth
-                y: canonicalY
+                        * achievementRoot.baseAuthoredWidth, width)
+                y: achievementRoot.containCanvasY(canonicalY
                     + achievementRoot.fieldGroupParentReflowY
                     + achievementRoot.achievementModel.customFieldGroupYOffset
-                        * achievementRoot.baseAuthoredHeight
-                width: canonicalWidth
+                        * achievementRoot.baseAuthoredHeight, height)
+                // A grown progress circle pushes the authored group right (its x above); the group gives up the
+                // same width, so its far edge stays where it was instead of leaving the card (operator, 22 Nov).
+                width: Math.max(1.0, canonicalWidth
                     * achievementRoot.achievementModel.customFieldGroupWidthScale
+                    - (achievementRoot.fieldGroupOnAuthoredRail
+                            && achievementRoot.progressOnAuthoredRail
+                            && !achievementRoot.headerFlipped
+                        ? achievementRoot.progressLayoutWidthDelta : 0.0))
                 height: canonicalHeight
                     * achievementRoot.achievementModel.customFieldGroupHeightScale
 
