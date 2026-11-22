@@ -575,7 +575,7 @@ new-mode capabilities follow D5.3's 23 Nov supersession instead. The gate is wha
 | 3 | Async GPU jobs: image upload, mips, derived maps and transition precompute off the frame (D9) | No hitch at an image change or a transition start while a Visualizer runs; the 14 ms image-change constraint goes | Moderate | Cross-queue synchronisation; devices with one queue | D9's proof: p99 frame time and late frames across image changes with a Visualizer running, async against in-frame |
 | 4 | Mixed-resolution soft layers (P4, N4.f) | Display-size and 4K budgets for fog, bloom, reflection blur and glows; the base for smoke; lines, dots and rims stay at full resolution | Moderate | Halos at depth edges | Per mode: stills side by side reviewed by the lead and GPU time before and after; never whole-frame upscaling |
 | 5 | The backdrop every transition frame with continuous blur levels; true glass over the Visualizer (D7) | Visible: materials that follow a transition instead of stepping, and overlays that are glass over live content | Small to moderate | Cost at 4K | D7's budgets and the lead's review |
-| 6 | High-potential 3D primitives without a consumer (N4.c, N4.d's wet-surface masks, N4.h, N4.k, N4.m, N6.1 to N6.3; the masks added 12 Nov night to match the class the lead wrote at the plan's N4.d) | What scenes can look like: populations, shadows, many lights, merged shafts, a reactive surface, places, smoke | Moderate each | Building what nobody uses well | Each on its harness with measured cost, lazy creation and a showcase; none blocks the flip |
+| 6 | High-potential 3D primitives without a prerequisite consumer (N4.c, N4.d wet masks, N4.h, N4.k, N4.m, N6.1 to N6.3) | Reusable populations, shadows, soft light, water fields, believable geometry and smoke; six optional musical demonstration integrations now approved (23 Nov) | Moderate each | Empty showcases with no production utility, or art tasks blocking core migration | Each independently proved on harness, GPU median/p90, lazy use and retirement. Prefer **six real, Studio-adjustable, musically reactive integrations** in existing accepted modes, with new freely authored demonstration presets, over disposable WebPs; this artistic work is **after the host mode's parity, native N5.8 Studio migration and NF**, never an original-port/flip gate. All six detailed in Current Plan N4/N6 box; no automated test ever uses a preset. |
 | 7 | GPU-driven populations with count draws | Populations of 10^5 to 10^6 with GPU culling and no readback, for droplets, debris, sprites | Moderate (smaller since Qt 6.12: the indirect draw is QRhi's own, no raw service) | No indirect draw in QRhi 6.11 (resolved by Qt 6.12, 12 Nov) | The population harness at one million sprites against "draw the maximum, cull in the vertex shader"; the two existing transitions port on the simple route |
 | 8 | Persistent high-rate rings | Larger histories and denser strands and particles at one copy per frame | Small | Low | D5.3's measurement; not built if QRhi's dynamic buffers are within 0.05 ms |
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
@@ -586,7 +586,21 @@ Multi-threaded command recording, which the lead listed as a CPU-side plus, is *
 frame here is a handful of passes and well under a millisecond of recording, and QRhi's command buffer is
 single-threaded. It is reconsidered only if a trace shows the render thread recording for more than 2 ms.
 
-**Where the plus sits in the order** (the plan places each): 2 with the substrate, so every port is measured with
+**Where the plus sits in the order****23 Nov operator acceptance contract for D8 plus 6:** The six approved demonstrations are
+Kelp Cathedral (Extruded Bubble: N6.7/N6.2/N4.h), Smoke Signals (Waveform:
+N6.3/N4.f2), Rainfall Echo (Neon Lake: N6.1/N4.d), Shadow Theatre (Waveform:
+N4.h), Abyssal Lanterns (Extruded Bubble: N4.m/N4.c) and Rain-Slick Floor
+(Waveform: N4.d). Each is an **additional optional production feature** with
+authorable visual properties and independent musical response controls in its
+existing mode Studio, followed by a new freely editable example preset.
+The core can prove a high-potential primitive independently before use; the six
+artistic integrations wait for that mode's *accepted* native port, the **N5.8
+Studio-native switch, and NF**. No old preset has to change; no consumer may
+be made a native-flip gate. No automated test may use any real preset,
+including schema/read/save or demonstration acceptance: test-owned synthetic
+inputs and ephemeral test preset shapes only. See Current Plan N4/N6 box.
+
+ (the plan places each): 2 with the substrate, so every port is measured with
 it; 3 proved on the harness before the substrate and used first by the presenter; 5 with the presenter; 4 after
 Waveform Ribbon and Extruded Bubble are native, before Expanded Visualizer M6; 6, 7 and 8 on the primitives track,
 never holding the flip; 1 is every port.
@@ -3264,7 +3278,7 @@ the answers as the lead gave them (including "Nothing here is decided", which is
 | Two forms of every service | Each native route doubles a test surface, and the less-used form rots | D5.3: the list is closed, each service must win a measurement to exist, the two forms are tested against each other, and QRhi stays the default |
 | Async work | Cross-queue synchronisation bugs are rare, late and hard to reproduce | D9: self-contained jobs, latched publication with no GPU-side wait, an in-frame form that always exists, validation layers as a gate, adversarial teardown in the proof |
 | Linux | Never run; best effort by the operator's decision | The core is one code path through QRhi with OpenGL as the selectable backend there; the conventions (N0.3) are tested per backend on Windows; what a first Linux run would show stays a Watchlist entry |
-| Building primitives nobody uses | High-potential work with no consumer can drift from what modes need | Each has a harness scene, a measured cost and a showcase before it counts as built, and none blocks the flip (D8 plus 6) |
+| Building primitives nobody uses | High-potential work without a consumer can drift from actual artistic value | Keep each primitive's independent harness, measured costs, validation and dormancy. **After N5.8/NF** integrate all six approved optional reactive features with full Studio controls and newly authored, freely mutable demonstration presets as the main artistic proof. WebPs may document human visual review but do not replace motion or production utility. No preset is a test fixture, oracle, golden, schema case or pin. No integration holds the original parity/Studio/Vulkan flip (D8 plus 6; Current Plan N4/N6 integration box). |
 | The Python path during the migration | Two renderers exist for a ported transition until the family switches; the protected clip and background optimisations must not be retuned meanwhile | D10 point 4 bounds it to the background family and deletes at the switch; the protected commits stay untouched; the native background must measure no worse than them before it replaces them |
 
 ## Where the audit of 12 Nov disagreed, in one place
