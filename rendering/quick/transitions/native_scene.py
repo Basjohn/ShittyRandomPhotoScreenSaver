@@ -180,11 +180,12 @@ def motion_post_sources() -> dict[str, str]:
 
 
 #: The trails' edge pass in a scene's pass list (after the underlay and the ghosts, before the pieces): the core's
-#: triangle over the scene's whole allocation, blended as Python's (SRC_ALPHA, ONE_MINUS_SRC_ALPHA on both).
+#: triangle over the scene's whole allocation, blended as Python's ``blend_scope(ADD, SRC_ALPHA, ONE_MINUS_SRC_ALPHA)``:
+#: the colour over, the alpha kept (ZERO, ONE). N5.2e: with bloom the alpha is emitted light, and an edge blended into it
+#: lit every trail outline (N5.2d's opaque scenes never read it).
 TRAIL_EDGES_PASS = NativeScenePass(TRAIL_EDGES, None, "", samplers=(("uGhosts", "ghosts"),), core_triangle=True,
                                    viewport="allocation",
-                                   blend=(("add", "src_alpha", "one_minus_src_alpha"),
-                                          ("add", "src_alpha", "one_minus_src_alpha")))
+                                   blend=(("add", "src_alpha", "one_minus_src_alpha"), ("add", "zero", "one")))
 
 
 @dataclass(frozen=True)

@@ -625,6 +625,49 @@ def test_exploding_tiles_frame_block_is_merged_into_each_pass_block():
         assert frame.name in declared and len(declared) == 2, name
 
 
+def test_the_n52e_bounds_cover_every_moving_form():
+    """Every single-sampled Exploding Tiles and Page Curl form is judged by the piece-edge class (rule a), every
+    Exploding Tiles form and Page Curl with options by it under rule (b); Membrane's 4x default by its own rule (b)."""
+    trc = _trc()
+    single = {v for v, o in trc.N52E_VARIANTS.items() if o.get("samples") == 0}
+    moving = {v for v in single if not v.startswith("membrane")}
+    assert set(trc.N52E_EDGE_FLIPS_A) == moving
+    assert set(trc.N52E_EDGE_FLIPS_B) == {v for v in trc.N52E_VARIANTS if v.startswith("exploding_tiles")} | {
+        "page_curl_options"}
+    assert set(trc.EDGE_FLIPS_A) == set(trc.N52D_EDGE_FLIPS_A) | moving
+    # Control: the gather-free judgement (against Python in the core's frame) never takes a form with bloom.
+    assert trc.n52d_gather_free("exploding_tiles_plain") and trc.n52d_gather_free("page_curl_options")
+    assert not trc.n52d_gather_free("exploding_tiles_bloom") and not trc.n52d_gather_free("membrane_options")
+
+
+def test_the_trail_edges_keep_the_scenes_alpha_as_python_blends_them():
+    """Python blends the trails' edges with ``blend_scope(ADD, SRC_ALPHA, ONE_MINUS_SRC_ALPHA)``, whose alpha is
+    (ZERO, ONE): kept. With bloom the alpha is emitted light; N5.2d's alpha (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) lit every
+    trail outline (n52e_r1: Exploding Tiles with bloom, motion and trails, 100k pixels off; 236 once kept)."""
+    from unittest import mock
+
+    from OpenGL import GL as gl
+
+    from rendering.quick.scene3d import passes
+    from rendering.quick.transitions.native_scene import TRAIL_EDGES_PASS
+
+    names = {gl.GL_ZERO: "zero", gl.GL_ONE: "one", gl.GL_SRC_ALPHA: "src_alpha",
+             gl.GL_ONE_MINUS_SRC_ALPHA: "one_minus_src_alpha", gl.GL_FUNC_ADD: "add"}
+    calls = {}
+    with mock.patch.object(passes, "gl") as fake:
+        for constant in ("GL_ZERO", "GL_ONE", "GL_SRC_ALPHA", "GL_ONE_MINUS_SRC_ALPHA", "GL_FUNC_ADD", "GL_BLEND"):
+            setattr(fake, constant, getattr(gl, constant))
+        fake.glBlendFuncSeparate.side_effect = lambda *a: calls.setdefault("func", a)
+        fake.glBlendEquationSeparate.side_effect = lambda *a: calls.setdefault("equation", a)
+        with passes.blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA):
+            pass
+    src, dst, src_a, dst_a = (names[v] for v in calls["func"])
+    python = ((names[calls["equation"][0]], src, dst), (names[calls["equation"][1]], src_a, dst_a))
+    assert tuple(map(tuple, TRAIL_EDGES_PASS.blend)) == python
+    # Control: N5.2d's blend (the colour's factors on the alpha too) is not Python's.
+    assert (("add", "src_alpha", "one_minus_src_alpha"), ("add", "src_alpha", "one_minus_src_alpha")) != python
+
+
 def test_the_merge_refuses_a_doubled_member_and_a_third_block():
     from rendering.gl_programs import exploding_tiles_program as et
     from rendering.quick.transitions.native_scene import native_one_block

@@ -1549,6 +1549,10 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   - [ ] `NativeScenePasses` for the three, the packs baked, the route check's N52E variants (each default; single-sampled
     with options; Exploding Tiles with bloom, motion, trails, both and neither, and 4x), bounds measured, cost, the hitch
     session, registration last.
+  - [ ] For the lead (agent, 22 Nov): the N52E bounds in `transition_route_check.py` (`N52E_EDGE_FLIPS_A`/`_B`, the
+    piece-edge class for Exploding Tiles and Page Curl's moving page; `MEMBRANE_RULE_B`, Membrane's 4x translucent sheet
+    at 14,544 one-level pixels a frame); then the hitch session (Display 1 off on 22 Nov: only the 4K panel at 60 Hz,
+    primary) and registration after it (the ported-equals-drawn test holds its interim form until then).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
