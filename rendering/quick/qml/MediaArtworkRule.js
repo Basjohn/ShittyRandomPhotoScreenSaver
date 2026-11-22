@@ -15,9 +15,15 @@
 // The share of the extra width the artwork takes (the rest goes to the metadata beside it).
 var widthShare = 0.35
 
-// The artwork's width before its height bounds it.
-function provisionalWidth(baseWidth, extraWidth, contentWidth, metadataRoom, floorWidth) {
-    return Math.min(Math.max(floorWidth, baseWidth + extraWidth * widthShare),
+// The artwork's width before its height bounds it. An owner that passes its vertical room (``heightRoom``, the least
+// height the artwork can have) and its ``maxAspect`` lets the artwork widen to the shape its height asks for (a
+// square for the Media card) as soon as the card has the room, instead of only by the share of the extra width: a
+// tall card otherwise leaves a narrow strip beside a wide empty text column.
+function provisionalWidth(baseWidth, extraWidth, contentWidth, metadataRoom, floorWidth, heightRoom, maxAspect) {
+    var wanted = baseWidth + extraWidth * widthShare
+    if (heightRoom > 0.0 && maxAspect > 0.0)
+        wanted = Math.max(wanted, heightRoom * maxAspect)
+    return Math.min(Math.max(floorWidth, wanted),
                     Math.max(1.0, contentWidth - metadataRoom))
 }
 

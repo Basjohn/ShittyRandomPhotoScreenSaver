@@ -640,7 +640,13 @@ OverlayWidget {
                 // block draws it too): this card's base, floor and metadata room.
                 readonly property real provisionalArtworkWidth: ArtworkRule.provisionalWidth(
                     baseArtworkWidth, extraHorizontalRoom,
-                    mediaRoot.authoredCardContentWidth, minimumMetadataRoom, 88.0
+                    mediaRoot.authoredCardContentWidth, minimumMetadataRoom, 88.0,
+                    squareHeightRoom, 1.0
+                )
+                // The least height the artwork can have (it never reaches below the seek rail): the width
+                // the square shape asks for. Reads no width, so it cannot feed back into the seek overlap test.
+                readonly property real squareHeightRoom: Math.max(
+                    1.0, progressRailTop - (progressBand.visible ? mediaColumn.spacing : 0.0) - topInColumn
                 )
                 readonly property real provisionalArtworkX:
                     mediaRoot.authoredCardContentWidth - provisionalArtworkWidth
