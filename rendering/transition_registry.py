@@ -113,6 +113,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Volumetric Dissolve",
         stable_id="volumetric_dissolve",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -187,6 +188,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Disintegrate",
         stable_id="disintegrate",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
