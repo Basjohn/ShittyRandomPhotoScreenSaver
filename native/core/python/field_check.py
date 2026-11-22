@@ -81,12 +81,12 @@ def photo_pixels():
 
 def recipes(low_high=(0.05, 0.12)):
     from rendering.gl_programs.capillary_bloom_program import CAPILLARY_COST_GLSL
-    from rendering.quick.scene3d.native_fields import edge_field_recipe, propagation_recipe
+    from rendering.quick.scene3d.native_fields import edge_field_recipe, propagation_recipe, propagation_seed_layout
     from rendering.quick.transitions.implementations.capillary_bloom import QuickCapillaryBloomRenderer
 
     edge = edge_field_recipe(PHOTO, *low_high, input_texture="photo", output="edge_field")
     _key, sources, bound, values = QuickCapillaryBloomRenderer._field_inputs(4, 0.6, 1234, PHOTO)
-    prop = propagation_recipe("capillary", CAPILLARY_COST_GLSL, PHOTO, sources, bound, values, arrival="arrival",
+    prop = propagation_recipe("capillary", propagation_seed_layout(CAPILLARY_COST_GLSL), PHOTO, sources, bound, values, arrival="arrival",
                               extent="extent")
     return {"edge": edge, "propagation": prop}
 

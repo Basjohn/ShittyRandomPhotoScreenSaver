@@ -19,6 +19,7 @@ from rendering.gl_programs.scene3d import Scene3DBlockLayout
 
 from . import edge_field as ef
 from . import propagation_field as pf
+from .propagation_field import _portable_seed
 
 #: The edge field's stages' pack stems, in the owner's order (``EDGE_FIELD_PROGRAMS``).
 EDGE_FIELD_PACKS = tuple(key for key, _source in ef.EDGE_FIELD_PROGRAMS)
@@ -123,15 +124,17 @@ def edge_field_recipe(pixel_size: tuple[int, int], low: float, high: float, *, i
 
 # ------------------------------------------------------------------------------------------------- the propagation
 
-def _seed_layout(cost_glsl: str) -> Scene3DBlockLayout:
-    _source, cost = pf._portable_seed(cost_glsl)
+def propagation_seed_layout(cost_glsl: str) -> Scene3DBlockLayout:
+    """The seed pack's one merged block (the consumer's cost block, then the dispatch block). A consumer resolves it once
+    at its module's top level and hands it to ``propagation_recipe``, so the recipe builder composes no shader."""
+    _source, cost = _portable_seed(cost_glsl)
     return Scene3DBlockLayout.of(cost.name, tuple(cost.fields) + tuple(pf._DISPATCH_BLOCK.fields))
 
 
 def propagation_seed_source(cost_glsl: str) -> str:
     from rendering.quick.transitions.native_scene import native_one_block
 
-    source, _cost = pf._portable_seed(cost_glsl)
+    source, _cost = _portable_seed(cost_glsl)
     return native_one_block((source,), "PropagationDispatch")[0]
 
 
@@ -143,7 +146,7 @@ def propagation_sources(name: str, cost_glsl: str) -> dict[str, str]:
             f"{PROPAGATION_EXTENT}.comp": pf._EXTENT_COMPUTE}
 
 
-def propagation_recipe(name: str, cost_glsl: str, pixel_size: tuple[int, int], sources, bound: float,
+def propagation_recipe(name: str, seed_layout: Scene3DBlockLayout, pixel_size: tuple[int, int], sources, bound: float,
                        cost_values: dict, *, arrival: str, extent: str,
                        passes: int = pf.PROPAGATION_PASSES) -> NativeFieldRecipe:
     """The arrival field and its extent for a render of ``pixel_size`` (``PropagationField.build_step``'s dispatches:
@@ -156,7 +159,7 @@ def propagation_recipe(name: str, cost_glsl: str, pixel_size: tuple[int, int], s
     packed = [(*source[:3], 0.0) for source in list(sources)[:count]]
     dispatch = {"uSize": (width, height), "uAspect": width / height, "uSourceCount": count, "uBound": float(bound),
                 "uSources": packed + [(0.0, 0.0, 0.0, 0.0)] * (pf.PROPAGATION_MAX_SOURCES - count)}
-    layout = _seed_layout(cost_glsl)
+    layout = seed_layout
     seed_values = {member: 0.0 for member, _kind in layout.fields}
     seed_values.update({k: v for k, v in cost_values.items()})
     seed_values.update(dispatch)

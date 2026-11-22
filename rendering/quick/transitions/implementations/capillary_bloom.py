@@ -50,6 +50,11 @@ def capillary_bloom_parameters(parameters: Mapping[str, object]) -> tuple[int, f
     return sources, float(fibres), seed
 
 
+# The native seed pack's block, resolved once (``propagation_seed_layout``): the recipe builder composes no shader.
+from rendering.quick.scene3d.native_fields import propagation_seed_layout as _propagation_seed_layout  # noqa: E402
+
+_SEED_LAYOUT = _propagation_seed_layout(CAPILLARY_COST_GLSL)
+
 class QuickCapillaryBloomRenderer(NativeFragmentPass):
     transition_id = "capillary_bloom"
     #: N5.2g: the native pack's text (the native define and the gradient's dFdy sign, capillary_native_fragment).
@@ -73,7 +78,7 @@ class QuickCapillaryBloomRenderer(NativeFragmentPass):
         count, fibres, seed = capillary_bloom_parameters(run.request.parameter_dict())
         size = (int(pixels[0]), int(pixels[1]))
         _key, sources, bound, cost_values = self._field_inputs(count, fibres, seed, size)
-        return (NativeFieldRequest(None, propagation_recipe("capillary", CAPILLARY_COST_GLSL, size, sources, bound,
+        return (NativeFieldRequest(None, propagation_recipe("capillary", _SEED_LAYOUT, size, sources, bound,
                                                             cost_values, arrival=NATIVE_ARRIVAL,
                                                             extent=NATIVE_EXTENT)),)
 
