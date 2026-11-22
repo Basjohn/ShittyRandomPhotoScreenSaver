@@ -51,7 +51,8 @@ there three tracks, one High slot each:
 - the **primitives track** (N4's unconsumed items and N6) "whenever a High slot is free and never holds the flip"
   (item 8b, "Order" paragraph).
 
-Then **NF** (the flip, item 8b, NF), then item 9: SMP foundations, then new modes (item 9).
+Then **NF** (the flip, item 8b, NF), followed by native-only **Melt Pool then Concrete Rain** (item 9 / §7) and
+substantial QoL work. SMP foundations remain deferred in `Future_Work.md` §2.5 until explicit operator readmission.
 
 **N4 items are ported just before their first consumer** (item 8b, the heading above the N4 boxes: "each ported just before its first
 consumer below (the unconsumed ones on the primitives track)"). An N4 item whose consumer is on the modes or the
@@ -543,15 +544,15 @@ Never built in any form:
   post-flip Melt Pool and Concrete Rain may explicitly require Vulkan + `VK_EXT_mesh_shader` without one (operator,
   23 Nov; see D5.3 supersession and `Current_Plan.md` N6.7). The other low-potential candidates still need admission.
 
-### Candidate consumers beyond today's modes (item 9 and SMP)
+### Candidate consumers beyond today's modes (item 9; SMP deferred)
 
 New modes (`Current_Plan.md` item 9) are built on the native core only: Reactive Liquid / Melt Pool (section 7.2,
 S3D-3, S3D-4, S3D-5, S3D-2: N6.2, N6.1, N4.d, N4.c), Concrete Rain (section 7.3, same four), Usu Moonscape (section 7.4,
 "plus S3D-6", i.e. N4.h, with character and world foundations S19 to S27 that are not primitives of this catalogue).
-Expanded Visualizer M6 (4K acceptance) waits on N4.f2 for Waveform Ribbon and Extruded Bubble (item 8b, N4.f2's box). SMP surfaces
-(item 9, SMP foundations): the plan says "one Visualizer owner, any surface"; the plan names Neon Lake and SMP surfaces as
-candidate users of N6.1 (N6.1's box). Which other SMP surface uses which primitive is **unverified**: no SMP document
-was read for this catalogue.
+Expanded Visualizer M6 (4K acceptance) waits on N4.f2 for Waveform Ribbon and Extruded Bubble (item 8b, N4.f2's box).
+**Future-only SMP consumers** (not current item 9): host-agnostic native rendering remains a retained contract,
+and N6.1 might eventually serve SMP surfaces. There is no admitted SMP consumer, shader, renderer or deadline;
+its source/host contract stays in Future_Work §2.5 and SMP plan 02.
 
 ## 6. How to read an entry's numbers
 
