@@ -78,17 +78,14 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   - [ ] Rule (b) soft-glow failures (Frozen Past 44, Travelling Pulse 23, Whole Swell 12 frames, max 79; same
     single-sampled): same bisect on one failing frame; a defect is fixed, never admitted by a wider bound.
   - [ ] Then rule (b) and the affected P rerun (30 s of each take, section 7), T, stop point 2.
-- [ ] Background track: agent a4f18f4449f3e8a5b (Opus Medium), the watch items below then N5.2e (Membrane, Page Curl,
-  Exploding Tiles) to stop point 1, ABI 41 reserved (Waveform takes 40); the black flicker
-  fixed and merged 22 Nov (ABI 39).
+- [ ] Background track: agent a4f18f4449f3e8a5b (Opus Medium), N5.2e (Membrane, Page Curl, Exploding Tiles) from
+  stop point 1 (merged 22 Nov; design in the N5.2e box, no core C++, ABI 41 freed) to stop point 2.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] The route check's Warp variant still uses the old id `warp` (the registry's is `warp_dissolve`), so a default
-    route check stops with "unavailable transition warp"; rename it through `fullscreen_pass_check.py`'s tables and
-    the route check's sheet list.
   - [ ] Display 1 session gaps: the final flicker session had two runs over 33 ms (3D Block Spins 55, Beam 35; single
     missed vsyncs at 60 Hz, also present with the diagnostic off), where the 21 Nov N5.2d session had none at ~185 fps.
-    Record the display mode and take one session again before the next transition batch (N5.2e); unstable only if
-    it repeats at the earlier mode.
+    Record the display mode and take one session again (22 Nov: deferred, only the 4K panel at 60 Hz attached as
+    primary; run `preflip_pack.py --rows` with the flicker session's eight, `--backend native-vulkan`, when Display 1
+    is back, with N5.2e's hitch session); unstable only if it repeats at the earlier mode.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
