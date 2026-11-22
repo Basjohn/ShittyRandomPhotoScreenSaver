@@ -1470,6 +1470,81 @@ whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a 
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
+  Reading (agent, 22 Nov; the three implementations and programs, `rendering/quick/scene3d/` grid, shadows, particles,
+  target, post and motion, `rendering/gl_programs/scene3d.py`):
+  - Shared. Each ends on the photographs (progress 0 the old picture, the end the new one: 1.0, Membrane's
+    `MEMBRANE_DONE` 0.92), reads N4.j's photo environment of the new picture (`uEnvironment`, unit 2) on every frame, and
+    draws into a scene target of the request's samples (Python draws straight into Quick's framebuffer at 0). Every
+    vertex stage but the shadows' writes its own clip depth (`sceneProjectAt`'s `sceneClipDepth`, Exploding Tiles' sparks
+    `sceneStreak`'s), so each takes `native_clip_depth`; the shadows' clip goes through `uMatrix` with z 0 and takes none.
+  - Membrane: the underlay (the new picture: `UNDERLAY_PROGRAM`, `uImage`), then the sheet: the bendable grid
+    (`scene3d_grid_vertices(columns, rows)`, `aGrid` vec2, two triangles a cell, the tier's `grid_cells` along the longer
+    side at the logical aspect: High 192 x 108 at 16:9, 124,416 vertices), depth LESS written, blended straight (colour
+    add src_alpha / one_minus_src_alpha, alpha add one / one_minus_src_alpha; its back is translucent). Block `Membrane`:
+    `uGridCells`, `uSweep` (`MEMBRANE_SWEEP_VECTORS` of the direction), `uProgress`, `uSpin` (+1 for an odd seed, else -1),
+    `uSeed` (seed % 997), `uGloss`; the core's `uMatrix`, `uItemSize`. Samplers `uOldTex` (0), `uEnvironment` (2);
+    the fragment declares `uNewTex` (1) and never reads it.
+  - Page Curl: the backdrop (item quad, `uNewTex`, the roll's shadow `uShade`), no depth, replace; then the page (the
+    same grid, `uOldTex` and `uEnvironment`), depth LESS written, replace. Values per frame: `uDirection`
+    (`page_curl_direction(origin, aspect)`), `uLine` (`page_curl_line`), `uRoll` (`page_curl_roll(size)`), `uShade`
+    (`page_curl_shade_weight`), `uGloss`, `uGridCells`; blocks `PageCurlBackdrop` and `PageCurlPage`.
+  - Exploding Tiles: samples are the request's, or 1 with bloom, motion blur or trails. Passes: the backdrop (item quad,
+    `uNewTex`, the blast's light, no depth, replace), the soft shadows when the tier has shadows (item quad strip of 4,
+    one instance a tile, colour MIN one/one, alpha add zero/one: the backdrop's alpha kept), [trails: the tile ghosts x 3
+    on the R8 buffer and the edges], the tiles (the 144-vertex beveled slab, `aPosition`/`aNormal`/`aUv` 3/3/2, one
+    instance a tile from `gl_InstanceID`, columns 6-48 by `exploding_tiles_grid` of the viewport's device pixels, so at
+    most 48 x 48; depth LESS written, replace; with motion blur it writes the velocity), then the sparks while
+    `exploding_tiles_sparks_live` (item quad strip, `particle_budget(480, tier)` instances, colour and alpha add one/one,
+    depth tested LESS and not written). Every program declares TWO blocks: its pass block (`ExplodingTilesBackdrop`,
+    `ExplodingTilesShadows`, `ExplodingTiles` with the ghosts' `uGhostFade`, `ExplodingTilesSparks`: `uMatrix`,
+    `uItemSize`) and the shared `ExplodingTilesFrame` at binding 15 (one upload a frame through Python's StreamRing):
+    `uGrid`, `uProgress`, `uSeed`, `uDepth`, `uThickness`, `uForce`, `uCenterOut` (int), `uEpicentre` (x, y, reach:
+    `exploding_tiles_epicentre`, seeded), `uSeconds`, `uBlast` (flash, fire), `uBody` (the source's dominant colour,
+    once a run), `uEmissive` (1 with bloom), `uShutter` (the shutter progress with motion blur, else 0; a ghost passes
+    its time minus now), `uViewport` (device pixels). Its tile fragment writes `SceneMotion` (vec4, location 1) itself,
+    not through `scene3d_motion_fragment`, so it never writes location 2.
+  - Bloom (Exploding Tiles only): with bloom the scene's colour clears to (0, 0, 0, 0) and every pass writes the light
+    it emits in alpha (`sceneOutput`: luminance; the sparks add theirs); at the end (resolved when multisampled) the
+    motion gather runs first, over the whole allocation, and the bloom chain (`post.py`, 4 levels) reads the gathered
+    picture; the opaque composite adds the glow at `uBloomStrength` = the request's bloom (`uBloomScale` 1 / allocation).
+  - What the core lacks: a pass with two blocks of its own (`mode_content.cpp`: "a pass has one block of its own, the
+    same in both stages"); nothing else. The rest is there as data: scene meshes and instance counts by setting (0 draws
+    nothing), MIN/MAX blends, a depth test without a write, scoped settings, the allocation viewport, `BloomStep` on any
+    averaged scene attachment (the `blurred` target's included) and the `opaque_glow` composite (Python's
+    `_COMPOSITE_FRAGMENT`). N4.l's bendable grid is a static mesh, its planar shadows and particles instanced quads:
+    no primitive of their own (its silhouette half is N5.3's).
+  Design (agent, 22 Nov; no core C++, so ABI 41 is not used and goes back to the lead):
+  - The frame block as data: the native packs of Exploding Tiles declare one block, the pass block with the frame
+    block's members appended (a `native_scene` text helper over `portable.block_declaration`; every stage of a pass the
+    same merged block at the pass block's binding; a name in both blocks refused), filled by name from `scene_values`
+    like any member; the ghosts' frame members scoped (`uProgress@tiles_ghost_<k>`, `uBlast@...`, `uShutter@...` = the
+    ghost's time minus now, `uGhostFade@...`). Python keeps its two blocks and its StreamRing (frozen). Rejected: a second
+    block a pass in the core, a change on the pass admission, the arena plan, the bindings and the record of every mode's
+    path, where the duplicated frame members cost about 100 bytes a pass in the arena. N5.2f's Disintegrate and
+    Volumetric Dissolve frame blocks take the same helper.
+  - Python conversion (checklist 16, stills before and after, byte-identical): Exploding Tiles' tile fragment also writes
+    `layout(location = 2) out vec4 SceneMotionY` = (v.y, 0, 0, 1), as `scene3d_motion_fragment` (Python's RG16F keeps .xy
+    at 1, no draw buffer at 2). Its native tiles pack without motion blur is the same text with the motion outputs as
+    plain variables (`scene3d_ghost_fragment`'s conversion), since the core refuses outputs past a target's attachments.
+  - `NativeScenePass` gains `depth_write` (default: `depth`) for the sparks' test without a write.
+  - Scenes: Membrane `underlay`, `sheet` (mesh `scene_grid` of the run's grid; samplers old, environment, and new if
+    the pack reflects it); Page Curl `backdrop`, `page`; Exploding Tiles `backdrop`, [`shadows`], [`tiles_ghost_<k>`,
+    the edges], `tiles` (moves with motion blur), `sparks` (instances `spark_instances`: the budget while live, else 0, as
+    Python skips the pass); tile counts by the setting `tile_instances` (`scene_pixels`: the grid of the item's device
+    pixels). Targets as N5.2d's, the scene's colour cleared (0, 0, 0, 0) with bloom.
+  - Bloom: `BloomStep("scene_bloom", "scene_blurred.colour")` with motion blur, else of `scene.colour` (its resolve when
+    multisampled, as Python's shader average), then `CompositeStep(..., "opaque_glow", <that>, "scene_bloom.glow")` with
+    `u_bloom_strength` the request's bloom; with bloom the gather draws over the allocation (`"viewport": "allocation"`,
+    Python's), N5.2d's runs unchanged. Without bloom the opaque composite as N5.2c's.
+  - Proof (proof guide section 3, the transition port): row order checked first (checklist 17; the gather-free forms
+    against `core_frame`), rule (a) on the single-sampled forms (`N52C_RULE_A` for Membrane and Page Curl; Exploding
+    Tiles' moving tiles under the piece-edge class, its bloom's spread of the edge flips measured, for the lead), rule (b)
+    on every form, `--cost` at 1440p and 4K on both backends, one native Vulkan hitch session, registration last.
+  - [ ] The Python conversion with its stills; the `native_scene` helpers (merged block, motion-free tiles) with GPU-free
+    tests whose controls fail (two blocks refused, a doubled name refused).
+  - [ ] `NativeScenePasses` for the three, the packs baked, the route check's N52E variants (each default; single-sampled
+    with options; Exploding Tiles with bloom, motion, trails, both and neither, and 4x), bounds measured, cost, the hitch
+    session, registration last.
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
