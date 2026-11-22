@@ -31,6 +31,20 @@ def seeded_random(indices, salt):
     return (x & SEED_STEPS).astype(np.float64) / float(SEED_STEPS)
 
 
+# A SCENE population cycles over its inlet's track inside the tank (scene_entries' span). An inlet near the exit
+# corner has a track of a few hundredths of a unit: its 160 beads were packed into it and wrapped around it faster
+# than a frame, so at the emission face they landed somewhere new every frame, each along its own plume ray (the
+# flickering starfish of Preset 9, N5.6), and a short track held a dense pinned clump. A cycle never shorter than
+# this keeps a bead's spacing and step physical; the part of the cycle past the track is outside the tank, where
+# the exit fade hides it. World units (about 1.3 tank heights). One value for the GPU (_SCENE_INLET_GLSL) and here.
+SCENE_CYCLE_FLOOR = 12.0
+
+
+def scene_cycles(spans):
+    """The length each SCENE population cycles over: its track, never under SCENE_CYCLE_FLOOR."""
+    return np.maximum(np.asarray(spans, dtype=float), SCENE_CYCLE_FLOOR)
+
+
 def scene_entries(face_seed, uv, direction, weights):
     """Same physical inlet and exit lengths as sceneInlet in the procedural shader."""
     d = np.asarray(direction); half = np.asarray(WORLD_HALF); centre = np.asarray(WORLD_CENTER)
@@ -214,6 +228,7 @@ def chain_geometry(controls, direction, across, depth_axis, face_weights, nodes=
     if controls.emission_geometry=='SCENE':
         start,spans=scene_entries(seeded_random(ids,31),
             np.stack((seeded_random(ids,32),seeded_random(ids,33)),axis=-1),direction,face_weights)
+        spans=scene_cycles(spans)
     else:
         width=min(WORLD_HALF[0],WORLD_HALF[2])*.28*controls.particle_spread
         start=(source+np.asarray(across)[None,:]*(seeded_random(ids,1)*2.-1.)[:,None]*width
@@ -234,6 +249,7 @@ def cloud_geometry(controls, direction, across, depth_axis, face_weights, family
     end=np.asarray(world_point(controls.stream_path[3:],WORLD_HALF))
     if controls.emission_geometry=='SCENE':
         start,spans=scene_entries(seeded_random(ids,salts[3]),seed[:,(0,2)],direction,face_weights)
+        spans=scene_cycles(spans)
     else:
         if family=='specks':
             transverse=np.cross(direction,(0.,1.,0.) if abs(direction[1])<.9 else (0.,0.,1.))
