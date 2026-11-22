@@ -103,7 +103,7 @@ QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture)
         // Every level (N5.7b: the backdrop's output has mips, each level a target of its own; QRhi tracks one layout
         // for the whole image, and setNativeLayout below names it for every level). One level for every other target.
         barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS; // ABI 42: a cube's six faces too
         df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
                                  &barrier);
@@ -151,7 +151,7 @@ int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &t
             barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-            barrier.subresourceRange.layerCount = 1;
+            barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS; // ABI 42: a cube's six faces too
             barriers.append(barrier);
         }
         df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -210,7 +210,8 @@ int colourBarriers(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *const *texture
             barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-            barrier.subresourceRange.layerCount = 1;
+            // ABI 42: every layer (a cube target's six faces: QRhi's layout is the whole image's, layers included).
+            barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
         }
         df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, dstStage, 0, 0, nullptr,
                                  0, nullptr, uint32_t(n), barriers);

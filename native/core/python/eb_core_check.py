@@ -45,7 +45,7 @@ import vk_validation  # noqa: E402
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("limits", "skip", "readback", "geometry")
+ROUNDS = ("limits", "skip", "readback", "geometry", "probe")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
 OUT: Path | None = None     # the child's evidence folder (set by child)
@@ -79,7 +79,68 @@ void main() {
     result[64u + i] = prev[i];
 }
 """
-SHADERS = {"fill.frag": FILL_FRAG, "extra.frag": EXTRA_FRAG, "geometry.comp": GEOMETRY_COMP}
+PROBE_SIDE = 32
+PROBE_LEVELS = (0, 2, 3)          # the lookups' levels (3: a 4x4 face, the cone's blur past a box's)
+LOOK_SIZE = (128, 64)
+
+
+def face_frag(face: int) -> str:
+    """A face pass drawing the world direction of its pixel (probe.py's rotation for ``face``), encoded d * 0.5 + 0.5.
+    v_uv is y down (render_contract.py), as in a face framebuffer Python draws: OpenGL's NDC y is 1 - 2 v_uv.y."""
+    from rendering.quick.scene3d.probe import scene3d_probe_face_rotation
+
+    r = scene3d_probe_face_rotation(face)
+    vec = lambda v: "vec3(%r, %r, %r)" % tuple(float(x) for x in v)  # noqa: E731
+    return f"""#version 440
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 colour;
+void main() {{
+    vec2 ndc = vec2(v_uv.x * 2.0 - 1.0, 1.0 - v_uv.y * 2.0);
+    vec3 d = normalize({vec(r[0:3])} * ndc.x + {vec(r[3:6])} * ndc.y - {vec(r[6:9])});
+    colour = vec4(d * 0.5 + 0.5, 1.0);
+}}
+"""
+
+
+FACE_MATRIX_VERT = """#version 440
+layout(std140, binding = 18) uniform FaceDraw { mat4 uMatrix; };
+layout(location = 0) out vec2 vNdc;
+void main() {
+    vec2 p = vec2(gl_VertexIndex == 1 ? 3.0 : -1.0, gl_VertexIndex == 2 ? 3.0 : -1.0);
+    vNdc = p;
+    // uMatrix maps item pixels (y down, one a face texel) to the face's clip space: OpenGL's NDC as item pixels.
+    gl_Position = uMatrix * vec4((p.x * 0.5 + 0.5) * 32.0, (0.5 - p.y * 0.5) * 32.0, 0.0, 1.0);
+}
+"""
+
+
+def face_matrix_frag(face: int) -> str:
+    """The face drawn as probe.py draws it: OpenGL's clip space (NDC from the vertex) through the core's uMatrix."""
+    return face_frag(face).replace("layout(location = 0) in vec2 v_uv;", "layout(location = 0) in vec2 vNdc;").replace(
+        "vec2 ndc = vec2(v_uv.x * 2.0 - 1.0, 1.0 - v_uv.y * 2.0);", "vec2 ndc = vNdc;").replace(
+        "#version 440\n", "#version 440\nlayout(std140, binding = 18) uniform FaceDraw { mat4 uMatrix; };\n")
+
+
+LOOK_FRAG = """#version 440
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 l0;
+layout(location = 1) out vec4 l2;
+layout(location = 2) out vec4 l3;
+layout(location = 3) out vec4 dir;
+layout(binding = 1) uniform samplerCube uCube;
+void main() {
+    float lon = (v_uv.x * 2.0 - 1.0) * 3.14159265;
+    float lat = (v_uv.y - 0.5) * 3.14159265 * 0.98;
+    vec3 d = vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
+    l0 = vec4(textureLod(uCube, d, 0.0).rgb, 1.0);
+    l2 = vec4(textureLod(uCube, d, 2.0).rgb, 1.0);
+    l3 = vec4(textureLod(uCube, d, 3.0).rgb, 1.0);
+    dir = vec4(d * 0.5 + 0.5, 1.0);
+}
+"""
+SHADERS = {"fill.frag": FILL_FRAG, "extra.frag": EXTRA_FRAG, "geometry.comp": GEOMETRY_COMP, "look.frag": LOOK_FRAG,
+           **{f"face{f}.frag": face_frag(f) for f in range(6)},
+           **{f"face_matrix{f}.frag": face_matrix_frag(f) for f in range(6)}, "face_matrix.vert": FACE_MATRIX_VERT}
 
 
 class Raw:
@@ -93,8 +154,15 @@ class Raw:
         return dict(self._declaration)
 
 
-def _with(entry, **keys) -> Raw:
-    return Raw(dict(entry.declaration(), **keys), getattr(entry, "pack", b"") or b"")
+def _with(entry, **keys):
+    """``entry`` with ABI 42 keys added to its declaration, its class kept (``program_json`` still finds its packs)."""
+    import copy
+
+    base = type(entry)
+    cls = type(f"With{base.__name__}", (base,), {"declaration": lambda self: dict(base.declaration(self), **keys)})
+    made = copy.copy(entry)
+    object.__setattr__(made, "__class__", cls)
+    return made
 
 
 # --------------------------------------------------------------------------------------------------- the packs
@@ -674,6 +742,248 @@ def round_geometry(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# --------------------------------------------------------------------------------------------------- the probe
+# A CPU twin of probe.py's chain on the same scene (each texel the direction it faces): OpenGL's cube-map faces (the
+# major-axis table, row 0 at t = 0), bilinear reads clamped at a face's edge, each level probe.py's 32-tap cone over
+# the level above. Its control twin: per-face 2x2 box mips (what generateMips gives).
+
+def _face_dir(face, sc, tc):
+    import numpy as np
+
+    one = np.ones_like(sc)
+    table = {0: (one, -tc, -sc), 1: (-one, -tc, sc), 2: (sc, one, tc), 3: (sc, -one, -tc), 4: (sc, -tc, one),
+             5: (-sc, -tc, -one)}
+    d = np.stack(table[face], axis=-1)
+    return d / np.linalg.norm(d, axis=-1, keepdims=True)
+
+
+def _texel_dirs(n):
+    import numpy as np
+
+    c = (np.arange(n) + 0.5) / n * 2.0 - 1.0
+    tc, sc = np.meshgrid(c, c, indexing="ij")          # [row, column]: row t, column s
+    return np.stack([_face_dir(f, sc, tc) for f in range(6)])
+
+
+def _cube_sample(level, d):
+    """Bilinear read of ``level`` (6, n, n, 3) along directions ``d`` (..., 3), clamped at the face's edge."""
+    import numpy as np
+
+    n = level.shape[1]
+    x, y, z = d[..., 0], d[..., 1], d[..., 2]
+    ax, ay, az = np.abs(x), np.abs(y), np.abs(z)
+    face = np.where((ax >= ay) & (ax >= az), np.where(x > 0, 0, 1),
+                    np.where(ay >= az, np.where(y > 0, 2, 3), np.where(z > 0, 4, 5)))
+    sc = np.select([face == 0, face == 1, face == 2, face == 3, face == 4, face == 5], [-z, z, x, x, x, -x])
+    tc = np.select([face == 0, face == 1, face == 2, face == 3, face == 4, face == 5], [-y, -y, z, -z, -y, -y])
+    ma = np.select([face < 2, face < 4], [ax, ay], az)
+    s = (sc / ma + 1.0) * 0.5 * n - 0.5
+    t = (tc / ma + 1.0) * 0.5 * n - 0.5
+    s0, t0 = np.floor(s), np.floor(t)
+    fs, ft = (s - s0)[..., None], (t - t0)[..., None]
+    s0, t0 = s0.astype(int), t0.astype(int)
+    c = lambda v: np.clip(v, 0, n - 1)  # noqa: E731
+    v00, v01 = level[face, c(t0), c(s0)], level[face, c(t0), c(s0 + 1)]
+    v10, v11 = level[face, c(t0 + 1), c(s0)], level[face, c(t0 + 1), c(s0 + 1)]
+    return (v00 * (1 - fs) + v01 * fs) * (1 - ft) + (v10 * (1 - fs) + v11 * fs) * ft
+
+
+def _cone(source, axis, cone):
+    import numpy as np
+
+    helper = np.where(np.abs(axis[..., 1:2]) < 0.99, np.array([0.0, 1.0, 0.0]), np.array([1.0, 0.0, 0.0]))
+    u = np.cross(helper, axis)
+    u /= np.linalg.norm(u, axis=-1, keepdims=True)
+    v = np.cross(axis, u)
+    sigma = max(cone * 0.5, 1e-4)
+    total, weights = 0.0, 0.0
+    for i in range(32):
+        cos_t = 1.0 - (i + 0.5) / 32.0 * (1.0 - np.cos(cone))
+        theta = np.arccos(cos_t)
+        phi = i * 2.39996323
+        d = axis * cos_t + (u * np.cos(phi) + v * np.sin(phi)) * np.sin(theta)
+        w = np.exp(-theta * theta / (2.0 * sigma * sigma))
+        total = total + _cube_sample(source, d) * w
+        weights += w
+    return total / weights
+
+
+def probe_models(side: int, levels: int):
+    """(cone chain, box chain): each a list of (6, n, n, 3) levels."""
+    import math
+
+    import numpy as np
+
+    base = _texel_dirs(side) * 0.5 + 0.5
+    cone, box = [base], [base]
+    for level in range(1, levels):
+        n = max(side >> level, 1)
+        cone.append(_cone(cone[-1], _texel_dirs(n), min(2.2 * (math.pi / 2.0) / n, math.pi / 2.0)))
+        prev = box[-1]
+        box.append(0.25 * (prev[:, 0::2, 0::2] + prev[:, 1::2, 0::2] + prev[:, 0::2, 1::2] + prev[:, 1::2, 1::2]))
+    return cone, box
+
+
+def _probe_program(packs, *, swap: bool = False, mips: str = "linear", matrix: bool = False):
+    from rendering.native.mode import ModePass, ModeTarget, PassOutput, PassSampler, TargetAttachment
+
+    cube = Raw({"name": "probe", "size": [PROBE_SIDE, PROBE_SIDE], "colour": [{"name": "colour", "format": "rgba16f"}],
+                "cube": True, "allocation": "exact"})
+    look = ModeTarget("look", tuple(TargetAttachment(n, "rgba16f") for n in ("l0", "l2", "l3", "dir")),
+                      size=LOOK_SIZE, allocation="exact")
+    passes = []
+    for f in range(6):
+        drawn = {0: 1, 1: 0}.get(f, f) if swap else f
+        if matrix:
+            from rendering.native.mode import PassGeometry
+
+            entry = ModePass(f"face{f}", packs[f"face_matrix{f}.frag"], "replace", target="probe",
+                             geometry=PassGeometry(packs["face_matrix.vert"], vertices=3))
+        else:
+            entry = ModePass(f"face{f}", packs[f"face{f}.frag"], "replace", target="probe")
+        passes.append(_with(entry, face=drawn))
+    passes.append(Raw({"name": "filter", "prefilter": "probe"}))
+    passes.append(ModePass("look", packs["look.frag"], "replace", target="look",
+                           outputs=tuple(PassOutput(True, "replace") for _ in range(4)),
+                           samplers=(PassSampler("uCube", "probe.colour", "linear", "clamp", mips),)))
+    return passes, (cube, look)
+
+
+def _edge_band(d, n, texels=1.0):
+    """Lookups within ``texels`` of a face's edge at a face size ``n``."""
+    import numpy as np
+
+    a = np.sort(np.abs(d), axis=-1)
+    minor = a[..., 1] / a[..., 2]                       # the larger of the two minor coordinates over the major
+    return minor > 1.0 - 2.0 * texels / n
+
+
+def round_probe(core, engine, app, api: str, packs: dict) -> dict:
+    import math
+
+    import numpy as np
+
+    checks, facts = {}, {}
+    levels = int(math.log2(PROBE_SIDE)) + 1
+    cone, box = probe_models(PROBE_SIDE, levels)
+    host = _host(core, CARD)
+    got = {}
+    try:
+        mips = "linear"
+        for label, swap, matrix in (("probe", False, False), ("swapped", True, False), ("matrix", False, True)):
+            passes, targets = _probe_program(packs, swap=swap, mips=mips, matrix=matrix)
+            before = _live(core)
+            try:
+                scene = _still(core, engine, host, CARD, packs, passes, targets, {})
+            except ValueError as exc:
+                # A module before the fix refuses a cube's mipped sampler (as a defocus layer's): a fact; the level
+                # lookups wait for the rebuild, the faces and levels are still read back.
+                if "reads mips of the defocus layer" not in str(exc):
+                    raise
+                facts["mipped_cube_sampler_refused"] = str(exc)
+                mips = "none"
+                passes, targets = _probe_program(packs, swap=swap, mips=mips, matrix=matrix)
+                scene = _still(core, engine, host, CARD, packs, passes, targets, {})
+            try:
+                got[label] = _targets(scene)
+                state = scene.mode.state()
+                live = _live(core)
+                facts[f"{label}_counts"] = {k: _delta(live, before, k) for k in
+                                            ("scene_cube_face_runs", "scene_cube_prefilters", "scene_cube_level_copies")}
+                facts[f"{label}_reason"] = state.get("last_reason")
+                facts[f"{label}_failing"] = state.get("content_failing")
+            finally:
+                _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    live = _live(core)
+    facts["after_teardown"] = {k: live.get(k) for k in ("scene_targets", "scene_target_textures", "mode_resources")}
+    checks["retired_to_zero"] = all(not v for v in facts["after_teardown"].values())
+    look = got["probe"]
+    facts["readback_keys"] = sorted(look)
+    if OUT is not None:
+        for label, images in got.items():
+            stem = "probe" if label == "probe" else f"probe_{label}"
+            np.savez_compressed(OUT / f"{stem}_{api}.npz", **{k.replace(".", "_").replace("#", "_f").replace("@", "_l"): v
+                                                              for k, v in images.items()})
+    d = look["look.dir"][..., :3].astype(np.float64) * 2.0 - 1.0
+    d /= np.linalg.norm(d, axis=-1, keepdims=True)
+    errors = {}
+    for level in PROBE_LEVELS:
+        native = look[f"look.l{level}"][..., :3].astype(np.float64)
+        for name, model in (("cone", cone), ("box", box)):
+            expected = _cube_sample(model[level], d)
+            diff = np.abs(native - expected).max(axis=-1)
+            band = _edge_band(d, PROBE_SIDE >> level)
+            errors[f"l{level}_{name}"] = {"interior_max": float(diff[~band].max()), "edge_max": float(diff[band].max()),
+                                         "mean": float(diff.mean())}
+    facts["lookup_errors"] = errors
+    # Seams: the largest step between neighbouring lookups (along longitude) at level 3, across face edges against
+    # inside faces; the CPU twin reads each face alone (clamped): its ratio is the non-seamless control.
+    def steps(values):
+        return np.abs(np.diff(values, axis=1)).max(axis=-1)
+
+    band = _edge_band(d, PROBE_SIDE >> 3, texels=0.5)[:, 1:]
+    native_steps = steps(look["look.l3"][..., :3].astype(np.float64))
+    clamped_steps = steps(_cube_sample(cone[3], d))
+    facts["seam"] = {"native_edge_over_interior": float(native_steps[band].max() / native_steps[~band].max()),
+                     "clamped_edge_over_interior": float(clamped_steps[band].max() / clamped_steps[~band].max())}
+    # The cube's own texels, read back: each face and level against the twin (OpenGL's rows), mirrored rows reported.
+    faces = {}
+    for f in range(6):
+        for level in range(levels):
+            key = f"probe.colour#{f}" + (f"@{level}" if level else "")      # level 0 read as the face itself
+            if key not in look:
+                faces[key] = None
+                continue
+            native = look[key][..., :3].astype(np.float64)
+            model = cone[level][f]
+            faces[key] = {"as_is": float(np.abs(native - model).max()),
+                          "rows_flipped": float(np.abs(native[::-1] - model).max())}
+    facts["faces"] = faces
+    read = [v for v in faces.values() if v]
+    facts["faces_read"] = len(read)
+    orientation = "as_is" if all(v["as_is"] <= v["rows_flipped"] for v in read[:6]) else "rows_flipped"
+    facts["readback_rows"] = orientation
+    facts["face_texel_max_error"] = max(v[orientation] for v in read) if read else None
+    swapped = got["swapped"]["look.l0"][..., :3].astype(np.float64)
+    matrix_l0 = got["matrix"]["look.l0"][..., :3].astype(np.float64)
+    facts["matrix_l0_max_error"] = float(np.abs(matrix_l0 - _cube_sample(cone[0], d)).max())
+    checks["faces_drawn_through_umatrix_match_the_twin"] = facts["matrix_l0_max_error"] <= tol[0] if False else (
+        facts["matrix_l0_max_error"] <= 0.01)
+    facts["swapped_l0_max_error"] = float(np.abs(swapped - _cube_sample(cone[0], d)).max())
+    tol = {0: 0.01, 2: 0.03, 3: 0.05}
+    checks["drawn_with_no_failure"] = not facts["probe_failing"] and not facts["probe_reason"]
+    checks["six_face_runs_and_a_prefilter"] = (facts["probe_counts"]["scene_cube_face_runs"] >= 6
+                                               and facts["probe_counts"]["scene_cube_prefilters"] >= 1)
+    checks["every_face_and_level_read_back"] = facts["faces_read"] == 6 * levels
+    checks["every_face_and_level_matches_the_twin"] = (facts["face_texel_max_error"] or 1.0) <= 0.03
+    e = errors["l0_cone"]
+    checks["level_0_lookups_match_the_cone_twin"] = max(e["interior_max"], e["edge_max"]) <= tol[0]
+    # The face readback's levels against both twins: the cone's within the bound, the box chain's past it (level 3).
+    def texels(f, level):
+        native = look[f"probe.colour#{f}" + (f"@{level}" if level else "")][..., :3].astype(np.float64)
+        return native[::-1] if orientation == "rows_flipped" else native
+
+    box_error = max(float(np.abs(texels(f, 3) - box[3][f]).max()) for f in range(6)) if read else 0.0
+    facts["face_level_3_box_twin_error"] = box_error
+    checks["control_box_mips_leave_the_bound_at_level_3_texels"] = box_error > 0.03
+    if "mipped_cube_sampler_refused" in facts:
+        facts["lookups_at_levels_2_and_3"] = "not run: this module refuses a cube's mipped sampler (fixed, rebuild)"
+        checks["mipped_cube_sampler_admitted"] = False
+    else:
+        for level in PROBE_LEVELS[1:]:
+            e = errors[f"l{level}_cone"]
+            checks[f"level_{level}_lookups_match_the_cone_twin"] = max(e["interior_max"], e["edge_max"]) <= tol[level]
+        checks["control_box_mips_leave_the_bound_at_level_3"] = errors["l3_box"]["interior_max"] > tol[3]
+        checks["no_seam_at_level_3"] = facts["seam"]["native_edge_over_interior"] < 2.0
+        checks["control_a_clamped_read_shows_the_seam"] = (facts["seam"]["clamped_edge_over_interior"]
+                                                           > facts["seam"]["native_edge_over_interior"])
+    checks["control_swapped_faces_leave_the_bound"] = facts["swapped_l0_max_error"] > 0.2
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- the children
 
 def child(args) -> dict:
@@ -717,7 +1027,8 @@ def child(args) -> dict:
         record["instance_created"] = True
     engine = QQmlEngine()
     packs = load_packs(out)
-    rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry}
+    rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry,
+              "probe": round_probe}
     try:
         for name in args.rounds:
             if vulkan:

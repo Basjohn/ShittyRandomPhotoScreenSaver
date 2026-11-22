@@ -3094,7 +3094,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             if (s.mips == SamplerMips::None || !targetTextureName(s.texture) || environmentOf(s.texture))
                 continue;                     // N5.2c: an environment step's copy holds its levels (the box kernel's)
             const int t = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
-            if (t >= 0 && !program.targets.at(t).selfMips) {
+            // ABI 42: a cube target's levels are its prefilter step's (never a defocus layer's).
+            if (t >= 0 && !program.targets.at(t).selfMips && !program.targets.at(t).cube) {
                 *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of the defocus layer '%3' (its levels "
                                         "are its defocus step's)").arg(QString::fromLatin1(pass.name),
                                                                        QString::fromLatin1(s.name),
