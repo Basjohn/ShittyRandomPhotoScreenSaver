@@ -985,6 +985,17 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   | `extruded_bubble` | framed | no | yes | A volume seen from any side; Auto Rotate swivels it round. |
   | `waveform_ribbon` | framed | yes | no | A ribbon over a floor: it coasts but never swings below the floor. |
 
+  **The camera home has one owner, `framed_camera.home_view(mode, preset_index)` (operator, 22 Nov).** It is the
+  record a preset save writes: the pose from the preset's `starting_view` and, for a framed camera, the lens
+  (`camera_fov`) and eye offset (`camera_position`) from the same preset's settings, canonical where absent. A preset
+  without a starting view (saved with "Include current camera view" off) keeps its lens but has the canonical pose and
+  offset, because the offset is relative to the pose. Custom's home is canonical. Reset Camera and preset selection
+  (`apply_preset_starting_view`) both read it; a gesture saves its pose and offset into the live view only, never into
+  the preset, so only a preset save (Studio Save To Preset / Save Camera, Save Preset As) moves the home. This
+  supersedes the earlier "Reset restores the canonical FOV and zero offset" rule, under which every framed preset with
+  its own lens or offset reset somewhere other than its saved camera. `tests/test_framed_camera_home_round_trip.py`
+  saves a camera into a preset and resets, per orbiting mode.
+
 - **Reusable framed 3D camera contract:** Neon Lake and Extruded Bubble consume the shared bounded internal-camera
   capability through the existing descriptor/view-orbit/scene-transform owners; future bordered 3D modes reuse it rather
   than copying renderer bounds/pan logic or adding another camera store. A framed mode supplies its declared pivot, fit,
