@@ -181,6 +181,7 @@
 #pragma once
 
 #include "compute_passes.h"
+#include "cube_prefilter.h"
 #include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
@@ -434,13 +435,19 @@ struct ModePass
     // ABI 37 (N4.i): "viewport": "allocation", a pass on the core's triangle drawn over its scene target's whole
     // allocation (Python's post passes over the SceneTarget's allocation: the trails' edges).
     bool allocationViewport = false;
+    // ABI 42 (N5.6, the scene probe): a pass into a cube target draws its face ("face": 0..5; -1 for any other pass),
+    // and a prefilter step ({"name", "prefilter": <cube target>}, an empty pack) makes the cube's levels
+    // (cube_prefilter.h), its `target` the cube.
+    int face = -1;
+    bool prefilter = false;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
     // A bloom, defocus or (N5.2c) environment step: recorded outside the runs of passes, with render passes of its own.
     bool stepOfItsOwn() const
     {
-        return stage == StageKind::Bloom || stage == StageKind::Defocus || stage == StageKind::Environment;
+        return stage == StageKind::Bloom || stage == StageKind::Defocus || stage == StageKind::Environment
+            || prefilter;                     // ABI 42
     }
 };
 
@@ -940,7 +947,8 @@ private:
     ContentLatch m_latch;
     GpuTexture m_textures[kMaxModeTextures];
     MipChainKernel m_textureChains;          // ABI 35: the item textures' box kernel (mip_chain.h)
-    quint64 m_textureObjects = 0;            // a texture object created or released: the bindings are rebuilt
+    CubePrefilter m_cubePrefilter;           // ABI 42: a cube target's levels (cube_prefilter.h)
+    quint64 m_textureObjects = 0;           // a texture object created or released: the bindings are rebuilt
     QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
     QStringList m_texturesLost;
     QStringList m_lostNames;                 // the names last reported lost (the edge fires for a new one)

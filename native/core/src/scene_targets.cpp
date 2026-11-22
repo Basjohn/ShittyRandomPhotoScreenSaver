@@ -22,6 +22,9 @@ QAtomicInteger<int> g_allocationStepLimit { 0 };
 QAtomicInteger<int> g_skipScissor { 0 };
 QAtomicInteger<int> g_oversizeViewport { 0 };
 QAtomicInteger<qint64> g_selfMips { 0 };    // ABI 33
+QAtomicInteger<qint64> g_cubeFaceRuns { 0 };     // ABI 42
+QAtomicInteger<qint64> g_cubePrefilters { 0 };
+QAtomicInteger<qint64> g_cubeLevelCopies { 0 };
 
 QMutex &removedMutex()
 {
@@ -105,6 +108,8 @@ qint64 textureBytes(const QRhiTexture *texture)
             bytes += qint64(size.width()) * qint64(size.height()) * perTexel;
         }
     }
+    if (texture->flags().testFlag(QRhiTexture::CubeMap))
+        bytes *= kCubeFaces;                  // ABI 42: every face of every level
     return bytes;
 }
 
@@ -126,6 +131,8 @@ void countTargetObjects(SceneTargets::Target &t)
     add(t.depthNearest);
     add(t.captureColour);
     add(t.captureDepth);
+    for (int level = 0; level < kMaxCubeLevels; ++level)
+        add(t.stage[level]);                  // ABI 42: a cube target's prefilter stages
     if ((textures > 0) != (t.textures > 0))
         g_targets.fetchAndAddRelaxed(textures > 0 ? 1 : -1);
     if (textures != t.textures)
@@ -186,7 +193,8 @@ bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
         || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
         || surfaceSized() != o.surfaceSized()
         || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips // N3.4
-        || exact != o.exact || selfMips != o.selfMips) // ABI 33
+        || exact != o.exact || selfMips != o.selfMips // ABI 33
+        || cube != o.cube)                    // ABI 42
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
         const TargetAttachment &a = colour.at(i);
@@ -248,6 +256,7 @@ QJsonObject TargetDeclaration::toJson() const
     o.insert(QStringLiteral("mips"), mips);
     o.insert(QStringLiteral("self_mips"), selfMips);                                   // ABI 33
     o.insert(QStringLiteral("allocation"), exact ? QStringLiteral("exact") : QStringLiteral("bucket"));
+    o.insert(QStringLiteral("cube"), cube);                                            // ABI 42
     return o;
 }
 
@@ -372,7 +381,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
                                QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame"),
                                QStringLiteral("transparency"), QStringLiteral("mips"), // N3.4
-                               QStringLiteral("allocation") };                         // ABI 33
+                               QStringLiteral("allocation"),                           // ABI 33
+                               QStringLiteral("cube") };                               // ABI 42
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -512,6 +522,26 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                 "samples: before its first run a pass would read resolves nothing wrote)")
                      .arg(label).arg(d.samples);
         return false;
+    }
+    // ABI 42 (N5.6): a cube target (probe.py's SceneProbe): an explicit square size, one RGBA16F attachment, single-
+    // sampled, no previous_frame and no "mips" (its chain is its prefilter step's, never a box kernel's or
+    // generateMips), its allocation exact (the probe's face size per tier, never a bucket).
+    const QJsonValue cube = o.value(QStringLiteral("cube"));
+    if (!cube.isUndefined() && !cube.isBool()) {
+        *error = QStringLiteral("target '%1': cube is true or false").arg(label);
+        return false;
+    }
+    d.cube = cube.toBool(false);
+    if (d.cube) {
+        if (d.surfaceSized() || d.size.width() != d.size.height() || d.colour.size() != 1
+            || d.colour.at(0).format != TargetFormat::RGBA16F || d.colour.at(0).nearest || d.samples != 1
+            || d.previousFrame || d.mips || allocation.toString() == QLatin1String("bucket")) {
+            *error = QStringLiteral("target '%1': a cube target has an explicit square size, one rgba16f attachment, one "
+                                    "sample, no previous_frame, no mips (its prefilter step makes its levels) and an "
+                                    "exact allocation").arg(label);
+            return false;
+        }
+        d.exact = true;
     }
     if (d.mips) {
         // N3.4 (D17 point 6): single-sampled (its chains are generated from the texture drawn), no nearest attachment,
@@ -750,7 +780,30 @@ SceneTargetCounts sceneTargetCounts()
     c.resolvePrimes = g_resolvePrimes.loadRelaxed();
     c.nearestResolves = g_nearestResolves.loadRelaxed();
     c.generatedMips = g_selfMips.loadRelaxed();
+    c.cubeFaceRuns = g_cubeFaceRuns.loadRelaxed();       // ABI 42
+    c.cubePrefilters = g_cubePrefilters.loadRelaxed();
+    c.cubeLevelCopies = g_cubeLevelCopies.loadRelaxed();
     return c;
+}
+
+void countCubeFaceRun()
+{
+    g_cubeFaceRuns.fetchAndAddRelaxed(1);
+}
+
+void countCubePrefilter(int levelCopies)
+{
+    g_cubePrefilters.fetchAndAddRelaxed(1);
+    g_cubeLevelCopies.fetchAndAddRelaxed(levelCopies);
+}
+
+QRhiTextureRenderTarget *SceneTargets::Target::faceRenderTarget(int face) const
+{
+    if (!decl.cube)
+        return renderTarget.get();
+    if (face <= 0)
+        return renderTarget.get();            // face 0 is the target's own render target
+    return face < kCubeFaces ? faceTarget[face].get() : nullptr;
 }
 
 // ------------------------------------------------------------------------------------------------- a target
@@ -826,7 +879,17 @@ void SceneTargets::releaseTarget(Target &t)
 {
     // Reverse order of creation: the capture's target, its descriptor and textures; the nearest resolves' targets and
     // descriptors; the target, its descriptor; the depth and its nearest resolve; the colour attachments and their
-    // resolves.
+    // resolves. ABI 42: a cube target's prefilter stages (their face targets, descriptors, textures) and face targets
+    // first: they name the cube.
+    for (int level = kMaxCubeLevels - 1; level >= 0; --level) {
+        for (int f = kCubeFaces - 1; f >= 0; --f)
+            t.stageTarget[level][f].reset();
+        t.stagePass[level].reset();
+        t.stage[level].reset();
+    }
+    for (int f = kCubeFaces - 1; f >= 0; --f)
+        t.faceTarget[f].reset();
+    t.cubeLevels = 0;
     t.captureTarget.reset();
     t.captureRenderPass.reset();
     t.captureDepth.reset();
@@ -973,8 +1036,10 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
         t.allocation = allocation;
         t.stepsDone = 0;
         // N3.4: a transparency target makes no depth of its own (its owner's) and has no capture.
+        // ABI 42: a cube target's prefilter stages are one step more (no capture: refused at the program's parse).
         t.stepsTotal = d.transparency() ? int(d.colour.size()) + 1
-                                        : int(d.colour.size()) + (d.depth ? 1 : 0) + 1 + (d.capture ? 1 : 0);
+                                        : int(d.colour.size()) + (d.depth ? 1 : 0) + 1 + (d.capture ? 1 : 0)
+                                              + (d.cube ? 1 : 0);
         t.generation = nextTargetGeneration();
         t.lastReason = layoutChanged && reason == QLatin1String("made") ? QStringLiteral("made") : reason;
         ++m_allocations;
@@ -1055,6 +1120,8 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         QRhiTexture::Flags flags = t.samples > 1 ? QRhiTexture::Flags(QRhiTexture::RenderTarget) : readableFlags;
         if (t.decl.selfMips && a.mipsRead)
             flags |= QRhiTexture::UsedWithLoadStore; // ABI 33: its chain is the core's box kernel's (image stores)
+        if (t.decl.cube)
+            flags |= QRhiTexture::CubeMap | QRhiTexture::MipMapped; // ABI 42: the probe's cube, its chain the prefilter's
         bool ok = make(t.colour[k], format, t.samples, flags, name);
         // A resolve only for an attachment a sampler or the capture reads (D14 point 8). An unread resolve is never
         // read between two passes' stores, and its render pass's UNDEFINED transition then races the last store
@@ -1113,6 +1180,10 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                 QRhiColorAttachment attachment(t.colourTexture(i));
                 if (t.samples > 1 && !t.decl.colour.at(i).nearest && !t.decl.colour.at(i).borrowed)
                     attachment.setResolveTexture(t.resolve[i].get()); // QRhi's average (null: not read)
+                if (t.decl.cube) {
+                    attachment.setLayer(0);   // ABI 42: face 0 (+X) of level 0; the other faces' targets below
+                    attachment.setLevel(0);
+                }
                 attachments.append(attachment);
             }
             QRhiTextureRenderTargetDescription description;
@@ -1133,6 +1204,32 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             *error = QStringLiteral("target '%1': its render target could not be created at %2 x %3")
                          .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
             return false;
+        }
+        if (t.decl.cube) {
+            // ABI 42 (N4.d, the lead's decision: six passes, one render target per face): faces 1..5 of level 0, each
+            // over the same depth (cleared per face by its run), all compatible with face 0's descriptor, so the passes'
+            // pipelines (built over renderPass) draw into every face.
+            for (int f = 1; f < kCubeFaces; ++f) {
+                if (t.newLayout || !t.faceTarget[f]) {
+                    QRhiColorAttachment attachment(t.colour[0].get());
+                    attachment.setLayer(f);
+                    attachment.setLevel(0);
+                    QRhiTextureRenderTargetDescription description { attachment };
+                    if (t.depth)
+                        description.setDepthTexture(t.depth.get());
+                    QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::PreserveColorContents;
+                    if (t.depth)
+                        flags |= QRhiTextureRenderTarget::PreserveDepthStencilContents;
+                    t.faceTarget[f].reset(rhi->newTextureRenderTarget(description, flags));
+                    t.faceTarget[f]->setName(label + QByteArrayLiteral(".face") + QByteArray::number(f));
+                    t.faceTarget[f]->setRenderPassDescriptor(t.renderPass.get());
+                }
+                if (!t.faceTarget[f]->create()) {
+                    *error = QStringLiteral("target '%1': face %2's render target could not be created at %3 x %3")
+                                 .arg(QString::fromLatin1(t.decl.name)).arg(f).arg(t.allocation.width());
+                    return false;
+                }
+            }
         }
         // D14 point 10: each nearest resolve's render target (one R32F attachment, written whole: no load).
         for (int s = 0; s < kNearestSlots; ++s) {
@@ -1157,6 +1254,49 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                 return false;
             }
         }
+        return true;
+    }
+    if (t.decl.cube) {
+        // ABI 42: the prefilter's stage cube of each level L >= 1 (one level, the level's side) and its six face render
+        // targets: the prefilter draws level L of a face here from the cube's level L - 1, then copies it into the cube
+        // (cube_prefilter.h). Made again whole at an allocation edge (never per record).
+        for (int level = kMaxCubeLevels - 1; level >= 1; --level) {
+            for (int f = kCubeFaces - 1; f >= 0; --f)
+                t.stageTarget[level][f].reset();
+            t.stagePass[level].reset();
+            t.stage[level].reset();
+        }
+        t.cubeLevels = qMin(mipChainLevels(t.allocation), kMaxCubeLevels);
+        for (int level = 1; level < t.cubeLevels; ++level) {
+            const int side = qMax(1, t.allocation.width() >> level);
+            t.stage[level].reset(rhi->newTexture(QRhiTexture::RGBA16F, QSize(side, side), 1,
+                                                 QRhiTexture::CubeMap | QRhiTexture::RenderTarget
+                                                     | QRhiTexture::UsedAsTransferSource));
+            t.stage[level]->setName(label + QByteArrayLiteral(".prefilter stage ") + QByteArray::number(level));
+            m_objectGeneration += 1;
+            if (!t.stage[level]->create()) {
+                *error = QStringLiteral("target '%1': its prefilter stage of level %2 could not be created at %3 x %3")
+                             .arg(QString::fromLatin1(t.decl.name)).arg(level).arg(side);
+                return false;
+            }
+            for (int f = 0; f < kCubeFaces; ++f) {
+                QRhiColorAttachment attachment(t.stage[level].get());
+                attachment.setLayer(f);
+                QRhiTextureRenderTargetDescription description { attachment };
+                t.stageTarget[level][f].reset(rhi->newTextureRenderTarget(description)); // written whole: no load
+                t.stageTarget[level][f]->setName(label + QByteArrayLiteral(".prefilter ") + QByteArray::number(level)
+                                                 + QByteArrayLiteral(".") + QByteArray::number(f));
+                if (f == 0)
+                    t.stagePass[level].reset(t.stageTarget[level][0]->newCompatibleRenderPassDescriptor());
+                t.stageTarget[level][f]->setRenderPassDescriptor(t.stagePass[level].get());
+                if (!t.stageTarget[level][f]->create()) {
+                    *error = QStringLiteral("target '%1': its prefilter target of level %2, face %3 could not be "
+                                            "created").arg(QString::fromLatin1(t.decl.name)).arg(level).arg(f);
+                    return false;
+                }
+            }
+        }
+        ++m_layoutGeneration;                 // the prefilter's pipeline is built over the stages' descriptors
         return true;
     }
     // The capture (D14 point 5): the colour as attachment 0's format, linear; the nearest window depth R32F, nearest.
@@ -1291,6 +1431,14 @@ int SceneTargets::liveObjects() const
             + (m_targets[i]->captureTarget ? 2 : 0) + m_targets[i]->chainBindings(); // ABI 33: the chain's
         for (int s = 0; s < kNearestSlots; ++s)
             objects += m_targets[i]->nearestTarget[s] ? 2 : 0;
+        // ABI 42: a cube's face targets and its prefilter stages' targets and descriptors (their textures are counted).
+        for (int f = 0; f < kCubeFaces; ++f)
+            objects += m_targets[i]->faceTarget[f] ? 1 : 0;
+        for (int level = 0; level < kMaxCubeLevels; ++level) {
+            objects += m_targets[i]->stagePass[level] ? 1 : 0;
+            for (int f = 0; f < kCubeFaces; ++f)
+                objects += m_targets[i]->stageTarget[level][f] ? 1 : 0;
+        }
     }
     return objects;
 }
@@ -1321,16 +1469,22 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     const auto levelCount = [](const Target &t) {
         // N3.4: a mipped target's every level (the defocus layer's mips, D17 choice G's proof), else its base.
         int levels = 1;
+        if (t.decl.cube)
+            return qMax(1, t.cubeLevels);     // ABI 42: a cube's every level (the prefilter's proof)
         for (QSize s = t.allocation; t.decl.mips && (s.width() > 1 || s.height() > 1); ++levels)
             s = QSize(qMax(1, s.width() / 2), qMax(1, s.height() / 2));
         return levels;
     };
+    // ABI 42: a cube's six faces ("<target>.<attachment>#<face>@<level>"), every other texture's one.
+    const auto faceCount = [](const Target &t) { return t.decl.cube ? kCubeFaces : 1; };
     const auto add = [&](const Target &t, const QString &name, QRhiTexture *texture, const QString &format,
-                         int level = 0) {
+                         int level = 0, int face = -1) {
         if (!texture)
             return;
         SceneTargetPixels p;
-        p.name = level ? name + QLatin1Char('@') + QString::number(level) : name;
+        const QString faced = face >= 0 ? name + QLatin1Char('#') + QString::number(face) : name;
+        p.name = level ? faced + QLatin1Char('@') + QString::number(level) : faced;
+        p.face = face;
         p.size = QSize(qMax(1, t.allocation.width() >> level), qMax(1, t.allocation.height() >> level));
         // Project the base content's normalized rectangle, rounding out to touched level texels. This is nominal
         // coverage, not a promise about the mip filter's footprint outside the rectangle on odd-sized levels.
@@ -1350,9 +1504,11 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
             continue;
         const QString base = QString::fromLatin1(t.decl.name);
         for (int c = 0; c < int(t.decl.colour.size()); ++c) {
-            for (int level = 0; level < levelCount(t); ++level)
-                add(t, base + QLatin1Char('.') + QString::fromLatin1(t.decl.colour.at(c).name), t.readable(c),
-                    targetFormatName(t.decl.colour.at(c).format), level);
+            for (int face = 0; face < faceCount(t); ++face) {
+                for (int level = 0; level < levelCount(t); ++level)
+                    add(t, base + QLatin1Char('.') + QString::fromLatin1(t.decl.colour.at(c).name), t.readable(c),
+                        targetFormatName(t.decl.colour.at(c).format), level, t.decl.cube ? face : -1);
+            }
         }
         if (t.depthNearest)
             add(t, base + QStringLiteral(".depth"), t.depthNearest.get(), QStringLiteral("r32f"));
@@ -1374,28 +1530,32 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
         const Target &t = *m_targets[i];
         if (!t.ready() || t.dormant)
             continue;
-        QList<QPair<QRhiTexture *, int>> textures; // (texture, level), in the order the pixels were listed
+        struct Read { QRhiTexture *texture; int level; int layer; };
+        QList<Read> textures; // (texture, level, layer), in the order the pixels were listed
         for (int c = 0; c < int(t.decl.colour.size()); ++c) {
-            for (int level = 0; t.readable(c) && level < levelCount(t); ++level)
-                textures.append({ t.readable(c), level });
+            for (int face = 0; face < faceCount(t); ++face) {
+                for (int level = 0; t.readable(c) && level < levelCount(t); ++level)
+                    textures.append({ t.readable(c), level, face }); // ABI 42: a cube's face is its layer
+            }
         }
         if (t.depthNearest)
-            textures.append({ t.depthNearest.get(), 0 });
+            textures.append({ t.depthNearest.get(), 0, 0 });
         if (t.decl.capture) {
             if (t.captureColour)
-                textures.append({ t.captureColour.get(), 0 });
+                textures.append({ t.captureColour.get(), 0, 0 });
             if (t.captureDepth)
-                textures.append({ t.captureDepth.get(), 0 });
+                textures.append({ t.captureDepth.get(), 0, 0 });
         }
-        for (const QPair<QRhiTexture *, int> &texture : textures) {
+        for (const Read &texture : textures) {
             if (r >= raw->count)
                 break;
             raw->results[r].completed = [raw]() {
                 if (raw->pending.fetchAndAddOrdered(-1) == 1)
                     g_readbacksPending.fetchAndAddRelaxed(-1);
             };
-            QRhiReadbackDescription description(texture.first);
-            description.setLevel(texture.second);
+            QRhiReadbackDescription description(texture.texture);
+            description.setLevel(texture.level);
+            description.setLayer(texture.layer);
             updates->readBackTexture(description, &raw->results[r]);
             ++r;
         }

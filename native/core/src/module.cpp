@@ -765,6 +765,9 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_resolve_primes"), double(scenes.resolvePrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
     o.insert(QStringLiteral("scene_target_mips"), double(scenes.generatedMips)); // ABI 33: self-mipped chains made
+    o.insert(QStringLiteral("scene_cube_face_runs"), double(scenes.cubeFaceRuns));        // ABI 42 (N5.6)
+    o.insert(QStringLiteral("scene_cube_prefilters"), double(scenes.cubePrefilters));
+    o.insert(QStringLiteral("scene_cube_level_copies"), double(scenes.cubeLevelCopies));
     // N3.2 (D15): the meshes (resident buffers, bytes, the core's copies, uploads), the streams and arenas (buffers,
     // bytes, writes), every buffer created (the no-allocation proof), and the indirect and batched draws recorded.
     const srpss_core::MeshBufferCounts mb = srpss_core::meshBufferCounts();

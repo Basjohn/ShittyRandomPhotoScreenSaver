@@ -225,4 +225,13 @@
 // u_scene_rows_up (0 for every other program: their composites read as before). Waveform draws its scene so: drawn
 // flipped, its anti-aliased edges met the multisample pattern mirrored and differed from Python's (the bloom carried
 // them; one sample a pixel drew alike).
-#define SRPSS_NATIVE_CORE_ABI 40
+// 41: reserved (the transitions agent's).
+// 42 (N5.6, Extruded Bubble's core boxes; reserved by the lead, 22 Nov): (1) the scene probe (scene_targets.h,
+// cube_prefilter.h): a target's "cube": true (an explicit square size, one rgba16f attachment, one sample, exact; a
+// D32F depth shared by its faces), a pass's "face": 0..5 into it (one render target per face, cleared per face, drawn
+// in OpenGL's cube-map rows: the cube triangle's flipped uv and the uMatrix's extra Y flip; no culling), a prefilter
+// step ({"name", "prefilter": <cube>}, an empty pack: probe.py's 32-tap cone filter per level and face into a stage
+// cube, copied into the cube's level), a samplerCube reading "<cube>.<attachment>" with mips; the readback's
+// "<target>.<attachment>#<face>@<level>"; composite_live's scene_cube_face_runs, scene_cube_prefilters and
+// scene_cube_level_copies. Backward compatible for every earlier program (none declares a cube).
+#define SRPSS_NATIVE_CORE_ABI 42

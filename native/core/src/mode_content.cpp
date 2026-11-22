@@ -320,7 +320,10 @@ constexpr int kTriangleFloats = 3 * kVertexFloats;
 // The card's, a target's own, the scene's card's (ABI 28: sceneAnchor), each bloom step's first downsample's.
 constexpr int kSceneTriangle = 2;
 constexpr int kFirstBloomTriangle = 3;
-constexpr int kTriangles = kFirstBloomTriangle + kMaxBloomStages;
+// ABI 42 (N5.6): a cube target's own triangle drawn rows up (cubeTriangle): its two uv flipped in y, so a pass into a
+// cube face sees OpenGL's cube-map rows (the face's bottom row at memory row 0, as probe.py's faces hold them).
+constexpr int kCubeTriangle = kFirstBloomTriangle + kMaxBloomStages;
+constexpr int kTriangles = kCubeTriangle + 1;
 // ABI 32: after the triangles, the card's own quad (cardQuad): six vertices, the two triangles of Python's strip.
 constexpr int kCardQuadVertices = 6;
 constexpr int kCardQuadFirstFloat = kTriangles * kTriangleFloats;
@@ -330,6 +333,22 @@ constexpr quint32 kUvUpOffset = 4 * sizeof(float);
 constexpr const char kConventionsBlock[] = "SrpssConventions";
 constexpr const char kUvDownName[] = "v_uv"; // rendering/quick/visualizer/render_contract.py
 constexpr const char kUvUpName[] = "vUv";    // rendering/gl_programs/item_quad.py
+
+// ABI 42: a target's own triangle (`own`, fullTriangle with no card) with both uv flipped in y (a cube face's rows up:
+// v_uv's 0 and vUv's 1 at the face's memory row H - 1 instead of 0). The map stays affine over the whole triangle.
+void cubeTriangle(const float *own, float *out)
+{
+    for (int v = 0; v < 3; ++v) {
+        const float *in = own + v * kVertexFloats;
+        float *o = out + v * kVertexFloats;
+        o[0] = in[0];
+        o[1] = in[1];
+        o[2] = in[2];
+        o[3] = 1.0f - in[3];                  // v_uv.y (y down) from the face's bottom row
+        o[4] = in[4];
+        o[5] = 1.0f - in[5];                  // vUv.y (y up) from the face's bottom row
+    }
+}
 
 // The triangle's vertices on this backend. The target's top row (texel row 0: conventions.h, F1) lies at the clip y the
 // target correction maps the OpenGL-form top (y = +1) to (-1 on OpenGL and Vulkan, +1 on D3D and Metal). Each vertex
@@ -456,6 +475,15 @@ int nameIndex(const QString &text, const char *const *names, int count)
 }
 
 // A shader's sampler name (GLSL identifier) and an item's texture name (lower-case identifier).
+// A combined sampler's dimensions as PassSampler holds them: 2 (sampler2D), 3 (sampler3D: a 3D storage image, N3.3)
+// or ABI 42's 6 (samplerCube: a cube target, the scene probe).
+constexpr int kCubeSamplerDimensions = 6;
+int samplerDimensions(QShaderDescription::VariableType type)
+{
+    return type == QShaderDescription::Sampler3D ? 3 : type == QShaderDescription::SamplerCube ? kCubeSamplerDimensions
+                                                                                                : 2;
+}
+
 bool shaderIdentifier(const QByteArray &name)
 {
     if (name.isEmpty() || name.size() > 64 || (name.at(0) >= '0' && name.at(0) <= '9'))
@@ -787,13 +815,15 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
                          .arg(name, QString::fromLatin1(s.name));
             return false;
         }
-        if (image->type != QShaderDescription::Sampler2D && image->type != QShaderDescription::Sampler3D) {
+        if (image->type != QShaderDescription::Sampler2D && image->type != QShaderDescription::Sampler3D
+            && image->type != QShaderDescription::SamplerCube) {
             *error = QStringLiteral("pass '%1': the sampler '%2' is not a sampler2D (the sampling primitive reads 2D "
-                                    "textures; a sampler3D reads a 3D storage image, N3.3)")
+                                    "textures; a sampler3D reads a 3D storage image, N3.3; a samplerCube a cube "
+                                    "target, ABI 42)")
                          .arg(name, QString::fromLatin1(s.name));
             return false;
         }
-        s.dimensions = image->type == QShaderDescription::Sampler3D ? 3 : 2; // checked against its texture later
+        s.dimensions = samplerDimensions(image->type); // checked against its texture later
         if (image->binding < 0 || image->binding == kConventionsBinding || image->binding == ownBinding) {
             *error = QStringLiteral("pass '%1': the sampler '%2' is at binding %3 (17 is the conventions block's; %4 "
                                     "its own block's)").arg(name, QString::fromLatin1(s.name)).arg(image->binding)
@@ -1063,7 +1093,8 @@ bool checkTargetSampler(const ModePass &pass, const PassSampler &s, QList<Target
     const bool capture = attachment == "capture_colour" || attachment == "capture_depth";
     // ABI 33: a mipped target's colour attachments have their levels (a defocus layer's are refused once the steps are
     // known: ModeProgram::fromJson); a depth, a capture and any other target's texture have none.
-    if (s.mips != SamplerMips::None && (!t.mips || capture || attachment == "depth")) {
+    // ABI 42: a cube target's attachment has its levels too (its prefilter step makes them).
+    if (s.mips != SamplerMips::None && (!(t.mips || t.cube) || capture || attachment == "depth")) {
         *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of '%3', which has none (a scene target's colour "
                                 "attachments have levels only when it is declared with \"mips\": true)")
                      .arg(label, QString::fromLatin1(s.name), QString::fromLatin1(s.texture));
@@ -1319,13 +1350,14 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
             for (const QShaderDescription::InOutVariable &image : s.d->combinedImageSamplers()) {
                 if (image.name != smp.name)
                     continue;
-                if ((image.type != QShaderDescription::Sampler2D && image.type != QShaderDescription::Sampler3D)
+                if ((image.type != QShaderDescription::Sampler2D && image.type != QShaderDescription::Sampler3D
+                     && image.type != QShaderDescription::SamplerCube)
                     || (smp.binding >= 0 && smp.binding != image.binding)) {
-                    *error = QStringLiteral("pass '%1': the sampler '%2' is not one sampler2D (or sampler3D) at one "
-                                            "binding").arg(name, QString::fromLatin1(smp.name));
+                    *error = QStringLiteral("pass '%1': the sampler '%2' is not one sampler2D (or sampler3D, or "
+                                            "samplerCube) at one binding").arg(name, QString::fromLatin1(smp.name));
                     return false;
                 }
-                smp.dimensions = image.type == QShaderDescription::Sampler3D ? 3 : 2; // N3.3, checked later
+                smp.dimensions = samplerDimensions(image.type); // N3.3 (ABI 42: a cube), checked later
                 smp.binding = image.binding;
                 smp.stages |= s.flag;
             }
@@ -2722,6 +2754,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             // N3.4 (D17): a stage step with an empty pack (its shaders are the core's).
             if (!parseStageStep(o, i, fragmentPack, program, drawn, &bloomSteps, &defocusSteps, pass, error))
                 return false;
+        } else if (o.contains(QStringLiteral("prefilter"))) {
+            // ABI 42 (N5.6): a cube target's prefilter step (cube_prefilter.h) with an empty pack: every level of every
+            // face from the level above, after the passes that drew its faces this record.
+            pass.prefilter = true;
+            pass.target = targetIndex(o.value(QStringLiteral("prefilter")).toString());
+            if (o.size() != 2 || !passName(pass.name) || pass.target < 0 || !fragmentPack.isEmpty()
+                || !program.targets.at(pass.target).cube) {
+                *error = QStringLiteral("pass %1 is a prefilter step {\"name\": an identifier, \"prefilter\": a declared "
+                                        "cube target} with an empty pack").arg(i);
+                return false;
+            }
+            if (!drawn[pass.target]) {
+                *error = QStringLiteral("prefilter '%1' filters cube '%2' before any pass drew a face of it")
+                             .arg(QString::fromLatin1(pass.name), QString::fromLatin1(program.targets.at(pass.target).name));
+                return false;
+            }
         } else if (o.contains(QStringLiteral("capture"))) {
             // N3.1: a capture step of a target (D14 point 5), no fragment of its own.
             pass.capture = true;
@@ -2736,9 +2784,10 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                              .arg(QString::fromLatin1(pass.name), QString::fromLatin1(program.targets.at(pass.target).name));
                 return false;
             }
-            if (program.targets.at(pass.target).transparency() || program.targets.at(pass.target).mips) {
-                *error = QStringLiteral("capture '%1': a transparency or mipped target has no capture (N3.4)")
-                             .arg(QString::fromLatin1(pass.name));
+            if (program.targets.at(pass.target).transparency() || program.targets.at(pass.target).mips
+                || program.targets.at(pass.target).cube) {
+                *error = QStringLiteral("capture '%1': a transparency, mipped or cube target has no capture (N3.4, "
+                                        "ABI 42)").arg(QString::fromLatin1(pass.name));
                 return false;
             }
             TargetDeclaration &target = program.targets[pass.target];
@@ -2783,7 +2832,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                  QStringLiteral("indirect"), QStringLiteral("draw_count"),
                                                  QStringLiteral("batches"), QStringLiteral("batch_count"),
                                                  QStringLiteral("sorted"),   // N3.4: a transparent pass's
-                                                 QStringLiteral("viewport") }; // ABI 37: "content" or "allocation"
+                                                 QStringLiteral("viewport"), // ABI 37: "content" or "allocation"
+                                                 QStringLiteral("face") };   // ABI 42: a cube target's face
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
@@ -2824,6 +2874,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 }
                 pass.allocationViewport = allocation;
             }
+            // ABI 42 (N5.6): a pass into a cube target draws one face ("face": 0..5, OpenGL's order), as probe.py's
+            // capture calls its draw per face (a face's view is the pass's own: its settings, "<member>@<pass>"); it
+            // draws rows up (the cube-map convention) and so may not cull (rule 4's front face is the unflipped one's).
+            const bool cubeTarget = pass.target >= 0 && program.targets.at(pass.target).cube;
+            const QJsonValue face = o.value(QStringLiteral("face"));
+            if (cubeTarget != o.contains(QStringLiteral("face"))
+                || (cubeTarget && (!face.isDouble() || face.toDouble() != std::floor(face.toDouble())
+                                   || face.toDouble() < 0.0 || face.toDouble() >= double(kCubeFaces)
+                                   || pass.cull != PassCull::None || !pass.frontSelector.name.isEmpty()
+                                   || pass.allocationViewport))) {
+                *error = QStringLiteral("pass '%1': a pass into a cube target declares its \"face\" (0 to 5) and draws "
+                                        "unculled over its content viewport; no other pass declares a face")
+                             .arg(QString::fromLatin1(pass.name));
+                return false;
+            }
+            pass.face = cubeTarget ? int(face.toDouble()) : -1;
             for (const PassSampler &s : pass.samplers) {
                 if (!targetTextureName(s.texture))
                     continue;
@@ -2864,7 +2930,7 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 return false;
             }
         }
-        if (!pass.capture && !pass.compute && pass.stage != StageKind::TransparencyResolve
+        if (!pass.capture && !pass.compute && !pass.prefilter && pass.stage != StageKind::TransparencyResolve
             && pass.stage != StageKind::Bloom && pass.stage != StageKind::Defocus
             && pass.stage != StageKind::Environment) {
             pass.fragment = coreFragment.isValid() ? coreFragment : QShader::fromSerialized(fragmentPack); // N3.4
@@ -2896,6 +2962,41 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     // captures the owner, or blooms from it, between the target's first pass and its resolve.
     if (!checkTransparencyOrder(program, error))
         return false;
+    // ABI 42 (N5.6): a cube target's six faces are each drawn by a pass, and one prefilter step follows every pass that
+    // draws it (its levels are made from what the faces hold), before any pass reads it.
+    for (int t = 0; t < int(program.targets.size()); ++t) {
+        if (!program.targets.at(t).cube)
+            continue;
+        bool faces[kCubeFaces] = {};
+        int prefilters = 0;
+        int lastDraw = -1;
+        int filtered = -1;
+        int firstRead = -1;
+        for (int p = 0; p < int(program.passes.size()); ++p) {
+            const ModePass &pass = program.passes.at(p);
+            if (pass.target == t && pass.face >= 0) {
+                faces[pass.face] = true;
+                lastDraw = p;
+            }
+            if (pass.prefilter && pass.target == t) {
+                ++prefilters;
+                filtered = p;
+            }
+            for (const PassSampler &s : pass.samplers) {
+                if (firstRead < 0 && s.texture.startsWith(program.targets.at(t).name + '.'))
+                    firstRead = p;
+            }
+        }
+        bool all = true;
+        for (const bool f : faces)
+            all = all && f;
+        if (!all || prefilters != 1 || filtered < lastDraw || (firstRead >= 0 && firstRead < filtered)) {
+            *error = QStringLiteral("cube target '%1': each of its six faces is drawn by a pass, then one prefilter step "
+                                    "follows them before any pass reads it")
+                         .arg(QString::fromLatin1(program.targets.at(t).name));
+            return false;
+        }
+    }
     // Audit 2, M4: a target read as the frame before is one a pass of the frame draws (else nothing ever writes it).
     for (int t = 0; t < int(program.targets.size()); ++t) {
         if (program.targets.at(t).previousFrame && !drawn[t]) {
@@ -3008,10 +3109,19 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         }
         for (PassSampler &s : pass.samplers) {
             const StorageImageDeclaration *image = program.storageImage(s.texture);
-            if ((image ? image->dimensions : 2) != s.dimensions) {
-                *error = QStringLiteral("pass '%1': the sampler '%2' is a sampler%3D reading '%4', a %5D texture")
-                             .arg(label, QString::fromLatin1(s.name)).arg(s.dimensions)
-                             .arg(QString::fromLatin1(s.texture)).arg(image ? image->dimensions : 2);
+            // ABI 42: a cube target's attachment is read by a samplerCube, and only by one (6: samplerDimensions).
+            const qsizetype dot = s.texture.indexOf('.');
+            const int read = dot > 0 ? targetNamed(program.targets, s.texture.left(dot)) : -1;
+            const bool cube = read >= 0 && program.targets.at(read).cube;
+            const int expected = image ? image->dimensions : cube ? kCubeSamplerDimensions : 2;
+            if (expected != s.dimensions) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' (%3) reads '%4', a %5 texture")
+                             .arg(label, QString::fromLatin1(s.name),
+                                  s.dimensions == kCubeSamplerDimensions ? QStringLiteral("samplerCube")
+                                                                         : QStringLiteral("sampler%1D").arg(s.dimensions),
+                                  QString::fromLatin1(s.texture),
+                                  expected == kCubeSamplerDimensions ? QStringLiteral("cube")
+                                                                     : QStringLiteral("%1D").arg(expected));
                 return false;
             }
             if (image && s.mips != SamplerMips::None) {
@@ -3058,6 +3168,10 @@ QJsonObject ModeProgram::toJson() const
         p.insert(QStringLiteral("target"), pass.target >= 0 ? QJsonValue(QString::fromLatin1(targets.at(pass.target).name))
                                                             : QJsonValue(QStringLiteral("surface")));
         p.insert(QStringLiteral("capture"), pass.capture);
+        if (pass.face >= 0)
+            p.insert(QStringLiteral("face"), pass.face);         // ABI 42
+        if (pass.prefilter)
+            p.insert(QStringLiteral("prefilter"), true);         // ABI 42
         // N3.4 (D17): a stage entry.
         p.insert(QStringLiteral("stage"), stageKindName(pass.stage));
         if (pass.stage == StageKind::TransparencyResolve || pass.stage == StageKind::Bloom
@@ -3841,8 +3955,17 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
         for (const BlockMember &member : pass.block.members()) {
             int count = 0;
             if (pass.ownVertex() && member.name == "uMatrix") {
-                // N3.2 (D15 choice H): item pixels to the drawn target's clip space, corrected once.
-                itemClipMatrix(passCard, target, clipCorrection, values);
+                // N3.2 (D15 choice H): item pixels to the drawn target's clip space, corrected once. ABI 42: a pass into
+                // a cube face draws rows up (cubeTriangle's rows): the correction's clip Y negated once more, so the
+                // OpenGL-form top lands on the face's last memory row, as probe.py's face framebuffer holds it.
+                float cubeCorrection[16];
+                const float *correction = clipCorrection;
+                if (clipCorrection && pass.face >= 0) {
+                    for (int c = 0; c < 16; ++c)
+                        cubeCorrection[c] = (c % 4 == 1) ? -clipCorrection[c] : clipCorrection[c];
+                    correction = cubeCorrection;
+                }
+                itemClipMatrix(passCard, target, correction, values);
                 if (!block.set(member.name, values, 16, error))
                     return false;
                 continue;
@@ -4664,12 +4787,14 @@ int ModeContent::liveResources() const
         textures += (texture.texture ? 1 : 0) + texture.chain.bindings; // ABI 35: a chain's bindings
     return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live()
         + m_storage.live()                    // N3.3
-        + m_post.live();                      // N3.4
+        + m_post.live()                       // N3.4
+        + m_cubePrefilter.liveObjects();      // ABI 42
 }
 
 void ModeContent::releasePipelines()
 {
     m_post.releasePipelines();                // N3.4: the stages' pipelines and bindings (made at the build)
+    m_cubePrefilter.release();                // ABI 42: its bindings name a cube, its pipeline a stage's descriptor
     if (!m_res)
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
@@ -7115,6 +7240,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     const QRhiCommandBuffer::VertexInput sceneInput(r.vertices.get(),
                                                     quint32(kSceneTriangle * kTriangleFloats * sizeof(float)));
     const QRhiCommandBuffer::VertexInput quadInput(r.vertices.get(), quint32(kCardQuadFirstFloat * sizeof(float)));
+    const QRhiCommandBuffer::VertexInput cubeInput(r.vertices.get(),          // ABI 42: a cube face's rows up
+                                                   quint32(kCubeTriangle * kTriangleFloats * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
     // ABI 35: the item textures committed with mips this record: their chains before any pass samples them.
     recordTextureChains(rhi, cb, &pending);
@@ -7182,12 +7309,24 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             ++i;
             continue;
         }
+        if (pass.prefilter) {
+            // ABI 42 (N5.6): the cube's levels from what its faces hold now (cube_prefilter.h), outside any run.
+            QString prefilterError;
+            if (SceneTargets::Target *cube = m_targets.target(pass.target)) {
+                if (!m_cubePrefilter.record(rhi, cb, *cube, &pending, &prefilterError))
+                    m_reason = prefilterError;
+            }
+            ++i;
+            continue;
+        }
         // N3.4: a run is the passes drawing into one target this record (a dormant transparency target's passes draw
         // into its owner: D17 choice D).
         const int runTarget = effectiveTarget(i);
         int last = i;
+        // ABI 42: a run on a cube target is one face's passes (each face its own render target, cleared per face).
         while (last + 1 < count && !program.passes.at(last + 1).capture && !program.passes.at(last + 1).compute
-               && !program.passes.at(last + 1).stepOfItsOwn() && effectiveTarget(last + 1) == runTarget)
+               && !program.passes.at(last + 1).stepOfItsOwn() && effectiveTarget(last + 1) == runTarget
+               && program.passes.at(last + 1).face == pass.face)
             ++last;
         if (runTarget < 0) {
             cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
@@ -7224,8 +7363,16 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             if (!skipResolvePrime())
                 countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(runTarget,
                                                                                                     textures)));
-            cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
+            // ABI 42: a cube's run draws into its face's render target, and every face is cleared at its run (colour to
+            // the attachment's clear, depth to 1: probe.py clears both per face).
+            const bool cube = t.decl.cube && pass.face >= 0;
+            cb->beginPass(cube ? t.faceRenderTarget(pass.face) : t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
+                          pending);
             pending = nullptr;
+            if (cube) {
+                cleared[runTarget] = false;
+                countCubeFaceRun();
+            }
             if (!cleared[runTarget]) {
                 cb->setGraphicsPipeline(r.targetClears[runTarget].pipeline.get());
                 setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
@@ -7239,7 +7386,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // Harness only: a full-allocation viewport makes a quad extend into slack independently of clip-volume
             // clipping. The scissor remains the content rect; the product always uses v for both.
             const QRect viewport = sceneOversizeViewport() ? QRect(QPoint(), t.allocation) : v;
-            const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? sceneInput : ownInput;
+            const QRhiCommandBuffer::VertexInput &input = cube ? cubeInput : t.decl.surfaceSized() ? sceneInput : ownInput;
             const QRect whole(QPoint(), t.allocation);
             for (int k = i; k <= last; ++k) {
                 // ABI 37 (N4.i): a pass declaring "viewport": "allocation" covers the whole allocation (the trails'
@@ -7380,6 +7527,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     for (int n = 0; n < int(m_bloomSpecs.size()) && n < kMaxBloomStages; ++n)
         bloomTriangle(m_bloomSpecs.at(n), sceneCard, triangle + kTriangleFloats,
                       triangle + (kFirstBloomTriangle + n) * kTriangleFloats);
+    cubeTriangle(triangle + kTriangleFloats, triangle + kCubeTriangle * kTriangleFloats); // ABI 42
     m_keptTarget = false;
     const bool readback = m_source->targetReadRequests() != m_targetReadsDone; // N3.1, harness
     if (m_draw && !withPasses && !readback && holdsFrame(target)) {
