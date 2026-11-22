@@ -67,11 +67,17 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a. Its branch holds 17a4bb9e0 (placement, bucket
-  discard, row order; Python stills unchanged) and e3a84a443 (core C++, not compiled: record f64/u32 into vector and
-  matrix members, the conventions `w` flag, the sampler W-wrap fix). Next: lead reserves ABI 38 (37 is N5.2d's), the
-  agent renumbers, lead builds; rule (a) needs a measured Waveform bound (bloom rounding 13-29k px at 2-3 levels,
-  edges 400-1,200 past 3) decided on the rerun after the W-wrap fix; then L, P, rule (b), C, T.
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, branch at a5a5a292b (core still ABI 38, 40 at
+  its merge). L (12/12 IDENTICAL), P (35,544 frames, rule (a) statistical bound fixed: mean 0.063, signed 0.062,
+  2-3 levels 0.52 %, past 3 0.6 %; all 5 controls caught), readback and C (2.0-3.6 ms whole surface) done. Open:
+  - [ ] Group Wave's saturated yellow/red squares: a mode defect (Python shows them on 13 P frames; native OpenGL
+    on 4,301 of 5,250 rule (b) frames; Vulkan never). Lead decision: root-cause by bisecting one failing frame
+    pass by pass on both APIs (first pass non-finite or divergent; suspect NaN/Inf or a read before write, spread
+    in blocks), check the OpenGL GL_INVALID_ENUM on the first 4x frame against it, fix at the source in the one
+    shared shader or resource (Python and native alike), re-cache variant b's references only.
+  - [ ] Rule (b) soft-glow failures (Frozen Past 44, Travelling Pulse 23, Whole Swell 12 frames, max 79; same
+    single-sampled): same bisect on one failing frame; a defect is fixed, never admitted by a wider bound.
+  - [ ] Then rule (b) and the affected P rerun (30 s of each take, section 7), T, stop point 2.
 - [ ] Background track: agent a4f18f4449f3e8a5b (Opus Medium), the watch items below then N5.2e (Membrane, Page Curl,
   Exploding Tiles) to stop point 1, ABI 41 reserved (Waveform takes 40); the black flicker
   fixed and merged 22 Nov (ABI 39).
