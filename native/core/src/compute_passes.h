@@ -35,11 +35,13 @@
 // Render thread only, but the declarations (any thread) and the process-wide counts and controls (any thread).
 #pragma once
 
+#include "geometry_arena.h"
 #include "mesh_buffers.h"
 #include "rhi_owned.h"
 
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
@@ -82,6 +84,12 @@ struct StorageBufferDeclaration
     bool vertex = false;      // also a VertexBuffer (a draw reads it per instance through `layout`)
     bool indirect = false;    // also an IndirectBuffer (a draw's commands)
     RecordLayout layout;      // its per-instance attributes (vertex only)
+    // ABI 42 (D3, geometry_arena.h): a geometry buffer ({"name", "geometry": {"family", "key"}}): read only, its bytes
+    // uploaded once per key from the arena's bank (ModeStorage::syncGeometry), the key read from the record's u32 array
+    // field `geometryKey`. A compute entry binds the previous key's buffer as "<name>@previous" (the rebase record).
+    bool geometry = false;
+    quint32 geometryFamily = 0;
+    QByteArray geometryKey;
 
     bool sameShape(const StorageBufferDeclaration &other) const; // usage and layout (the size may differ)
     QJsonObject toJson() const;
@@ -131,7 +139,8 @@ struct ComputeBinding
 // still's compute entry may take (a still has no record: "frame" and a field would never or always fire).
 struct ComputeTrigger
 {
-    enum class Kind { Frame = 0, Field = 1, Draw = 2 };
+    // ABI 42 (N5.6): "once", dispatched at the entry's first record (fresh storage) and never again (a check).
+    enum class Kind { Frame = 0, Field = 1, Draw = 2, Once = 3 };
     Kind kind = Kind::Frame;
     QByteArray field;
 
@@ -156,12 +165,25 @@ struct ComputeCounts
     qint64 objectsCreated = 0;    // every buffer, texture and kernel object this file created (flat at rest)
     qint64 statesLost = 0;        // a content made again found its storage gone (the owner's edge)
     int readbacksPending = 0;     // harness readbacks in flight
+    // ABI 42 (D3): geometry residencies (steady one key a family, two during a swap, zero after teardown), uploads (one
+    // per key), keys failed (each logged once), residencies released, and records that waited for a first key.
+    int geometryResident = 0;
+    qint64 geometryUploads = 0;
+    qint64 geometryFailed = 0;
+    qint64 geometryReleased = 0;
+    qint64 geometryWaits = 0;
+    // ABI 42 (N5.6): a check entry's one-shot readbacks started, their bytes, and the results reported (each once).
+    qint64 checkReadbacks = 0;
+    qint64 checkReadbackBytes = 0;
+    qint64 checkReports = 0;
 };
 ComputeCounts computeCounts();
 void countDispatch();
 void countComputePass();
 void countSkipped();
 void countStateLost();
+void countCheckReadback(quint32 bytes);
+void countCheckReport();
 
 // Harness controls (each the negative control of one proof; process-wide, the harness's only):
 // - every written binding recorded as a read (QRhi then derives no barrier for the write: read-after-write's control);
@@ -206,6 +228,20 @@ struct StoragePixels
     QString format;           // "bytes" for a buffer
     int size[3] = { 0, 0, 0 };
     QByteArray data;
+};
+
+// ABI 42 (N5.6), the one named exception to "nothing in the product reads storage back": a check entry's results
+// ("readback" on a "once" entry, at most kMaxCheckReadbackBytes), read once after its dispatch. QRhi completes it
+// at a later frame; the content takes it at a later record (never waited on) and reports it once (state and log).
+// Held by the source too, so a content released first leaves QRhi's completion nothing dangling.
+constexpr quint32 kMaxCheckReadbackBytes = 4096;
+struct CheckReadback
+{
+    QByteArray entry;
+    QByteArray buffer;
+    quint32 bytes = 0;
+    QRhiReadbackResult result;
+    QAtomicInteger<int> done { 0 };
 };
 
 // Written by QRhi at a frame's end (each result's completion), read by the GUI thread once done. Allocated only when the
@@ -273,14 +309,52 @@ public:
     bool holds() const { return !m_buffers.isEmpty() || !m_images.isEmpty(); }
     // Nothing held at all: no resource, no replaced buffer awaiting its release, no kernel (audit 5 M1: a sync is still
     // needed while any is held, so a program without storage releases the last one's).
-    bool empty() const { return !holds() && m_retiring.isEmpty() && !m_clear && !m_copy && !m_opBlocks; }
+    // ABI 42: the geometry residencies count (a program without storage still syncs while they remain).
+    bool empty() const {
+        return !holds() && m_retiring.isEmpty() && !m_clear && !m_copy && !m_opBlocks && m_geometry.isEmpty()
+            && m_geometryRetiring.isEmpty();
+    }
     void release();
     QJsonObject stateJson() const;
 
     // Harness: every buffer and image read back into `updates` (an image slice by slice).
     std::shared_ptr<StorageReadback> startReadback(QRhiResourceUpdateBatch *updates) const;
 
+    // ABI 42 (D3, geometry_arena.h): at a record, each geometry buffer's key (`keys`, from the record) made resident:
+    // a key it holds changes nothing; a new key is read whole from `arena` and uploaded into a new buffer (one upload
+    // per key), the old key's kept as "<name>@previous" until a frame using the new one was recorded (geometryRecorded),
+    // never released before its replacement exists. A key the arena does not hold yet (absent or torn) is asked again at
+    // the next record, the old one still drawn; a key that fails (its object, or an invalid bank) is `failed`: logged
+    // once, never retried, the old one still drawn. `changed`: a buffer the bindings name is new (they are made
+    // again); `waiting`: a geometry buffer has no resident key at all (the content keeps its frame: never an empty one).
+    // No arena yet waits as an absent key. False is reserved for a declaration it cannot serve (`error`: none today).
+    bool syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, const GeometryArena *arena,
+                      const QList<StorageBufferDeclaration> &declared, const QHash<QByteArray, GeometryKey> &keys,
+                      bool *changed, bool *waiting, QString *error);
+    // A frame drawing every current key was recorded: each previous key's residency goes (released at the next sync, a
+    // frame after the record that used it last).
+    void geometryRecorded();
+    // Every geometry residency goes (D3 point 3: mode or activation change, drop, retire, device loss, the content's
+    // release).
+    void releaseGeometry();
+    int geometryResidencies() const;
+
 private:
+    struct GeometrySlot
+    {
+        QByteArray name;
+        quint32 family = 0;
+        Buffer *current = nullptr;
+        GeometryKey currentKey;
+        Buffer *previous = nullptr;
+        GeometryKey previousKey;
+        QList<GeometryKey> failed;    // keys never retried
+    };
+    void releaseGeometryBuffer(Buffer *b);
+    QList<GeometrySlot *> m_geometry;
+    QList<Buffer *> m_geometryRetiring;
+    QList<StorageBufferDeclaration> m_declaredSource; // sync's declared list (shared), and its buffers other than geometry
+    QList<StorageBufferDeclaration> m_plainBuffers;
     struct Op
     {
         bool copy = false;

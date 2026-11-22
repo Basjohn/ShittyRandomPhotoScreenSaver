@@ -46,6 +46,7 @@ QAtomicInteger<int> g_recreateStreams { 0 };
 QAtomicInteger<int> g_skipMeshRelease { 0 };
 QAtomicInteger<int> g_instancesPastUsed { 0 };
 QAtomicInteger<qint64> g_drawsRefused { 0 };
+QAtomicInteger<qint64> g_entriesSkipped { 0 }; // ABI 42
 
 // The item quad of the Python host (render_host.py _ensure_quad): (0,0), (1,0), (0,1), (1,1), a strip.
 constexpr float kQuadVertices[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };
@@ -479,6 +480,7 @@ MeshBufferCounts meshBufferCounts()
     c.recordNs = g_recordNs.loadRelaxed();
     c.streamWriteNs = g_streamWriteNs.loadRelaxed();
     c.drawsRefused = g_drawsRefused.loadRelaxed();
+    c.entriesSkipped = g_entriesSkipped.loadRelaxed();
     return c;
 }
 
@@ -491,6 +493,7 @@ void countRecordTime(qint64 recordNs, qint64 streamWriteNs)
 
 void countIndirectDraw() { g_indirectDraws.fetchAndAddRelaxed(1); }
 void countDrawRefused() { g_drawsRefused.fetchAndAddRelaxed(1); }
+void countEntrySkipped() { g_entriesSkipped.fetchAndAddRelaxed(1); }
 void countBatched(bool indirect) { (indirect ? g_batchedIndirect : g_batchedLoop).fetchAndAddRelaxed(1); }
 void meshesCountUpload() { g_meshUploads.fetchAndAddRelaxed(1); }
 

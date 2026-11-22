@@ -60,7 +60,7 @@ def limits_hold_waveform(mode_h: str, compute_h: str, targets_h: str) -> bool:
     targets = _constant(targets_h, "kMaxSceneTargets")
     return (passes == mode.MAX_PASSES and images == mode.MAX_STORAGE_IMAGES and targets == mode.MAX_TARGETS
             and passes >= wp.SHAPE_PASSES and images >= wp.SHAPE_IMAGE_COUNT and targets >= 4
-            and 2 * passes <= 64)        # a pass's two mesh names are bits of a quint64 (missingMeshMask)
+            and passes <= 64)            # a pass's missing meshes are a bit of a quint64 (missingMeshMask)
 
 
 def test_the_limits_are_the_faces_and_hold_waveforms_shape():

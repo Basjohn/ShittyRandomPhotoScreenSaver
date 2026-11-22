@@ -179,7 +179,8 @@ int storageReflectedFormat(QRhiTexture::Format format)
 bool StorageBufferDeclaration::sameShape(const StorageBufferDeclaration &o) const
 {
     if (name != o.name || vertex != o.vertex || indirect != o.indirect || layout.stride != o.layout.stride
-        || layout.attributes.size() != o.layout.attributes.size())
+        || layout.attributes.size() != o.layout.attributes.size()
+        || geometry != o.geometry || geometryFamily != o.geometryFamily || geometryKey != o.geometryKey) // ABI 42
         return false;
     for (qsizetype i = 0; i < layout.attributes.size(); ++i) {
         const MeshAttribute &a = layout.attributes.at(i);
@@ -194,6 +195,11 @@ QJsonObject StorageBufferDeclaration::toJson() const
 {
     QJsonObject o;
     o.insert(QStringLiteral("name"), QString::fromLatin1(name));
+    if (geometry) {
+        o.insert(QStringLiteral("geometry"), QJsonObject { { QStringLiteral("family"), int(geometryFamily) },
+                                                           { QStringLiteral("key"), QString::fromLatin1(geometryKey) } });
+        return o;                             // ABI 42: its bytes are its key's bank's
+    }
     o.insert(QStringLiteral("bytes"), bytes.toJson());
     QJsonArray usage;
     if (vertex)
@@ -211,6 +217,24 @@ bool parseStorageBuffer(const QJsonValue &value, StorageBufferDeclaration *out, 
     const QJsonObject o = value.toObject();
     StorageBufferDeclaration b;
     b.name = o.value(QStringLiteral("name")).toString().toLatin1();
+    if (o.contains(QStringLiteral("geometry"))) {
+        // ABI 42 (D3): {"name", "geometry": {"family": 0..7, "key": a record u32 array field of 8 words}}: read only,
+        // uploaded once per key from the geometry arena (geometry_arena.h); its bytes are the bank's.
+        const QJsonObject g = o.value(QStringLiteral("geometry")).toObject();
+        const double family = g.value(QStringLiteral("family")).toDouble(-1.0);
+        b.geometryKey = g.value(QStringLiteral("key")).toString().toLatin1();
+        if (!value.isObject() || o.size() != 2 || !identifier(b.name) || g.size() != 2 || family < 0.0
+            || family >= double(kMaxGeometryFamilies) || family != std::floor(family) || !identifier(b.geometryKey)) {
+            *error = QStringLiteral("a geometry buffer is {\"name\": an identifier, \"geometry\": {\"family\": 0 to %1, "
+                                    "\"key\": the record's u32 array field of %2 words}}")
+                         .arg(kMaxGeometryFamilies - 1).arg(kGeometryKeyWords);
+            return false;
+        }
+        b.geometry = true;
+        b.geometryFamily = quint32(family);
+        *out = b;
+        return true;
+    }
     const bool withUsage = o.contains(QStringLiteral("usage"));
     const bool withLayout = o.contains(QStringLiteral("layout"));
     bool ok = value.isObject() && o.size() == 2 + (withUsage ? 1 : 0) + (withLayout ? 1 : 0) && identifier(b.name)
@@ -333,6 +357,8 @@ QJsonValue ComputeTrigger::toJson() const
         return QJsonObject { { QStringLiteral("field"), QString::fromLatin1(field) } };
     if (kind == Kind::Draw)
         return QStringLiteral("draw");        // ABI 37
+    if (kind == Kind::Once)
+        return QStringLiteral("once");        // ABI 42
     return QStringLiteral("frame");
 }
 
@@ -348,6 +374,11 @@ bool parseComputeTrigger(const QJsonValue &value, ComputeTrigger *out)
         *out = t;
         return true;
     }
+    if (value.isString() && value.toString() == QLatin1String("once")) {
+        t.kind = ComputeTrigger::Kind::Once;  // ABI 42 (N5.6): the entry's first record only (a check)
+        *out = t;
+        return true;
+    }
     const QJsonObject o = value.toObject();
     t.field = o.value(QStringLiteral("field")).toString().toLatin1();
     if (!value.isObject() || o.size() != 1 || !identifier(t.field))
@@ -359,9 +390,29 @@ bool parseComputeTrigger(const QJsonValue &value, ComputeTrigger *out)
 
 // ------------------------------------------------------------------------------------------- counts and controls
 
+namespace {
+// ABI 42 (D3): the geometry residencies (ModeStorage::syncGeometry).
+QAtomicInteger<int> g_geometryResident { 0 };
+QAtomicInteger<qint64> g_geometryUploads { 0 };
+QAtomicInteger<qint64> g_geometryFailed { 0 };
+QAtomicInteger<qint64> g_geometryReleased { 0 };
+QAtomicInteger<qint64> g_geometryWaits { 0 };
+QAtomicInteger<qint64> g_checkReadbacks { 0 };      // ABI 42 (N5.6)
+QAtomicInteger<qint64> g_checkReadbackBytes { 0 };
+QAtomicInteger<qint64> g_checkReports { 0 };
+} // namespace
+
 ComputeCounts computeCounts()
 {
     ComputeCounts c;
+    c.geometryResident = g_geometryResident.loadRelaxed();
+    c.geometryUploads = g_geometryUploads.loadRelaxed();
+    c.geometryFailed = g_geometryFailed.loadRelaxed();
+    c.geometryReleased = g_geometryReleased.loadRelaxed();
+    c.geometryWaits = g_geometryWaits.loadRelaxed();
+    c.checkReadbacks = g_checkReadbacks.loadRelaxed();
+    c.checkReadbackBytes = g_checkReadbackBytes.loadRelaxed();
+    c.checkReports = g_checkReports.loadRelaxed();
     c.buffers = g_buffers.loadRelaxed();
     c.bufferBytes = g_bufferBytes.loadRelaxed();
     c.images = g_images.loadRelaxed();
@@ -382,6 +433,12 @@ void countDispatch() { g_dispatches.fetchAndAddRelaxed(1); }
 void countComputePass() { g_computePasses.fetchAndAddRelaxed(1); }
 void countSkipped() { g_skipped.fetchAndAddRelaxed(1); }
 void countStateLost() { g_statesLost.fetchAndAddRelaxed(1); }
+void countCheckReadback(quint32 bytes)
+{
+    g_checkReadbacks.fetchAndAddRelaxed(1);
+    g_checkReadbackBytes.fetchAndAddRelaxed(bytes);
+}
+void countCheckReport() { g_checkReports.fetchAndAddRelaxed(1); }
 
 void setComputeWriteAsRead(bool on) { g_writeAsRead.storeRelaxed(on ? 1 : 0); }
 bool computeWriteAsRead() { return g_writeAsRead.loadRelaxed() != 0; }
@@ -548,7 +605,180 @@ const ModeStorage::Buffer *ModeStorage::buffer(const QByteArray &name) const
         if (b->decl.name == name && b->buffer)
             return b;
     }
+    // ABI 42 (D3): a geometry buffer is its current key's residency; "<name>@previous" the key it replaces until a frame
+    // using the new one was recorded (the drift's rebase record reads both), else the current one.
+    const bool previous = name.endsWith("@previous");
+    const QByteArray base = previous ? name.left(name.size() - 9) : name;
+    for (const GeometrySlot *slot : m_geometry) {
+        if (slot->name != base)
+            continue;
+        const Buffer *b = previous && slot->previous ? slot->previous : slot->current;
+        return b && b->buffer ? b : nullptr;
+    }
     return nullptr;
+}
+
+void ModeStorage::releaseGeometryBuffer(Buffer *b)
+{
+    b->buffer.reset();                        // QRhi releases the native buffer after the frames that use it
+    delete b;
+    ++m_objects;                              // the bindings that named it are made again
+}
+
+int ModeStorage::geometryResidencies() const
+{
+    int n = 0;
+    for (const GeometrySlot *slot : m_geometry)
+        n += (slot->current ? 1 : 0) + (slot->previous ? 1 : 0);
+    return n + int(m_geometryRetiring.size());
+}
+
+bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, const GeometryArena *arena,
+                               const QList<StorageBufferDeclaration> &declared,
+                               const QHash<QByteArray, GeometryKey> &keys, bool *changed, bool *waiting, QString *)
+{
+    *changed = false;
+    *waiting = false;
+    // The residencies a recorded frame retired go now, a frame after the record that used them last.
+    for (Buffer *b : m_geometryRetiring) {
+        g_geometryResident.fetchAndAddRelaxed(-1);
+        g_geometryReleased.fetchAndAddRelaxed(1);
+        releaseGeometryBuffer(b);
+        *changed = true;
+    }
+    m_geometryRetiring.clear();
+    // Slots of geometry buffers no longer declared go with their residencies.
+    for (qsizetype i = m_geometry.size() - 1; i >= 0; --i) {
+        GeometrySlot *slot = m_geometry.at(i);
+        bool kept = false;
+        for (const StorageBufferDeclaration &decl : declared)
+            kept = kept || (decl.geometry && decl.name == slot->name && decl.geometryFamily == slot->family);
+        if (kept)
+            continue;
+        for (Buffer *b : { slot->current, slot->previous }) {
+            if (!b)
+                continue;
+            g_geometryResident.fetchAndAddRelaxed(-1);
+            g_geometryReleased.fetchAndAddRelaxed(1);
+            releaseGeometryBuffer(b);
+        }
+        delete slot;
+        m_geometry.removeAt(i);
+        *changed = true;
+    }
+    for (const StorageBufferDeclaration &decl : declared) {
+        if (!decl.geometry)
+            continue;
+        GeometrySlot *slot = nullptr;
+        for (GeometrySlot *s : m_geometry) {
+            if (s->name == decl.name)
+                slot = s;
+        }
+        if (!slot) {
+            slot = new GeometrySlot;
+            slot->name = decl.name;
+            slot->family = decl.geometryFamily;
+            m_geometry.append(slot);
+        }
+        const auto wanted = keys.constFind(decl.name);
+        if (wanted == keys.cend() || !wanted.value().valid()) {
+            *waiting = *waiting || !slot->current;
+            continue;
+        }
+        const GeometryKey &key = wanted.value();
+        if (slot->current && slot->currentKey == key)
+            continue;                         // resident: nothing is read or uploaded again (once per key)
+        if (slot->failed.contains(key)) {
+            *waiting = *waiting || !slot->current;
+            continue;                         // failed: never retried; the old key is still drawn
+        }
+        if (key.family != decl.geometryFamily) {
+            slot->failed.append(key);         // another family's key: the worker's mapping is wrong (logged once)
+            g_geometryFailed.fetchAndAddRelaxed(1);
+            qWarning("srpss core: geometry buffer '%s' (family %u) was named key %s of another family",
+                     decl.name.constData(), decl.geometryFamily, qPrintable(key.text()));
+            *waiting = *waiting || !slot->current;
+            continue;
+        }
+        // No arena yet (the owner names it with the activation; a name that did not open was logged once): the key waits
+        // as one the arena does not hold.
+        QByteArray bytes;
+        QString readError;
+        const GeometryArena::Read read = arena ? arena->read(key, &bytes, &readError) : GeometryArena::Read::Absent;
+        if (read == GeometryArena::Read::Absent || read == GeometryArena::Read::Torn) {
+            g_geometryWaits.fetchAndAddRelaxed(slot->current ? 0 : 1);
+            *waiting = *waiting || !slot->current;
+            continue;                         // requested: asked again at the next record
+        }
+        RhiOwned<QRhiBuffer> made;
+        bool ok = read == GeometryArena::Read::Found && bytes.size() >= 4;
+        if (ok) {
+            made.reset(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::StorageBuffer, quint32(bytes.size())));
+            made->setName(QByteArrayLiteral("srpss core geometry ") + decl.name);
+            g_objectsCreated.fetchAndAddRelaxed(1);
+            ok = made->create();
+        }
+        if (!ok) {
+            // D3 point 3: the new key fails (one logged error, no per-frame retry); the old key stays drawn and
+            // nothing is deleted before a replacement exists.
+            slot->failed.append(key);
+            g_geometryFailed.fetchAndAddRelaxed(1);
+            qWarning("srpss core: geometry buffer '%s' key %s failed: %s", decl.name.constData(),
+                     qPrintable(key.text()),
+                     qPrintable(read == GeometryArena::Read::Invalid ? readError
+                                                                     : QStringLiteral("its buffer could not be created")));
+            *waiting = *waiting || !slot->current;
+            continue;
+        }
+        updates->uploadStaticBuffer(made.get(), 0, quint32(bytes.size()), bytes.constData());
+        g_geometryUploads.fetchAndAddRelaxed(1);
+        g_geometryResident.fetchAndAddRelaxed(1);
+        Buffer *b = new Buffer;
+        b->decl = decl;
+        b->bytes = quint32(bytes.size());
+        b->buffer = std::move(made);
+        if (slot->previous)
+            m_geometryRetiring.append(slot->previous); // a swap not yet recorded: the oldest goes a frame later
+        slot->previous = slot->current;
+        slot->previousKey = slot->currentKey;
+        slot->current = b;
+        slot->currentKey = key;
+        ++m_objects;
+        *changed = true;
+    }
+    return true;
+}
+
+void ModeStorage::geometryRecorded()
+{
+    for (GeometrySlot *slot : m_geometry) {
+        if (!slot->previous)
+            continue;
+        m_geometryRetiring.append(slot->previous);   // D3: the new key resident and one frame using it recorded
+        slot->previous = nullptr;
+        slot->previousKey = GeometryKey();
+    }
+}
+
+void ModeStorage::releaseGeometry()
+{
+    for (Buffer *b : m_geometryRetiring) {
+        g_geometryResident.fetchAndAddRelaxed(-1);
+        g_geometryReleased.fetchAndAddRelaxed(1);
+        releaseGeometryBuffer(b);
+    }
+    m_geometryRetiring.clear();
+    for (GeometrySlot *slot : m_geometry) {
+        for (Buffer *b : { slot->current, slot->previous }) {
+            if (!b)
+                continue;
+            g_geometryResident.fetchAndAddRelaxed(-1);
+            g_geometryReleased.fetchAndAddRelaxed(1);
+            releaseGeometryBuffer(b);
+        }
+        delete slot;
+    }
+    m_geometry.clear();
 }
 
 const ModeStorage::Image *ModeStorage::image(const QByteArray &name) const
@@ -613,6 +843,7 @@ int ModeStorage::live() const
     n += m_copy ? 1 : 0;
     n += m_opBlocks ? 1 : 0;
     n += m_dummy ? 1 : 0;
+    n += geometryResidencies();               // ABI 42 (D3)
     return n;
 }
 
@@ -694,6 +925,7 @@ void ModeStorage::release()
 {
     m_opCount = 0;
     releaseKernels();
+    releaseGeometry();                        // ABI 42 (D3 point 3): every residency of the stream, on this thread
     if (skipStorageRelease()) {
         // The retirement proof's control: the storage left behind (counted) until a later sync on this QRhi.
         LeftBehind left;
@@ -719,10 +951,21 @@ void ModeStorage::release()
     m_images.clear();
 }
 
-bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<StorageBufferDeclaration> &buffers,
+bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<StorageBufferDeclaration> &declared,
                        const QList<StorageImageDeclaration> &images, const QHash<QByteArray, double> &settings,
                        bool *fresh, QString *error)
 {
+    // ABI 42 (D3): the geometry buffers are syncGeometry's (uploaded once per key, never zeroed or sized here). The
+    // others are taken once per declared list (implicitly shared: the same list costs no copy per record).
+    if (declared.constData() != m_declaredSource.constData() || declared.size() != m_declaredSource.size()) {
+        m_declaredSource = declared;
+        m_plainBuffers.clear();
+        for (const StorageBufferDeclaration &decl : declared) {
+            if (!decl.geometry)
+                m_plainBuffers.append(decl);
+        }
+    }
+    const QList<StorageBufferDeclaration> &buffers = m_plainBuffers;
     *fresh = false;
     m_uploaded = false;
     m_rhi = rhi;

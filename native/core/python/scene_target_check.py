@@ -2208,16 +2208,21 @@ def round_wave_limits(core, engine, app, packs: dict, folder: Path) -> dict:
                     refusals[label] = "admitted"
                 except ValueError as exc:
                     refusals[label] = f"refused: {exc}"
-            fifth = targets + (type(targets[3])("fifth", targets[3].colour, size=(8, 8)),)
+            # One past the core's target limit (ABI 42: 6), the extra ones small explicit targets like the prepass.
+            from rendering.native.mode import MAX_PASSES, MAX_STORAGE_IMAGES, MAX_TARGETS
+            past = targets + tuple(type(targets[3])(f"extra{n}", targets[3].colour, size=(8, 8))
+                                   for n in range(MAX_TARGETS + 1 - len(targets)))
             try:
-                scene.mode.program(passes, settings, targets=fifth, images=images, unread=("u_frame",))
+                scene.mode.program(passes, settings, targets=past, images=images, unread=("u_frame",))
                 refusals["one_target_past"] = "admitted"
             except ValueError as exc:
                 refusals["one_target_past"] = f"refused: {exc}"
             facts["refusals"] = refusals
-            checks["one_pass_past_refused_with_its_reason"] = "28 passes" in refusals["one_pass_past"]
-            checks["one_image_past_refused_with_its_reason"] = "at most 9 storage images" in refusals["one_image_past"]
-            checks["one_target_past_refused_with_its_reason"] = "at most 4 targets" in refusals["one_target_past"]
+            checks["one_pass_past_refused_with_its_reason"] = f"{MAX_PASSES} passes" in refusals["one_pass_past"]
+            checks["one_image_past_refused_with_its_reason"] = (
+                f"at most {MAX_STORAGE_IMAGES} storage images" in refusals["one_image_past"])
+            checks["one_target_past_refused_with_its_reason"] = (
+                f"at most {MAX_TARGETS} targets" in refusals["one_target_past"])
             host.frames(2)
             checks["the_drawn_program_kept"] = not scene.mode.state().get("content_failing")
         finally:
