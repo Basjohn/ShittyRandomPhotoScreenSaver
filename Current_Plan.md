@@ -77,15 +77,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     `visualizers/extruded_bubble/n56_flicker`, `n56_wake_teleport`, `n56_living_acceleration`) and `.../scratch/n56/`
     (probe scripts: `orbit_points.py`, `flicker_map.py`, `veil_probe.py`, `eb_probe.py`). Done 22 Nov: camera home
     (a9d471c94), the music trace, port preparation (N5.6 box); wound down for the port proper.
-  - N5.2g Edge Bloom and Capillary Bloom, agent ac3072f8bea57441b (Opus Medium, ABI 43). Worktree
-    `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-ac3072f8bea57441b`, branch `worktree-agent-ac3072f8bea57441b` (pushed; design merged 8451b34c4).
-    Journal `.artifacts/handover/JOURNAL.md` in the worktree (its `.artifacts` has no D: junctions: evidence it makes
-    stays in the worktree on F:, copy it out before retiring). Doing: the ABI 43 C++ (field recipes as item textures,
-    the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
-    part; built clean at 6e8f36059 (72 module tests pass); now its built proofs, stop point 2, the N5.2f hitch
-    attribution (its box).
-  - Winding down (operator, 22 Nov): N5.6 saves its running reference renders, updates docs and stops; N5.2g merges if
-    it finishes well. All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
+  - N5.2g landed 22 Nov (7965d4abe; agent retired): all 28 transitions are native. N5.6 is wound down (branch pushed,
+    worktree kept for the port proper; resume agent ac5f7832a73527151 or a successor from its journal). No agent is
+    running.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a) with their GPU proofs; R-250 and the camera home merged; port preparation
   done (the N5.6 box lists the next steps). Waveform leftovers:
