@@ -292,14 +292,39 @@ COMPACT_CORE = 7
 #: A piece's edge: a 3 x 3 span of EDGE_LEVEL or more in the reference (a trail outline's faint rim spans 7: n52d_r4,
 #: Crumble both at 0.65), on a moving piece.
 EDGE_LEVEL = 4
-SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS
-SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS}
+#: N5.2e (N4.l): the bendable grid's scenes (Membrane, Page Curl) and Exploding Tiles' slabs, planar shadows, sparks and
+#: bloom. Each at its production defaults (the tier's 4 samples; Exploding Tiles with the tier's bloom), and
+#: single-sampled with options at the other extremes (rule a's forms); Exploding Tiles single-sampled with bloom, motion
+#: blur, trails, both and neither, and with all three at 4 samples (rule b).
+N52E_TRANSITIONS = ("membrane", "page_curl", "exploding_tiles")
+N52E_VARIANTS = {
+    "membrane": {},
+    "membrane_options": {"request_direction": "up", "gloss": 1.0, "seed": 8, "samples": 0},
+    "membrane_matte": {"request_direction": "left", "gloss": 0.0, "seed": 3, "samples": 0, "detail": "Performance"},
+    "page_curl": {},
+    "page_curl_options": {"request_direction": "top_left", "gloss": 1.0, "size": 1.0, "samples": 0},
+    "page_curl_edge": {"request_direction": "right", "gloss": 0.0, "size": 0.0, "samples": 0,
+                       "detail": "Performance"},
+    "exploding_tiles": {},
+    "exploding_tiles_plain": {"samples": 0, "bloom": 0.0, "motion_blur": False, "motion_trails": False},
+    "exploding_tiles_bloom": {"samples": 0, "bloom": 1.0, "motion_blur": False, "motion_trails": False,
+                              "request_direction": "center_out"},
+    "exploding_tiles_motion": {"samples": 0, "bloom": 0.0, "motion_blur": True, "motion_trails": False,
+                               "request_direction": "left"},
+    "exploding_tiles_trails": {"samples": 0, "bloom": 0.0, "motion_blur": False, "motion_trails": True,
+                               "detail": "Performance", "columns": 24},
+    "exploding_tiles_both": {"samples": 0, "bloom": 0.6, "motion_blur": True, "motion_trails": True, "columns": 8,
+                             "force": 2.0},
+    "exploding_tiles_both_4x": {"samples": 4, "bloom": 0.6, "motion_blur": True, "motion_trails": True},
+}
+SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS
+SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS}
 TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
 VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS, *N52E_VARIANTS)
 
 
 def variant_progress(variant: str) -> tuple[float, ...]:

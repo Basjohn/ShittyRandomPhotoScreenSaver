@@ -32,9 +32,25 @@ from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.grid import draw_grid
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from rendering.quick.scene3d.resources import pack_floats
+from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
+                            item_quad_pass, native_clip_depth)
 from ..render_contract import QuickTransitionRenderFrame
 
 _ORIGINS = frozenset(PAGE_CURL_ORIGINS.values())
+# N5.2e (N4.l's bendable grid): the native scene's passes, the texts this renderer compiles (the page's vertex stage
+# with its native clip depth): the new picture under the roll's shadow, then the page over the run's grid.
+_GRID_INPUTS = (("aGrid", 2),)
+_SCENE_PASSES = (
+    item_quad_pass("backdrop", PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE,
+                   (("uNewTex", "new"),)),
+    NativeScenePass("page", native_clip_depth(PAGE_CURL_VERTEX_SOURCE), PAGE_CURL_FRAGMENT_SOURCE, mesh="grid",
+                    samplers=(("uOldTex", "old"), ("uEnvironment", "environment")), depth=True),
+)
+
+
+def _progress(sample) -> float:
+    return max(0.0, min(1.0, float(sample.eased_progress)))
 
 
 def page_curl_parameters(parameters: Mapping[str, object]) -> tuple[float, float, str]:
@@ -51,8 +67,46 @@ def page_curl_parameters(parameters: Mapping[str, object]) -> tuple[float, float
     return values[0], values[1], detail
 
 
-class QuickPageCurlRenderer:
+class QuickPageCurlRenderer(NativeScenePasses):
     transition_id = "page_curl"
+
+    # ------------------------------------------------------------------------------- N5.2e: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        _gloss, _size, detail = page_curl_parameters(parameters)
+        columns, rows = scene3d_grid_size(scene3d_detail(detail), logical_size[0] / logical_size[1])
+        grid = NativeSceneMesh("grid", pack_floats(scene3d_grid_vertices(columns, rows)), _GRID_INPUTS)
+        return NativeScene(_SCENE_PASSES, (grid,), scene3d_request_samples(parameters), True)
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(_progress(sample))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float]) -> dict[str, object]:
+        """The backdrop's and the page's values for the frame (``_curl_values``, one owner)."""
+        origin = str(run.request.direction)
+        if origin not in _ORIGINS:
+            raise ValueError(f"unknown resolved Page Curl origin: {origin!r}")
+        gloss, size, detail = page_curl_parameters(run.request.parameter_dict())
+        return self._curl_values(_progress(sample), origin, gloss, page_curl_roll(size), detail, logical_size)
+
+    @staticmethod
+    def _curl_values(progress: float, origin: str, gloss: float, roll, detail: str,
+                     logical_size: tuple[float, float]) -> dict[str, object]:
+        """Both programs' values by name (the backdrop reads the line, roll, direction and shade; the page the grid,
+        the line, roll, direction and gloss)."""
+        aspect = logical_size[0] / logical_size[1]
+        direction = page_curl_direction(origin, aspect)
+        near, far = page_curl_span(direction, aspect)
+        line = page_curl_line(progress, near, far, roll)
+        columns, rows = scene3d_grid_size(scene3d_detail(detail), aspect)
+        return {"uDirection": direction, "uLine": line, "uRoll": roll,
+                "uShade": page_curl_shade_weight(line, near, far, roll), "uGloss": gloss,
+                "uGridCells": (float(columns), float(rows))}
 
     # The photographs each program reads (bind_frame binds them); every other value is in its pass block.
     _PAGE_SAMPLERS = ("uOldTex",)
@@ -124,11 +178,7 @@ class QuickPageCurlRenderer:
 
     def _draw(self, frame, progress: float, origin: str, gloss: float, roll: tuple[float, float], detail: str,
               environment: int) -> None:
-        width, height = frame.logical_size
-        aspect = width / height
-        direction = page_curl_direction(origin, aspect)
-        near, far = page_curl_span(direction, aspect)
-        line = page_curl_line(progress, near, far, roll)
+        curl = self._curl_values(progress, origin, gloss, roll, detail, frame.logical_size)   # the one owner (N5.2e)
         r = self._resources
 
         program = r.program("backdrop", PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE)
@@ -137,10 +187,7 @@ class QuickPageCurlRenderer:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        values["uDirection"] = direction
-        values["uLine"] = line
-        values["uRoll"] = roll
-        values["uShade"] = page_curl_shade_weight(line, near, far, roll)
+        values.update(curl)
         with r.pass_blocks.bound(pack_block(PAGE_CURL_BACKDROP_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -150,12 +197,8 @@ class QuickPageCurlRenderer:
         uniforms = r.uniforms("page", self._PAGE_SAMPLERS)
         values = r.values("page")
         bind_frame(program, uniforms, frame, values)
-        columns, rows = scene3d_grid_size(scene3d_detail(detail), aspect)
-        values["uGridCells"] = (float(columns), float(rows))
-        values["uDirection"] = direction
-        values["uLine"] = line
-        values["uRoll"] = roll
-        values["uGloss"] = gloss
+        values.update(curl)
+        columns, rows = (int(v) for v in curl["uGridCells"])
         gl.glActiveTexture(gl.GL_TEXTURE2)               # the environment's binding
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glActiveTexture(gl.GL_TEXTURE0)

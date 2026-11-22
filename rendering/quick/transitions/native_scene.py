@@ -20,6 +20,7 @@ layer's own program on either slot, and the effect with the scene's program.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Mapping
 
@@ -73,6 +74,13 @@ class NativeScenePass:
     viewport: str = "content"
     #: N5.2d: a pass with no vertex stage of its own (``vertex_source`` None) draws the core's triangle.
     core_triangle: bool = False
+    #: N5.2e: whether a depth-tested pass also writes depth (None: as ``depth``); Exploding Tiles' sparks test and never
+    #: write (Python's ``draw_particles``).
+    depth_write: bool | None = None
+
+    @property
+    def writes_depth(self) -> bool:
+        return self.depth if self.depth_write is None else bool(self.depth and self.depth_write)
 
 
 @dataclass(frozen=True)
@@ -101,6 +109,10 @@ class NativeScene:
     motion: bool = False
     trails: bool = False
     textures: tuple[NativeSceneTexture, ...] = ()
+    #: N5.2e: the bloom's strength (0: none). With bloom the scene's colour clears to (0, 0, 0, 0), its alpha the light
+    #: each pass emits, and the bloom chain of the scene (after the gather with motion blur) adds its glow at the
+    #: composite (Python's ``SceneTarget`` with ``bloom``).
+    bloom: float = 0.0
 
 
 def item_quad_pass(name: str, vertex_source: str, fragment_source: str, samplers: tuple[tuple[str, str], ...] = (),
@@ -258,6 +270,64 @@ def native_clip_depth(vertex_source: str) -> str:
     return vertex_source[:body_end] + NATIVE_CLIP_DEPTH_LINE + vertex_source[body_end:]
 
 
+_STD140_BLOCK = re.compile(r"layout\s*\(\s*std140\s*,\s*binding\s*=\s*(\d+)\s*\)\s*uniform\s+(\w+)\s*\{")
+_CONVENTIONS_BLOCK = "SrpssConventions"
+
+
+def native_one_block(stages: tuple[str, ...], frame_block: str) -> tuple[str, ...]:
+    """N5.2e: a pass's stages (vertex, fragment) whose programs declare their pass block and a shared frame block
+    (Exploding Tiles' ``ExplodingTilesFrame``, one upload a frame in Python) as the native core draws them: one block of
+    their own (the core admits one a pass), the pass block with the frame block's members appended, declared the same in
+    every stage at the pass block's binding; every value still filled by name. A member in both blocks, a third block
+    or a stage declaring a block differently is refused. The Python renderer compiles its own texts."""
+    from rendering.gl_programs.portable import _strip_comments, block_declaration, block_layout_from_glsl
+    from rendering.gl_programs.scene3d import Scene3DBlockLayout
+
+    declarations: dict[str, tuple[str, int]] = {}
+    for text in stages:
+        for binding, name in _STD140_BLOCK.findall(_strip_comments(text)):
+            if name == _CONVENTIONS_BLOCK:
+                continue
+            declaration = block_declaration(text, name)
+            if declarations.setdefault(name, (declaration, int(binding)))[0] != declaration:
+                raise ValueError(f"the stages declare the block {name} differently")
+    if frame_block not in declarations:
+        raise ValueError(f"no stage declares the frame block {frame_block}")
+    own = [name for name in declarations if name != frame_block]
+    if len(own) != 1:
+        raise ValueError(f"a pass merges one block of its own with {frame_block}, not {own}")
+    pass_name = own[0]
+    pass_fields = block_layout_from_glsl(declarations[pass_name][0]).fields
+    frame_fields = block_layout_from_glsl(declarations[frame_block][0]).fields
+    doubled = sorted({name for name, _kind in pass_fields} & {name for name, _kind in frame_fields})
+    if doubled:
+        raise ValueError(f"{', '.join(doubled)} is a member of both {pass_name} and {frame_block}")
+    merged = Scene3DBlockLayout.of(pass_name, tuple(pass_fields) + tuple(frame_fields)).glsl(declarations[pass_name][1])
+    out = []
+    for text in stages:
+        for name in (pass_name, frame_block):
+            text = text.replace(declarations[name][0].rstrip("\n"), "")
+        if any(name in (pass_name, frame_block) for _binding, name in _STD140_BLOCK.findall(_strip_comments(text))):
+            raise ValueError("a block declaration was not removed whole")
+        head, newline, rest = text.partition("\n")
+        if not head.startswith("#version") or not newline:
+            raise ValueError("a stage starts with its #version line")
+        out.append(f"{head}\n{merged}{rest}")
+    return tuple(out)
+
+
+def native_without_motion(fragment_source: str) -> str:
+    """N5.2e: a fragment that always writes its screen motion (Exploding Tiles' tiles: ``SceneMotion`` and
+    ``SceneMotionY`` at locations 1 and 2) as drawn on a scene without motion blur: its motion outputs plain variables
+    (their writes dead), since the core refuses outputs past a target's attachments; Python masks the attachment."""
+    for output in ("SceneMotion", "SceneMotionY"):
+        fragment_source, count = re.subn(rf"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*out\s+vec4\s+{output}\s*;",
+                                         f"vec4 {output};", fragment_source)
+        if count != 1:
+            raise ValueError(f"a motion-writing fragment declares its {output} output once")
+    return fragment_source
+
+
 def eased_show(progress: float, end: float = 1.0) -> int:
     """The show of a run whose Python renderer draws the old picture at progress 0 and the new one from ``end``."""
     if progress <= 0.0:
@@ -284,4 +354,5 @@ __all__ = ["MOTION_GATHER", "MOTION_TILE_MAX", "MotionGeometry", "NativeScene", 
            "NativeScenePasses", "NativeSceneTexture", "QUAD_MESH", "SCENE_TARGETS", "SCENE_TEXTURES", "SHOW_EFFECT",
            "SHOW_NEW", "SHOW_OLD", "TRAIL_EDGES", "TRAIL_EDGES_PASS", "eased_show", "flat_values", "ghost_pass_name",
            "ghost_values", "item_quad_pass", "motion_geometry", "motion_post_sources", "motion_post_values",
-           "NATIVE_CLIP_DEPTH_LINE", "native_clip_depth", "native_frame_text"]
+           "NATIVE_CLIP_DEPTH_LINE", "native_clip_depth", "native_frame_text", "native_one_block",
+           "native_without_motion"]
