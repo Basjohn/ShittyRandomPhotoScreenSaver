@@ -86,11 +86,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
     part; built clean at 6e8f36059 (72 module tests pass); now its built proofs, stop point 2, the N5.2f hitch
     attribution (its box).
-  - Widget geometry defects (Now Playing artwork width and side flip, Achievement Pulse shelves; box below), agent
-    a033a7fb2fcd1e6bf (Sonnet Medium; operator go 22 Nov). Worktree
-    `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-a033a7fb2fcd1e6bf`, branch
-    `worktree-agent-a033a7fb2fcd1e6bf`; journal `.artifacts/handover/JOURNAL.md` there; renders under its
-    `.artifacts/evidence/widgets/`.
   - All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
@@ -151,18 +146,6 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
     since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
     not; fold it there too, with a control.
-- [ ] Widget geometry defects (operator, 22 Nov; agent a033a7fb2fcd1e6bf, Sonnet, started 22 Nov; screenshots in
-  `.artifacts/evidence/widgets/media/20261122_operator_geometry/`; the operator's `--geo` logs and the evidence chest
-  hold more runs):
-  - [ ] Now Playing: the square artwork does not widen with the card, leaving a lot of empty text space; the card
-    needs excess width before the artwork can grow. Also (operator, 22 Nov): "The seek bar should also widen as the
-    box widens naturally."
-  - [ ] Now Playing side flip: flipping the artwork to the other side is a move, not a mirrored layout, so after a
-    CUSTOM edit the artwork overlaps the title, artist, progress and controls; the flip must mirror the resolved
-    layout (artwork and text column swap sides, keeping each child's custom offsets relative to its column).
-  - [ ] Achievement Pulse: resizing the card or its children sometimes cuts children (the shelves) out of the widget
-    entirely; children must stay inside the card's content rect at every size.
-  Root-cause each at the layout owner with the `--geo` evidence; a resize test per case with a control.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
