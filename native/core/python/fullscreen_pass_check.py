@@ -73,7 +73,7 @@ ROUNDS = ("shape", "draw", "textures", "timing")
 CHILD_TIMEOUT_S = 1500
 #: The seven transitions that draw one fragment between two pictures through ``FullscreenPassRenderer`` (their modules
 #: under ``rendering/quick/transitions/implementations``), the first consumers with N5.7a's presenter.
-FULLSCREEN_TRANSITIONS = ("crossfade", "burn", "particle", "ripple", "slide", "warp", "wipe")
+FULLSCREEN_TRANSITIONS = ("crossfade", "burn", "particle", "ripple", "slide", "warp_dissolve", "wipe")
 #: Drawn natively here: all seven (N5.2a), each from its own product fragment with its own values.
 PROVED = FULLSCREEN_TRANSITIONS
 #: The widened values: each transition's production defaults and its options (a variant ``<id>_<label>`` lays its
@@ -88,7 +88,7 @@ VARIANTS = {"crossfade": {}, "burn": {},
             "ripple": {}, "ripple_options": {"ripple_count": 8},
             "slide": {}, "slide_push": {"request_direction": "up", "motion_style": "Perspective Push"},
             "slide_elastic": {"request_direction": "right", "motion_style": "Elastic"},
-            "warp": {},
+            "warp_dissolve": {},
             "wipe": {}, "wipe_diagonal": {"request_direction": "diag_tr_bl"}}
 
 
@@ -129,10 +129,15 @@ _ALLOWED_ENV: set[str] = set()
 
 def renderer_class(transition_id: str):
     """The transition's ``NativeFragmentPass`` subclass (the one its module defines: a ``FullscreenPassRenderer`` for
-    the seven, N5.2b's item-quad renderers for theirs)."""
+    the seven, N5.2b's item-quad renderers for theirs), its module the product's implementation registry's for the
+    registry's id."""
     from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
+    from rendering.quick.transitions.implementation_registry import iter_quick_transition_implementations
 
-    module = importlib.import_module(f"rendering.quick.transitions.implementations.{transition_id}")
+    modules = {item.transition_id: item.module_name for item in iter_quick_transition_implementations()}
+    if transition_id not in modules:
+        raise ValueError(f"{transition_id!r} is not a registered transition id")
+    module = importlib.import_module(modules[transition_id])
     found = [value for value in vars(module).values()
              if isinstance(value, type) and issubclass(value, NativeFragmentPass)
              and value.__module__ == module.__name__]

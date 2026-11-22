@@ -297,7 +297,7 @@ SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS}
 TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
 VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
-SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
+SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
                   "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS)
 
