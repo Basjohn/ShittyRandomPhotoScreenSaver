@@ -1,0 +1,351 @@
+{
+ "schema": 1,
+ "name": "n52g_native_vulkan",
+ "commit": "4e0d5909b",
+ "created": "2026-11-22T16:46:35",
+ "updated": "2026-11-22T16:49:15",
+ "backend": "native-vulkan",
+ "clip": "anything_mixed2.jsonl",
+ "wallpaper": "D:\\Temp\\Scratch\\SRPSS\\wallpaper_usu",
+ "load": null,
+ "controls": {
+  "2160p": {
+   "size": "3840x2160",
+   "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+   "commit": "4e0d5909b",
+   "control_gpu_quiet_ms": 0.021248,
+   "control_gpu_min_ms": 0.021248,
+   "control_gpu_max_ms": 0.021376,
+   "admitted": 3,
+   "controls": 3,
+   "cpu_others_median": 32.5,
+   "gpu_clock_mhz_median": 2790.0
+  }
+ },
+ "rows": {
+  "transition/edge_bloom/2160p/idle": {
+   "key": "transition/edge_bloom/2160p/idle",
+   "kind": "transition",
+   "id": "edge_bloom",
+   "label": "Edge Bloom Reveal",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 0,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-ac3072f8bea57441b\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_n52g_native_vulkan_session_2160p_idle",
+   "measured_in_s": 77.8,
+   "conditions_before": {
+    "captured_at": "2026-11-22T16:46:44",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 1654.5
+     },
+     {
+      "pid": 22588,
+      "name": "Fortune's Eden.exe",
+      "cpu_core_pct": 306.4
+     },
+     {
+      "pid": 23748,
+      "name": "python.exe",
+      "cpu_core_pct": 103.8
+     },
+     {
+      "pid": 25152,
+      "name": "python.exe",
+      "cpu_core_pct": 95.2
+     },
+     {
+      "pid": 21020,
+      "name": "python.exe",
+      "cpu_core_pct": 89.4
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 22588,
+      "name": "Fortune's Eden.exe",
+      "gpu_pct": 27.1
+     },
+     {
+      "pid": 21020,
+      "name": "python.exe",
+      "gpu_pct": 15.19
+     },
+     {
+      "pid": 23748,
+      "name": "python.exe",
+      "gpu_pct": 8.03
+     },
+     {
+      "pid": 1612,
+      "name": "csrss.exe",
+      "gpu_pct": 0.07
+     },
+     {
+      "pid": 1508,
+      "name": "dwm.exe",
+      "gpu_pct": 0.01
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P0",
+     "util_pct": 47.0,
+     "clocks_gr_mhz": 2790.0,
+     "clocks_mem_mhz": 10501.0,
+     "temp_c": 47.96,
+     "power_w": 141.22,
+     "memory_used_mb": 11712.0,
+     "throttle_reasons": "0x0000000000000400"
+    },
+    "gpu_clock_mhz": 2790.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 33.5,
+    "cpu_others_max": 46.1,
+    "cpu_system_median": 33.8,
+    "cpu_system_max": 46.5,
+    "gpu_clock_mhz_median": 2790.0,
+    "gpu_clock_mhz_max": 2790.0,
+    "gpu_temp_c_median": 47.5,
+    "gpu_temp_c_max": 48.6,
+    "gpu_util_median": 47.0,
+    "gpu_util_max": 59.0,
+    "memory_used_median": 86.9,
+    "memory_used_max": 89.3
+   },
+   "status": "ok",
+   "figures": {
+    "fps": 163.7,
+    "render_median_ms": 1.42,
+    "render_p90_ms": 1.87,
+    "render_source": "quick_render_ms",
+    "swap_gap_median_ms": 6.04,
+    "swap_gap_p90_ms": 6.69,
+    "frame_source": "quick_after_rendering",
+    "late_pct": 0.1,
+    "hitches_per_min": 0.0,
+    "cpu_core_pct": 70.65,
+    "gpu_pct": 9.13,
+    "gpu_ms_per_frame": 0.558,
+    "rss_mb": 896.05,
+    "private_mb": 1401.1,
+    "first2s_frames": null,
+    "first2s_late_pct": null,
+    "steady_seconds": 4.96,
+    "late_frames": 1,
+    "hitches": 0,
+    "frames": 812,
+    "run_id": 2,
+    "gap_ms": {
+     "median": 6.04,
+     "p90": 6.69,
+     "max": 39.4,
+     "count": 812
+    },
+    "first_frame_ms": 4.96,
+    "gaps_over_limit": 1,
+    "gap_limit_ms": 33.0,
+    "hitch_verdict": "fail: 1 gap(s) over 33 ms ([39.4])"
+   },
+   "commit": "4e0d5909b",
+   "backend": "native-vulkan"
+  },
+  "transition/capillary_bloom/2160p/idle": {
+   "key": "transition/capillary_bloom/2160p/idle",
+   "kind": "transition",
+   "id": "capillary_bloom",
+   "label": "Capillary Bloom",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 0,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-ac3072f8bea57441b\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_n52g_native_vulkan_session_2160p_idle",
+   "measured_in_s": 67.1,
+   "conditions_before": {
+    "captured_at": "2026-11-22T16:48:05",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 1683.2
+     },
+     {
+      "pid": 22588,
+      "name": "Fortune's Eden.exe",
+      "cpu_core_pct": 301.2
+     },
+     {
+      "pid": 23748,
+      "name": "python.exe",
+      "cpu_core_pct": 108.1
+     },
+     {
+      "pid": 21020,
+      "name": "python.exe",
+      "cpu_core_pct": 96.6
+     },
+     {
+      "pid": 25152,
+      "name": "python.exe",
+      "cpu_core_pct": 82.1
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 22588,
+      "name": "Fortune's Eden.exe",
+      "gpu_pct": 29.0
+     },
+     {
+      "pid": 21020,
+      "name": "python.exe",
+      "gpu_pct": 14.95
+     },
+     {
+      "pid": 23748,
+      "name": "python.exe",
+      "gpu_pct": 6.96
+     },
+     {
+      "pid": 1612,
+      "name": "csrss.exe",
+      "gpu_pct": 0.08
+     },
+     {
+      "pid": 4,
+      "name": "System",
+      "gpu_pct": 0.01
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P0",
+     "util_pct": 45.0,
+     "clocks_gr_mhz": 2790.0,
+     "clocks_mem_mhz": 10501.0,
+     "temp_c": 47.82,
+     "power_w": 139.61,
+     "memory_used_mb": 11706.0,
+     "throttle_reasons": "0x0000000000000400"
+    },
+    "gpu_clock_mhz": 2790.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 34.6,
+    "cpu_others_max": 48.3,
+    "cpu_system_median": 35.0,
+    "cpu_system_max": 48.5,
+    "gpu_clock_mhz_median": 2790.0,
+    "gpu_clock_mhz_max": 2790.0,
+    "gpu_temp_c_median": 46.4,
+    "gpu_temp_c_max": 47.2,
+    "gpu_util_median": 40.0,
+    "gpu_util_max": 47.0,
+    "memory_used_median": 88.8,
+    "memory_used_max": 89.7
+   },
+   "status": "ok",
+   "figures": {
+    "fps": 164.0,
+    "render_median_ms": 1.5,
+    "render_p90_ms": 2.01,
+    "render_source": "quick_render_ms",
+    "swap_gap_median_ms": 6.04,
+    "swap_gap_p90_ms": 6.82,
+    "frame_source": "quick_after_rendering",
+    "late_pct": 0.1,
+    "hitches_per_min": 0.0,
+    "cpu_core_pct": 66.5,
+    "gpu_pct": 10.69,
+    "gpu_ms_per_frame": 0.652,
+    "rss_mb": 923.1,
+    "private_mb": 1328.1,
+    "first2s_frames": null,
+    "first2s_late_pct": null,
+    "steady_seconds": 6.96,
+    "late_frames": 1,
+    "hitches": 0,
+    "frames": 1141,
+    "run_id": 2,
+    "gap_ms": {
+     "median": 6.04,
+     "p90": 6.81,
+     "max": 40.83,
+     "count": 1141
+    },
+    "first_frame_ms": 5.73,
+    "gaps_over_limit": 1,
+    "gap_limit_ms": 33.0,
+    "hitch_verdict": "fail: 1 gap(s) over 33 ms ([40.83])"
+   },
+   "commit": "4e0d5909b",
+   "backend": "native-vulkan"
+  }
+ },
+ "settings": {
+  "viz_seconds": 45.0,
+  "transition_seconds": 75.0,
+  "transition_interval_s": 8,
+  "session_transitions": [
+   "exploding_tiles",
+   "volumetric_dissolve",
+   "disintegrate",
+   "jigsaw",
+   "crossfade"
+  ]
+ }
+}
