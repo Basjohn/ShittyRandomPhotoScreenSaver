@@ -3852,6 +3852,19 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
     for (const StorageBufferDeclaration &b : buffers) { // N3.3: a buffer sized by a setting waits for it
         if (b.bytes.kind == DrawCount::Kind::Named && !(settings && settings->contains(QString::fromLatin1(b.bytes.name))))
             waiting.append(QStringLiteral("buffers.%1").arg(QString::fromLatin1(b.bytes.name)));
+        if (!b.geometry)
+            continue;
+        // ABI 42 (D3): a geometry buffer's key is the record's u32 array of kGeometryKeyWords (geometry_arena.h).
+        const fa::Field *key = nullptr;
+        for (quint32 i = 0; i < schema->fieldCount; ++i) {
+            if (b.geometryKey == schema->fields[i].name)
+                key = &schema->fields[i];
+        }
+        if (!key || key->kind != fa::FieldKind::U32 || key->count != quint32(kGeometryKeyWords)) {
+            *error = QStringLiteral("geometry buffer '%1''s key '%2' is not the record's u32 array of %3 words")
+                         .arg(QString::fromLatin1(b.name), QString::fromLatin1(b.geometryKey)).arg(kGeometryKeyWords);
+            return false;
+        }
     }
     for (const ModePass &pass : passes) {
         if (!pass.block.valid())
@@ -4370,6 +4383,23 @@ void ModeSource::noteImageChange(const ImageChangeRecord &record)
     m_imageChanges.append(record);
     while (m_imageChanges.size() > kImageChangeRecords)
         m_imageChanges.removeFirst();
+}
+
+void ModeSource::setGeometryArena(const QByteArray &name)
+{
+    {
+        QMutexLocker lock(&m_textureReportMutex);
+        if (m_geometryArenaName == name)
+            return;
+        m_geometryArenaName = name;
+    }
+    m_geometryArenaSerial.fetchAndAddRelease(1);
+}
+
+QByteArray ModeSource::geometryArenaName() const
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    return m_geometryArenaName;
 }
 
 void ModeSource::texturesLost(const QStringList &names)
@@ -6285,7 +6315,8 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
         retrackCompute(program);
     }
     // Audit 5 M1: empty() counts the buffers a program without storage replaced, until the next sync releases them.
-    if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty())
+    if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty()
+        && m_storage.geometryResidencies() == 0)
         return true;                          // nothing declared, nothing held: no work
     QRhiResourceUpdateBatch *edgeUpdates = rhi->nextResourceUpdateBatch(); // its own: the record's batch is still filling
     bool fresh = false;
@@ -6309,6 +6340,12 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
             countStateLost();
         }
     }
+    if (!syncGeometry(rhi, cb, program, error)) {     // ABI 42 (D3): before the bindings over the storage
+        edgeUpdates->release();
+        const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
+        m_source->noteFailure(*error, failures);
+        return false;
+    }
     const bool holds = m_storage.holds();
     m_storageHeldHere = holds;
     m_source->setStorageHeld(holds);
@@ -6330,6 +6367,56 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
         state.insert(QStringLiteral("fresh_generation"), double(m_freshGeneration));
         m_source->noteStorage(state);
     }
+    return true;
+}
+
+bool ModeContent::syncGeometry(QRhi *rhi, QRhiCommandBuffer *cb, const ModeProgram &program, QString *error)
+{
+    m_geometryWaiting = false;
+    bool declares = false;
+    for (const StorageBufferDeclaration &b : program.buffers)
+        declares = declares || b.geometry;
+    if (!declares && m_storage.geometryResidencies() == 0)
+        return true;                          // no geometry: nothing read, nothing held
+    const quint64 serial = m_source->geometryArenaSerial();
+    if (serial != m_geometryArenaSerial) {
+        // A new name (an activation's arena, or none): this view goes and the new one opens, once per name; a name that
+        // does not open is reported once and waited on (the next name opens again), never retried per record.
+        m_geometryArenaSerial = serial;
+        m_geometryArena.close();
+        const QByteArray name = m_source->geometryArenaName();
+        QString reason;
+        if (!name.isEmpty() && !m_geometryArena.open(name, &reason))
+            qWarning("srpss core: %s", qPrintable(reason));
+        m_storage.releaseGeometry();          // D3 point 3: another activation's keys are never kept
+    }
+    const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    const QByteArray &record = m_source->frameRecord();
+    for (const StorageBufferDeclaration &b : program.buffers) {
+        if (!b.geometry)
+            continue;
+        const fa::Field *field = schema ? schema->field(b.geometryKey) : nullptr;
+        GeometryKey key;
+        if (field && field->kind == fa::FieldKind::U32 && field->count == quint32(kGeometryKeyWords)
+            && quint64(field->offset) + 4u * kGeometryKeyWords <= quint64(record.size())) {
+            quint32 words[kGeometryKeyWords];
+            for (int w = 0; w < kGeometryKeyWords; ++w)
+                words[w] = recordU32At(record, field->offset + 4u * quint32(w));
+            key = GeometryKey::fromWords(words);
+        }
+        m_geometryKeys[b.name] = key;         // assigned in place: one node a name, made once
+    }
+    QRhiResourceUpdateBatch *uploads = rhi->nextResourceUpdateBatch();
+    bool changed = false;
+    if (!m_storage.syncGeometry(rhi, uploads, &m_geometryArena, program.buffers, m_geometryKeys, &changed,
+                                &m_geometryWaiting, error)) {
+        uploads->release();
+        return false;
+    }
+    if (changed)
+        cb->resourceUpdate(uploads);          // outside any pass: a new key's bytes, before any pass reads them
+    else
+        uploads->release();
     return true;
 }
 
@@ -7469,7 +7556,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
         return false;
     }
-    const bool withPasses = texturesReady() && meshesReady(); // N3.2: every drawn mesh uploaded
+    // N3.2: every drawn mesh uploaded; ABI 42 (D3): every geometry buffer with a resident key.
+    const bool withPasses = texturesReady() && meshesReady() && !m_geometryWaiting;
     if (!ensure(rhi, target, withPasses, error)) {
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
         return false;
@@ -7483,13 +7571,19 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         const quint64 missingMask = meshesWaiting ? missingMeshMask() : 0u;
         const quint64 program = m_source->drawnProgram().generation;
         if (!m_waitingValid || m_waitingProgram != program || m_waitingJobs != m_report.jobsPending
-            || m_waitingMeshes != missingMask || m_waitingLost != m_texturesLost) {
+            || m_waitingMeshes != missingMask || m_waitingLost != m_texturesLost
+            || m_waitingGeometry != m_geometryWaiting) {
             m_waitingValid = true;
             m_waitingProgram = program;
             m_waitingJobs = m_report.jobsPending;
             m_waitingMeshes = missingMask;
             m_waitingLost = m_texturesLost;   // a shared copy, at the edge only
-            if (meshesWaiting) {
+            m_waitingGeometry = m_geometryWaiting;
+            if (texturesReady() && meshesReady() && m_geometryWaiting) {
+                // ABI 42 (D3): a geometry key the arena does not hold yet (the worker writes it before the frame
+                // naming it, so a first key waits a record or two), or one that failed with no key drawn before.
+                m_waitingReason = QStringLiteral("waiting: a geometry buffer has no resident key yet");
+            } else if (meshesWaiting) {
                 // Every mesh the program draws that the content does not hold: lost with a content made again, or one
                 // the owner removed while the program still draws it (the sync's list names only the first).
                 QStringList missing;
@@ -7621,6 +7715,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         streamWriteNs = recordTimer.nsecsElapsed() - writesFrom;
     }
     recordPasses(rhi, cb, target, updates, draw, readback);
+    if (draw)
+        m_storage.geometryRecorded();     // ABI 42 (D3): a frame using every current key recorded
     noteMeshBuffers();                        // N3.2 audit 4: a draw refused at its edge in this record (else nothing)
     if (draw && !m_source->drawnStill())
         countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis

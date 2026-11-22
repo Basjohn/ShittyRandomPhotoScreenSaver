@@ -808,6 +808,17 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("compute_objects_created"), double(cc.objectsCreated));
     o.insert(QStringLiteral("compute_states_lost"), double(cc.statesLost));
     o.insert(QStringLiteral("compute_readbacks"), cc.readbacksPending);
+    // ABI 42 (D3): the geometry residencies (one key a family at rest, two during a swap, zero after teardown), the
+    // uploads (one a key), the keys failed (each logged once), the residencies released, the records that waited
+    // with no key resident, and the arenas mapped with their reads found and torn.
+    o.insert(QStringLiteral("geometry_resident"), cc.geometryResident);
+    o.insert(QStringLiteral("geometry_uploads"), double(cc.geometryUploads));
+    o.insert(QStringLiteral("geometry_failed"), double(cc.geometryFailed));
+    o.insert(QStringLiteral("geometry_released"), double(cc.geometryReleased));
+    o.insert(QStringLiteral("geometry_waits"), double(cc.geometryWaits));
+    o.insert(QStringLiteral("geometry_arenas"), srpss_core::GeometryArena::liveArenas());
+    o.insert(QStringLiteral("geometry_reads_found"), double(srpss_core::GeometryArena::readsFound()));
+    o.insert(QStringLiteral("geometry_reads_torn"), double(srpss_core::GeometryArena::readsTorn()));
     // N3.4 (D17): the stages' objects (bloom chains, defocus read levels, their textures, bytes and pipelines), every
     // object a stage made (flat at rest), the records of each stage, the generated mips, the transparency fallbacks
     // noted and what the skipped-release control left behind.
@@ -1823,6 +1834,22 @@ PyObject *composite_mode_target_size(PyObject *, PyObject *args)
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+// ABI 42 (D3, geometry_arena.h): the activation's geometry arena by its mapping name ("" for none); the render thread
+// opens its own view at the next record.
+PyObject *composite_mode_geometry_arena(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    if (!PyArg_ParseTuple(args, "Ls", &handle, &name))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    source->setGeometryArena(QByteArray(name));
     compositeOf(handle)->update();
     Py_RETURN_NONE;
 }
@@ -3100,6 +3127,9 @@ PyMethodDef methods[] = {
     { "composite_mode_target_size", composite_mode_target_size, METH_VARARGS,
       "(handle, name, (w, h)) -> None: N3.1, an explicit-size scene target's size with no new program (Bubble's "
       "ambient target follows its card). ValueError for a target the program does not declare with an explicit size." },
+    { "composite_mode_geometry_arena", composite_mode_geometry_arena, METH_VARARGS,
+      "(handle, name) -> None: ABI 42 (D3), the activation's geometry arena by its mapping name ('' for none): "
+      "each geometry buffer's key is read from it once and uploaded once (geometry_arena.h)." },
     { "composite_mode_target_read", composite_mode_target_read, METH_VARARGS,
       "(handle) -> None: N3.1, harness: a readback of every scene target's readable texture at the next record." },
     { "composite_mode_target_pixels", composite_mode_target_pixels, METH_VARARGS,

@@ -193,6 +193,7 @@
 #include "rhi_owned.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QSharedPointer>
@@ -733,6 +734,11 @@ public:
     // item for a frame), and its bytes once QRhi completed it (any thread; taken once). The record it rides on
     // dispatches nothing (no new work).
     void requestStorageRead();
+    // ABI 42 (D3, geometry_arena.h), GUI thread: the geometry arena's mapping name (the activation's; empty: none). The
+    // render thread opens it at its next record and keeps its own view (geometryArenaSerial changes with each name).
+    void setGeometryArena(const QByteArray &name);
+    quint64 geometryArenaSerial() const { return m_geometryArenaSerial.loadAcquire(); }
+    QByteArray geometryArenaName() const;
     quint64 storageReadRequests() const { return m_storageReads.loadAcquire(); }
     void setStorageReadback(const std::shared_ptr<StorageReadback> &readback);
     bool takeStoragePixels(QList<StoragePixels> *out);
@@ -795,6 +801,8 @@ private:
     QJsonObject m_storageState;                 // N3.3, under m_textureReportMutex
     std::shared_ptr<StorageReadback> m_storageReadback; // N3.3, under m_textureReportMutex
     QAtomicInteger<quint64> m_storageReads { 0 };
+    QByteArray m_geometryArenaName;             // ABI 42, under m_textureReportMutex
+    QAtomicInteger<quint64> m_geometryArenaSerial { 0 };
 };
 
 class ModeContent final : public SurfaceContent
@@ -884,6 +892,9 @@ private:
     // N3.3 (D16): the storage at this record (made, kept or made again; its edge kernels recorded now, before any pass);
     // false with the reason (the content's failure, latched like a build's).
     bool syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error);
+    // ABI 42 (D3): each geometry buffer's key read from the record and made resident (ModeStorage::syncGeometry), the
+    // arena opened when the source names a new one; m_geometryWaiting when a geometry buffer has no key resident yet.
+    bool syncGeometry(QRhi *rhi, QRhiCommandBuffer *cb, const ModeProgram &program, QString *error);
     // N3.3: which compute entries dispatch at this drawn record (their trigger has new work), u_srpss_compute filled into
     // the arena's copy for each.
     void decideDispatches();
@@ -980,6 +991,7 @@ private:
     int m_waitingJobs = 0;
     quint64 m_waitingMeshes = 0;
     QStringList m_waitingLost;
+    bool m_waitingGeometry = false;          // ABI 42
     QString m_waitingReason;
     QByteArray m_batchShadow;                // N3.2: the batched passes' indirect commands (form 3), written per record
     quint64 m_meshBuffersNoted = ~quint64(0); // N3.2: the meshes' and streams' objects the state was last noted for
@@ -1006,6 +1018,10 @@ private:
     // Audit 5 M2: the tracks of a new program, each entry's kept from the last program by its name.
     void retrackCompute(const ModeProgram &program);
     ModeStorage m_storage;
+    GeometryArena m_geometryArena;           // ABI 42 (D3): the content's own view of the activation's arena
+    quint64 m_geometryArenaSerial = 0;       // the source's name this view was opened for
+    QHash<QByteArray, GeometryKey> m_geometryKeys; // the record's keys, assigned in place (no allocation per record)
+    bool m_geometryWaiting = false;          // a geometry buffer has no resident key: the frame is kept
     ComputeTrack m_compute[kMaxModePasses];
     bool m_dispatch[kMaxModePasses] = {};
     quint64 m_computeProgram = 0;            // the program the tracks are of
