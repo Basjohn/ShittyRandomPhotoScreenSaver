@@ -90,10 +90,11 @@ class BubbleWorld:
     population_scale: float
     # The most heroes this world holds, live and draining (the simulation's cap).
     hero_capacity: int = BUBBLE_CARD_CAPACITY
-    # Movement per step is multiplied by this: 1 on every card; on the display-wide card the card rule's square-root
-    # zoom over its own smaller zoom, so the bubbles cross the display as fast as before the zoom-out (on-screen speed
-    # scales with the zoom; operator, 22 Nov: fullscreen was ~20 % slow, exactly overflow ** (0.5 - 0.26)).
-    motion_scale: float = 1.0
+    # What the zoom-out took from the screen, given back: 1 on every card; on the display-wide card the card rule's
+    # square-root zoom over its own smaller zoom (overflow ** (0.5 - 0.26)). Movement per step and the breathing swing
+    # (render size about the base radius, and the size clamp's headroom) are multiplied by it, so fullscreen bubbles
+    # cross and breathe on screen as before the zoom-out (operator, 22 Nov: both ~20 % weak).
+    screen_gain: float = 1.0
 
 
 def _extent(viewport_extent: Sequence[object] | None, baseline: tuple[float, float]) -> tuple[float, float]:
@@ -148,7 +149,7 @@ def resolve_bubble_world(
             population_scale = min(population_scale, DISPLAY_WIDE_LIVE_CAPACITY / population)
         return BubbleWorld(width=width, height=height, domain_w=domain_w, domain_h=domain_h, world_scale=world_scale,
                            population_scale=population_scale, hero_capacity=BUBBLE_RENDER_CAPACITY,
-                           motion_scale=card_zoom / world_scale)
+                           screen_gain=card_zoom / world_scale)
     domain_w = cards_w / world_scale
     domain_h = cards_h / world_scale
     return BubbleWorld(

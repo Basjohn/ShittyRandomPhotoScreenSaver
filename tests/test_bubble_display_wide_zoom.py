@@ -88,8 +88,15 @@ def test_display_wide_zooms_out_with_more_heroes_while_the_card_keeps_its_world(
     late = [frame.mode_state.bubble_count for frame in wide["frames"][len(wide["frames"]) // 2:]]
     assert statistics.median(late) > 1.2 * card_rule_live, (statistics.median(late), card_rule_live)
 
-    # Each hero breathes as much against its own size at both sizes (the drawn radius is that ratio times the zoom).
-    assert _breathing(wide["frames"]) == pytest.approx(_breathing(card["frames"]), rel=0.15)
+    # Each hero's swing about its own size is the card's times the display-wide world's screen gain (operator, 22 Nov:
+    # the zoom-out made fullscreen breathing ~20 % weak on screen; the gain gives that back, exactly overflow ** 0.24).
+    gain = resolve_bubble_world(wide_drawn.logical_viewport_extent, authored_population=population,
+                                display_wide=True).screen_gain
+    assert gain > 1.05
+    card_swing, wide_swing = _breathing(card["frames"]) - 1.0, _breathing(wide["frames"]) - 1.0
+    assert card_swing > 0.05
+    assert wide_swing == pytest.approx(card_swing * gain, rel=0.2), (card_swing, wide_swing, gain)
+    assert wide_swing > card_swing * 1.05          # the control: without the gain the swings matched (old assertion)
 
 
 def test_display_wide_motion_keeps_the_card_rules_on_screen_speed():
@@ -105,11 +112,11 @@ def test_display_wide_motion_keeps_the_card_rules_on_screen_speed():
     population = 60
     card = resolve_bubble_world(extent, authored_population=population)
     wide = resolve_bubble_world(extent, authored_population=population, display_wide=True)
-    assert card.motion_scale == 1.0                      # every card world: motion unchanged
-    assert resolve_bubble_world((420.0, 280.0), authored_population=population).motion_scale == 1.0
+    assert card.screen_gain == 1.0                      # every card world: motion unchanged
+    assert resolve_bubble_world((420.0, 280.0), authored_population=population).screen_gain == 1.0
     overflow = population * (1920.0 / 420.0) * (1080.0 / 280.0) / max(population, BUBBLE_LIVE_CAPACITY)
     assert wide.world_scale == pytest.approx(overflow ** DISPLAY_WIDE_ZOOM_EXPONENT)
-    assert wide.motion_scale == pytest.approx(math.sqrt(overflow) / wide.world_scale)
-    assert wide.motion_scale > 1.0
+    assert wide.screen_gain == pytest.approx(math.sqrt(overflow) / wide.world_scale)
+    assert wide.screen_gain > 1.0
     # On-screen speed (motion per step times zoom, over the cards spanned) equals the card rule's.
-    assert wide.motion_scale * wide.world_scale == pytest.approx(card.world_scale)
+    assert wide.screen_gain * wide.world_scale == pytest.approx(card.world_scale)

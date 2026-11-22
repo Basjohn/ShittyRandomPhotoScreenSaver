@@ -714,8 +714,8 @@ class BubbleSimulation:
                 for bb in small_pool[:promote_count]:
                     bb.promoted = True
                     bb.promote_timer = promote_duration
-        # This world's movement scale (BubbleWorld.motion_scale): 1 on every card, so card motion is unchanged.
-        motion_gain = float(self._world.motion_scale)
+        # This world's screen gain (BubbleWorld.screen_gain): 1 on every card, so card motion is unchanged.
+        motion_gain = float(self._world.screen_gain)
         # Tick down promotion timers
         for b in self._bubbles:
             if b.promoted:
@@ -2870,6 +2870,8 @@ class BubbleSimulation:
         # the canonical response height and this world's ``world_scale``.
         inv_domain_w = 1.0 / self._domain_w
         inv_domain_h = 1.0 / self._domain_h
+        # The breathing swing about the base radius is scaled by the world's screen gain (1 on every card).
+        breath_gain = float(self._world.screen_gain)
 
         for idx, b in enumerate(self._bubbles):
             # Pulse: smoothed energy drives visible size thump.
@@ -2891,6 +2893,8 @@ class BubbleSimulation:
                     small_freq_pulse=small_freq_pulse,
                 )
 
+            if breath_gain != 1.0:
+                pulse_factor = 1.0 + (pulse_factor - 1.0) * breath_gain
             target_radius = b.radius * pulse_factor
 
             # Contraction bias: during quiet passages (low pulse_energy),
@@ -2905,6 +2909,8 @@ class BubbleSimulation:
             # Max size clamp: cap the pulsed radius to base_radius * clamp
             if b.is_big and big_size_clamp > 0.0:
                 clamp_limit = self._resolve_big_clamp_limit(b.radius, big_size_clamp)
+                if breath_gain != 1.0:
+                    clamp_limit = b.radius + (clamp_limit - b.radius) * breath_gain
                 if target_radius >= clamp_limit - 1e-5:
                     big_render_diag["big_clamp_hits"] += 1.0
                 target_radius = min(target_radius, clamp_limit)
