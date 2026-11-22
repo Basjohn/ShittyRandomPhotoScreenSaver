@@ -201,6 +201,10 @@ Each foundation slice adds what it learned here.
 - A refactor onto shared functions keeps every expression's operation order (return a product's factors
   separately rather than regrouping them); floating point is not associative. Then prove pixel identity against
   HEAD in a worktree, per tier and option.
+- With bloom a scene's alpha is light, so every blended pass's alpha factors matter, not only its colour's: an opaque
+  composite never reads alpha and hides a wrong alpha blend until a bloom reads it (N5.2e: the native trails' edges
+  blended their alpha as their colour, Python keeps it, and Exploding Tiles' bloom lit every trail outline: 100k pixels
+  off, 236 once fixed). Port a blend as Python's four factors and both equations.
 - Photo textures are lent: sample them, never modify them (no mipmaps, no writes). Anything derived is a
   renderer-owned per-run copy.
 - Reflection or refraction on thin geometry (slab edges, bevels) needs a normal that varies across the face (a rounded

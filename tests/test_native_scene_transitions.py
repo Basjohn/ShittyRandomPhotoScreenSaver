@@ -91,6 +91,11 @@ def _program_members(scene) -> dict[str, set[str]]:
     if scene.motion:
         found[MOTION_TILE_MAX] = _members(post[MOTION_TILE_MAX])
         found[MOTION_GATHER] = _members(post[MOTION_GATHER])
+    if getattr(scene, "bloom", 0.0) > 0.0:
+        # N5.2e: the glow composite's own member (the core's post stage block; ``STAGE_MEMBERS``), its others the core's.
+        from post_stages import STAGE_MEMBERS
+
+        found["scene_composite"] = set(STAGE_MEMBERS["opaque_glow"])
     return found
 
 
@@ -203,8 +208,18 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
             assert native.pack == fragment.read_bytes() and native.geometry.vertex_pack == vertex.read_bytes()
         assert native.target == (nb.SCENE_GHOSTS if scene_pass.target == "ghosts" else nb.SCENE_TARGET)
         assert (native.depth_test == "less") == scene_pass.depth
-    assert isinstance(passes[-1], CompositeStep) and passes[-1].form == "opaque"
-    assert passes[-1].scene == (f"{nb.SCENE_BLURRED}.colour" if scene.motion else f"{nb.SCENE_TARGET}.colour")
+        assert native.depth_write == scene_pass.writes_depth             # N5.2e: the sparks test without a write
+    shown = f"{nb.SCENE_BLURRED}.colour" if scene.motion else f"{nb.SCENE_TARGET}.colour"
+    if scene.bloom > 0.0:
+        # N5.2e: the bloom chain of what the composite shows, its glow added (Python's opaque composite with bloom).
+        from rendering.native.mode import BloomStep
+
+        assert isinstance(passes[-2], BloomStep) and passes[-2].source == shown
+        assert passes[-1].form == "opaque_glow" and passes[-1].glow == f"{passes[-2].name}.glow"
+        assert program["targets"][0]["colour"][0].get("clear", [0.0, 0.0, 0.0, 0.0]) == [0.0, 0.0, 0.0, 0.0]
+    else:
+        assert passes[-1].form == "opaque"
+    assert isinstance(passes[-1], CompositeStep) and passes[-1].scene == shown
     target = program["targets"][0]
     assert target["depth"] is True and target.get("samples", 1) == max(1, scene.samples)
     assert len(program["targets"]) == 1 + int(scene.trails) + int(scene.motion)
@@ -400,8 +415,10 @@ def test_rule_b_admits_three_isolated_edge_flips_a_frame():
 
 #: A vertex stage's own clip depth written after the matrix: Block Spins' ``projected.z``, Crumble's ``q.z``, Glass
 #: Shatter's and Pixel Accretion's ``gl_Position.z``, and the shared camera's ``sceneProject*`` (``clip.z =
-#: sceneClipDepth(w)``: OpenGL's -w..w, negative closer than twice the near plane), read in the code main runs.
-_OWN_DEPTH = re.compile(r"\b\w+\.z\s*=(?!=|\s*(?:sceneClipDepth|uMatrix\[2\]\[2\]))|\bsceneProject\w*\s*\(")
+#: sceneClipDepth(w)``: OpenGL's -w..w, negative closer than twice the near plane), read in the code main runs; N5.2e:
+#: the particles' ``sceneStreak`` (through ``sceneParticleStreak``: ``clip.z = sceneClipDepth(w) / w * clip.w``).
+_OWN_DEPTH = re.compile(r"\b\w+\.z\s*=(?!=|\s*(?:sceneClipDepth|uMatrix\[2\]\[2\]))|\bsceneProject\w*\s*\("
+                        r"|\bscene(?:Particle)?Streak\s*\(")
 
 
 def _main_code(vertex_source: str) -> str:
@@ -438,7 +455,7 @@ def test_a_stage_writing_its_own_clip_depth_puts_it_through_the_matrix():
                 others.append(scene_pass.name)
                 assert NATIVE_CLIP_DEPTH_LINE not in body, f"{cls.transition_id} {scene_pass.name}"
     assert set(writers) == {"block_spins", "crumble", "glass_shatter", "pixel_accretion", "blinds", "cube_turn",
-                            "depth_cascade", "jigsaw"}
+                            "depth_cascade", "jigsaw", "membrane", "page_curl", "exploding_tiles"}
     assert "shadow" in others and "underlay" in others
     # Controls: the Python renderer's own text is a writer without the line; the line is put once, at main's end.
     assert _writes_own_depth(BLOCK_SPIN_QUICK_VERTEX_SOURCE) and NATIVE_CLIP_DEPTH_LINE not in BLOCK_SPIN_QUICK_VERTEX_SOURCE
@@ -570,3 +587,149 @@ def test_the_n52d_bounds_cover_every_form_and_the_gather_free_ones_are_judged_in
     # Control: the gather-free forms are the plain ones and the defaults, never a form with motion blur or trails.
     assert trc.n52d_gather_free("crumble_plain") and trc.n52d_gather_free("crumble")
     assert not trc.n52d_gather_free("crumble_both") and not trc.n52d_gather_free("crumble_trails")
+
+
+# ---------------------------------------------------------------- N5.2e (N4.l): the grid, the tiles, their frame block
+
+def _own_blocks(text: str) -> dict[str, str]:
+    """A stage's std140 blocks but the conventions' -> each block's body (comments dropped)."""
+    return {name: body for binding, name, body in _BLOCK.findall(_COMMENT.sub("", text)) if int(binding) != 17}
+
+
+def test_exploding_tiles_frame_block_is_merged_into_each_pass_block():
+    """The core admits one block of its own a pass; Exploding Tiles' programs declare their pass block and the shared
+    ``ExplodingTilesFrame``. Each native pack declares one block, the pass block with the frame block's members after
+    its own, the same in both stages, at the pass block's binding."""
+    from rendering.gl_programs import exploding_tiles_program as et
+    from rendering.quick.transitions.implementations.exploding_tiles import QuickExplodingTilesRenderer
+
+    frame = et.EXPLODING_TILES_FRAME_BLOCK
+    frame_members = [name for name, _kind in frame.fields]
+    originals = {"backdrop": (et.EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, et.EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE),
+                 "shadows": (et.EXPLODING_TILES_SHADOW_VERTEX_SOURCE, et.EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE),
+                 "tiles_motion": (et.EXPLODING_TILES_VERTEX_SOURCE, et.EXPLODING_TILES_FRAGMENT_SOURCE),
+                 "sparks": (et.EXPLODING_TILES_SPARK_VERTEX_SOURCE, et.EXPLODING_TILES_SPARK_FRAGMENT_SOURCE)}
+    for scene_pass in QuickExplodingTilesRenderer.native_scene_passes():
+        if scene_pass.core_triangle:
+            continue
+        stages = [_own_blocks(scene_pass.vertex_source), _own_blocks(scene_pass.fragment_source)]
+        assert all(len(blocks) == 1 for blocks in stages), scene_pass.name
+        assert stages[0] == stages[1], scene_pass.name
+        (name, body), = stages[0].items()
+        members = _MEMBER.findall(body)
+        assert name != frame.name and members[-len(frame_members):] == frame_members, scene_pass.name
+        assert len(set(members)) == len(members), scene_pass.name
+    # Control: the Python renderer's own texts declare two blocks, which the core refuses.
+    for name, texts in originals.items():
+        declared = set().union(*(_own_blocks(text) for text in texts))
+        assert frame.name in declared and len(declared) == 2, name
+
+
+def test_the_n52e_bounds_cover_every_moving_form():
+    """Every single-sampled Exploding Tiles and Page Curl form is judged by the piece-edge class (rule a), every
+    Exploding Tiles form and Page Curl with options by it under rule (b); Membrane's 4x default by its own rule (b)."""
+    trc = _trc()
+    single = {v for v, o in trc.N52E_VARIANTS.items() if o.get("samples") == 0}
+    moving = {v for v in single if not v.startswith("membrane")}
+    assert set(trc.N52E_EDGE_FLIPS_A) == moving
+    assert set(trc.N52E_EDGE_FLIPS_B) == {v for v in trc.N52E_VARIANTS if v.startswith("exploding_tiles")} | {
+        "page_curl_options"}
+    assert set(trc.EDGE_FLIPS_A) == set(trc.N52D_EDGE_FLIPS_A) | moving
+    # Control: the gather-free judgement (against Python in the core's frame) never takes a form with bloom.
+    assert trc.n52d_gather_free("exploding_tiles_plain") and trc.n52d_gather_free("page_curl_options")
+    assert not trc.n52d_gather_free("exploding_tiles_bloom") and not trc.n52d_gather_free("membrane_options")
+
+
+def test_the_trail_edges_keep_the_scenes_alpha_as_python_blends_them():
+    """Python blends the trails' edges with ``blend_scope(ADD, SRC_ALPHA, ONE_MINUS_SRC_ALPHA)``, whose alpha is
+    (ZERO, ONE): kept. With bloom the alpha is emitted light; N5.2d's alpha (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) lit every
+    trail outline (n52e_r1: Exploding Tiles with bloom, motion and trails, 100k pixels off; 236 once kept)."""
+    from unittest import mock
+
+    from OpenGL import GL as gl
+
+    from rendering.quick.scene3d import passes
+    from rendering.quick.transitions.native_scene import TRAIL_EDGES_PASS
+
+    names = {gl.GL_ZERO: "zero", gl.GL_ONE: "one", gl.GL_SRC_ALPHA: "src_alpha",
+             gl.GL_ONE_MINUS_SRC_ALPHA: "one_minus_src_alpha", gl.GL_FUNC_ADD: "add"}
+    calls = {}
+    with mock.patch.object(passes, "gl") as fake:
+        for constant in ("GL_ZERO", "GL_ONE", "GL_SRC_ALPHA", "GL_ONE_MINUS_SRC_ALPHA", "GL_FUNC_ADD", "GL_BLEND"):
+            setattr(fake, constant, getattr(gl, constant))
+        fake.glBlendFuncSeparate.side_effect = lambda *a: calls.setdefault("func", a)
+        fake.glBlendEquationSeparate.side_effect = lambda *a: calls.setdefault("equation", a)
+        with passes.blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA):
+            pass
+    src, dst, src_a, dst_a = (names[v] for v in calls["func"])
+    python = ((names[calls["equation"][0]], src, dst), (names[calls["equation"][1]], src_a, dst_a))
+    assert tuple(map(tuple, TRAIL_EDGES_PASS.blend)) == python
+    # Control: N5.2d's blend (the colour's factors on the alpha too) is not Python's.
+    assert (("add", "src_alpha", "one_minus_src_alpha"), ("add", "src_alpha", "one_minus_src_alpha")) != python
+
+
+def test_the_merge_refuses_a_doubled_member_and_a_third_block():
+    from rendering.gl_programs import exploding_tiles_program as et
+    from rendering.quick.transitions.native_scene import native_one_block
+
+    frame = et.EXPLODING_TILES_FRAME_BLOCK.name
+    vertex, fragment = et.EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, et.EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE
+    assert native_one_block((vertex, fragment), frame)                                  # the plain merge passes
+    doubled = fragment.replace("uniform ExplodingTilesFrame {", "uniform ExplodingTilesFrame {\n    mat4 uMatrix;")
+    with pytest.raises(ValueError, match="both"):
+        native_one_block((vertex, doubled), frame)
+    third = fragment.replace("#version 460 core\n", "#version 460 core\nlayout(std140, binding = 3) uniform Extra {\n"
+                             "    float uExtra;\n};\n", 1)
+    with pytest.raises(ValueError, match="one block of its own"):
+        native_one_block((vertex, third), frame)
+    with pytest.raises(ValueError, match="frame block"):
+        native_one_block((vertex, fragment), "NoSuchFrame")
+
+
+def test_the_motion_free_tiles_write_no_motion_and_the_motion_tiles_both_axes():
+    """Without motion blur the scene target has its colour alone and the core refuses outputs past it: the tiles' pack
+    writes FragColor only; with it, x at location 1 and y at 2 (the conversion: Python's RG16F keeps both at 1)."""
+    from rendering.quick.transitions.implementations.exploding_tiles import QuickExplodingTilesRenderer
+    from rendering.quick.transitions.native_scene import native_without_motion
+
+    output = re.compile(r"layout\s*\(\s*location\s*=\s*(\d+)\s*\)\s*out\s+vec4\s+(\w+)\s*;")
+    plain = QuickExplodingTilesRenderer.scene_pass("tiles").fragment_source
+    moving = QuickExplodingTilesRenderer.scene_pass("tiles_motion").fragment_source
+    assert output.findall(plain) == [("0", "FragColor")]
+    assert output.findall(moving) == [("0", "FragColor"), ("1", "SceneMotion"), ("2", "SceneMotionY")]
+    assert "SceneMotionY = vec4(motion.y" in moving
+    # Control: a fragment without the outputs is refused (it is not a motion-writing fragment).
+    with pytest.raises(ValueError):
+        native_without_motion(plain)
+
+
+def test_exploding_tiles_values_are_the_python_renderers_frame_block():
+    """The frame block's values are ``_frame_values`` (the one owner ``render`` packs), the tile count its grid of the
+    item's device pixels, the sparks' count 0 outside their life, and each ghost its own moment."""
+    from rendering.gl_programs.exploding_tiles_program import exploding_tiles_blast, exploding_tiles_grid
+    from rendering.gl_programs.scene3d import scene3d_trail_ghosts
+    from rendering.quick.render.native_background import scene_settings
+    from rendering.quick.transitions.implementations.exploding_tiles import SPARK_INSTANCES, TILE_INSTANCES
+
+    run = _run("exploding_tiles_both")
+    renderer = _renderer("exploding_tiles")
+    scene = renderer.native_scene(run, LOGICAL)
+    columns = run.request.parameter_dict()["columns"]
+    early = run.sample(run.start_ns + (run.end_ns - run.start_ns) // 50)
+    late = run.sample(run.start_ns + (run.end_ns - run.start_ns) * 9 // 10)
+    for sample in (early, late):
+        settings = scene_settings(renderer, run, sample, LOGICAL, PIXELS, scene)
+        grid = exploding_tiles_grid(columns, *PIXELS)
+        assert settings["uGrid"] == grid and settings[TILE_INSTANCES] == grid[0] * grid[1]
+        assert settings["uViewport"] == (float(PIXELS[0]), float(PIXELS[1])) and settings["uEmissive"] == 1.0
+        assert settings["u_bloom_strength"] == run.request.parameter_dict()["bloom"]
+        progress = float(sample.eased_progress)
+        for age, (time, fade) in enumerate(scene3d_trail_ghosts(progress, run.request.duration_ms)):
+            assert settings[f"uProgress@tiles_ghost_{age}"] == time
+            assert settings[f"uBlast@tiles_ghost_{age}"] == exploding_tiles_blast(time)
+            assert settings[f"uShutter@tiles_ghost_{age}"] == time - progress
+            assert settings[f"uGhostFade@tiles_ghost_{age}"] == fade
+    # Before the detonation no spark can live (Python skips the pass); later they do.
+    assert scene_settings(renderer, run, early, LOGICAL, PIXELS, scene).get(SPARK_INSTANCES) == 0
+    assert scene_settings(renderer, run, run.sample(run.start_ns + (run.end_ns - run.start_ns) // 8), LOGICAL,
+                          PIXELS, scene)[SPARK_INSTANCES] > 0

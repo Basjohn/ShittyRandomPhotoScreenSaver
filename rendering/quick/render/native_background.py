@@ -68,6 +68,7 @@ SCENE_GHOSTS = "ghosts"
 SCENE_BLURRED = "blurred"
 SCENE_MOTION_TILES = "motion_tiles"
 SCENE_MOTION_TABLE = "motion_table"
+SCENE_BLOOM = "scene_bloom"                 # N5.2e: the bloom step (its glow "scene_bloom.glow")
 #: The frame trace's records of a run on the layer (``FrameTraceEvent.NATIVE_TRANSITION_TICK`` / ``_END``; a test holds
 #: them equal).
 _TRACE_TICK, _TRACE_END = 81, 82
@@ -164,7 +165,8 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     the composite of that. With trails each ghost pass (target ``ghosts``) is drawn once a ghost into an R8 buffer,
     MAX-blended, and the edges are a pass of the scene's list."""
     from rendering.gl_programs.scene3d import SCENE3D_TRAIL_GHOSTS
-    from rendering.native.mode import (BUILTIN_QUAD_MESH, BlendState, ComputeBinding, ComputePass, CompositeStep,
+    from rendering.native.mode import (BUILTIN_QUAD_MESH, BlendState, BloomStep, ComputeBinding, ComputePass,
+                                       CompositeStep,
                                        EnvironmentStep, ModePass, ModeTarget, PassGeometry, PassOutput, PassSampler,
                                        StorageImage, TargetAttachment)
     from rendering.quick.scene3d.environment import environment_size
@@ -207,8 +209,11 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
                                        target=SCENE_GHOSTS, geometry=geometry))
             continue
         passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
-                               depth_test="less" if p.depth else None, depth_write=bool(p.depth), geometry=geometry))
-    colour = [TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 1.0))]
+                               depth_test="less" if p.depth else None,
+                               depth_write=bool(getattr(p, "writes_depth", p.depth)), geometry=geometry))
+    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears to 0).
+    bloom = float(getattr(scene, "bloom", 0.0) or 0.0)
+    colour = [TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0))]
     targets: list = []
     images: list = []
     scene_texture = f"{SCENE_TARGET}.colour"
@@ -221,16 +226,24 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         passes.append(ComputePass(MOTION_TILE_MAX, shared_pack_path(MOTION_TILE_MAX, ".comp").read_bytes(),
                                   (ComputeBinding("uTiles", SCENE_MOTION_TILES, "image", "write"),),
                                   groups=(geometry.tiles[0], geometry.tiles[1], 1), trigger="draw", samplers=velocity))
+        # N5.2e: with bloom the gather covers the allocation (Python's), whose margin the bloom chain reads.
         passes.append(ModePass(MOTION_GATHER, shared_pack_path(MOTION_GATHER, ".frag").read_bytes(), "replace",
                                (PassSampler("uScene", scene_texture, "nearest"), *velocity,
-                                PassSampler("uTiles", SCENE_MOTION_TILES, "nearest")), target=SCENE_BLURRED))
+                                PassSampler("uTiles", SCENE_MOTION_TILES, "nearest")), target=SCENE_BLURRED,
+                               viewport="allocation" if bloom > 0.0 else "content"))
         scene_texture = f"{SCENE_BLURRED}.colour"
-    passes.append(CompositeStep("scene_composite", "opaque", scene_texture))
+    if bloom > 0.0:
+        # N5.2e: Python's bloom chain of the (gathered) scene, its glow added by the opaque composite.
+        passes.append(BloomStep(SCENE_BLOOM, scene_texture))
+        passes.append(CompositeStep("scene_composite", "opaque_glow", scene_texture, f"{SCENE_BLOOM}.glow"))
+    else:
+        passes.append(CompositeStep("scene_composite", "opaque", scene_texture))
     targets.append(ModeTarget(SCENE_TARGET, tuple(colour), depth=True, samples=max(1, int(scene.samples))))
     if trails:
         targets.append(ModeTarget(SCENE_GHOSTS, (TargetAttachment("ghost", "r8"),)))
     if motion:
-        targets.append(ModeTarget(SCENE_BLURRED, (TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 1.0)),)))
+        targets.append(ModeTarget(SCENE_BLURRED, (TargetAttachment(
+            "colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0)),)))
     return passes, tuple(targets), tuple(images)
 
 
@@ -279,6 +292,8 @@ def scene_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[flo
     values = flat_values(values)
     if scene is not None and (getattr(scene, "motion", False) or getattr(scene, "trails", False)):
         values.update(motion_post_values(scene, pixels))
+    if scene is not None and float(getattr(scene, "bloom", 0.0) or 0.0) > 0.0:
+        values["u_bloom_strength"] = float(scene.bloom)          # N5.2e: Python's uBloomStrength (the request's bloom)
     return {name: _flat(value) for name, value in values.items() if name not in MODE_CORE_MEMBERS}
 
 

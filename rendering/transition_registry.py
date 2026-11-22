@@ -85,6 +85,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Exploding Tiles",
         stable_id="exploding_tiles",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -138,6 +139,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Membrane Turnover",
         stable_id="membrane",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -191,6 +193,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Page Curl",
         stable_id="page_curl",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),

@@ -98,7 +98,7 @@ REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options",
-                  "block_spins_both")
+                  "block_spins_both", "exploding_tiles_both")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -292,14 +292,64 @@ COMPACT_CORE = 7
 #: A piece's edge: a 3 x 3 span of EDGE_LEVEL or more in the reference (a trail outline's faint rim spans 7: n52d_r4,
 #: Crumble both at 0.65), on a moving piece.
 EDGE_LEVEL = 4
-SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS
-SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS}
+#: N5.2e (N4.l): the bendable grid's scenes (Membrane, Page Curl) and Exploding Tiles' slabs, planar shadows, sparks and
+#: bloom. Each at its production defaults (the tier's 4 samples; Exploding Tiles with the tier's bloom), and
+#: single-sampled with options at the other extremes (rule a's forms); Exploding Tiles single-sampled with bloom, motion
+#: blur, trails, both and neither, and with all three at 4 samples (rule b).
+N52E_TRANSITIONS = ("membrane", "page_curl", "exploding_tiles")
+N52E_VARIANTS = {
+    "membrane": {},
+    "membrane_options": {"request_direction": "up", "gloss": 1.0, "seed": 8, "samples": 0},
+    "membrane_matte": {"request_direction": "left", "gloss": 0.0, "seed": 3, "samples": 0, "detail": "Performance"},
+    "page_curl": {},
+    "page_curl_options": {"request_direction": "top_left", "gloss": 1.0, "size": 1.0, "samples": 0},
+    "page_curl_edge": {"request_direction": "right", "gloss": 0.0, "size": 0.0, "samples": 0,
+                       "detail": "Performance"},
+    "exploding_tiles": {},
+    "exploding_tiles_plain": {"samples": 0, "bloom": 0.0, "motion_blur": False, "motion_trails": False},
+    "exploding_tiles_bloom": {"samples": 0, "bloom": 1.0, "motion_blur": False, "motion_trails": False,
+                              "request_direction": "center_out"},
+    "exploding_tiles_motion": {"samples": 0, "bloom": 0.0, "motion_blur": True, "motion_trails": False,
+                               "request_direction": "left"},
+    "exploding_tiles_trails": {"samples": 0, "bloom": 0.0, "motion_blur": False, "motion_trails": True,
+                               "detail": "Performance", "columns": 24},
+    "exploding_tiles_both": {"samples": 0, "bloom": 0.6, "motion_blur": True, "motion_trails": True, "columns": 8,
+                             "force": 2.0},
+    "exploding_tiles_both_4x": {"samples": 4, "bloom": 0.6, "motion_blur": True, "motion_trails": True},
+}
+SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS
+SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS}
+#: N5.2e: the piece-edge flip class (N5.2d's rule, for the lead) for Exploding Tiles' tiles (moving pieces; the gather
+#: and the bloom smear their edge flips) and Page Curl's moving page edge, per variant: 1.5 times the measured worst
+#: pixels past one level a frame (n52e_r2, both dprs, ceiling); every other guard of the class unchanged. Page Curl's
+#: single-sampled forms hold none against Python drawn in the core's frame (their two flips a frame against Python's own
+#: frame, r1, are F1's alone), so their bound is 0.
+N52E_EDGE_FLIPS_A = {
+    "page_curl_options": 0, "page_curl_edge": 0,
+    "exploding_tiles_plain": 2, "exploding_tiles_bloom": 3, "exploding_tiles_motion": 36, "exploding_tiles_trails": 5,
+    "exploding_tiles_both": 44,
+}
+N52E_EDGE_FLIPS_B = {
+    "page_curl_options": 9,
+    "exploding_tiles": 110, "exploding_tiles_plain": 12, "exploding_tiles_bloom": 6, "exploding_tiles_motion": 41,
+    "exploding_tiles_trails": 9, "exploding_tiles_both": 20, "exploding_tiles_both_4x": 126,
+}
+#: Every variant judged by the piece-edge class, and its bounds.
+PIECE_EDGE_VARIANTS = {**N52D_VARIANTS, **{v: N52E_VARIANTS[v] for v in set(N52E_EDGE_FLIPS_A) | set(N52E_EDGE_FLIPS_B)}}
+EDGE_FLIPS_A = {**N52D_EDGE_FLIPS_A, **N52E_EDGE_FLIPS_A}
+EDGE_FLIPS_B = {**N52D_EDGE_FLIPS_B, **N52E_EDGE_FLIPS_B}
+#: N5.2e: Membrane's 4x default, rule (b), for the lead: its translucent sheet blended over 4 samples and averaged puts
+#: many pixels one level apart between the two drivers (n52e_r2: at most 9,696 a frame, both dprs; Python's own 4x
+#: Membrane differs from run to run by a level, tens of pixels), times 1.5, and N52C_RULE_B's ties and 3 edge flips
+#: (measured 2 a frame past one level).
+MEMBRANE_RULE_B = pt.Tolerance("Membrane 4x, Vulkan against OpenGL (rule b)", scatter_pixels=14_544,
+                               tie_pixels=TIE_PIXELS, flip_pixels=3)
 TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
 VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS, *N52E_VARIANTS)
 
 
 def variant_progress(variant: str) -> tuple[float, ...]:
@@ -398,9 +448,11 @@ def references(variants, photos, dpr: float, *, core_frame: bool = False) -> dic
 
 
 def n52d_gather_free(variant: str) -> bool:
-    """An N5.2d variant drawn with neither motion blur nor trails (its production defaults leave both off)."""
-    overrides = N52D_VARIANTS.get(variant.split("@", 1)[0])
-    return overrides is not None and not overrides.get("motion_blur") and not overrides.get("motion_trails")
+    """A piece-edge variant drawn with neither motion blur nor trails (N5.2d's production defaults leave both off) and
+    (N5.2e) no bloom: drawn straight into the frame, so Python's frame drawn upside down is its reference."""
+    overrides = PIECE_EDGE_VARIANTS.get(variant.split("@", 1)[0])
+    return (overrides is not None and not overrides.get("motion_blur") and not overrides.get("motion_trails")
+            and not overrides.get("bloom"))
 
 
 def _grow(flags, steps: int):
@@ -585,11 +637,11 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     rows = scene.display_rows(scene.read())
                     key = f"dpr{dpr}_{variant}_{progress_key(progress)}"
                     frames[key] = rows
-                    if not vulkan and VARIANTS[variant].get("motion_blur") and variant in N52D_VARIANTS:
+                    if not vulkan and VARIANTS[variant].get("motion_blur") and variant in PIECE_EDGE_VARIANTS:
                         velocities[key] = _native_velocity(scene)
                     if not vulkan:
                         reference = expected[(variant, progress)]
-                        if variant in N52D_VARIANTS:
+                        if variant in PIECE_EDGE_VARIANTS:
                             references_kept[key] = reference
                             if (variant, progress) in expected_core:
                                 references_kept[f"core_{key}"] = expected_core[(variant, progress)]
@@ -599,7 +651,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                         # N5.2c: a multisampled scene is judged by rule (b) only (rule a: its single-sampled form).
                         judged["tolerance"] = (pt.judge(rows[..., :3], reference[..., :3], rule) if rule is not None
                                                else {"pass": True, "judged": False, "reason": MULTISAMPLED_RULE_A})
-                        if rule is not None and variant in N52D_EDGE_FLIPS_A:
+                        if rule is not None and variant in EDGE_FLIPS_A:
                             # A gather-free form against Python drawn in the core's frame (F1's flips are not its).
                             framed = {q: expected_core.get((variant, q), expected[(variant, q)]) for q in progresses}
                             against = framed[progress]
@@ -609,7 +661,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                             if (variant, progress) in expected_core:
                                 judged["against_python_frame"] = judged["tolerance"]
                                 judged["core_frame_over_tolerance"] = _over(rows, against, VULKAN_TOLERANCE)
-                            judged["tolerance"] = judge_piece_edges(rows, against, N52D_EDGE_FLIPS_A[variant],
+                            judged["tolerance"] = judge_piece_edges(rows, against, EDGE_FLIPS_A[variant],
                                                                     allowed, ties=TIE_PIXELS)
                 if not vulkan:
                     # Another progress's reference differs (the pair two thirds into the run's values).
@@ -953,12 +1005,13 @@ def vulkan_against_opengl(work: Path) -> dict:
         worst = max(worst, result.get("max_level", 255))
         drawn = variant.split("_", 1)[1]
         tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
+                     MEMBRANE_RULE_B if drawn == "membrane" else
                      N52C_RULE_B if drawn in SCENE_VARIANTS else
                      FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
-        if drawn in N52D_EDGE_FLIPS_B:          # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
+        if drawn in EDGE_FLIPS_B:               # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
             moved = velocity[key] if key in velocity else None
             allowed = piece_edges(vk[key], gl[key], _neighbour_frames(gl, key), moved, N52D_LONGEST)
-            judged.setdefault(variant, []).append(judge_piece_edges(vk[key], gl[key], N52D_EDGE_FLIPS_B[drawn],
+            judged.setdefault(variant, []).append(judge_piece_edges(vk[key], gl[key], EDGE_FLIPS_B[drawn],
                                                                     allowed, ties=N52C_RULE_B.tie_pixels))
             continue
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
