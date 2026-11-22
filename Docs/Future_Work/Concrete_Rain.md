@@ -75,3 +75,32 @@ Promote only through reusable substrate work, not a one-off mode-private rendere
 3. Splash crown / droplet accent proof.
 4. Music mapping for density, energy and reflection disturbance.
 5. Final Concrete Rain scene assembly and acceptance against the supplied reference.
+
+
+## 7. Post-flip Vulkan-native construction and camera proof (operator, 23 Nov 2026)
+
+**Second new Vulkan-native Visualizer after Reactive Liquid / Audio Melt Pool.** The scene is eligible to require
+`VK_EXT_mesh_shader`; there is no requirement to construct or visually match a legacy OpenGL or mesh-free twin.
+Only the selected Visualizer mode is unavailable when the required capability is absent; the OpenGL fallback and
+existing accepted modes continue to work. The raw Vulkan pass lives in the shared native core N6.7, not a private
+renderer or a new window/scene/compositor owner.
+
+**Procedural spatial construction, not obligatory Blender asset authoring:** prove asphalt and road crown with
+real geometric relief where the near-ground camera exposes it; individually varied pavement slabs/tiles, joints,
+curbs, drains, chipped edges and street fixtures; bounded middle-distance wall/building geometry with convincing
+depth. Use mesh/task shading for geometry that benefits, conventional instancing, fragment/normal detail and
+compute where those are the better tool. Distant architecture and light may be simplified with fog/bokeh
+impostors only where depth, parallax and orbit tests remain convincing. Keep the established wet substrate,
+puddle optics, reflections, rain impulses, ripple interference, crown/droplet mechanics and stable authored lights.
+
+**Camera:** preserve the original low/high reference's *same-camera, same-street* comparison (no scenery
+changing to fake reactivity). In addition prove optional, modest free orbit around a bounded street/crosswalk/
+intersection with a credible **360-degree view**, if the resulting scene remains believable: no missing
+backfaces/buildings, paper-thin slabs, broken reflection coverage or impossible light parallax. This is a pocket
+environment, not a requirement for unrestricted walking down a street. Use the existing framed-camera authority.
+
+**Acceptance order:** (1) dry urban geometry with orbit and occlusion; (2) materials and rain-wet reflections
+including from moved views; (3) impact/ripple/splash primitives; (4) recorded live-audio mapping across density,
+energy, ripple complexity and reflection disturbance; (5) low/high comparison and multi-view native captures
+against the operator-owned mock, measured GPU cost and device/lifecycle proof. No runtime Blender dependency,
+no unbounded world/particle simulation, no anticipatory choreography.
