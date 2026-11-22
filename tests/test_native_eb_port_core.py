@@ -559,3 +559,44 @@ def test_when_is_a_record_u32_on_a_draw_or_a_defocus_step_only():
     check = _function(mode_cpp, "bool ModeProgram::check(", "\n}\n")
     assert "if (!when || when->kind != fa::FieldKind::U32 || when->count != 1) {" in check
     assert 'p.insert(QStringLiteral("when"), QString::fromLatin1(pass.when));' in mode_cpp
+
+
+# ------------------------------------------------------- the built proofs' findings (eb_core_check.py, 22 Nov)
+
+def core_reads_own_their_fields(mode_cpp: str) -> bool:
+    """A field only a "when" or a geometry key reads is one the program reads (not "unknown", never "unread")."""
+    reads = _function(mode_cpp, "bool ModeProgram::coreReads(const QByteArray &field) const",
+                      "bool ModeProgram::streamReads(")
+    return ("if (pass.when == field)" in reads and "if (b.geometry && b.geometryKey == field)" in reads
+            and "if (declares(name) || drawNames(name) || streamReads(name) || coreReads(name)) {" in mode_cpp
+            and "if (!declares(name) && !drawNames(name) && !streamReads(name) && !coreReads(name)) {" in mode_cpp
+            and "+ int(coreReads(name)) > 1" in mode_cpp)
+
+
+def test_a_when_field_and_a_geometry_key_are_fields_the_program_reads():
+    mode_cpp = _source("mode_content.cpp")
+    assert core_reads_own_their_fields(mode_cpp)
+    # Negative control: the built module's form (6e9093f7a), where such a field was refused as unknown.
+    assert not core_reads_own_their_fields(mode_cpp.replace(
+        "if (!declares(name) && !drawNames(name) && !streamReads(name) && !coreReads(name)) {",
+        "if (!declares(name) && !drawNames(name) && !streamReads(name)) {"))
+
+
+def test_a_cube_is_sampled_with_mips_and_primed_on_every_layer():
+    mode_cpp = _source("mode_content.cpp")
+    rule = "if (t >= 0 && !program.targets.at(t).selfMips && !program.targets.at(t).cube) {"
+    assert rule in mode_cpp
+    targets = _source("targets.cpp")
+
+    def every_colour_prime_takes_every_layer(text: str) -> bool:
+        # Three colour primes; the one layer left is the depth's (a cube's depth is one 2D texture shared by its faces).
+        return (text.count("barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;") == 3
+                and text.count("barrier.subresourceRange.layerCount = 1;") == 1)
+
+    assert every_colour_prime_takes_every_layer(targets)
+    # Negative controls (the built module's forms): a cube's mipped sampler refused as a defocus layer's; a prime
+    # moving layer 0 alone (Vulkan validation's VUID-vkCmdDraw-None-09600 on faces 1 to 5).
+    assert rule not in mode_cpp.replace(rule, "if (t >= 0 && !program.targets.at(t).selfMips) {")
+    assert not every_colour_prime_takes_every_layer(targets.replace(
+        "barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;", "barrier.subresourceRange.layerCount = 1;",
+        1))

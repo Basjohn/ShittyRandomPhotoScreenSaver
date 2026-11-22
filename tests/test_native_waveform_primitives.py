@@ -358,7 +358,8 @@ def test_the_built_core_admits_waveforms_shape_and_refuses_one_past_each_limit(c
     layout = _layout(core, passes, targets, images)
     assert len(layout["passes"]) == wp.SHAPE_PASSES
     passes, targets, images = wp.shape_program(packs, layers, extra_pass=True)
-    with pytest.raises(ValueError, match="1 to 28 passes"):
+    from rendering.native.mode import MAX_PASSES
+    with pytest.raises(ValueError, match=f"1 to {MAX_PASSES} passes"):
         _layout(core, passes, targets, images)
     passes, targets, images = wp.shape_program(packs, layers, extra_image=True)
     with pytest.raises(ValueError, match="at most 9 storage images"):

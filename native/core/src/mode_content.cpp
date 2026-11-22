@@ -3094,7 +3094,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             if (s.mips == SamplerMips::None || !targetTextureName(s.texture) || environmentOf(s.texture))
                 continue;                     // N5.2c: an environment step's copy holds its levels (the box kernel's)
             const int t = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
-            if (t >= 0 && !program.targets.at(t).selfMips) {
+            // ABI 42: a cube target's levels are its prefilter step's (never a defocus layer's).
+            if (t >= 0 && !program.targets.at(t).selfMips && !program.targets.at(t).cube) {
                 *error = QStringLiteral("pass '%1': the sampler '%2' reads mips of the defocus layer '%3' (its levels "
                                         "are its defocus step's)").arg(QString::fromLatin1(pass.name),
                                                                        QString::fromLatin1(s.name),
@@ -3537,6 +3538,20 @@ bool ModeProgram::drawNames(const QByteArray &name) const
     return false;
 }
 
+bool ModeProgram::coreReads(const QByteArray &field) const
+{
+    // ABI 42 (N5.6): a pass's "when" and a geometry buffer's key: the core reads them (their shapes checked below).
+    for (const ModePass &pass : passes) {
+        if (pass.when == field)
+            return true;
+    }
+    for (const StorageBufferDeclaration &b : buffers) {
+        if (b.geometry && b.geometryKey == field)
+            return true;
+    }
+    return false;
+}
+
 bool ModeProgram::streamReads(const QByteArray &field) const
 {
     for (const StreamDeclaration &s : streams) {
@@ -3714,7 +3729,7 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                              .arg(QString::fromLatin1(name));
                 return false;
             }
-            if (declares(name) || drawNames(name) || streamReads(name)) {
+            if (declares(name) || drawNames(name) || streamReads(name) || coreReads(name)) {
                 *error = QStringLiteral("the program leaves the record's field '%1' unread, yet a pass, draw or stream "
                                         "reads it").arg(QString::fromLatin1(name));
                 return false;
@@ -3730,7 +3745,7 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
             }
             if (unread.contains(name))
                 continue;                     // read by no pass of this program, by its declaration (checked above)
-            if (!declares(name) && !drawNames(name) && !streamReads(name)) {
+            if (!declares(name) && !drawNames(name) && !streamReads(name) && !coreReads(name)) {
                 *error = QStringLiteral("unknown: the record's field '%1' is no pass's member, draw count or stream "
                                         "(an unknown name is refused)").arg(QString::fromLatin1(name));
                 return false;
@@ -3740,7 +3755,8 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
             bool batchTable = false;
             for (const ModePass &pass : passes)
                 batchTable = batchTable || (pass.batched() && pass.batches == name);
-            if (int(declares(name)) + int(drawNames(name) && !batchTable) + int(streamReads(name)) > 1
+            if (int(declares(name)) + int(drawNames(name) && !batchTable) + int(streamReads(name))
+                    + int(coreReads(name)) > 1
                 || (batchTable && declares(name))) {
                 *error = QStringLiteral("the record's field '%1' fills two of a block member, a draw count and a stream: "
                                         "one owner a name").arg(QString::fromLatin1(name));

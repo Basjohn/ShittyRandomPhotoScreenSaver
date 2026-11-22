@@ -2038,7 +2038,13 @@ compute; N0.7's edge field ran one as a job, one QRhi compute pass per dispatch,
 - G. D4's pair self-check is the one named readback exception: once, at its warm-up edge, never waited on, its
   result logged, through `readBackBuffer` with the completion read at a later frame. On OpenGL QRhi reads it
   synchronously when the batch runs: that stall belongs to the lifecycle, not to steady state. Removing the check
-  would lose D4's guard against a compiler that drops `precise`.
+  would lose D4's guard against a compiler that drops `precise`. As built (N5.6 box 3, ABI 42): a compute trigger
+  `"once"` (the entry's first record with its storage, or a new program changing it) and the entry's
+  `"readback"` (a buffer it writes, one check a program, at most 4096 bytes), read in the batch that ends its
+  compute pass, taken at a later record and reported once (the content's state `"check"`, one log line;
+  `check_readbacks`, `check_readback_bytes`, `check_reports`). Built proof (`eb_core_check.py --rounds readback`,
+  both backends): D4's kernel read once (2,048 bytes) at the second record, exact, flat over 300 more records,
+  the harness readback unused; the kernel without its error terms reported inexact. The judgement stays Python's.
 - H. QRhi's barriers on OpenGL (point 6), judged by GPU time against Python's; no raw `glMemoryBarrier` of the core's.
 - I. A content made again creates its storage zeroed, dispatches with `fresh`, and tells the owner once
   (`NativeMode.on_state_lost`, as N3.8's `on_textures_lost`). A display move keeping the history is N3.9's.
@@ -2253,7 +2259,12 @@ read once (`:770-808`).
 1. *Stages are data in a program* (D12's rule; D13, D14 and D16's shape), each absent unless declared: a program
    without it holds no object of it, records nothing of it and draws the same picture bit for bit. A mode turns a stage
    on or off by its program, which Python chooses at the Settings edge (the Oscilloscope's and Neon Lake's glow at 0,
-   Waveform's flat view), never per record (choice E).
+   Waveform's flat view), never per record (choice E). As built (N5.6 box 5, ABI 42): a pass's `"when"` (a record
+   u32) skips it at a record where the field is 0: a draw pass draws nothing in its run, a defocus step makes none of
+   its passes; never on a compute entry, capture, cube face, prefilter, bloom or environment step (what those make
+   is read later). Built proof (`eb_core_check.py --rounds skip`, both backends): the near layer and its defocus
+   step under `"when"` at 0 leave the frame equal to the program without them, with no defocus record; the
+   program-only form still draws at 0. The zero-shell GPU time against Python's is not measured yet.
 2. *Transparency.* A target declared `"transparency": {"of": <scene target>, "borrow": [<attachment>, ...]}` owns two
    attachments, accumulation RGBA16F and coverage R16F, and borrows the owner's depth and the named attachments: the
    same textures, at the owner's allocation and samples, in a render target of its own (D14 point 9 left room for it).
@@ -2744,6 +2755,25 @@ counter (`itertools.count`) is unique inside one process only. The OpenGL solver
 on revision alone); once per key (upload counter; frame size independent of capacity); failed swap (allocation failure
 injected, old buffers still drawn, logged once; control: delete-before-allocate); release (residency count zero after
 teardown, drop, mode switch, window destruction; control: skip the retire job); oracle off the wire.
+
+**As built (N5.6 box 2, ABI 42; built proof on the GitHub module of 6e9093f7a, 22 Nov 2026).** The reader is
+`native/core/src/geometry_arena.*` (a main-process mapping by name, the layout in its header, two banks a family,
+each read whole under its sequence) and `ModeStorage::syncGeometry` (`compute_passes.*`). A program declares a
+geometry buffer `{"name", "geometry": {"family", "key"}}` (read only), its key the record's u32 array of 8
+words (point 1's six fields); the owner names the activation's arena with `composite_mode_geometry_arena`. Point 3
+as built: a key is read and uploaded once; the old key stays bound (also as `"<name>@previous"`, the rebase
+record's) until a record drew the new one, then retires a frame later; a key the arena does not hold yet waits
+with the frame kept; a failed key (its object, an invalid bank, another family's key) is logged once and never
+retried; every residency goes at release, at a new arena name and when a program stops declaring it. The
+requested and uploading states are one record each (the read and the upload happen in the record that first
+names the key). The allocation-failure injection and the delete-before-allocate and retire-skipped controls are
+source predicates (`tests/test_native_eb_port_core.py`); the built proof (`native/core/python/eb_core_check.py
+--rounds geometry`, both backends, validation clean; evidence under `.artifacts/evidence/native_core/n5_6/`) drives a harness writer of the
+layout: one upload for fifty records, the same revision under another namespace drawing its own bytes, the swap's
+previous binding, a capacity growth as a new key, an invalid bank failed once with the old drawn, zero residencies
+after a mode switch and after teardown. Point 2's worker writer, the slot shrink and the drifted run against
+`MaterialDriftReference` are the port's. A field only the core reads (a geometry key, a pass's `"when"`) is the
+program's read (`ModeProgram::coreReads`; the 6e9093f7a module refused it as unknown, fixed after that build).
 
 ### The transport rule (proposed)
 
