@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 def _family_name(key: object) -> str:
     """Diagnostic family only. Do not log authored feed URLs/cache keys."""
     if isinstance(key, tuple) and key:
-        if key[0] in ("gmail", "reddit"):
+        if key[0] in ("gmail", "reddit", "steam_followed"):
             return str(key[0])
         if isinstance(key[0], int):
             return "feeds"

@@ -328,7 +328,10 @@ The operator-authorized Bubble equal-area response correction is documented in `
 
 `core/threading/refresh_transition_gate.py` is a **generation-scoped admission
 arbiter**, not a global scheduler, new timer, worker pool or presentation owner.
-FEEDS, Gmail's live fetch and Reddit's provider fetch participate in R163.
+FEEDS, Gmail's live fetch, Reddit's provider fetch and Games You Follow's source jobs (its cache read and every
+refresh, `widgets/steam_followed_runtime.py`; certified 22 Nov 2026 by `tests/test_steam_followed_shared_runtime.py`'s
+gate tests: a 45-50 ms render gap inside native Exploding Tiles was its pure-Python refresh sharing the GIL with the
+run) participate in R163.
 Each keeps its own dormancy, source cadence, cache freshness, retries, manual
 cooldowns, source generations and cancellation. This gate holds one refresh
 claim across participating sources **through GUI publication**; completed
@@ -341,8 +344,8 @@ by an automatic due event. Stop, retirement, submission failures and cancellatio
 must release active claims or remove deferred intents without reviving dormant
 sources. Never silence slow-callback diagnostics to hide contention.
 
-Scope is deliberate: startup cache bootstrap outside FEEDS, Steam, Weather,
-and other services are **not** certified participants. Before adding any,
+Scope is deliberate: startup cache bootstrap outside FEEDS and Games You Follow, the other Steam services (Friend
+Pulse, achievements, abandonment), Weather and other services are **not** certified participants. Before adding any,
 prove worker completion, GUI delivery, cancellation and generation retirement,
 including the case where a worker completion cannot reach the GUI dispatcher.
 Do not fence unrelated cache persistence, audio DSP, QML painting or passive
