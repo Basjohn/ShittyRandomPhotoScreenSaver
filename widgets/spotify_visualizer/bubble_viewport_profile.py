@@ -44,6 +44,9 @@ BUBBLE_LIVE_CAPACITY = 72
 # never more than the render capacity's live share (192 / 1.52).
 DISPLAY_WIDE_ZOOM_EXPONENT = 0.26
 DISPLAY_WIDE_LIVE_CAPACITY = 126
+# The share of the screen gain's extra the breathing swing takes (movement takes all of it): operator, 22 Nov, the full
+# gain on breathing was a little too much; 70 % of it, still above the swing before the gain.
+DISPLAY_WIDE_BREATH_GAIN_SHARE = 0.7
 
 # Stroke tuning is expressed in *physical half-stroke pixels*.  The shader owns
 # the final SDF conversion.
@@ -180,6 +183,7 @@ __all__ = [
     "BUBBLE_BIG_EXTRA_HALF_STROKE_PX",
     "BUBBLE_CARD_CAPACITY",
     "DISPLAY_WIDE_LIVE_CAPACITY",
+    "DISPLAY_WIDE_BREATH_GAIN_SHARE",
     "DISPLAY_WIDE_ZOOM_EXPONENT",
     "BUBBLE_BASE_HALF_STROKE_PX",
     "BUBBLE_MAX_HALF_STROKE_PX",

@@ -90,13 +90,16 @@ def test_display_wide_zooms_out_with_more_heroes_while_the_card_keeps_its_world(
 
     # Each hero's swing about its own size is the card's times the display-wide world's screen gain (operator, 22 Nov:
     # the zoom-out made fullscreen breathing ~20 % weak on screen; the gain gives that back, exactly overflow ** 0.24).
-    gain = resolve_bubble_world(wide_drawn.logical_viewport_extent, authored_population=population,
-                                display_wide=True).screen_gain
-    assert gain > 1.05
+    from widgets.spotify_visualizer.bubble_viewport_profile import DISPLAY_WIDE_BREATH_GAIN_SHARE
+
+    screen_gain = resolve_bubble_world(wide_drawn.logical_viewport_extent, authored_population=population,
+                                       display_wide=True).screen_gain
+    gain = 1.0 + DISPLAY_WIDE_BREATH_GAIN_SHARE * (screen_gain - 1.0)   # 70 % of the extra (operator, 22 Nov)
+    assert 1.03 < gain < screen_gain
     card_swing, wide_swing = _breathing(card["frames"]) - 1.0, _breathing(wide["frames"]) - 1.0
     assert card_swing > 0.05
     assert wide_swing == pytest.approx(card_swing * gain, rel=0.2), (card_swing, wide_swing, gain)
-    assert wide_swing > card_swing * 1.05          # the control: without the gain the swings matched (old assertion)
+    assert wide_swing > card_swing * 1.02          # still above the pre-gain swing (the old assertion: equal)
 
 
 def test_display_wide_motion_keeps_the_card_rules_on_screen_speed():

@@ -27,6 +27,7 @@ from widgets.spotify_visualizer.bubble_viewport_profile import (
     BubbleWorld,
     resolve_bubble_world,
     scale_bubble_population,
+    DISPLAY_WIDE_BREATH_GAIN_SHARE,
 )
 from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
 from core.authored_clock import authored_now
@@ -2870,8 +2871,9 @@ class BubbleSimulation:
         # the canonical response height and this world's ``world_scale``.
         inv_domain_w = 1.0 / self._domain_w
         inv_domain_h = 1.0 / self._domain_h
-        # The breathing swing about the base radius is scaled by the world's screen gain (1 on every card).
-        breath_gain = float(self._world.screen_gain)
+        # The breathing swing about the base radius takes DISPLAY_WIDE_BREATH_GAIN_SHARE of the world's screen gain's
+        # extra (1 on every card, so the card is unchanged).
+        breath_gain = 1.0 + DISPLAY_WIDE_BREATH_GAIN_SHARE * (float(self._world.screen_gain) - 1.0)
 
         for idx, b in enumerate(self._bubbles):
             # Pulse: smoothed energy drives visible size thump.
