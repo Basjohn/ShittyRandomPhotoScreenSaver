@@ -1423,10 +1423,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     pairs, full canonical durations, both dprs; the cull form equal to the indirect one; N4.c's harness at one million
     sprites, indirect against cull, same pixels, cost; `--cost` at 1440p and 4K on both backends; one native Vulkan
     hitch session; registration last.
-  - [ ] The hitch session on Display 1, taken under whatever load the machine has (operator, 22 Nov: users run it at
-    all times; record the conditions): `preflip_pack.py --name n52f_native_vulkan --rows
-    "transition/disintegrate/*,transition/volumetric_dissolve/*" --per-row --backend native-vulkan
-    --app-arg=--graphics-backend=vulkan --keep-logs`, twice each, no gap over 33 ms.
+  - [ ] The hitch rows, taken 22 Nov under a game (Fortune's Eden ~250 % CPU, GPU ~32 %; `n52f_native_vulkan`,
+    `n52f_load_control`): Disintegrate passes at full rate (164 fps, max 18.9 ms) but shows ONE 46-73 ms gap in every run
+    where the saver sits at ~64 fps (3 of 3); Volumetric Dissolve one 182.6 ms gap at 161 fps, then a pass at 65 fps;
+    Crossfade (control) clean in both runs, both at full rate (never caught in the ~64 fps state, so not yet a matched
+    control). Attribute with a kept frame trace per run (per-row runs share one session folder: copy it out between
+    runs), Crossfade in the same ~64 fps state as the control; fix at the owner if it is N5.2f's (the population's
+    compute or buffer growth, a first-use pipeline), then twice each, no gap over 33 ms.
   - No cull fallback (lead, 22 Nov): indirect draw is core Vulkan 1.0 and OpenGL 4.0, and Python's population already
     draws with `glDrawArraysIndirect`, so no supported card lacks it; the core refuses with its reason if one ever does
     (ABI 41's facts record the answer). N4.c's one-million-sprite cost check runs on the indirect form only.
