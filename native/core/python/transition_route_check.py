@@ -98,7 +98,8 @@ REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options",
-                  "block_spins_both", "exploding_tiles_both", "disintegrate_fine", "volumetric_dissolve_center")
+                  "block_spins_both", "exploding_tiles_both", "disintegrate_fine", "volumetric_dissolve_center",
+                  "edge_bloom_fine", "capillary_bloom_six")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -332,6 +333,20 @@ N52F_VARIANTS = {
     "volumetric_dissolve_flat": {"request_direction": "up", "mist": 0.0, "depth": 0.0, "particle_size": 8, "seed": 5,
                                  "samples": 0},
 }
+#: N5.2g (N4.g, ABI 43): the two fragments that read per-run fields the core makes from recipes (Edge Bloom's two edge
+#: fields, Capillary Bloom's arrival field and extent). Each at its production defaults, and at the options' extremes:
+#: Edge Bloom's detail 0 and 1, glow 0 and 1, every colour source; Capillary Bloom's fewest and most sources, fibres 0
+#: and 1, other seeds. Judged as fragment passes (their effect is one fragment between the pictures).
+N52G_TRANSITIONS = ("edge_bloom", "capillary_bloom")
+N52G_VARIANTS = {
+    "edge_bloom": {},
+    "edge_bloom_fine": {"detail": 1.0, "glow": 1.0, "color_source": "each", "seed": 7},
+    "edge_bloom_bold": {"detail": 0.0, "glow": 0.0, "color_source": "custom", "color": (0.2, 0.8, 1.0), "seed": 3},
+    "edge_bloom_next": {"detail": 0.5, "glow": 1.0, "color_source": "next", "seed": 11},
+    "capillary_bloom": {},
+    "capillary_bloom_one": {"sources": 1, "fibres": 0.0, "seed": 3},
+    "capillary_bloom_six": {"sources": 6, "fibres": 1.0, "seed": 11},
+}
 SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS + N52F_TRANSITIONS
 SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS, **N52F_VARIANTS}
 #: N5.2e: the piece-edge flip class (N5.2d's rule, for the lead) for Exploding Tiles' tiles (moving pieces; the gather
@@ -376,8 +391,8 @@ EDGE_FLIPS_B = {**N52D_EDGE_FLIPS_B, **N52E_EDGE_FLIPS_B, **N52F_EDGE_FLIPS_B}
 #: (measured 2 a frame past one level).
 MEMBRANE_RULE_B = pt.Tolerance("Membrane 4x, Vulkan against OpenGL (rule b)", scatter_pixels=14_544,
                                tie_pixels=TIE_PIXELS, flip_pixels=3)
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",) + SCENE_TRANSITIONS + N52G_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS, **N52G_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
@@ -661,6 +676,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 entry["first_frame_not_black"] = entry["first_frame_black"] <= FIRST_FRAME_BLACK
                 entry["first_frame_waiting_kept"] = scene.mode_state().get("waiting_kept")
                 scene.settle()                                   # the destination's upload job committed
+                entry["fields_in"] = _await_fields(scene)        # N5.2g: a run's fields committed
                 ticks_before = scene.layer.ticks
                 scene.frames(2)
                 entry["clock_edge_ticks_over_2_frames"] = scene.layer.ticks - ticks_before
@@ -795,6 +811,7 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 clock.at(run, 0.1)
                 scene.layer.transition(run)
                 scene.settle()
+                _await_fields(scene)                             # N5.2g: a run's fields committed
                 scene.frames(4)
                 host.set_gpu_timer(True)
                 host.gpu_samples()
@@ -872,6 +889,7 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
         clock.at(run, PROGRESS[0])
         scene.item.set_transition_run(run)
         scene.settle()
+        _await_fields(scene)                                     # N5.2g: a run's fields committed
         same = {}
         for progress in variant_progress(route_variant):
             clock.at(run, progress)
@@ -968,7 +986,21 @@ N52C_FRAGMENT_VARIANTS = ("blinds_flat",)
 
 def _is_fragment_pass(variant: str) -> bool:
     drawn = variant.split("@", 1)[0]
-    return drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
+    return (drawn in N52B_VARIANTS or drawn in BEAM_VARIANTS or drawn in N52C_FRAGMENT_VARIANTS
+            or drawn in N52G_VARIANTS)
+
+
+def _await_fields(scene, frames: int = 600) -> bool:
+    """N5.2g: frames until the run's fields are committed (the layer's ready edge started its effect); the harness then
+    holds the run's clock itself, so the effect's clock offset is zeroed (the layer test proves the offset). True when
+    they were in (a run without fields: at once)."""
+    layer = scene.layer if getattr(scene, "layer", None) is not None else scene.item.native_layer
+    for _ in range(frames):
+        if not layer._fields_pending:
+            break
+        scene.frames(1)
+    layer._clock_offset_ns = 0
+    return not layer._fields_pending
 
 
 def _multisampled_scene(entry: dict) -> bool:
