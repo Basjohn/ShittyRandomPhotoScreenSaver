@@ -250,4 +250,16 @@
 // none of its passes (never on a compute entry, capture, cube face, prefilter, bloom or environment step);
 // composite_live's mode_entries_skipped.
 // Backward compatible for every earlier program (none declares a cube or a geometry buffer).
-#define SRPSS_NATIVE_CORE_ABI 42
+// 43 (N5.2g with N4.g; reserved by the lead, 22 Nov): field recipes (field_recipe.h): composite_mode_field(handle,
+// recipe_json, packs, blocks, pixels=None, (w, h), in_frame, deadline_ms) makes an item's field outputs (Edge Bloom's
+// edge fields, Capillary Bloom's arrival and extent) from a flat list of compute dispatches over the recipe's images,
+// recorded by one recorder in two forms (D9 point 5): a field job on the device's job service (the input photo uploaded
+// by the job from `pixels`; its outputs published together under consecutive ids) or in the frame at the commit over the
+// input's front (OpenGL, no service, a failed job, in_frame, and the core's deadline: a job past deadline_ms gives way
+// at the next record); the outputs commit with the item's other textures. The mode texture format r32f (a field's
+// output, never with mips). composite_mode_on_ready(handle, callable): the owner's ready edge, once per record that
+// committed textures, with their names (the transition's start). field_recipe_check (GPU-free admission) and
+// field_counts; the content state's "fields" and textures_ready_edges / _delivered; the job self-test's submit_field.
+// Backward compatible for every earlier program and caller (no texture is a field's output unless sent so; the ready
+// edge only calls a listener that is set).
+#define SRPSS_NATIVE_CORE_ABI 43

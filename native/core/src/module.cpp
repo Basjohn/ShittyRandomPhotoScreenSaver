@@ -1398,6 +1398,134 @@ PyObject *composite_mode_on_lost(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+// ABI 43 (N5.2g): the ready edge's owner, the same kind of callable (the committed names), GUI thread only.
+PyObject *composite_mode_on_ready(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    PyObject *callable = nullptr;
+    if (!PyArg_ParseTuple(args, "LO", &handle, &callable))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    if (callable != Py_None && !PyCallable_Check(callable)) {
+        PyErr_SetString(PyExc_TypeError, "the ready listener is a callable taking the list of names, or None");
+        return nullptr;
+    }
+    std::shared_ptr<srpss_core::TexturesLostListener> listener;
+    if (callable != Py_None)
+        listener = std::make_shared<PyTexturesLostListener>(callable);
+    QString error;
+    if (!item->texturesReadyListener(listener, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+// ABI 43: a Python sequence of bytes as a list (false with a TypeError set).
+bool bytesList(PyObject *sequence, const char *what, QList<QByteArray> *out)
+{
+    // The stable ABI (abi3): PySequence_Size and PySequence_GetItem (a new reference each), never the Fast macros.
+    const Py_ssize_t count = PySequence_Check(sequence) ? PySequence_Size(sequence) : -1;
+    if (count < 0) {
+        PyErr_Format(PyExc_TypeError, "%s: a sequence of bytes", what);
+        return false;
+    }
+    for (Py_ssize_t i = 0; i < count; ++i) {
+        PyObject *item = PySequence_GetItem(sequence, i);
+        if (!item)
+            return false;
+        if (!PyBytes_Check(item)) {
+            Py_DECREF(item);
+            PyErr_Format(PyExc_TypeError, "%s: every element is bytes", what);
+            return false;
+        }
+        out->append(QByteArray(PyBytes_AsString(item), qsizetype(PyBytes_Size(item))));
+        Py_DECREF(item);
+    }
+    return true;
+}
+
+bool recipeArguments(const char *json, Py_ssize_t length, PyObject *packs, PyObject *blocks,
+                     srpss_core::FieldRecipe *out)
+{
+    QList<QByteArray> packList;
+    QList<QByteArray> blockList;
+    if (!bytesList(packs, "a field recipe's packs", &packList) || !bytesList(blocks, "a field recipe's blocks",
+                                                                             &blockList))
+        return false;
+    QString error;
+    if (!srpss_core::FieldRecipe::fromJson(QByteArray(json, qsizetype(length)), packList, blockList, out, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return false;
+    }
+    return true;
+}
+
+// ABI 43: an item's field (mode_content.h ModeSource::setField): its outputs made from the recipe.
+PyObject *composite_mode_field(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *json = "";
+    Py_ssize_t length = 0;
+    PyObject *packs = nullptr;
+    PyObject *blocks = nullptr;
+    PyObject *pixels = Py_None;
+    int width = 0;
+    int height = 0;
+    int inFrame = 0;
+    int deadlineMs = 0;
+    if (!PyArg_ParseTuple(args, "Ls#OO|O(ii)pi", &handle, &json, &length, &packs, &blocks, &pixels, &width, &height,
+                          &inFrame, &deadlineMs))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    QByteArray bytes;
+    if (pixels != Py_None) {
+        if (!PyBytes_Check(pixels)) {
+            PyErr_SetString(PyExc_TypeError, "a field's input pixels are bytes (RGBA8, rows top first, tight) or None");
+            return nullptr;
+        }
+        bytes = QByteArray(PyBytes_AsString(pixels), qsizetype(PyBytes_Size(pixels)));
+    }
+    auto recipe = std::make_shared<srpss_core::FieldRecipe>();
+    if (!recipeArguments(json, length, packs, blocks, recipe.get()))
+        return nullptr;
+    QString error;
+    if (!item->fieldMode(std::shared_ptr<const srpss_core::FieldRecipe>(recipe), bytes, QSize(width, height),
+                         inFrame != 0, deadlineMs, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+// ABI 43, GPU-free: a recipe's admission against its packs' reflection, as JSON.
+PyObject *field_recipe_check(PyObject *, PyObject *args)
+{
+    const char *json = "";
+    Py_ssize_t length = 0;
+    PyObject *packs = nullptr;
+    PyObject *blocks = nullptr;
+    if (!PyArg_ParseTuple(args, "s#OO", &json, &length, &packs, &blocks))
+        return nullptr;
+    QList<QByteArray> packList;
+    QList<QByteArray> blockList;
+    if (!bytesList(packs, "a field recipe's packs", &packList) || !bytesList(blocks, "a field recipe's blocks",
+                                                                             &blockList))
+        return nullptr;
+    const QByteArray out = srpss_core::fieldRecipeCheckJson(QByteArray(json, qsizetype(length)), packList, blockList);
+    return PyUnicode_FromStringAndSize(out.constData(), Py_ssize_t(out.size()));
+}
+
+PyObject *field_counts(PyObject *, PyObject *)
+{
+    const QByteArray out = QJsonDocument(srpss_core::fieldCountsJson()).toJson(QJsonDocument::Compact);
+    return PyUnicode_FromStringAndSize(out.constData(), Py_ssize_t(out.size()));
+}
+
 // ---------------------------------------------------------------- the job service (N3.8, D9)
 
 QJsonObject jobCountsObject()
@@ -3073,6 +3201,19 @@ PyMethodDef methods[] = {
     { "composite_mode_on_lost", composite_mode_on_lost, METH_VARARGS,
       "(handle, callable|None) -> None: N3.8, the owner's lost-texture edge: called on the GUI thread with the list of "
       "names once each is found lost (a node made again, a texture that could not be created)." },
+    { "composite_mode_on_ready", composite_mode_on_ready, METH_VARARGS,
+      "(handle, callable|None) -> None: ABI 43, the owner's ready edge: called on the GUI thread with the list of the "
+      "textures a record committed (their new images drawn from it on), once per committing record." },
+    { "composite_mode_field", composite_mode_field, METH_VARARGS,
+      "(handle, recipe_json, packs, blocks, pixels=None, (width, height)=(0, 0), in_frame=False, deadline_ms=0) -> None: "
+      "ABI 43, the item's field outputs made from a recipe (native/core/src/field_recipe.h): by the device's job "
+      "service (the input photo uploaded from `pixels`, RGBA8 of (width, height)) or in the frame over the input's "
+      "front; past deadline_ms the job gives way to the in-frame form. ValueError for a refused recipe." },
+    { "field_recipe_check", field_recipe_check, METH_VARARGS,
+      "(recipe_json, packs, blocks) -> JSON str: ABI 43, GPU-free: the recipe's admission against its packs' "
+      "reflection ({ok, error?, recipe?: the reflected bindings per dispatch})." },
+    { "field_counts", field_counts, METH_NOARGS,
+      "() -> JSON str: ABI 43, the field recorders' counts (recipes recorded, dispatches, pipelines made, recorders)." },
     { "window_edges_self_test", window_edges_self_test, METH_NOARGS,
       "() -> JSON str: audit N38 M1, GPU-free: a window's frame count with two drivers' edges in each of two frames "
       "(edges seen, total): one per frame." },
