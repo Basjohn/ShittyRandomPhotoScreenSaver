@@ -31,6 +31,7 @@ new frame). Each is armed for one firing and re-runs the item's update.
 """
 from __future__ import annotations
 
+import struct
 import uuid
 import weakref
 from pathlib import Path
@@ -217,6 +218,292 @@ def oscilloscope_program(glow: bool) -> dict:
     return program
 
 
+def waveform_card_size(presentation: Any) -> tuple[int, int]:
+    """The device pixels Waveform's scene is drawn at for ``presentation``: the oriented card's ``item_pixel_rect``,
+    as the Python renderer reads it (``QuickWaveformRibbonRenderer._draw``)."""
+    from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
+    from rendering.quick.visualizer.framed_view import drawn_card_frame
+
+    _x, _y, width, height = item_pixel_rect(orient_visualizer_scene_frame(drawn_card_frame(presentation)))
+    return max(1, int(width)), max(1, int(height))
+
+
+#: Waveform's scene targets (N5.4): the HDR scene (colour, emission, depth; 4 samples), its transparency (the ribbon
+#: body), the planar reflection (exact size, its box chain read by the floor) and the floor's reduced pre-pass.
+WAVEFORM_SCENE, WAVEFORM_OIT, WAVEFORM_REFLECTION, WAVEFORM_PREPASS = "scene", "scene_oit", "reflection", "prepass"
+#: A pass the variant draws nothing into keeps its targets and images at one texel (bound, never read).
+_WAVEFORM_IDLE = (1, 1)
+
+
+def waveform_stages(snapshot: Any, size: tuple[int, int] | None = None) -> tuple:
+    """The stages the drawn snapshot draws: (mist, strays, sparks, the yielding floor, the floor's pre-pass), from its
+    recipe and its scene's device pixels (``size``, or ``waveform_card_size``)."""
+    from rendering.quick.scene3d.waveform_plan import floor_prepass_size
+
+    recipe = snapshot.logical.mode_state.scene
+    size = waveform_card_size(snapshot.presentation) if size is None else (int(size[0]), int(size[1]))
+    return (recipe.fog is not None, recipe.strays is not None, recipe.sparks is not None, recipe.floor.give > 0.,
+            floor_prepass_size(size, recipe.floor) is not None)
+
+
+def waveform_variant(snapshot: Any) -> tuple:
+    """Waveform's program variant for the drawn snapshot: its clear backdrop (a constant in production; a change is a
+    new program, D17 choice E). Every stage's passes are in the one program, each drawing nothing while its stage is
+    off (its count 0: ``waveform_settings_values``, the record's counts), so a Setting turning a stage on or off builds
+    nothing: the core's unread list holds at most 16 record fields, and a program leaving a stage out would leave its
+    members' fields unread."""
+    return (tuple(float(c) for c in snapshot.logical.mode_state.scene.environment.backdrop),)
+
+
+def waveform_program(variant: tuple) -> dict:
+    """Waveform's program (N5.4) for ``variant`` (``waveform_variant``, its backdrop): the yielding floor's and the fog's
+    compute entries, the planar reflection (the mirrored sky, ribbon light, strays and sparks, added), then the scene: the sky,
+    the floor (its pre-pass first), the ribbon body through the transparency target (resolved), its light, strays and
+    sparks added, the emission's bloom and the overlay composite with the glow in the content's orientation. Each pass
+    draws its pass file (``rendering.gl_programs.waveform_shader_files``), its members named for it; the scene clears
+    to the backdrop x .35 (declared once: the lead's decision of 21 Nov)."""
+    from rendering.gl_programs.waveform_shader_files import PASS_FILES
+    from rendering.native.mode import (
+        BlendState,
+        BloomStep,
+        ComputeBinding,
+        ComputePass,
+        CompositeStep,
+        ModePass,
+        ModeStream,
+        ModeTarget,
+        PassGeometry,
+        PassOutput,
+        PassSampler,
+        StorageImage,
+        TargetAttachment,
+        TransparencyResolve,
+        TransparencyTarget,
+    )
+    from rendering.quick.scene3d.waveform import SCENE_SAMPLES
+
+    (backdrop,) = variant
+    pack = _shader_pack
+    add = BlendState(("add", "one", "one"), ("add", "one", "one"))
+    light = BlendState(("add", "one", "one"), ("add", "zero", "one"))
+    replace = BlendState(("add", "one", "zero"), ("add", "one", "zero"))
+    fog = {"": "fog_volume", "_mirror": "fog_volume_mirror"}
+    linear = dict(filter="linear", wrap="clamp")
+
+    def fog_sampler(camera):
+        return PassSampler("uFogVolume", fog[camera], **linear)
+
+    give_sampler = PassSampler("uFloorGiveField", "give_field", **linear)
+    images = [StorageImage("field", _WAVEFORM_IDLE, "rgba32f"), StorageImage("give_sections", _WAVEFORM_IDLE, "rgba32f"),
+              StorageImage("give_field", _WAVEFORM_IDLE, "rgba32f")]
+    for camera in ("", "_mirror"):
+        images += [StorageImage("fog_inject" + camera, (1, 1, 1), "rgba16f"),
+                   StorageImage("fog_steady" + camera, (1, 1, 1), "r16f"),
+                   StorageImage("fog_volume" + camera, (1, 1, 1), "rgba16f")]
+    # Each stage draws nothing while it is off: the yielding floor's and the world field's groups (the record's), the
+    # media's and volumes' groups and the skies' and pre-pass's draws (the settings'), the strays' vertices and the
+    # sparks' instances (the record's).
+    passes: list = [
+            ComputePass("give_section", pack("waveform_give_section.comp"), groups=("give_groups", 4, 1),
+                        bindings=(ComputeBinding("Paths", "ribbon_knots", "stream"),
+                                  ComputeBinding("uSections", "give_sections", "image", "write"))),
+            ComputePass("give_blur", pack("waveform_give_blur.comp"), groups=("give_groups", 1, 1),
+                        bindings=(ComputeBinding("uSections", "give_sections", "image", "read"),
+                                  ComputeBinding("uOutput", "give_field", "image", "write"))),
+            ComputePass("field", pack("waveform_field.comp"), groups=("field_groups", 1, 1),
+                        bindings=(ComputeBinding("Paths", "ribbon_knots", "stream"),
+                                  ComputeBinding("uOutput", "field", "image", "write")))]
+    for camera in ("", "_mirror"):
+        passes += [
+                ComputePass("medium" + camera, pack(f"waveform_medium{camera}.comp"),
+                            groups=tuple(f"medium{camera}_groups_{axis}" for axis in "xyz"),
+                            bindings=(ComputeBinding("Paths", "ribbon_knots", "stream"),
+                                      ComputeBinding("uFogInject", "fog_inject" + camera, "image", "write"),
+                                      ComputeBinding("uFogSteady", "fog_steady" + camera, "image", "write")),
+                            samplers=(PassSampler("uBodyField", "field", **linear),)),
+                ComputePass("integrate" + camera, pack(f"waveform_fog_integrate{camera}.comp"),
+                            groups=(f"integrate{camera}_groups_x", f"integrate{camera}_groups_y", 1),
+                            bindings=(ComputeBinding("uFogInject", "fog_inject" + camera, "image", "read"),
+                                      ComputeBinding("uFogIntegrated", fog[camera], "image", "write")))]
+
+    def ribbon(name, fragment, camera, target, blend, outputs, *, sorted_pack=None, storage_pulse=True):
+        storage = (("Paths", "ribbon_knots"),) + ((("PulseRimField", "ribbon_pulse"),) if storage_pulse else ())
+        return ModePass(name, pack(fragment), blend, target=target, outputs=outputs, depth_test="less",
+                        samplers=(fog_sampler(camera), give_sampler), sorted_pack=sorted_pack,
+                        geometry=PassGeometry(pack(f"waveform_ribbon{camera}.vert"), vertices="ribbon_vertices",
+                                              instances="ribbon_instances", storage=storage))
+
+    def stray(camera, target, blend, outputs):
+        return ModePass("strays" + camera, pack(f"waveform_strays{camera}.frag"), blend, target=target,
+                        outputs=outputs, depth_test="less", samplers=(fog_sampler(camera), give_sampler),
+                        geometry=PassGeometry(pack(f"waveform_strays{camera}.vert"), vertices="strays_vertices",
+                                              instances="ribbon_instances",
+                                              storage=(("Paths", "ribbon_knots"), ("StrandBirths", "ribbon_cohorts"))))
+
+    def burst(camera, target, blend, outputs):
+        return ModePass("bursts" + camera, pack(f"waveform_bursts{camera}.frag"), blend, target=target,
+                        outputs=outputs, depth_test="less", samplers=(fog_sampler(camera),),
+                        geometry=PassGeometry(pack(f"waveform_bursts{camera}.vert"), topology="triangle_strip",
+                                              vertices=4, mesh="burst_quad", instances="bursts_instances",
+                                              storage=(("Bursts", "ribbon_bursts"),)))
+
+    # The planar reflection: everything above the plane through the mirrored camera, added (alpha: the emitters'
+    # weighted height), depth tested, never written.
+    mirrored = (PassOutput(True, add),)
+    passes += [ModePass("sky_mirror", pack("waveform_sky_mirror.frag"), add, target=WAVEFORM_REFLECTION,
+                        outputs=mirrored, depth_test="less", samplers=(fog_sampler("_mirror"),),
+                        geometry=PassGeometry(pack("waveform_sky_mirror.vert"), vertices=3, instances="fog_draws")),
+               ribbon("ribbon_mirror", "waveform_ribbon_light_mirror.frag", "_mirror", WAVEFORM_REFLECTION, add,
+                      mirrored),
+               stray("_mirror", WAVEFORM_REFLECTION, add, mirrored),
+               burst("_mirror", WAVEFORM_REFLECTION, add, mirrored)]
+    # The scene: opaque colour, emission added (``SceneTarget.emission_writes``).
+    opaque = (PassOutput(True, replace), PassOutput(True, add))
+    lit = (PassOutput(True, light), PassOutput(True, add))
+    floor_samplers = lambda specular: (  # noqa: E731
+        PassSampler("uAlbedo", "albedo", "linear", "repeat", "linear"),
+        PassSampler("uSlope", "slope", "linear", "repeat", "linear"),
+        PassSampler("uReflection", f"{WAVEFORM_REFLECTION}.colour", "linear", "clamp", "linear"),
+        PassSampler("uRoughness", "roughness", "linear", "repeat", "linear"),
+        PassSampler("uSpecular", specular, **linear),
+        fog_sampler(""), give_sampler, PassSampler("uBodyField", "field", **linear))
+    passes += [
+        ModePass("sky", pack("waveform_sky.frag"), replace, target=WAVEFORM_SCENE, outputs=opaque,
+                 samplers=(fog_sampler(""),),
+                 geometry=PassGeometry(pack("waveform_sky.vert"), vertices=3, instances="fog_draws")),
+        # The reflection term alone into its own target (it never reads the target it draws: its uSpecular is the
+        # reflection, unread in this mode); drawn only for a scene past the pre-pass height.
+        ModePass("floor_prepass", pack("waveform_floor_prepass.frag"), replace, target=WAVEFORM_PREPASS,
+                 outputs=(PassOutput(True, replace),), samplers=floor_samplers(f"{WAVEFORM_REFLECTION}.colour"),
+                 geometry=PassGeometry(pack("waveform_floor_prepass.vert"), vertices="mesh", mesh="floor",
+                                       instances="floor_prepass_draws", storage=(("Paths", "ribbon_knots"),))),
+        # The floor reads its pre-pass (uSpecMode 2) or evaluates the reflection term itself (0, the pre-pass target
+        # one texel, bound and never read).
+        ModePass("floor", pack("waveform_floor.frag"), replace, target=WAVEFORM_SCENE, outputs=opaque,
+                 depth_test="less", depth_write=True, samplers=floor_samplers(f"{WAVEFORM_PREPASS}.colour"),
+                 geometry=PassGeometry(pack("waveform_floor.vert"), vertices="mesh", mesh="floor",
+                                       storage=(("Paths", "ribbon_knots"),)))]
+    passes += [ribbon("ribbon_body", "waveform_ribbon_body.frag", "", WAVEFORM_OIT, add,
+                      (PassOutput(True), PassOutput(True), PassOutput(True, add)),
+                      sorted_pack=pack("waveform_ribbon_body_sorted.frag"), storage_pulse=False),
+               TransparencyResolve("ribbon_resolve", WAVEFORM_OIT),
+               ribbon("ribbon_light", "waveform_ribbon_light.frag", "", WAVEFORM_SCENE, light, lit),
+               stray("", WAVEFORM_SCENE, light, lit), burst("", WAVEFORM_SCENE, light, lit)]
+    passes += [BloomStep("waveform_bloom", f"{WAVEFORM_SCENE}.emission"),
+               CompositeStep("waveform_show", "overlay_glow", f"{WAVEFORM_SCENE}.colour", "waveform_bloom.glow",
+                             scene_frame="oriented", scene_rows="up")]
+    targets = [
+        ModeTarget(WAVEFORM_SCENE, (TargetAttachment("colour", "rgba16f", clear=(*(c * .35 for c in backdrop), 1.)),
+                                    TargetAttachment("emission", "rgba16f")), depth=True, samples=SCENE_SAMPLES),
+        TransparencyTarget(WAVEFORM_OIT, WAVEFORM_SCENE, borrow=("emission",)),
+        ModeTarget(WAVEFORM_REFLECTION, (TargetAttachment("colour", "rgba16f"),), size=_WAVEFORM_IDLE, depth=True,
+                   mips=True, allocation="exact"),
+        ModeTarget(WAVEFORM_PREPASS, (TargetAttachment("colour", "rgba16f"),), size=_WAVEFORM_IDLE, allocation="exact"),
+    ]
+    streams = [ModeStream("ribbon_knots", "ribbon_knots", "storage", used="ribbon_knot_floats"),
+               ModeStream("ribbon_cohorts", "ribbon_cohorts", "storage", used="ribbon_cohort_floats"),
+               ModeStream("ribbon_bursts", "ribbon_bursts", "storage", used="ribbon_burst_floats"),
+               ModeStream("ribbon_pulse", "ribbon_pulse", "storage", used="ribbon_pulse_floats")]
+    assert {pass_id for _name, _body, pass_id in PASS_FILES} <= {p.name for p in passes} | {"ribbon"}
+    return {"passes": passes, "targets": targets, "streams": streams, "images": images, "unread": []}
+
+
+def waveform_settings_values(snapshot: Any, size: tuple[int, int] | None = None) -> dict:
+    """Waveform's card-decided members (N5.4; ``waveform_native_schema.SETTINGS_MEMBERS``) at the card's device pixels
+    (``size``, or the snapshot's ``waveform_card_size``): every pass's viewport and the floor's pre-pass mode; the fog
+    media's and volumes' compute groups, and the skies' and the pre-pass's draws (``fog_draws``,
+    ``floor_prepass_draws``: 0 while the stage is off, its passes then drawing nothing)."""
+    from rendering.quick.scene3d.waveform_plan import floor_prepass_size, fog_grid, reflection_size
+
+    recipe = snapshot.logical.mode_state.scene
+    size = waveform_card_size(snapshot.presentation) if size is None else (int(size[0]), int(size[1]))
+    # The plan's own sizes (``waveform_pass_values`` draws at them): the scene, the reflection, the pre-pass.
+    mirrored = reflection_size(size, recipe.floor)
+    prepass = floor_prepass_size(size, recipe.floor)
+    viewports = {"ribbon": size, "ribbon_mirror": mirrored, "floor": size, "strays": size, "strays_mirror": mirrored,
+                 "bursts": size, "bursts_mirror": mirrored, "floor_prepass": prepass or _WAVEFORM_IDLE, "sky": size,
+                 "sky_mirror": mirrored}
+    from core.visualizer_engine.waveform_native_schema import member_name
+
+    values: dict = {member_name(pass_id, "uViewport"): [float(v) for v in viewport]
+                    for pass_id, viewport in viewports.items()}
+    values[member_name("floor", "uSpecMode")] = 0.0 if prepass is None else 2.0
+    values[member_name("floor_prepass", "uSpecMode")] = 1.0
+    values["floor_prepass_draws"] = 0.0 if prepass is None else 1.0
+    fog = recipe.fog
+    values["fog_draws"] = 0.0 if fog is None else 1.0
+    for camera, cell, slices in (("", getattr(fog, "cell", 1), getattr(fog, "slices", 1)),
+                                 ("_mirror", getattr(fog, "reflection_cell", 1), getattr(fog, "reflection_slices", 1))):
+        grid = fog_grid(size, cell, slices) if fog is not None else (0, 0, 0)
+        for axis, cells in zip("xyz", grid):
+            values[f"medium{camera}_groups_{axis}"] = float(-(-int(cells) // 4))
+        values[f"integrate{camera}_groups_x"] = float(-(-int(grid[0]) // 8))
+        values[f"integrate{camera}_groups_y"] = float(-(-int(grid[1]) // 8))
+    return values
+
+
+def waveform_sizes(snapshot: Any, size: tuple[int, int] | None = None) -> dict:
+    """Waveform's explicit sizes at the card's device pixels: the reflection and pre-pass targets, the world field,
+    the yielding floor's images and both fog volumes (one texel where the stage is off), sent when they change."""
+    from rendering.quick.scene3d.waveform_plan import floor_prepass_size, fog_grid, reflection_size
+
+    recipe = snapshot.logical.mode_state.scene
+    size = waveform_card_size(snapshot.presentation) if size is None else (int(size[0]), int(size[1]))
+    fog = recipe.fog
+    counts = {"reflection_size": reflection_size(size, recipe.floor),
+              "prepass_size": floor_prepass_size(size, recipe.floor)}
+    if fog is not None:
+        counts["fog_grid"] = fog_grid(size, fog.cell, fog.slices)
+        counts["fog_grid_mirror"] = fog_grid(size, fog.reflection_cell, fog.reflection_slices)
+    field = int(recipe.fog.field_span[2]) if recipe.fog is not None else 1
+    give = int(recipe.floor.give_span[2]) if recipe.floor.give > 0. else 1
+    from rendering.gl_programs.waveform_atmosphere import FIELD_ROWS
+    from rendering.gl_programs.waveform_floor_give import FLOOR_GIVE_ROWS
+    from rendering.gl_programs.waveform_atmosphere import FIELD_RIBBONS
+
+    sizes = {WAVEFORM_REFLECTION: tuple(counts["reflection_size"]),
+             WAVEFORM_PREPASS: tuple(counts["prepass_size"] or _WAVEFORM_IDLE),
+             "field": (field, FIELD_ROWS if recipe.fog is not None else 1),
+             "give_sections": (give, FIELD_RIBBONS if give > 1 else 1),
+             "give_field": (give, FLOOR_GIVE_ROWS if give > 1 else 1)}
+    for camera in ("", "_mirror"):
+        grid = tuple(counts.get("fog_grid" + camera, (1, 1, 1)))
+        for image in ("fog_inject", "fog_steady", "fog_volume"):
+            sizes[image + camera] = grid
+    return sizes
+
+
+def _waveform_settings(snapshot: Any, card: dict) -> dict:
+    """Waveform's settings at its scene's device pixels (``waveform_card_size``, the Python renderer's own)."""
+    return waveform_settings_values(snapshot)
+
+
+def _waveform_target_sizes(snapshot: Any, settings: dict) -> dict:
+    return waveform_sizes(snapshot)
+
+
+def waveform_resources(snapshot: Any) -> tuple[Any, Callable[[Any], None]]:
+    """Waveform's meshes and floor maps (N5.4): (their key, a sender onto a ``NativeMode``). The floor's footprint
+    (``waveform.floor_vertices``, six vec3 corners) and the sparks' quad (``ribbon_bursts.BURST_QUAD``), and the floor's
+    albedo, roughness (RGBA8) and slope (RGBA16F) maps with their chains (``waveform_plan.floor_images``, the Python
+    renderer's same bytes), sent once per floor: the item keeps them across programs."""
+    floor = snapshot.logical.mode_state.scene.floor
+    key = (str(floor.albedo), str(floor.roughness), str(floor.height))
+
+    def send(item: Any) -> None:
+        from rendering.native.mode import MeshAttribute, RecordLayout
+        from rendering.quick.scene3d.ribbon_bursts import BURST_QUAD
+        from rendering.quick.scene3d.waveform import floor_vertices
+        from rendering.quick.scene3d.waveform_plan import floor_images
+
+        item.mesh("floor", floor_vertices(), RecordLayout(12, (MeshAttribute("aPosition", 3, 0),)))
+        item.mesh("burst_quad", struct.pack("8f", *BURST_QUAD), RecordLayout(8, (MeshAttribute("aPosition", 2, 0),)))
+        for name, (pixels, size, fmt) in floor_images(floor).items():
+            item.texture(name, pixels.tobytes(), size, mips=True, format=fmt)
+
+    return key, send
+
+
 #: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function
 #: ``(snapshot, card) -> members by name``. Its program is its own fragment pack (one pass, straight alpha over, as the
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
@@ -242,6 +529,36 @@ GENERIC_MODE_TARGET_SIZES: dict[str, Callable[[Any, dict], dict]] = {
 GENERIC_MODE_PROGRAM_VARIANTS: dict[str, tuple[Callable[[Any], Any], Callable[[Any], dict]]] = {
     "oscilloscope": (oscilloscope_glow, oscilloscope_program),
 }
+#: A generic mode with meshes and item textures of its own (N5.4, Waveform): mode id -> ``snapshot -> (key, sender)``;
+#: the sender puts them on the item when the key changes (and again when the core finds a texture lost).
+GENERIC_MODE_RESOURCES: dict[str, Callable[[Any], tuple[Any, Callable[[Any], None]]]] = {}
+#: A generic mode whose record is drawn from the card's own camera (N5.4, Waveform): mode id -> ``snapshot -> bool``,
+#: whether the frame may be published for the card it is drawn on; a frame that may not is held (the previous one
+#: stays drawn), never encoded.
+GENERIC_MODE_FRAME_GATES: dict[str, Callable[[Any], bool]] = {}
+
+
+def waveform_frame_ready(snapshot: Any) -> bool:
+    """Whether a Waveform frame's framed view (the camera its record is built from, ``core.framed_view``) is the
+    drawn card's (``framed_view.resolve_framed_view``): before the scene first sends its view, and on a resize
+    edge until the worker's frames catch up, it is not, and the frame is held (Item 2's design, D5.5). A frame whose
+    ribbon is not ready yet (its history still priming, the first second of a model) is held too: the Python renderer
+    draws nothing for it (``QuickWaveformRibbonRenderer._draw``), and a model is new only with a new runtime
+    generation, whose route shows nothing until its first published frame (layer L's first run)."""
+    from rendering.quick.visualizer.framed_view import resolve_framed_view
+
+    state = snapshot.logical.mode_state
+    if not bool(getattr(state, "ready", False)):
+        return False
+    view = tuple(getattr(state, "framed_view", ()) or ())
+    drawn = resolve_framed_view(snapshot.presentation)
+    return bool(view) and drawn is not None and view == tuple(drawn)
+#: Waveform's route entries (N5.4; registered at the port's acceptance, playbook checklist 18): each table above's entry.
+GENERIC_MODE_SETTINGS["waveform_ribbon"] = _waveform_settings
+GENERIC_MODE_PROGRAM_VARIANTS["waveform_ribbon"] = (waveform_variant, waveform_program)
+GENERIC_MODE_TARGET_SIZES["waveform_ribbon"] = _waveform_target_sizes
+GENERIC_MODE_RESOURCES["waveform_ribbon"] = waveform_resources
+GENERIC_MODE_FRAME_GATES["waveform_ribbon"] = waveform_frame_ready
 #: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
 #: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
 NATIVE_MODE_IDS = frozenset({"spectrum", *GENERIC_MODE_SETTINGS})
@@ -640,6 +957,7 @@ class NativeVisualizerRoute:
         recheck, self._recheck = self._recheck, False
         sent = False
         sent_bits = 0                                     # --frame-trace only: what this sync sent (see the record)
+        published_now = False                             # a frame published this sync (a frame gate may hold it)
         try:
             # The frame's own stage (N29 M1; round 2 M1: the admission and the take too): a failure here is tried
             # again at the next update, never latched for the activation.
@@ -674,7 +992,9 @@ class NativeVisualizerRoute:
             if content.target_sizes(drawn, settings):
                 sent = True
                 sent_bits |= 4
-            if snapshot is not None:
+            gate = GENERIC_MODE_FRAME_GATES.get(identity.mode_id)
+            published_now = snapshot is not None and (gate is None or gate(snapshot))
+            if published_now:
                 logical = snapshot.logical
                 payload, payload_schema = content.encode(logical)
                 self._writer.publish(payload, payload_schema=payload_schema,
@@ -688,7 +1008,7 @@ class NativeVisualizerRoute:
             raise refused.cause from None             # the setup stage's: latched until an input changes
         except Exception as exc:
             raise _FrameFailure(exc) from exc
-        if healthy and placed != self._placed:
+        if healthy and placed != self._placed and (published_now or self._snapshot is not None):
             # Shown once a frame of its own is published for it, never before. After a fade-out (a failure, a hide) it
             # fades back in, and so does an activation whose first frame came late (M2); a new activation's first
             # frame shows at once, its fade-in the card's own content fade (the Python renderer's: rule (a) holds
@@ -701,7 +1021,7 @@ class NativeVisualizerRoute:
             self._failure = None                          # shown again: the next failure is logged again
             sent = True
             sent_bits |= 8
-        if snapshot is not None:
+        if published_now:
             self._snapshot = snapshot
             self.published += 1
         if sent:
@@ -864,9 +1184,15 @@ class _ModeContent:
         self._pending: tuple[str, str, dict] | None = None   # (mode, mapping name, expect): bound at its first settings
         self._bound = False
         self._sizes: dict | None = None                     # the explicit targets' sizes sent since the program
+        self._images: frozenset = frozenset()               # the program's storage images (sized as its targets are)
+        self._resources: tuple | None = None                # (mode, key, sender) of the meshes and textures sent
 
     def load(self, mode_id: str) -> None:
         if self._pack is None or self._pack[0] != mode_id:
+            if mode_id in GENERIC_MODE_PROGRAM_VARIANTS:
+                # A variant program builds every pass from its own packs (Waveform has no single fragment).
+                self._pack = (mode_id, b"")
+                return
             from rendering.native.program_values import mode_fragment_pack
 
             self._pack = (mode_id, mode_fragment_pack(mode_id))
@@ -913,14 +1239,52 @@ class _ModeContent:
                 sizes = sizer(snapshot, values) if sizer is not None else {}
                 program = variants[1](variant) if variants is not None else build(self._pack[1], sizes)
                 unread = {"unread": program["unread"]} if program.get("unread") else {}
+                images = program.get("images", ())
+                if images:
+                    unread["images"] = images
+                self._resources_for(mode_id, snapshot)
                 self.item.program(program["passes"], values, targets=program["targets"],
                                   streams=program["streams"], **unread)
-                self._sizes = dict(sizes)                  # the program's declarations hold them
+                self._images = frozenset(image.name for image in images)
+                if variants is not None:
+                    # A variant's declarations hold its idle sizes: the drawn ones follow at once.
+                    self._sizes = {}
+                    self._send_sizes(sizes)
+                else:
+                    self._sizes = dict(sizes)              # the program's declarations hold them
         except Exception as exc:
             # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
             # Spectrum's program at its bind, never tried again at every update.
             raise _ProgramRefused(exc) from exc
         self._program_mode, self._program_variant = mode_id, variant
+
+    def _resources_for(self, mode_id: str, snapshot: Any) -> None:
+        """The mode's meshes and textures (``GENERIC_MODE_RESOURCES``) when their key changed; a texture the core finds
+        lost is sent again (its lost edge)."""
+        resources = GENERIC_MODE_RESOURCES.get(mode_id)
+        if resources is None or snapshot is None:
+            return
+        key, send = resources(snapshot)
+        if self._resources is not None and self._resources[:2] == (mode_id, key):
+            return
+        send(self.item)
+        self._resources = (mode_id, key, send)
+        self.item.on_textures_lost(self._textures_lost)
+
+    def _textures_lost(self, _names: list[str]) -> None:
+        if self._resources is not None:
+            self._resources[2](self.item)
+
+    def _send_sizes(self, sizes: dict) -> None:
+        """Every size that changed: a storage image's (``image_size``) or an explicit-size target's."""
+        for name, size in sizes.items():
+            if (self._sizes or {}).get(name) == size:
+                continue
+            if name in self._images:
+                self.item.image_size(name, size)
+            else:
+                self.item.target_size(name, size)
+        self._sizes = dict(sizes)
 
     def settings(self, values: dict, snapshot: Any = None) -> None:
         pending = self._pending
@@ -953,9 +1317,7 @@ class _ModeContent:
         sizes = sizer(snapshot, settings)
         if sizes == self._sizes:
             return False
-        for name, size in sizes.items():
-            self.item.target_size(name, size)
-        self._sizes = dict(sizes)
+        self._send_sizes(sizes)
         return True
 
     def encode(self, logical: Any) -> tuple[bytes, int]:

@@ -854,6 +854,10 @@ class WaveformRibbonFrame:
     strand_origin: float = 0.
     zoom: float = 1.
     pulse: bytes = b''  # the logical owner's pulse appearance field on PULSE_GRID (float32, history x), or empty
+    # The drawn card's framed view the logical side built this frame for (``core.framed_view.FramedView``'s three
+    # numbers), or () before a card is drawn: the native record builds the camera from it (N0.4, D5.5; N5.4), and the
+    # route publishes a frame only to a card whose framed view it equals (a resize edge holds the previous frame).
+    framed_view: tuple = ()
 
     def __post_init__(self):
         RibbonPacket,RIBBON_BYTES,Recipe,MappingProxyType,PARTICLE_BYTES,COHORT_BYTES,PULSE_BYTES=_waveform_frame_contract()
@@ -880,6 +884,10 @@ class WaveformRibbonFrame:
         object.__setattr__(self,'zoom',zoom)
         if not isinstance(self.pulse,bytes) or len(self.pulse) not in (0,PULSE_BYTES):
             raise ValueError('Waveform pulse field must be immutable and match the pulse grid')
+        view=tuple(self.framed_view)
+        if view and (len(view)!=3 or not all(isinstance(v,(int,float)) and math.isfinite(v) and v>0. for v in view)):
+            raise ValueError('Waveform framed view must be three finite positive numbers or empty')
+        object.__setattr__(self,'framed_view',tuple(float(v) for v in view))
 
     @property
     def mode_id(self):

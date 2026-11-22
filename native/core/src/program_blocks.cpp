@@ -290,6 +290,22 @@ QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field
         return QStringLiteral("'%1': the record's %2 u32 element(s) do not fill one unsigned vector of %3 components")
             .arg(QString::fromLatin1(member.name)).arg(field.count).arg(member.components());
     }
+    // ABI 40 (N5.4): a u32 sequence fills one signed vector under the int range rule below (Waveform's draw ranges).
+    const bool signedVector = field.kind == frame_abi::FieldKind::U32
+        && (type == QShaderDescription::Int2 || type == QShaderDescription::Int3 || type == QShaderDescription::Int4);
+    if (signedVector) {
+        if (member.count != 1 || field.count != quint32(member.components())) {
+            return QStringLiteral("'%1': the record's %2 u32 element(s) do not fill one signed vector of %3 components")
+                .arg(QString::fromLatin1(member.name)).arg(field.count).arg(member.components());
+        }
+        const bool ruled = field.check == frame_abi::FieldCheck::Boolean
+            || (field.check == frame_abi::FieldCheck::AtMost && field.limit <= 2147483647u);
+        if (!ruled) {
+            return QStringLiteral("'%1': a u32 fills an int vector only under a range rule at most 2147483647 (at_most "
+                                  "or boolean)").arg(QString::fromLatin1(member.name));
+        }
+        return QString();
+    }
     bool typeFits = false;
     switch (field.kind) {
     case frame_abi::FieldKind::U32:
@@ -297,7 +313,18 @@ QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field
             || type == QShaderDescription::Bool || type == QShaderDescription::Float;
         break;
     case frame_abi::FieldKind::F64:
-        typeFits = type == QShaderDescription::Float;
+        // ABI 40 (N5.4): an f64 sequence fills any float member, its numbers the member's components times its
+        // elements in order (a matrix's columns first, as std140 lays them): a scene's cameras (mat4), eyes and axes
+        // (vec3) and spans (vec2) are per-frame record values. Before ABI 40 an f64 filled a float alone.
+        typeFits = type == QShaderDescription::Float || type == QShaderDescription::Vec2
+            || type == QShaderDescription::Vec3 || type == QShaderDescription::Vec4 || type == QShaderDescription::Mat4;
+        if (typeFits) {
+            const quint32 numbers = quint32(qMax(0, member.count * member.components()));
+            if (numbers > 0 && field.count == numbers)
+                return QString();
+            return QStringLiteral("'%1': the record holds %2 f64 number(s), the block's member takes %3")
+                .arg(QString::fromLatin1(member.name)).arg(field.count).arg(numbers);
+        }
         break;
     case frame_abi::FieldKind::F64x4:
         typeFits = type == QShaderDescription::Vec4;

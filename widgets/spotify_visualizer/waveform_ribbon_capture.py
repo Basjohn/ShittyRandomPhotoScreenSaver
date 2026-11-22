@@ -63,7 +63,8 @@ def capture_waveform_ribbon(widget,engine,context):
         snapshot.rotation_angle,snapshot.rotation_speed,snapshot.drives,snapshot.realized,
         ready=snapshot.ready,particles=snapshot.particles,particle_origin=snapshot.particle_origin,
         particle_serial=snapshot.particle_serial,passage=snapshot.passage,parameters=runtime.parameter_fields.freeze(camera),
-        strands=snapshot.strands,strand_origin=snapshot.strand_origin,zoom=snapshot.zoom,pulse=snapshot.pulse)
+        strands=snapshot.strands,strand_origin=snapshot.strand_origin,zoom=snapshot.zoom,pulse=snapshot.pulse,
+        framed_view=() if controller.framed_view is None else tuple(controller.framed_view))
     extra=_base_extras(widget,MODE,engine)
     extra['_quick_mode_changed']=True
     extra['_quick_mode_reveal_ready']=snapshot.ready

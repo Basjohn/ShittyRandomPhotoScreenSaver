@@ -467,6 +467,24 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
 """
 
 
+def _fog_medium_uniforms(program):
+    """The fixed medium's inject block for ``FogVolume.update``: its own values and the volume's, loose uniforms of the
+    raw program (the inject head declares the volume's loose since N5.4)."""
+    from contextlib import nullcontext
+
+    from OpenGL import GL as gl
+
+    def bind(fog):
+        gl.glUniform4f(gl.glGetUniformLocation(program, "uSphere"), .5, .2, -9., 2.5)
+        gl.glUniform1f(gl.glGetUniformLocation(program, "uSteady"), .6)
+        gl.glUniformMatrix4fv(gl.glGetUniformLocation(program, "uFogInvView"), 1, gl.GL_FALSE,
+                              np.asarray(fog["uFogInvView"], np.float32))
+        gl.glUniform4f(gl.glGetUniformLocation(program, "uFogLens"), *fog["uFogLens"])
+        gl.glUniform4f(gl.glGetUniformLocation(program, "uFogRange"), *fog["uFogRange"])
+        return nullcontext()
+    return bind
+
+
 def _read_texture_3d(texture, grid, channels):
     from OpenGL import GL as gl
     out = np.zeros((grid[2], grid[1], grid[0], channels), np.float32)
@@ -484,8 +502,7 @@ def pass_fog_volume(target):
     from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
     outputs, calls = {}, {}
     program = compile_compute_program(fog_inject_source(_FOG_MEDIUM), label="identity fog medium")
-    medium = lambda p: (gl.glUniform4f(gl.glGetUniformLocation(p, "uSphere"), .5, .2, -9., 2.5),
-                        gl.glUniform1f(gl.glGetUniformLocation(p, "uSteady"), .6))
+    medium = _fog_medium_uniforms(program)
     view = np.identity(4)
     view[:3, :3] = [[.96, 0., .28], [.05, .98, -.17], [-.27, .18, .94]]
     view[:3, 3] = (-.4, -1.1, .3)
@@ -494,7 +511,7 @@ def pass_fog_volume(target):
             volume, march = FogVolume("identity"), FogMarch("identity")
             try:
                 run = lambda *_: volume.update(program, view=view, lens=(.7, .4), depth_range=(1., 60.), grid=grid,
-                                               medium=medium, focus_depth=focus, restore=False)
+                                               inject_block=medium, focus_depth=focus, restore=False)
                 run()
                 counter = {}
                 with counting(counter):
@@ -850,12 +867,11 @@ def _paired_fog(mod, target, grid):
     volume = mod("rendering.quick.scene3d.fog_volume").FogVolume("paired")
     source = mod("rendering.gl_programs.fog_volume").fog_inject_source(_FOG_MEDIUM)
     program = compile_compute_program(source, label="paired fog medium")
-    medium = lambda p: (gl.glUniform4f(gl.glGetUniformLocation(p, "uSphere"), .5, .2, -9., 2.5),
-                        gl.glUniform1f(gl.glGetUniformLocation(p, "uSteady"), .6))
+    medium = _fog_medium_uniforms(program)
     view = np.identity(4)
     view[:3, 3] = (-.4, -1.1, .3)
     run = lambda _i: volume.update(program, view=view, lens=(.7, .4), depth_range=(1., 60.), grid=grid,
-                                   medium=medium, restore=False)
+                                   inject_block=medium, restore=False)
 
     def release():
         gl.glUseProgram(0)

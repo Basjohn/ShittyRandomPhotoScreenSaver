@@ -1,8 +1,9 @@
 """The Pulse Rim field: the logical owner's published pulse appearance, uploaded once per frame for the light pass.
 
 The field is ``WaveformDynamics.pulse_at`` on ``PULSE_GRID`` (history-axis x), published in the snapshot as float32
-bytes. It is uploaded only when its bytes object changes (one small ``glTextureSubImage2D``); nothing is evaluated
-here, so the brightening lies exactly where the published pulse is, in every Reaction Mode.
+bytes. It is uploaded only when its bytes object changes (one small ``glNamedBufferSubData``); nothing is evaluated
+here, so the brightening lies exactly where the published pulse is, in every Reaction Mode. It is a storage buffer
+the light pass reads linearly (``PULSE_RIM_GLSL``, N5.4: the native core's form, a storage stream, not a float texture).
 """
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
@@ -22,17 +23,24 @@ SPREAD = .75
 REFERENCE, CEILING = .12, 2.
 
 
+def pulse_rim_values(strength) -> tuple[tuple, tuple]:
+    """(``uPulseRim``, ``uPulseRimShape``) of the light pass at Pulse Rim ``strength`` (GL-free, N5.4)."""
+    length = LAST-FIRST+STEP
+    # Sample i's centre is PULSE_GRID[i]; beyond the grid the edge value continues (as ``pulse_at`` does).
+    return (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length), (1./REFERENCE, CEILING)
+
+
 class PulseRimField:
     """Caller owns the current GL context; ``update`` once per frame returns the light pass's
-    (texture, uPulseRim, uPulseRimShape)."""
+    (buffer, uPulseRim, uPulseRimShape)."""
     def __init__(self):
-        self.texture = 0
+        self.buffer = 0
         self._payload = None
         self._context = None
 
     @property
     def has_resources(self):
-        return bool(self.texture)
+        return bool(self.buffer)
 
     def _check(self):
         current = QOpenGLContext.currentContext()
@@ -47,27 +55,21 @@ class PulseRimField:
         self._check()
         if not isinstance(payload, bytes) or len(payload) != SAMPLES*4 or not strength > 0.:
             raise ValueError('Pulse rim field needs the published pulse grid and a positive strength')
-        if not self.texture:
+        if not self.buffer:
             name = (gl.GLuint*1)()
-            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
-            self.texture = int(name[0])
-            gl.glTextureStorage2D(self.texture, 1, gl.GL_R32F, SAMPLES, 1)
-            for key, value in ((gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR), (gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR),
-                               (gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE), (gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)):
-                gl.glTextureParameteri(self.texture, key, value)
+            gl.glCreateBuffers(1, name)
+            self.buffer = int(name[0])
+            gl.glNamedBufferStorage(self.buffer, SAMPLES*4, None, gl.GL_DYNAMIC_STORAGE_BIT)
             self._payload = None
         if payload is not self._payload:
-            gl.glTextureSubImage2D(self.texture, 0, 0, 0, SAMPLES, 1, gl.GL_RED, gl.GL_FLOAT,
-                                   np.frombuffer(payload, np.float32))
+            gl.glNamedBufferSubData(self.buffer, 0, SAMPLES*4, np.frombuffer(payload, np.float32))
             self._payload = payload
-        length = LAST-FIRST+STEP
-        # Texel i's centre is PULSE_GRID[i]; beyond the grid the edge value continues (as ``pulse_at`` does).
-        return self.texture, (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length), (1./REFERENCE, CEILING)
+        return (self.buffer, *pulse_rim_values(strength))
 
     def release(self):
-        if self.texture:
+        if self.buffer:
             self._check()
-            gl.glDeleteTextures(1, [self.texture])
-        self.texture = 0
+            gl.glDeleteBuffers(1, [self.buffer])
+        self.buffer = 0
         self._payload = None
         self._context = None

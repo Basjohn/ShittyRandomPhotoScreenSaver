@@ -26,6 +26,20 @@ def _texture(width,height):
     return texture
 
 
+def floor_give_values(packet,*,translation,floor,contact,camber,side=1.):
+    """(sections' dispatch members, blur's dispatch members, ``uFloorGive``) of the yielding floor (GL-free, N5.4: the
+    Python dispatches' and the native record's one owner)."""
+    first,last,samples=floor.give_span;samples=int(samples)
+    height,gap,_softness=(float(v) for v in contact)
+    step=(last-first)/(samples-1)
+    # The grade stays zero: the sections read only the light's presence.
+    sections={'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
+              'uFieldSide':float(side),'uGrade':(0.,0.,0.,0.),'uGradeStops':[(0.,0.,0.,0.)]*RIBBON_GRADE_STOPS,
+              'uGiveSpan':(first,last,samples,EDGE_FADE),'uGiveShape':(height+gap,floor.give_softness,float(camber),0.)}
+    blur={'uGiveBlur':(samples,floor.give_blur/step,floor.give,floor.give_radius)}
+    return sections,blur,(first-.5*step,1./(last-first+step),floor.give_depth,step)
+
+
 class FloorGiveField:
     """Caller owns the current GL context; ``update`` once per frame, then ``uniforms`` for every consumer."""
     def __init__(self):
@@ -66,29 +80,24 @@ class FloorGiveField:
             self._release_textures()
             self._sections=_texture(samples,FIELD_RIBBONS);self.texture=_texture(samples,FLOOR_GIVE_ROWS)
             self._samples=samples
-        height,gap,_softness=(float(v) for v in contact)
-        step=(last-first)/(samples-1)
+        section_values,blur_values,self._span=floor_give_values(packet,translation=translation,floor=floor,
+                                                                contact=contact,camber=camber,side=side)
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
             # The sections read the packet at storage binding 0, so their image is unit 1 (one namespace on Vulkan).
             # The grade stays zero: the sections read only the light's presence.
-            sections=FLOOR_GIVE_SECTION_BLOCK.pack({
-                'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
-                'uFieldSide':float(side),'uGrade':(0.,0.,0.,0.),'uGradeStops':[(0.,0.,0.,0.)]*RIBBON_GRADE_STOPS,
-                'uGiveSpan':(first,last,samples,EDGE_FADE),'uGiveShape':(height+gap,floor.give_softness,float(camber),0.)})
+            sections=FLOOR_GIVE_SECTION_BLOCK.pack(section_values)
             with self._blocks.bound(sections) as rebind:
                 program=self.resources.compute_program('sections',FLOOR_GIVE_SECTION_COMPUTE);gl.glUseProgram(program)
                 with bound_image(1,self._sections,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
                     dispatch((-(-samples//64),FIELD_RIBBONS,1),gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
                 program=self.resources.compute_program('blur',FLOOR_GIVE_BLUR_COMPUTE);gl.glUseProgram(program)
-                rebind(FLOOR_GIVE_BLUR_BLOCK.pack({'uGiveBlur':(samples,floor.give_blur/step,floor.give,
-                                                               floor.give_radius)}))
+                rebind(FLOOR_GIVE_BLUR_BLOCK.pack(blur_values))
                 with bound_image(0,self._sections,gl.GL_READ_ONLY,gl.GL_RGBA32F,restore=restore),\
                      bound_image(1,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
                     dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         finally:
             if before is not None:gl.glUseProgram(before)
-        self._span=(first-.5*step,1./(last-first+step),floor.give_depth,step)
 
     @property
     def uniforms(self):

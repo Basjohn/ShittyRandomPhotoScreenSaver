@@ -1,0 +1,6 @@
+#version 460 core
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_fog_integrate for the integrate_mirror pass, its block's members named for it (the arithmetic the body's)
+#define uFogInvView integrate_mirror_u_fog_inv_view
+#define uFogLens integrate_mirror_u_fog_lens
+#define uFogRange integrate_mirror_u_fog_range
+#include "waveform_fog_integrate.glsl"

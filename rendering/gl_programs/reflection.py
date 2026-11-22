@@ -8,6 +8,8 @@ reflection lies above the plane (no clip plane is applied), and the receiver its
 """
 import numpy as np
 
+from rendering.gl_programs.anisotropic import ANISOTROPIC_GLSL
+
 
 def mirror_matrix(plane_y: float) -> np.ndarray:
     """World -> mirrored world across the horizontal plane y = plane_y (4x4, row-major numpy)."""
@@ -31,10 +33,16 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
 # each within the sampler's ratio and Gaussian-weighted along the streak. Separated point taps stamped copies.
 # Contact hardening (optional): emitters that write luminance-weighted world height into the reflection's alpha
 # (the ribbon light and spark passes do) reflect crisply near the plane and spread with height, as on a wet floor.
-PLANAR_REFLECTION_GLSL = """
+# The footprint's anisotropy is the shader's own taps (``rendering.gl_programs.anisotropic``, N5.4: the reflection target
+# carries no hardware anisotropy, as the native core's sampler has none), included here once for every receiver.
+# The receiver's declarations alone: Waveform's floor reads the target with its own column taps, not the receiver's
+# function below, whose out-array helper a native shader may not carry (checklist 7).
+PLANAR_REFLECTION_UNIFORMS = ANISOTROPIC_GLSL + """
 uniform sampler2D uReflection;
 uniform vec4 uReflectionLook;   // streak half-length (uv), min/max optical mip, Gaussian sigma (receiver pixels)
 uniform vec4 uReflectionContact; // plane height (world), spread (uv per world unit of height; 0 off), along/across, probe mip
+"""
+PLANAR_REFLECTION_GLSL = PLANAR_REFLECTION_UNIFORMS + """
 // A discrete nine-tap Gaussian folded into five bilinear taps (offsets in texels of the sampled level), weights sum 1.
 void reflectionGaussian(float sigma, out float offsets[5], out float weights[5]) {
     float s=max(sigma,0.05);
@@ -98,7 +106,7 @@ vec3 planarReflection(vec2 targetPx, vec2 offset, float roughness, float streakH
     for(int y=0;y<rows;y++) for(int x=0;x<5;x++) {
         if(acrossWeights[x]<=0.0) continue;
         vec2 tap=clamp(uv+vec2(across[x]*pixelUv.x,along[y]),vec2(0),vec2(1));
-        colour+=acrossWeights[x]*alongWeights[y]*textureGrad(uReflection,tap,dx,dy).rgb;
+        colour+=acrossWeights[x]*alongWeights[y]*srpssAnisotropic(uReflection,tap,dx,dy,16.0).rgb;
     }
     return colour;
 }

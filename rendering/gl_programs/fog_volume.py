@@ -41,10 +41,17 @@ FOG_SLICE_GLSL = FOG_VOLUME_BLOCK.glsl(SCENE3D_COMPUTE_BLOCK_BINDING) + FOG_DEPT
 # The inject program's head (a fragment, not a shader: ``fog_inject_source`` puts the version line before it and the
 # consumer's medium after it). Its images sit at 2 and 3, clear of storage a medium declares at 0 (one namespace on
 # Vulkan); the steady share is one half-float channel (R16F: every shipped backend's target takes an r16f image).
+# The volume's values are loose uniforms here (N5.4): the consumer's conversion (``portable_program``) folds them into
+# its medium's one block, since a native compute entry has one block of its own (``mode_content.cpp``); the owner
+# packs them with the medium's (``FogVolume.update``'s ``inject_block``).
+FOG_VOLUME_UNIFORMS = """uniform mat4 uFogInvView;
+uniform vec4 uFogLens;
+uniform vec4 uFogRange;
+"""
 _INJECT_HEAD = """layout(local_size_x=4,local_size_y=4,local_size_z=4) in;
 layout(rgba16f,binding=2) uniform writeonly image3D uFogInject;
 layout(r16f,binding=3) uniform writeonly image3D uFogSteady;
-""" + FOG_SLICE_GLSL
+""" + FOG_VOLUME_UNIFORMS + FOG_DEPTH_MAPPING_GLSL
 
 _INJECT_MAIN = """
 void main() {

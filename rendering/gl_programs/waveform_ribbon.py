@@ -1,14 +1,27 @@
 """Waveform infinite wet-floor material; no scene lifetime or simulation."""
-from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.conventions import (SRPSS_CONVENTIONS_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_GLSL,
+                                               SRPSS_TARGET_CLIP_VERTEX_GLSL)
 from rendering.gl_programs.mist import MIST_GLSL
-from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
+from rendering.gl_programs.reflection import PLANAR_REFLECTION_UNIFORMS
 from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
 from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
 
-FLOOR_VERTEX = """#version 460 core
+#: The storage binding the floor reads the scene's packet at: its samplers hold bindings 0 to 4, and the native core's
+#: programs have one binding space (OpenGL's storage and texture units are separate, QRhi's are not).
+FLOOR_PATHS_BINDING = 5
+_PATHS_AT_0 = "layout(std430,binding=0) readonly buffer Paths"
+if WORLD_FIELD_GLSL.count(_PATHS_AT_0) != 1:
+    raise RuntimeError("the world field reads the packet at storage binding 0 once")
+_FLOOR_WORLD_FIELD_GLSL = WORLD_FIELD_GLSL.replace(
+    _PATHS_AT_0, f"layout(std430,binding={FLOOR_PATHS_BINDING}) readonly buffer Paths")
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
+
+FLOOR_VERTEX = "#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + """
 layout(location=0) in vec3 aPosition;
+uniform vec2 uViewport;
+uniform vec2 u_target_px;
 out vec2 vFloorNdc;
-void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=vec4(vFloorNdc,0.0,1.0); }
+void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=srpssTargetClip(vec4(vFloorNdc,0.0,1.0),uViewport,u_target_px); }
 """
 # The ground is an opaque infinite world plane, not a finite actor: each Perspective
 # pixel ray from the eye meets it, possibly beyond the actor far clip. Only this
@@ -23,6 +36,10 @@ uniform mat4 uMvp;
 uniform mat4 uFloorInverseMvp;
 uniform vec3 uEye;
 bool floorWorldHit(out vec3 world, out float depth) {
+    // A miss leaves the eye's foot point (defined, so the quad's derivatives taken before the miss discards read a
+    // value, never an unwritten one).
+    world=vec3(uEye.x,0.0,uEye.z);
+    depth=1.0;
     vec4 b=uFloorInverseMvp*vec4(vFloorNdc,1.0,1.0);
     vec3 farPoint=b.xyz/b.w;
     vec3 origin=uEye;
@@ -66,6 +83,7 @@ uniform sampler2D uSlope;      // height slope per uv unit (rg), from the smooth
 uniform int uFlat;
 uniform int uFogLit;
 uniform vec2 uViewport;
+uniform vec2 u_target_px;
 uniform vec3 uBackdrop;
 uniform vec3 uAmbient;
 uniform vec3 uFloorTint;
@@ -86,15 +104,26 @@ uniform sampler2D uSpecular;
 uniform vec3 uForward;
 uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
-layout(location=1) out vec4 Emission;
-""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+""" + SCENE_EMISSION_OUTPUT_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + SRPSS_TARGET_CLIP_GLSL + _FLOOR_WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_UNIFORMS + """
 const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
-// World-space slope of one height sample set at two incommensurate orientations (no visible tile lattice).
-vec2 slopeAt(vec2 xz, float tile, float bias) {
+// The maps' and the reflection's anisotropy (N5.4: the shader's taps, rendering/gl_programs/anisotropic.py, in both
+// renderers; the samplers at 1x, as the native core's are): the maps' former hardware 8x, the reflection's 16x.
+const float MAP_ANISOTROPY=8.0;
+const float REFLECTION_ANISOTROPY=16.0;
+// A map read at a mip bias, given the coordinate's screen gradients (taken by the caller before any lane can leave):
+// the bias scales the footprint by 2^bias, the hardware's bias on its own level.
+vec4 mapRead(sampler2D map, vec2 uv, vec2 dUvdx, vec2 dUvdy, float bias) {
+    float scale=exp2(bias);
+    return srpssAnisotropic(map,uv,dUvdx*scale,dUvdy*scale,MAP_ANISOTROPY);
+}
+// World-space slope of one height sample set at two incommensurate orientations (no visible tile lattice); dXz the
+// screen gradients of xz.
+vec2 slopeAt(vec2 xz, mat2 dXz, float tile, float bias) {
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
     vec2 uv=xz/tile;
-    vec2 near=texture(uSlope,uv,bias).rg;
-    vec2 far=transpose(turn)*texture(uSlope,turn*uv*1.37+vec2(.31,.47),bias).rg*1.37;
+    vec2 dx=dXz[0]/tile, dy=dXz[1]/tile;
+    vec2 near=mapRead(uSlope,uv,dx,dy,bias).rg;
+    vec2 far=transpose(turn)*mapRead(uSlope,turn*uv*1.37+vec2(.31,.47),turn*dx*1.37,turn*dy*1.37,bias).rg*1.37;
     return (0.6*near+0.4*far)/tile;
 }
 // A wet floor's column: the reflected image drawn out along the view, as smooth coloured mass. A plain average over
@@ -111,9 +140,9 @@ vec2 slopeAt(vec2 xz, float tile, float bias) {
 const int COLUMN_TAPS=8;
 const float COLUMN_POWER=2.0;
 const float COLUMN_OVERLAP=2.0;
-vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across) {
+vec3 columnReflection(vec2 screenUv, vec2 dScreenUvdx, vec2 dScreenUvdy, vec2 offset, float halfLength, float across) {
     vec2 size=vec2(textureSize(uReflection,0));
-    float pixelSpan=max(length(dFdx(screenUv)*size),length(dFdy(screenUv)*size));
+    float pixelSpan=max(length(dScreenUvdx*size),length(dScreenUvdy*size));
     float span=max(across,pixelSpan);
     float spacing=2.0*halfLength/float(COLUMN_TAPS);
     vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,COLUMN_OVERLAP*spacing));
@@ -122,7 +151,8 @@ vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across
     float tint=0.0, weight=0.0, moment=0.0, total=0.0;
     for(int i=0;i<COLUMN_TAPS;i++) {
         float t=(float(i)+0.5)*2.0/float(COLUMN_TAPS)-1.0;
-        vec4 sample_=textureGrad(uReflection,clamp(uv+vec2(0.0,t*halfLength),vec2(0),vec2(1)),dx,dy);
+        vec4 sample_=srpssAnisotropic(uReflection,clamp(uv+vec2(0.0,t*halfLength),vec2(0),vec2(1)),dx,dy,
+                                      REFLECTION_ANISOTROPY);
         float raw=max(dot(sample_.rgb,vec3(0.2126,0.7152,0.0722)),0.0);
         float height=raw>1e-6?max(sample_.a/raw,0.0):0.0;
         float spread=uMaterialShape.z/(uMaterialShape.z+height);
@@ -160,10 +190,18 @@ vec2 floorGiveReflection(vec3 world, vec3 normal, vec2 screenUv) {
     return clamp(ndcToUv(clip.xy/clip.w)-screenUv,vec2(-0.25),vec2(0.25));
 }
 void main() {
-    vec2 screenUv=fragUv(uViewport);
+    srpssItemOnly(uViewport,u_target_px);
+    vec2 screenUv=srpssGlFragUv(uViewport,u_target_px);  // OpenGL's form (rows bottom-up) on every target
     vec3 vWorldPos;float groundDepth;
-    if(!floorWorldHit(vWorldPos,groundDepth))discard;
-    gl_FragDepth=groundDepth;
+    bool hit=floorWorldHit(vWorldPos,groundDepth);
+    // Every derivative is taken here, before the miss discards: Vulkan's discard ends the lane (SPIR-V OpKill) where
+    // OpenGL keeps it as a helper, so a derivative after it is undefined (R-210). The map reads below take them.
+    vec2 dScreenUvdx=dFdx(screenUv), dScreenUvdy=dFdy(screenUv);
+    mat2 dWorldXz=mat2(dFdx(vWorldPos.xz),dFdy(vWorldPos.xz));
+    if(!hit)discard;
+#ifndef SRPSS_NO_DEPTH
+    gl_FragDepth=groundDepth;  // the pre-pass's target has no depth: its program is compiled without this write
+#endif
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     vec3 giveNormal=vec3(0.0,1.0,0.0);
     if(uFloorGive.y>0.0) { vec2 g=floorGiveGradient(vWorldPos.xz); giveNormal=normalize(vec3(g.x,1.0,g.y)); }
@@ -172,28 +210,32 @@ void main() {
     // flattens isotropic concrete into hairline scanlines; elongated, its blotches and relief read at the
     // proportions of a wet floor seen from standing height. World-fixed, so it never swims with the view.
     vec2 materialXz=vec2(vWorldPos.x,vWorldPos.z/max(uMaterialShape.x,1.0));
+    vec2 materialScale=vec2(1.0,1.0/max(uMaterialShape.x,1.0));
+    mat2 dMaterialXz=mat2(dWorldXz[0]*materialScale,dWorldXz[1]*materialScale);
     vec2 uv=materialXz/uFloor.x;
+    vec2 dUvdx=dMaterialXz[0]/uFloor.x, dUvdy=dMaterialXz[1]/uFloor.x;
     // Mip-biased: at this grazing angle the colour scan aliases into horizontal bands once lit. The concrete's own
     // variation is restored around its exact mean (the 1x1 level), so legibility never changes the floor's level.
     // The albedo is stored sRGB-encoded in plain RGBA8 and decoded here (N0.3 decision F4).
-    vec3 grain=mix(srgbToLinear(texture(uAlbedo,uv,uHot.w).rgb),
-                   srgbToLinear(texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb),.4);
+    vec3 grain=mix(srgbToLinear(mapRead(uAlbedo,uv,dUvdx,dUvdy,uHot.w).rgb),
+                   srgbToLinear(mapRead(uAlbedo,turn*uv*1.37+vec2(.31,.47),turn*dUvdx*1.37,turn*dUvdy*1.37,
+                                        uHot.w).rgb),.4);
     vec3 mean=srgbToLinear(textureLod(uAlbedo,vec2(0.5),20.0).rgb);
     vec3 albedo=max(mean+(grain-mean)*uMaterial.x,vec3(0.0))*uFloorTone.x;
-    float surfaceRoughness=texture(uRoughness,uv,uHot.w).r;
+    float surfaceRoughness=mapRead(uRoughness,uv,dUvdx,dUvdy,uHot.w).r;
     // Offsets and relief follow the viewed ground axes, so a turned camera streaks along its own view.
     vec3 groundForward=normalize(vec3(uForward.x,0.0,uForward.z));
     vec3 groundRight=cross(groundForward,vec3(0,1,0));
-    vec2 broadSlope=slopeAt(materialXz,uFloor.x,uMaterialShape.y);
+    vec2 broadSlope=slopeAt(materialXz,dMaterialXz,uFloor.x,uMaterialShape.y);
     // Unit-RMS rise of the broad relief along the view. Foreshortening turns it into the long horizontal breaks a
     // grazing wet floor shows; the material's shading and the reflection's breakup are both this one surface.
     float rise=dot(vec3(broadSlope.x,0,broadSlope.y),groundForward)*uFloor.x/HEIGHT_SLOPE_RMS;
     vec3 specular;
     if(uSpecMode==2) {
-        specular=texture(uSpecular,screenUv).rgb;
+        specular=textureLod(uSpecular,screenUv,0.0).rgb;   // one level: no derivative
     } else {
     vec2 broad=broadSlope*uFloorTone.y;
-    vec2 micro=slopeAt(vWorldPos.xz,uFloor.y,0.0)*uFloorTone.z;
+    vec2 micro=slopeAt(vWorldPos.xz,dWorldXz,uFloor.y,0.0)*uFloorTone.z;
     vec2 axes=vec2(dot(vec3(broad.x,0,broad.y),groundRight),dot(vec3(broad.x,0,broad.y),groundForward));
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
@@ -205,7 +247,7 @@ void main() {
     vec4 direction=uMvp*vec4(groundForward,0.0);
     float projected=abs(0.5*(direction.y*clip.w-clip.y*direction.w)/(clip.w*clip.w));
     float streak=uStreak.x*uReflectionLook.x*projected;
-    vec3 reflected=columnReflection(screenUv,offset,streak*roughness,
+    vec3 reflected=columnReflection(screenUv,dScreenUvdx,dScreenUvdy,offset,streak*roughness,
                                     exp2(mix(uReflectionLook.y,uReflectionLook.z,roughness)));
     vec3 view=normalize(vWorldPos-uEye);
     float cosine=clamp(abs(uFloorGive.y>0.0?dot(view,giveNormal):view.y),0.0,1.0);
@@ -225,8 +267,8 @@ void main() {
     // and shimmers as the light under it moves, so both are opt-in (uHot.y, uColumn.z; 0 is a smooth column).
     float film=1.0;
     if(uHot.y>0.0 || uColumn.z>0.0)
-        film=srgbToLinear(texture(uAlbedo,uv*2.3+vec2(.17,.61)).rgb).r
-             /max(srgbToLinear(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).rgb).r,1e-3);
+        film=srgbToLinear(mapRead(uAlbedo,uv*2.3+vec2(.17,.61),dUvdx*2.3,dUvdy*2.3,0.0).rgb).r
+             /max(srgbToLinear(mapRead(uAlbedo,uv*2.3+vec2(.17,.61),dUvdx*2.3,dUvdy*2.3,6.0).rgb).r,1e-3);
     if(uHot.y>0.0) reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
     // Relief breakup: facets tilted along the view send the column's light toward or away from the eye. Linear in
     // the zero-mean rise, so the column's mass is broken into the relief's long horizontal bands at any filtering

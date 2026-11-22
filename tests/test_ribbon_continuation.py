@@ -68,8 +68,10 @@ def test_native_continuation_vertices_and_atmosphere_share_one_world_field(qt_ap
     # Capture the real extension draw's world positions without replacing surface calculations.
     source=RIBBON_CONTINUOUS_VERTEX.replace('void main() {','void ribbonMain() {',1)+'''
 layout(std430,binding=1) buffer Captured { vec4 captured[]; };
-void main(){ribbonMain();if(uContinuation.w!=0.0)captured[gl_VertexID]=vec4(vWorld,1);}
+void main(){ribbonMain();if(drawnContinuation.w>0.0)captured[drawnVertex]=vec4(vWorld,1);}
 '''
+    # One draw holds the body and both extensions (N5.4); the +x extension's vertices are captured by their index in
+    # the extension's strip.
     segments=256;vertices=segments*6*8;buffer=0;distance_buffer=0
     try:
         primitive.resources.program('diagnostic_continuous',source,RIBBON_FRAGMENT)

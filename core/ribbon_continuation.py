@@ -138,7 +138,9 @@ def continuation_bounds(packet, translation, camber):
     Interior cubic controls form a convex hull. Reduce their current published extrema; a hardcoded old
     amplitude domain cannot admit larger rolled crests. Endpoint jets bound the unbounded continuation.
     """
-    rows = np.frombuffer(packet.payload, np.float32).reshape(packet.instances,-1,4)
+    # An empty packet (no ribbon yet: a Waveform record is encoded for every frame, N5.4) bounds nothing.
+    rows = (np.frombuffer(packet.payload, np.float32).reshape(packet.instances,-1,4) if packet.instances
+            else np.zeros((0,1,4),np.float32))
     origin = np.asarray(packet.world_origin)+translation
     low, high = np.array((0.,0.)), np.array((0.,0.))
     for path in rows:

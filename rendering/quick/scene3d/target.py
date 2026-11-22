@@ -168,6 +168,16 @@ vec4 sceneEmission(vec3 light) {
     return vec4(light, dot(light, vec3(0.2126, 0.7152, 0.0722)));
 }
 """
+# An opaque or added pass's emission output at location 1 (``emission_writes``). A program drawn into a target without
+# an emission attachment (Waveform's planar reflection, the floor's pre-pass) is compiled with ``SRPSS_NO_EMISSION``
+# defined: the write lands in a plain variable, so the program writes one output per attachment, as the native core
+# requires; OpenGL drops a write past the attachments, so the Python renderer draws either form alike.
+SCENE_EMISSION_OUTPUT_GLSL = """#ifdef SRPSS_NO_EMISSION
+vec4 Emission;
+#else
+layout(location=1) out vec4 Emission;
+#endif
+"""
 
 # What a pass drawn inside ``transparent_writes()`` writes: its premultiplied colour and coverage, weighted by depth
 # so nearer surfaces count for more (McGuire and Bavoil's equation 10 on view depth, in scene units), into the

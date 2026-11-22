@@ -17,6 +17,16 @@ from rendering.quick.scene3d.ribbon import GRADE_OFF
 from rendering.quick.scene3d.uniforms import PassBlocks
 
 
+#: The sparks' quad: four corners (x, y) of a triangle strip over the unit square (the native core's ``burst_quad``).
+BURST_QUAD=(0.,0.,1.,0.,0.,1.,1.,1.)
+
+
+def burst_values(*,mvp,now,viewport,mist,grade):
+    """The event sparks' pass-block members (GL-free, N5.4: the Python draw's and the native record's one owner)."""
+    return {'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade,
+            'uMvp':tuple(mvp),'uNow':now,'uViewport':tuple(viewport)}
+
+
 class RibbonBurstRenderer:
     def __init__(self):
         self.resources=MeshResources('ribbon event sparks')
@@ -40,7 +50,7 @@ class RibbonBurstRenderer:
         self._context(admit=True)
         if not warm_programs(((self.resources,'bursts',VERTEX,FRAGMENT),)):return False
         if not self.resources.has_mesh('quad'):
-            self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,));return False
+            self.resources.mesh('quad',BURST_QUAD,(2,));return False
         return self._stream().warm() and self.blocks.warm()
 
     def _stream(self):
@@ -62,9 +72,8 @@ class RibbonBurstRenderer:
         program=self.resources.program('bursts',VERTEX,FRAGMENT)
         gl.glUseProgram(program)
         # The mist volume samples unit FOG_TEXTURE_UNIT (its binding); every other value travels in the pass block.
-        values={'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade,
-                'uMvp':tuple(mvp),'uNow':now,'uViewport':tuple(viewport)}
-        vao,_=self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,))
+        values=burst_values(mvp=mvp,now=now,viewport=viewport,mist=mist,grade=grade)
+        vao,_=self.resources.mesh('quad',BURST_QUAD,(2,))
         stream=self._stream();stream.warm()
         with self.blocks.bound(pack_block(BURSTS_BLOCK,values)), \
                 stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload,restore=restore):

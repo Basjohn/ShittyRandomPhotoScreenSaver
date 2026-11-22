@@ -199,6 +199,45 @@ def test_scatter_is_a_share_never_the_frame():
     assert not pt.judge(two, reference, tolerance)["pass"]
 
 
+def test_a_statistical_bound_judges_shares_and_still_counts_the_classes():
+    """Waveform's statistical rule (a) (``pixel_tolerance`` "Statistics"): a flipped row along an edge and scattered
+    one-level rounding pass within the shares; a uniform shift, a bright patch, a share of flips and a share of ties
+    past their bounds each fail; the class counts are still reported."""
+    from tools import pixel_tolerance as pt
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    tolerance = parity.composite_tolerance("waveform_ribbon")
+    bound = tolerance.statistics
+    assert bound is not None and tolerance.bound()["statistics"]["flip_share"] == bound.flip_share
+    reference = np.zeros((200, 400, 4), np.uint8)
+    reference[..., :3] = 40
+    reference[..., 3] = 255
+    reference[100:, :, :3] = 200                                    # an edge along row 100
+    candidate = reference.copy()
+    candidate[100, :int(400 * 200 * bound.flip_share * .5), :3] = 190  # half the flip share: a row 10 levels off
+    rng = np.random.default_rng(5)
+    scatter = rng.choice(200 * 400, 2000, replace=False)
+    flat = candidate.reshape(-1, 4)
+    flat[scatter, 0] = np.minimum(flat[scatter, 0].astype(int) + 1, 255)
+    verdict = pt.judge(candidate, reference, tolerance)
+    assert verdict["pass"], verdict["reasons"]
+    assert verdict["flips"] > 0 and verdict["scatter"] > 0 and not verdict["pass_classes"]
+    # Controls, each failing by its own share.
+    shifted = reference.copy()
+    shifted[..., :3] += 1                                           # every pixel one level: the mean
+    assert any("mean" in r for r in pt.judge(shifted, reference, tolerance)["reasons"])
+    patch = reference.copy()
+    patch[:40, :, :3] += 12                                         # a bright patch: flips past their share
+    assert any("past 3" in r for r in pt.judge(patch, reference, tolerance)["reasons"])
+    ties = reference.copy()
+    ties[:, :, 1] += 2
+    ties[:, :200, 1] -= 2                                           # half the frame two levels in one channel
+    assert any("2 to 3" in r for r in pt.judge(ties, reference, tolerance)["reasons"])
+    # Every class tolerance refuses the passing frame (its flipped row is no class's).
+    for name, other in _tolerances().items():
+        assert not pt.judge(candidate, reference, other)["pass"], name
+
+
 def test_the_fragment_pass_flip_is_one_isolated_pixel_on_an_edge():
     from tools import pixel_tolerance as pt
 

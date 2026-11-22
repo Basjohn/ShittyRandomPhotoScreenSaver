@@ -210,8 +210,19 @@
 // a pass's "viewport": "allocation" (the core's triangle over a scene target's whole allocation: the trails' edges);
 // the item texture format rgba32f (composite_mode_texture's eighth argument full_float, no mips: Crumble's motion
 // table). Backward compatible for every earlier program and caller (none declares any of them).
-// 38: Waveform's (on its branch).
 // 39 (black flicker at a transition's start on Vulkan): a content waiting for its textures or meshes keeps the frame its
 // target holds (as a refused build does, M4) instead of recording no pass over a cleared target; composite_mode_state's
 // waiting_kept counts those records. Backward compatible for every caller (only a waiting content's frame changes).
-#define SRPSS_NATIVE_CORE_ABI 39
+// 40 (N5.4, the Waveform port's own-camera scene): a record's f64 field fills a vec2, vec3, vec4 or mat4 member (its
+// numbers the member's components times its elements, columns first) and its u32 field an int vector under a range
+// rule at most 2147483647 (program_blocks.cpp recordFieldFits); the conventions block's w is 1 where the target's clip
+// depth runs 0 to 1 (QRhi::isClipDepthZeroToOne: Vulkan, D3D, Metal; it was a reserved 0), read by
+// rendering/gl_programs/conventions.py SRPSS_TARGET_CLIP_GLSL; a graphics pass's samplers take their declared wrap on W
+// too (QRhi's default Repeat blended a 3D image's first and last slices; 2D samplers unchanged). Backward compatible
+// for every earlier program (no shader before Waveform reads w or samples a 3D image in a graphics pass). And a
+// composite step's "scene_rows": "up" (overlay_glow only): the scene holds OpenGL's rows (its bottom row at the
+// target's memory row 0, Python's SceneTarget memory), read there by the composite through the new core member
+// u_scene_rows_up (0 for every other program: their composites read as before). Waveform draws its scene so: drawn
+// flipped, its anti-aliased edges met the multisample pattern mirrored and differed from Python's (the bloom carried
+// them; one sample a pixel drew alike).
+#define SRPSS_NATIVE_CORE_ABI 40

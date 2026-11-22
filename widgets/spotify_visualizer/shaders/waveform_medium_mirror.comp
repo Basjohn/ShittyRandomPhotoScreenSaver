@@ -1,0 +1,16 @@
+#version 460 core
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_medium for the medium_mirror pass, its block's members named for it (the arithmetic the body's)
+#define uFogInvView medium_mirror_u_fog_inv_view
+#define uFogLens medium_mirror_u_fog_lens
+#define uFogRange medium_mirror_u_fog_range
+#define uFieldOrigin medium_mirror_u_field_origin
+#define uFieldSide medium_mirror_u_field_side
+#define uGradeStops medium_mirror_u_grade_stops
+#define uGrade medium_mirror_u_grade
+#define uBodySpan medium_mirror_u_body_span
+#define uBodyShape medium_mirror_u_body_shape
+#define uAtmosphereLight medium_mirror_u_atmosphere_light
+#define uAtmosphere medium_mirror_u_atmosphere
+#define uAtmosphereMotion medium_mirror_u_atmosphere_motion
+#define uAtmosphereAmbient medium_mirror_u_atmosphere_ambient
+#include "waveform_medium.glsl"

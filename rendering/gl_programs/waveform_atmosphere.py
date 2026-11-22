@@ -5,8 +5,9 @@ from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 from rendering.gl_programs.ribbon import (RIBBON_GRADE_FIELDS, RIBBON_GRADE_FUNCTION, RIBBON_GRADE_GLSL,
                                           RIBBON_GRADE_HEAD)
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
+from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_VERTEX_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
-from rendering.gl_programs.fog_volume import FOG_FULLSCREEN_VERTEX
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL
 
 FIELD_RIBBONS=RIBBON_CAPACITY
 FIELD_ROWS=FIELD_RIBBONS*2
@@ -104,8 +105,8 @@ vec3 groundLight(vec3 world) {
 void sourceField(float x,int owner,out vec4 shape,out vec4 light) {
     float u=(x-uBodySpan.x)*uBodySpan.y;
     if(u>=0.0 && u<=1.0) {
-        shape=texture(uBodyField,vec2(u,(float(owner*2)+0.5)/8.0));
-        light=texture(uBodyField,vec2(u,(float(owner*2)+1.5)/8.0));return;
+        shape=textureLod(uBodyField,vec2(u,(float(owner*2)+0.5)/8.0),0.0);   // one level: no derivative
+        light=textureLod(uBodyField,vec2(u,(float(owner*2)+1.5)/8.0),0.0);return;
     }
     packetField(x,owner,shape,light);
 }
@@ -148,7 +149,16 @@ vec3 atmosphereLight(vec3 local,vec3 ambient) {
 }
 '''
 
-MEDIUM_GLSL=WORLD_FIELD_GLSL+ATMOSPHERE_LIGHT_GLSL+'''
+# The medium fades out below the ground plane over a thin band instead of stopping at it. The mirror volume's cell
+# rows sweep through the plane as the camera moves, and a hard cut there flipped a whole row by each compiler's
+# rounding of its height: OpenGL cleared a row Vulkan filled (N5.4 rule (b): Frozen Past input 640 at y<0, Travelling
+# Pulse input 216 again at y<-1e-3). Continuous, a rounding difference changes the medium by as little.
+ATMOSPHERE_GROUND_BAND=0.05
+ATMOSPHERE_GROUND_GLSL='''
+float atmosphereGround(float y) { return smoothstep(-'''+repr(ATMOSPHERE_GROUND_BAND)+''',0.0,y); }
+'''
+
+MEDIUM_GLSL=WORLD_FIELD_GLSL+ATMOSPHERE_LIGHT_GLSL+ATMOSPHERE_GROUND_GLSL+'''
 uniform vec4 uAtmosphere; // ground extinction, height e-fold, clearance transition, local light gain
 uniform vec4 uAtmosphereMotion; // time, drift speed, noise amount, world noise scale
 uniform vec3 uAtmosphereAmbient;
@@ -158,7 +168,8 @@ float atmosphereNoise(vec3 p) {
         +0.25*sin(p.z*1.41+p.x*0.39)*cos(p.x*0.57-p.y*0.68);
 }
 void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float steady) {
-    if(world.y<0.0){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
+    float ground=atmosphereGround(world.y);
+    if(ground<=0.0){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
     vec4 body=bodyField(world);
     vec3 moving=world*uAtmosphereMotion.w+uAtmosphereMotion.x*uAtmosphereMotion.y*vec3(0.07,-0.11,0.03);
     float variation=mix(1.0,0.6+0.8*atmosphereNoise(moving),uAtmosphereMotion.z);
@@ -170,15 +181,27 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
     float distanceWeight=1.0+min(pow(behind/12.0,2.0),64.0);
     float foreground=mix(1.0,0.15,smoothstep(4.0,35.0,world.z));
     extinction=uAtmosphere.x*(0.0004+exp(-world.y/max(uAtmosphere.y,0.05))*distanceWeight)
-        *foreground*variation*clearance;
+        *foreground*variation*clearance*ground;
     steady=extinction;
     radiance=uAtmosphereAmbient*(0.4+0.6*exp(-behind/30.0))+atmosphereLight(body.rgb*uAtmosphere.w,uAtmosphereAmbient);
 }
 '''
 
-SKY_VERTEX=FOG_FULLSCREEN_VERTEX
-SKY_FRAGMENT='#version 460 core\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\nuniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
-void main(){vec4 fog=texture(uFogVolume,vec3(ndcToUv(vNdc),1.0));
+# The fog's full-screen triangle (``FOG_FULLSCREEN_VERTEX``) placed through the target clip (N5.4): vNdc stays OpenGL's.
+SKY_VERTEX='#version 460 core\n'+SRPSS_TARGET_CLIP_VERTEX_GLSL+'''
+uniform vec2 uViewport;
+uniform vec2 u_target_px;
+out vec2 vNdc;
+void main() {
+    vec2 corner=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
+    vNdc=corner*2.0-1.0;
+    gl_Position=srpssTargetClip(vec4(vNdc,0.0,1.0),uViewport,u_target_px);
+}
+'''
+SKY_FRAGMENT='#version 460 core\n'+SRPSS_TARGET_CLIP_FRAGMENT_GLSL+'uniform vec2 uViewport;\nuniform vec2 u_target_px;\nin vec2 vNdc;\nlayout(location=0) out vec4 FragColor;\n'+SCENE_EMISSION_OUTPUT_GLSL+'uniform vec3 uBackdrop;\nuniform int uSkyReflection;\n'+MIST_GLSL+'''
+void main(){
+    srpssItemOnly(uViewport,u_target_px);
+vec4 fog=textureLod(uFogVolume,vec3(ndcToUv(vNdc),1.0),0.0);
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}
 '''

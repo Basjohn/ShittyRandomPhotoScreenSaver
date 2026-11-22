@@ -4,7 +4,12 @@
 and enables depth testing; the caller draws everything above the plane through
 ``rendering.gl_programs.reflection.mirror_view`` (winding flips: do not cull by winding). ``end()`` builds the mip
 chain the receiver's roughness reads and hands back the caller's framebuffer, viewport, depth state and colour mask.
-``texture`` is then sampled by ``PLANAR_REFLECTION_GLSL``.
+``texture`` is then sampled by the receiver (Waveform's floor), its anisotropy the receiver's own taps
+(``rendering.gl_programs.anisotropic``; the sampler itself at 1x).
+
+The chain is the box kernel (``rendering.gl_programs.mip_chain``, N5.4: every level chain a sampler reads, the lead's
+decision of 21 Nov), never the driver's chain: the native core builds the same chain from the same text, so
+the two renderers' levels agree bit for bit; its program is compiled with the target (``warm``) and released with it.
 
 Allocation happens at the first ``begin`` at a size and is reused while the size holds; ``warm`` allocates on a
 hidden frame instead. ``release`` deletes everything under the owning context; nothing is held otherwise.
@@ -17,7 +22,9 @@ import weakref
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 
+from rendering.gl_programs.mip_chain import MIP_BOX_COMP, dispatch_mip_chain, mip_levels
 from rendering.quick import gl_query
+from rendering.quick.render.gl_resources import compile_compute_program, delete_program
 
 
 class PlanarReflection:
@@ -27,12 +34,13 @@ class PlanarReflection:
         self._colour = 0
         self._depth = 0
         self._fbo = 0
+        self._chain = 0
         self._saved = None
         self._context_ref = None
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._colour or self._depth or self._fbo)
+        return bool(self._colour or self._depth or self._fbo or self._chain)
 
     @property
     def texture(self) -> int:
@@ -56,13 +64,11 @@ class PlanarReflection:
         name = (ctypes.c_uint * 1)()
         gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
         self._colour = int(name[0])
-        gl.glTextureStorage2D(self._colour, max(width, height).bit_length(), gl.GL_RGBA16F, width, height)
+        gl.glTextureStorage2D(self._colour, mip_levels((width, height)), gl.GL_RGBA16F, width, height)
         gl.glTextureParameteri(self._colour, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
         gl.glTextureParameteri(self._colour, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-        # OpenGL 4.6 anisotropy bounds the elongated roughness footprint. Query only on allocation;
-        # no extra target, pass or per-frame capability query. A wider footprint selects coarser mips.
-        gl.glTextureParameterf(self._colour, gl.GL_TEXTURE_MAX_ANISOTROPY,
-                               min(16., float(gl.glGetFloatv(gl.GL_MAX_TEXTURE_MAX_ANISOTROPY))))
+        # No hardware anisotropy: the receiver bounds the elongated roughness footprint with its own taps
+        # (``srpssAnisotropic``), as the native core does (QRhi's sampler has none).
         for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
             gl.glTextureParameteri(self._colour, wrap, gl.GL_CLAMP_TO_EDGE)
         gl.glCreateRenderbuffers(1, name)
@@ -75,6 +81,8 @@ class PlanarReflection:
         if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
             raise RuntimeError(f"{self.label}: reflection target incomplete at {width}x{height}")
         self._size = (width, height)
+        if not self._chain:
+            self._chain = compile_compute_program(MIP_BOX_COMP, label=f"{self.label} mip box")
 
     def warm(self, width: int, height: int) -> bool:
         """One warm-up step: True when already allocated at this size, else allocate now (on a hidden frame)."""
@@ -108,7 +116,7 @@ class PlanarReflection:
         framebuffer, viewport, depth_mask, depth_test, mask = self._saved
         self._saved = None
         try:
-            gl.glGenerateTextureMipmap(self._colour)
+            dispatch_mip_chain(self._chain, self._colour, self._size, mip_levels(self._size), "rgba16f")
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
             gl.glViewport(*viewport)
@@ -126,10 +134,16 @@ class PlanarReflection:
         self._fbo = self._depth = self._colour = 0
         self._size = (0, 0)
 
+    def _drop_chain(self) -> None:
+        if self._chain:
+            delete_program(self._chain)
+        self._chain = 0
+
     def release(self) -> None:
         if self.has_resources:
             self._check_context()
         self._drop()
+        self._drop_chain()
         self._context_ref = None
 
 

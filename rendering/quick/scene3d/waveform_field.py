@@ -9,6 +9,16 @@ from rendering.quick.scene3d.ribbon import ribbon_grade
 from rendering.gl_programs.waveform_atmosphere import FIELD_BLOCK,FIELD_COMPUTE,FIELD_ROWS,FIELD_RIBBONS
 
 
+def field_values(packet,*,translation,span,grade,side=1.):
+    """The world field's dispatch members (GL-free, N5.4: the Python dispatch's and the native record's one owner)."""
+    first,last,samples=span
+    values=ribbon_grade(grade[0],grade[1],grade[3])
+    return {'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
+            'uFieldSide':float(side),'uGrade':tuple(values['uGrade']),
+            'uGradeStops':[tuple(stop) for stop in np.asarray(values['uGradeStops'],np.float32).reshape(6,4)],
+            'uFieldSpan':(first,last,int(samples),packet.instances)}
+
+
 class WaveformField:
     def __init__(self):
         self.resources=MeshResources('waveform world field');self.texture=0;self._samples=0;self._context=None
@@ -44,12 +54,7 @@ class WaveformField:
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
             program=self.resources.compute_program('field',FIELD_COMPUTE);gl.glUseProgram(program)
-            values=ribbon_grade(grade[0],grade[1],grade[3])
-            block=FIELD_BLOCK.pack({
-                'uFieldOrigin':(*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances),
-                'uFieldSide':float(side),'uGrade':tuple(values['uGrade']),
-                'uGradeStops':[tuple(stop) for stop in np.asarray(values['uGradeStops'],np.float32).reshape(6,4)],
-                'uFieldSpan':(first,last,samples,packet.instances)})
+            block=FIELD_BLOCK.pack(field_values(packet,translation=translation,span=span,grade=grade,side=side))
             # Image unit 1: binding 0 is the packet's storage (one namespace on Vulkan).
             with self._blocks.bound(block),bound_image(1,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
                 dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)

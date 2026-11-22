@@ -877,6 +877,43 @@ the feature (D3D11 is not stated).
       value no other consumer varies.
     - Lead decision (21 Nov): the recommendation. `clear` is declared once as backdrop x .35 when Python builds the
       program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
+  - [ ] The port's four layers (Opus High agent a6688ad0cd2ae360a, 21 Nov; `Docs/Guides/Native_Parity_And_Timing_Proof.md`
+    sections 3 "A port" and 5; at most 2 processes at once). Material: the three takes `ragdoll_quiet_intro_loud_end1`,
+    `human_heavy1`, `nightsolong_acousticsoft1` (60 s each, frozen settings from the spec, never presets), each of the
+    four reaction modes run separately (`waveform_ribbon_reaction_mode`: Travelling Pulse, Frozen Past, Whole Swell,
+    Group Wave). `<rm>` below is one reaction mode's run key in `tools/conventions_identity.mode_runs("waveform_ribbon")`.
+    - [ ] Warm-up: 0 frames of GPU history for every reaction mode. Every GPU resource is made again from the frame's
+      record each frame (the knot packet carries the ribbon history; the world field, floor give, both fog volumes'
+      inject and integrate, and the steady share are written whole every frame: `fog_volume.py:155-167`, the steady
+      share write-only at `:160`; the three stream rings are uploads, never read back). A window's drawing therefore
+      starts at its first input once the floor maps are resident (the content's own texture wait), plus 2 frames.
+    - [ ] L (every frame of every take and reaction mode; `native_record_identity.py` gains `--mode waveform_ribbon`):
+      `python tools/visualizer_replay/native_record_identity.py --mode waveform_ribbon --recording TAKE --seconds 60
+      --run <rm> --out .artifacts/evidence/native_core/n5_4/<date>_L_<take>_<rm> --deliveries <that folder>/deliveries`.
+    - [ ] Response, in parallel with L (CPU only), main before against the branch, per reaction mode:
+      `python tools/visualizer_replay/waveform_ribbon_breathing_probe.py record --clip <take>.jsonl --output chain.npy`
+      (the three takes back to back), `python -m tools.visualizer_replay.waveform_music_response music --clips
+      <the three takes> --out music.npy`, `... response --root <main checkout | worktree> --inputs chain.npy --mode
+      "<reaction mode>" --out <main|branch>_<rm>.npy`, `... report --music music.npy --response main=... --response
+      branch=... --out <dir>`; reported per mode: correlation, saturation and dead shares, early-vs-late spread.
+    - [ ] P (rule (a) OpenGL against the cached Python references, one full take per reaction mode plus coverage
+      windows from the other takes, late-song windows required): references once through the cache key after the
+      checklist-16 conversion, `python tools/visualizer_replay/owner_render_parity.py --native --mode waveform_ribbon
+      --runs <rm> --recording TAKE --seconds 60 --references --api opengl --placements display overscan --out ...`;
+      windows `python tools/visualizer_replay/coverage_windows.py --mode waveform_ribbon --recording TAKE --seconds 60
+      --deliveries <L's deliveries> --switch-input <L's switch_input> --out windows.json`, then the same parity run with
+      `--windows windows.json`; rule (b) Vulkan against native OpenGL `python tools/visualizer_replay/native_stream_player.py
+      --deliveries <L's deliveries> --apis opengl vulkan --switch-input <L's switch_input> --out ...`. Controls:
+      `--native-control shift` (rule (a) must fail), the stream player's `--control` record nudge (rule (b) must fail).
+    - [ ] C (once, without the validation layer; per pass, median and p90 over 240 frames, `nvidia-smi` and the display
+      state recorded): `python native/core/python/waveform_check.py --module-dir release/native_module --rounds cost`
+      at 2560 x 1440 and 3840 x 2160 on both APIs, against the Python renderer's own pass times.
+    - [ ] T (once at acceptance, the lead: registration in the main checkout uncommitted, playbook 18): `python
+      tools/visualizer_live_check.py --mode waveform_ribbon --seconds 90 --load none` on Display 1 with recorded music,
+      compared with `tools/preflip_pack.py --compare` against the pre-flip baseline, on both backends.
+    - [ ] Before the first Waveform consumer draws: the N3.2 box "Awaiting Validation before a Waveform consumer":
+      `python native/core/python/mesh_buffer_check.py --module-dir release/native_module --rounds stream_ring` with the
+      GPU state recorded before and after, its median margins against 0.05 ms and the D5.3 tail watch reviewed.
 - [ ] Waveform travel-speed reactivity (operator; after N5.4's acceptance, additive to its native record): the mesh's
   travel has no reactivity control for its speed. Add ONE range slider (two handles): its low end is the minimum
   speed at the least energy, its high end the maximum speed at the highest energy, and the speed between follows

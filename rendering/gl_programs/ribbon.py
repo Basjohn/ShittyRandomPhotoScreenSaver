@@ -14,8 +14,10 @@ per-ribbon colours, and choose the knobs. Strands and rims are box-filtered over
 to their average density once sub-pixel to limit crawling under slow motion.
 """
 from core.ribbon_geometry import MAX_PATH_SAMPLES
+from core.waveform_ribbon_dynamics import PULSE_GRID
+from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_VERTEX_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
-from rendering.quick.scene3d.target import SCENE_OIT_GLSL
+from rendering.quick.scene3d.target import SCENE_EMISSION_OUTPUT_GLSL, SCENE_OIT_GLSL
 
 # The grade in three parts so a compute program can carry its two uniforms in a block (``RIBBON_GRADE_FIELDS``) while
 # the draws keep ``RIBBON_GRADE_GLSL`` as it is.
@@ -183,11 +185,12 @@ vec3 surfacePoint(vec3 low, vec3 high, vec3 normal, float across) {
 }
 """
 
-RIBBON_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+RIBBON_VERTEX = ("#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + _RIBBON_SURFACE_GLSL + """
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
 uniform vec2 uViewport;     // pixels; with uRim.w (minimum on-screen width) zero, no widening
+uniform vec2 u_target_px;   // the drawn target's pixels (the native core's member; srpssTargetClip)
 uniform vec4 uRim;
 uniform vec3 uEye;
 out vec3 vWorld;
@@ -212,8 +215,9 @@ void main() {
     int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int divisions=clamp(int(paths[owner].meta.y),1,8);
     int crossDiv=max(int(uSurface.y),1);
-    int interval=gl_VertexID/(6*crossDiv), corner=gl_VertexID%6;
-    int acrossStrip=(gl_VertexID/6)%crossDiv;
+    int vertexId=gl_VertexID;
+    int interval=vertexId/(6*crossDiv), corner=vertexId%6;
+    int acrossStrip=(vertexId/6)%crossDiv;
     int segment=interval/divisions;
     gl_Position=vec4(2,2,2,1); vWorld=vec3(0); vNormal=vec3(0,0,1); vPhase=0; vAcross=0; vEmission=0;
     vColour=vec4(0); vColourB=vec4(0); vTint=vec4(0);
@@ -278,7 +282,7 @@ void main() {
     vColour=paths[owner].colourA;
     vColourB=paths[owner].colourB;
     vTint=mix(left.tint,right.tint,u);
-    gl_Position=uMvp*vec4(vWorld,1);
+    gl_Position=srpssTargetClip(uMvp*vec4(vWorld,1),uViewport,u_target_px);
     vCoverage=1.0; vExpanded=0.0; vFaceScale=1.0;
     // An edge-on sheet projects narrower than a pixel and MSAA catches it in dashes. Keep at least uRim.w pixels
     // across the screen-space tangent. Light per unit length must stay that of the real sheet through the fold:
@@ -301,7 +305,7 @@ void main() {
             // the projected across direction is -sign(N.V) times the tangent's left normal.
             vec2 perp=normalize(vec2(-along.y,along.x))*(dot(next?n1:n0,view)>0.0?-1.0:1.0);
             vec2 centre=cc.xy/cc.w*half_+perp*signWidth*0.5*minimum;
-            gl_Position=vec4(centre/half_*cc.w,cc.z,cc.w);
+            gl_Position=srpssTargetClip(vec4(centre/half_*cc.w,cc.z,cc.w),uViewport,u_target_px);
             vCoverage=max(drawn,1e-3)/minimum;
             vec3 across=cross(view,(l1+r1)*0.5-(l0+r0)*0.5);
             if(dot(across,across)>1e-24) {
@@ -320,7 +324,17 @@ void main() {
 from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 
 _CONTINUATION_VERTEX = """
-uniform vec4 uContinuation; // packet-local min/max x, subdivisions, endpoint side (-1/0/+1)
+// One draw (N5.4): the culled body, then the before and the after extension, as consecutive vertex ranges (the native
+// core's draw is a count from vertex 0, D15 point 6; one pass where three draws were). Each part's vertex count and its
+// first vertex in the culled strip, and each extension's packet-local min/max x, subdivisions and side (-1, +1).
+// The ranges are whole numbers held as floats (exact below 2^24): the native core fills a vec4 from the record, an
+// int vector only under a range rule its schema gives scalars alone.
+uniform vec4 uDrawCounts;
+uniform vec4 uDrawBases;
+uniform vec4 uContinuationBefore;
+uniform vec4 uContinuationAfter;
+int drawnVertex;
+vec4 drawnContinuation;  // the body's 0: no continuation
 void continuationMain(int owner,int crossDiv);
 bool continuationAnchored(int owner);
 int continuationAnchorKnot(int owner,bool before);
@@ -335,15 +349,16 @@ vec3 continuedSurface(int owner,float x,float across) {
 }
 void continuationMain(int owner,int crossDiv) {
     int last=int(paths[owner].meta.x)-1;
-    bool before=uContinuation.w<0.0;
+    bool before=drawnContinuation.w<0.0;
     float edgeX=continuationAnchor(owner,before);
-    float limit=before?uContinuation.x:uContinuation.y;
+    float limit=before?drawnContinuation.x:drawnContinuation.y;
     if((before && limit>=edgeX) || (!before && limit<=edgeX))return;
-    int interval=gl_VertexID/(6*crossDiv),corner=gl_VertexID%6;
-    int strip=(gl_VertexID/6)%crossDiv;
+    int vertexId=drawnVertex;
+    int interval=vertexId/(6*crossDiv),corner=vertexId%6;
+    int strip=(vertexId/6)%crossDiv;
     bool next=corner==1 || corner>=4,highAcross=corner==2 || corner==3 || corner==5;
     float across=float(strip+(highAcross?1:0))/float(crossDiv);
-    float t=float(interval+(next?1:0))/uContinuation.z;
+    float t=float(interval+(next?1:0))/drawnContinuation.z;
     // Cluster stations at the C2 join without moving any world-space point.
     float x=mix(edgeX,limit,t*t);
     vec4 f=continuationField(owner,x);
@@ -360,7 +375,7 @@ void continuationMain(int owner,int crossDiv) {
     vPhase=paths[owner].meta.z+vLocal/paths[owner].meta.w;
     vColour=paths[owner].colourA;vColourB=paths[owner].colourB;vTint=mix(k0.tint,k1.tint,share);
     vCoverage=1.0;vExpanded=0.0;vFaceScale=1.0;
-    gl_Position=uMvp*vec4(vWorld,1);
+    gl_Position=srpssTargetClip(uMvp*vec4(vWorld,1),uViewport,u_target_px);
 }
 """
 # The main strip draws only the anchored history [tail anchor, head anchor]; the continuation draws the rest.
@@ -374,9 +389,18 @@ _ANCHORED_STRIP = """
         u0=mix(low,high,u0);u1=mix(low,high,u1);u=mix(low,high,u);
     }
 """
-RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {',1)
+_DRAWN_PART = """
+    int drawn=gl_VertexID;
+    ivec4 drawCounts=ivec4(uDrawCounts), drawBases=ivec4(uDrawBases);
+    int part=drawn<drawCounts.x?0:(drawn<drawCounts.x+drawCounts.y?1:2);
+    drawnVertex=drawn-(part==0?0:(part==1?drawCounts.x:drawCounts.x+drawCounts.y))+drawBases[part];
+    drawnContinuation=part==0?vec4(0.0):(part==1?uContinuationBefore:uContinuationAfter);
+"""
+RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {'+_DRAWN_PART,1)
+    .replace('    int vertexId=gl_VertexID;\n    int interval=vertexId/(6*crossDiv), corner=vertexId%6;',
+             '    int vertexId=drawnVertex;\n    int interval=vertexId/(6*crossDiv), corner=vertexId%6;',1)
     .replace('if(segment>=count-1) return;',
-             'if(uContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
+             'if(drawnContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
     .replace('    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',_ANCHORED_STRIP+'    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',1)
     +CONTINUATION_GLSL+_CONTINUATION_MAIN)
 
@@ -453,11 +477,13 @@ void main() {
 # and leaves the surface along a smooth curve (offset zero and flat at the attachment, growing with distance along
 # it and with the knot's age), wobbles gently, tapers to a free tip and carries droplet beads. Every term is a smooth
 # function of (stray coordinate, knot age), so no setting can kink one. The knot's sparkle gates how many live.
-RIBBON_STRAY_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+RIBBON_STRAY_VERTEX = ("#version 460 core\n" + SRPSS_TARGET_CLIP_VERTEX_GLSL + _RIBBON_SURFACE_GLSL + """
+uniform int uVertexBase;  // the draw's first vertex (N5.4)
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
 uniform vec2 uViewport;
+uniform vec2 u_target_px;
 uniform vec4 uStray;       // strays per knot, length (knots), reach (world units), chance
 uniform vec4 uStrayLook;   // width (px), light, beads per stray, peel time (s)
 uniform vec2 uStrayClock;  // local now (s), absolute coordinate origin mod 1000 (stable identity)
@@ -507,7 +533,8 @@ void main() {
     ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
     ringCount=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int perKnot=max(int(uStray.x),1);
-    int stray=gl_VertexID/(6*STRAY_SEGMENTS), corner=gl_VertexID%6, segment=(gl_VertexID/6)%STRAY_SEGMENTS;
+    int vertexId=gl_VertexID+uVertexBase;   // the draw counts from vertex 0 (N5.4), its first vertex a member
+    int stray=vertexId/(6*STRAY_SEGMENTS), corner=vertexId%6, segment=(vertexId/6)%STRAY_SEGMENTS;
     int index=stray/perKnot, slot=stray%perKnot;
     gl_Position=vec4(2.0,2.0,2.0,1.0); vWorld=vec3(0.0); vAlong=0.0; vAcross=0.0; vBright=0.0; vSeed=0.0;
     vColour=vec3(0.0);
@@ -548,7 +575,7 @@ void main() {
     // Quad twice the line's width: the droplet beads fill it, the line's core stays narrow.
     float width=admission*uStrayLook.x*(1.0-0.6*s);
     vec2 offset=perp*(outer?1.0:-1.0)*width;
-    gl_Position=vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w);
+    gl_Position=srpssTargetClip(vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w),uViewport,u_target_px);
     vWorld=here;
     vAlong=s;
     vAcross=outer?1.0:-1.0;
@@ -609,12 +636,15 @@ RIBBON_COHORT_STRAY_VERTEX = RIBBON_STRAY_VERTEX.replace(
 ).replace('uStrayLook.x','cohortLook.x'
 ).replace('uStrayLook.y*k.side.w','cohortLook.y*(0.8+0.4*max(k.side.w,0.0)/(1.0+max(k.side.w,0.0)))')
 
-RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
+RIBBON_STRAY_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL +
+                         "layout(location=0) out vec4 FragColor;\n" + SCENE_EMISSION_OUTPUT_GLSL +
                          "in vec3 vWorld;\nin float vAlong;\nin float vAcross;\nin float vBright;\nin float vSeed;\n"
                          "flat in vec3 vColour;\nuniform vec3 uMistOrigin;\nuniform vec4 uStrayLook;\n"
                          "uniform vec2 uStrayGlow;  // soft halo around the filament, share sent to the bloom\n"
+                         "uniform vec2 uViewport;\nuniform vec2 u_target_px;\n"
                          + MIST_GLSL + RIBBON_GRADE_GLSL + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float a=vAcross*vAcross;
     float line=exp(-a*9.0);                                   // the filament: narrow core in a quad twice its width
     float along=fract(vAlong*uStrayLook.z+vSeed)-0.5;         // droplets strung along it, round over the full quad
@@ -680,6 +710,20 @@ float ribbonStrandCoordinate(float across,float phase,float strength,float frequ
 }
 """
 
+# A glint cell's draw from its integer (strand, phase cell) pair, exact on every backend. The phase cell grows with the
+# absolute path phase, and the former fract(sin(large)*43758) depended on each compiler's sin reduction: OpenGL and
+# Vulkan lit different cells of the same frame (N5.4 rule (b), Frozen Past input 4433: the reflection's first mip 3.7x
+# apart at three texels; with this hash every reflection texel agrees within 4.5 of 762).
+RIBBON_CELL_HASH_GLSL = """
+uint ribbonCellHash(uint x) {
+    x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; x^=x>>16;
+    return x;
+}
+float cellHash(float k, float j) {
+    return float(ribbonCellHash(uint(int(k))*0x9e3779b9u^uint(int(j))*0x85ebca6bu)&0xffffffu)/16777215.0;
+}
+"""
+
 # Shared by the body and light passes; every input is packet-local (the owner rebases eye/view with the MVP).
 _RIBBON_MATERIAL_GLSL = """
 in vec3 vWorld;
@@ -730,7 +774,7 @@ float ribbonLattice(float across, float phase) {
     return la+lb-la*lb;
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
-float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
+""" + RIBBON_CELL_HASH_GLSL + """
 // One-sided rim of half-width h (across units) at an edge, box-filtered over w.
 float rimCoverage(float edgeDistance, float h, float w) {
     return clamp((h-edgeDistance)/max(w,1e-4)+0.5,0.0,1.0)*min(1.0,2.0*h/max(w,1e-4)+0.25);
@@ -762,9 +806,11 @@ vec3 ribbonColour() {
 }
 """
 
-RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
+RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL + SCENE_OIT_GLSL
+                        + "layout(location=2) out vec4 Emission;\nuniform vec2 u_target_px;\n"
                         + _RIBBON_MATERIAL_GLSL + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0)*ageFade()
                       *mistTransmittance(vWorld+uMistOrigin)*clamp(vColour.a,0.0,1.0),0.0,0.95);
     sceneTransparent(ribbonColour()*uBody.y*alpha,alpha,viewDepth());
@@ -781,14 +827,27 @@ void main() {
 # swell's band over a lower plateau of older swells, and squaring keeps the plateau's rims close to their own light
 # while a passing swell's rims light up (linear, the whole rim set brightened together and the pulse did not read).
 # Smooth in the field (a square and a tanh), so the brightening has the field's own soft falloff and never a hard edge.
+# The published pulse field (``rendering.quick.scene3d.pulse_rim``) is a storage buffer of its samples read linearly
+# here (N5.4: the native core uploads no float texture per frame; a storage stream and this read need no core change):
+# u in the field's texture coordinates, sample i's centre at (i + 0.5) / n, beyond either end the edge sample (the
+# R32F texture's clamp-to-edge linear filter it replaces, at full float weights).
+PULSE_RIM_BINDING = 2
 PULSE_RIM_GLSL = """
-uniform sampler2D uPulseRimField;
+layout(std430,binding=""" + str(PULSE_RIM_BINDING) + """) readonly buffer PulseRimField { float pulseRimSamples[]; };
 uniform vec4 uPulseRim;       // field edge x (history axis), inverse covered length, strength (0: off), tap spread (u)
 uniform vec2 uPulseRimShape;  // inverse reference field level, response ceiling
+const int PULSE_RIM_SAMPLES=""" + str(int(PULSE_GRID.size)) + """;
+float pulseRimTap(float u) {
+    // Every index stays inside the bound buffer whatever its size (no robust buffer access).
+    int last=min(PULSE_RIM_SAMPLES,pulseRimSamples.length())-1;
+    float s=u*float(PULSE_RIM_SAMPLES)-0.5;
+    float i=floor(s);
+    int a=clamp(int(i),0,last), b=clamp(int(i)+1,0,last);
+    return mix(pulseRimSamples[a],pulseRimSamples[b],s-i);
+}
 float pulseRimField(float x) {
     float u=(x-uPulseRim.x)*uPulseRim.y;
-    return 0.25*textureLod(uPulseRimField,vec2(u-uPulseRim.w,0.5),0.0).r+0.5*textureLod(uPulseRimField,vec2(u,0.5),0.0).r
-          +0.25*textureLod(uPulseRimField,vec2(u+uPulseRim.w,0.5),0.0).r;
+    return 0.25*pulseRimTap(u-uPulseRim.w)+0.5*pulseRimTap(u)+0.25*pulseRimTap(u+uPulseRim.w);
 }
 float pulseRimResponse(float x) {
     float level=max(pulseRimField(x),0.0)*uPulseRimShape.x;
@@ -797,9 +856,36 @@ float pulseRimResponse(float x) {
 """
 # The one line the light pass gains; without it (or with uPulseRim.z 0) the rims are exactly today's.
 PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*pulseRimResponse(vWorld.x+uMistOrigin.x);\n"
-RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n"
-                         "layout(location=1) out vec4 Emission;\n" + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
+#: The largest channel one light write may carry (N5.4, the Group Wave squares; the Python renderer's defect too). The
+#: scene targets are 4x half floats that add every layer's write: Group Wave's folds stacked up to 12 writes of up to
+#: ~8000 into one sample (31,344 single-sampled), and OpenGL's 4x resolve went infinite where Vulkan's did not (still so
+#: with every write under 4096, so every sample finite: its arithmetic overflows, as summing in half floats would); the
+#: bloom chain spread that texel into squares. At this ceiling a sample of 15
+#: writes still resolves finite (4 x 15 x 1024 < 65504), the frame that failed resolves at most 8,792, and the light
+#: it clips is far past white: the frame's look keeps to the unclipped Vulkan one but for a halo edge a pixel or two in.
+#: Variant a (emission at most a few hundred) is untouched, pixel for pixel.
+RIBBON_LIGHT_CEILING = 1024.0
+RIBBON_LIGHT_CEILING_GLSL = """
+const float RIBBON_LIGHT_CEILING=""" + repr(RIBBON_LIGHT_CEILING) + """;
+// The write scaled down (its hue kept) so its largest channel stays at most the ceiling; below it, unchanged.
+vec3 ribbonLightCeiling(vec3 light) {
+    float largest=max(max(light.r,light.g),light.b);
+    return largest>RIBBON_LIGHT_CEILING?light*(RIBBON_LIGHT_CEILING/largest):light;
+}
+// A reflection target adds every write's luminance-weighted height in its half-float alpha: Group Wave's stacked
+// light passed 65504 there (human input 252; OpenGL's blend went infinite, its mips NaN, the floor's reflection dark
+// where Vulkan's saturated). Kept to one ceiling a write, so 63 stacked writes stay finite; only light far past
+// white is weighted less (its contact hardening reads it a little lower, as Vulkan's saturated alpha did).
+float ribbonHeightWeight(float weighted) {
+    return clamp(weighted,-RIBBON_LIGHT_CEILING,RIBBON_LIGHT_CEILING);
+}
+"""
+RIBBON_LIGHT_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL +
+                         "layout(location=0) out vec4 FragColor;\nuniform vec2 u_target_px;\n" +
+                         SCENE_EMISSION_OUTPUT_GLSL + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + RIBBON_LIGHT_CEILING_GLSL
+                         + """
 void main() {
+    srpssItemOnly(uViewport,u_target_px);
     float across=acrossClamped();
     float x=ribbonStrandCoordinate(across,vPhase,uStrands.w,uBody.w,uTone.z)*uStrands.x;
     float w=max(fwidth(x),1e-4);
@@ -859,10 +945,11 @@ void main() {
     vec3 light=(sheet*sheetScale+boundary)*scale+net;
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
-    FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
+    vec3 written=ribbonLightCeiling(light);
+    FragColor=vec4(written,ribbonHeightWeight(dot(written,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y)));
     // The lattice keeps its own (smaller) bloom share: a lit net must stay a net, not a white haze.
-    vec3 glowing=light-net*(1.0-uLatticeTone.y);
-    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
+    vec3 glowing=ribbonLightCeiling((light-net*(1.0-uLatticeTone.y))*uGlow.x);
+    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)));
 }
 """)
 
@@ -874,9 +961,7 @@ from rendering.gl_programs.mist import FOG_TEXTURE_UNIT as _FOG_UNIT  # noqa: E4
 from rendering.gl_programs.portable import portable_program  # noqa: E402
 
 RIBBON_FLOOR_GIVE_UNIT = 13
-RIBBON_PULSE_RIM_UNIT = 7
-_SAMPLERS = {"uFloorGiveField": RIBBON_FLOOR_GIVE_UNIT, "uPulseRimField": RIBBON_PULSE_RIM_UNIT,
-             "uFogVolume": _FOG_UNIT}
+_SAMPLERS = {"uFloorGiveField": RIBBON_FLOOR_GIVE_UNIT, "uFogVolume": _FOG_UNIT}
 (RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX), (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT), \
     RIBBON_BLOCK = portable_program((RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX),
                                     (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT),

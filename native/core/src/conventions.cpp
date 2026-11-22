@@ -45,6 +45,9 @@ ConventionsBlock targetConventions(QRhi *rhi)
     block.ndcFlip = (rhi && rhi->isYUpInNDC() && !rhi->isYUpInFramebuffer()) ? 1.0f : 0.0f; // F2
     // N3.2: where the OpenGL-form top (+Y) lands after the correction (a sprite's offset follows it).
     block.clipTopDown = targetCorrection(rhi).map(QVector3D(0.0f, 1.0f, 0.0f)).y() < 0.0f ? 1.0f : 0.0f;
+    // ABI 40 (N5.4): a scene drawn in OpenGL's form from its own camera (Waveform's record matrices, uncorrected) remaps
+    // its clip depth itself where the target's runs 0 to 1 (SRPSS_TARGET_CLIP_GLSL).
+    block.clipDepthZeroToOne = (rhi && rhi->isClipDepthZeroToOne()) ? 1.0f : 0.0f;
     return block;
 }
 

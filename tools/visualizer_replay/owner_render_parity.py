@@ -167,20 +167,27 @@ def parity_script(clip_frames, mode: str) -> list:
 def single_sample_scene_targets():
     """Every scene target opened single-sampled, for the block: ``SceneTarget.begin`` takes one sample whatever its
     caller asks for (a tier's overlay samples, Waveform Ribbon's fixed four). Nothing else about a draw changes: the
-    same passes, programs, post chain and tier."""
+    same passes, programs, post chain and tier. The native route's Waveform program takes the same single sample
+    (``native_route.waveform_program`` reads ``waveform.SCENE_SAMPLES`` when it builds): rule (a) judges a multisampled
+    scene by its single-sampled form, as the transitions' (D8 point 1; the proof guide, section 3), and its 4x form by
+    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one)."""
+    from rendering.quick.scene3d import waveform
     from rendering.quick.scene3d.target import SceneTarget
 
     begin = SceneTarget.begin
+    samples_before = waveform.SCENE_SAMPLES
 
     def single(self, frame, samples, *args, **kwargs):
         del samples
         return begin(self, frame, 1, *args, **kwargs)
 
     SceneTarget.begin = single
+    waveform.SCENE_SAMPLES = 1
     try:
         yield
     finally:
         SceneTarget.begin = begin
+        waveform.SCENE_SAMPLES = samples_before
 
 
 class _SpilledFrames:
@@ -478,13 +485,38 @@ RULE_A_SCATTER_GROUP = {"bubble": 22}
 #: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;
 #: fast_proof/20261120_m2_* and 20261121_m2_*, ties joined), times 1.5 rounded up: 26.
 RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
+#: A mode judged by its frame statistics instead of the classes (``pixel_tolerance`` "Statistics"): mode -> (mean
+#: absolute, mean signed, share 2 to 3 levels off, share past 3), its single-sampled form against Python's.
+#: Waveform Ribbon: layer P's measured worst times 1.5 (two significant figures, rounded up), within the lead's
+#: provisional bound (0.16, 0.10, 3 %, 0.6 %, 22 Nov), over 35,531 judged frames of every reaction mode (one full take
+#: each, display and overscan for variants a and b, coverage windows from the other two takes, late-song windows
+#: included; n5_4/20261122_p_*): worst mean 0.042 and signed 0.041 (human Group Wave input 3835), 2-3 levels 0.34 %
+#: (ragdoll Group Wave window, input 66), past 3 0.48 % (human Group Wave input 1255), whose 1.5 times (0.72 %) the
+#: provisional 0.6 % caps. 13 frames holding a saturated square (variant b, the Python renderer's own defect too) are
+#: set aside, never admitted. Each planted control fails it on almost every frame (human Frozen Past windows, 1,158
+#: frames): the ribbons half a pixel right 1,153, the fog x 1.03 1,146, the bloom x 1.03 1,155, the camera x 1.05 and
+#: the bloom off 1,158 (n5_4/20261122_p_control_*). Its scene's geometry is
+#: placed through the core's target clip (a 64-pixel bucket) where Python's viewport places it directly, so where a
+#: ribbon edge runs along a row of pixel centres the whole row flips (P, ragdoll Frozen Past, input 997: 339 pixels past
+#: 3 levels and 1,142 at 2 to 3 along one near-horizontal edge, no frame offset: Python's neighbouring frames differ by
+#: 129,000), and its bloom and fog round one level apart over wide soft regions (groups of 3,097 one-level pixels).
+RULE_A_STATISTICS: dict[str, tuple[float, float, float, float]] = {"waveform_ribbon": (0.063, 0.062, 0.0052, 0.006)}
+#: A statistical mode's classes: counted and reported, never a reason.
+_COUNTED = 10 ** 9
 
 
 def composite_tolerance(mode: str | None = None):
     """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``; ``mode`` adds its D12
-    scatter (``RULE_A_SCATTER_PIXELS``)."""
+    scatter (``RULE_A_SCATTER_PIXELS``), or its statistical bound (``RULE_A_STATISTICS``)."""
     from tools import pixel_tolerance
 
+    statistics = RULE_A_STATISTICS.get(mode)
+    if statistics is not None:
+        return pixel_tolerance.Tolerance(f"composite (rule a, {mode}, statistical)", masked_level=RULE_A_FILL_LEVEL,
+                                         scatter_pixels=_COUNTED, tie_pixels=_COUNTED, flip_pixels=_COUNTED,
+                                         tie_level=RULE_A_EDGE_LEVEL, edge_class=True,
+                                         scatter_cluster_pixels=_COUNTED, scatter_window_pixels=_COUNTED,
+                                         statistics=pixel_tolerance.FrameStatistics(*statistics))
     scatter = RULE_A_SCATTER_PIXELS.get(mode, 0)
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
                                      masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,

@@ -15,6 +15,8 @@
 // ABI 29: Python's texel is u_scene_from_target of the surface pixel's centre: the surface's own unturned (as ABI 28),
 // and under a turned card the window's frame its scene declares (Python's gl_FragCoord.xy - uOrigin: its SceneTarget
 // is physical, the item turned at the vertex), so the turned surface reads the physical scene, glow and dither key.
+// ABI 40: u_scene_rows_up 1 (the program's "scene_rows": "up": Waveform) says the scene holds OpenGL's rows, Python's
+// SceneTarget memory exactly (its texel's row is the memory row): the scene and its glow are read there, unmirrored.
 layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 FragColor;
 
@@ -26,6 +28,7 @@ layout(std140, binding = 0) uniform SceneComposite {
     vec4 u_scene_item;       // the core's: the item's cover in the surface's pixels (left, top, width, height)
     vec3 u_scene_from_target_x; // the core's (ABI 29): the surface's pixel to the scene's texel, rows x and y
     vec3 u_scene_from_target_y;
+    float u_scene_rows_up;   // the core's (ABI 40): 1 where the scene holds OpenGL's rows, else 0
 };
 layout(binding = 1) uniform sampler2D uScene;
 layout(binding = 2) uniform sampler2D uBloom;
@@ -68,9 +71,11 @@ void main()
     ivec2 local = ivec2(floor(vec2(dot(u_scene_from_target_x, centre), dot(u_scene_from_target_y, centre))));
     // ABI 28: the scene holds Python's SceneTarget content (sceneAnchor): the item's pixel at its allocation's bottom
     // left, so the item's texel is read (Python's texelFetch(uScene, texel)): top-first rows here.
-    ivec2 texel = ivec2(local.x, allocation.y - 1 - local.y);
+    bool rowsUp = u_scene_rows_up > 0.5;
+    ivec2 texel = rowsUp ? local : ivec2(local.x, allocation.y - 1 - local.y);
     vec4 scene = texelFetch(uScene, texel, 0);
-    vec2 glowUv = vec2(float(local.x) + 0.5, float(allocation.y) - float(local.y) - 0.5) / vec2(allocation);
+    vec2 glowUv = vec2(float(local.x) + 0.5, rowsUp ? float(local.y) + 0.5 : float(allocation.y) - float(local.y) - 0.5)
+        / vec2(allocation);
     vec3 glow = textureLod(uBloom, glowUv, 0.0).rgb * u_bloom_strength;
     if (scene.a <= 0.0 && max(glow.r, max(glow.g, glow.b)) < 1.0 / 512.0) discard;
     vec3 light = scene.rgb + glow;

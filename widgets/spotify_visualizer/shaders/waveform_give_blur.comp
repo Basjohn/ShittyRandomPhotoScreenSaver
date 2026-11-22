@@ -1,0 +1,4 @@
+#version 460 core
+// Waveform Ribbon (rendering/gl_programs/waveform_shader_files.py): waveform_give_blur for the give_blur pass, its block's members named for it (the arithmetic the body's)
+#define uGiveBlur give_blur_u_give_blur
+#include "waveform_give_blur.glsl"

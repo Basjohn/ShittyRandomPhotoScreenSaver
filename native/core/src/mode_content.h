@@ -255,6 +255,9 @@ struct ModeCard
     // Derived, never JSON: the program draws its scene in the content's orientation (its composite steps declare
     // "scene_frame": "oriented"), set on the card the composite's members are packed under (packFrame).
     bool orientedFrame = false;
+    // Derived, never JSON (ABI 40): the program's scene holds OpenGL's rows (its composite steps declare "scene_rows":
+    // "up"), set on the card the composite's members are packed under (packFrame): u_scene_rows_up.
+    bool sceneRowsUp = false;
 
     static bool fromJson(const QByteArray &json, ModeCard *out, QString *error);
     QJsonObject toJson() const;
@@ -420,6 +423,7 @@ struct ModePass
     CompositeForm compositeForm = CompositeForm::Overlay;
     bool sceneFrameWindow = false;                   // ABI 29: a composite's "scene_frame": "window"
     bool sceneFrameOriented = false;                 // ABI 35: a composite's "scene_frame": "oriented"
+    bool sceneRowsUp = false;                        // ABI 40: a composite's "scene_rows": "up"
     // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
     QShader sorted;
     QList<PassOutput> sortedOutputs;
@@ -508,6 +512,9 @@ struct ModeProgram
     bool sceneFrameWindow() const;
     // ABI 35: the program has a composite step and every composite step declares "scene_frame": "oriented".
     bool sceneFrameOriented() const;
+    // ABI 40: the program has a composite step and every composite step declares "scene_rows": "up" (its scene
+    // drawn in OpenGL's rows: the scene's bottom row at the target's memory row 0, as Python's SceneTarget holds it).
+    bool sceneRowsUp() const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's,
     // or `scene` when given: sceneAnchor's content) under `targets` (the program's own when null: ModeSource::drawnTargets
     // carries the sizes set since), into `out` in place (audit 2, M5: no new list per frame once its capacity holds the
