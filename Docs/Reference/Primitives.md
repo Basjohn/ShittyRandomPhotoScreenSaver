@@ -537,8 +537,11 @@ Never built in any form:
   QRhi's `VertexShaderPointSize` is not portable (D3D has none).
 - **Single draw with `ShaderDrawParameters`** (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) for a mode's small
   batches (plan note at item 8b, N3.2's box); D3D11 support is not stated.
-- **Not admitted** (D8 rows 9 and 10): HDR output, per-pass temporal upscaling, descriptor indexing, mesh shaders, ray
-  tracing. Low potential until a consumer exists; the door stays open (D6).
+- **Not yet built/admitted to production** (D8 rows 9, 10, 10a): HDR output, per-pass temporal upscaling,
+  descriptor indexing, mesh shaders, ray tracing. Mesh shaders are now N6.7's **planned** Vulkan-native fidelity
+  route, not an admitted runtime capability: existing-port parity retains its OpenGL twin, while newly authored
+  post-flip Melt Pool and Concrete Rain may explicitly require Vulkan + `VK_EXT_mesh_shader` without one (operator,
+  23 Nov; see D5.3 supersession and `Current_Plan.md` N6.7). The other low-potential candidates still need admission.
 
 ### Candidate consumers beyond today's modes (item 9 and SMP)
 
