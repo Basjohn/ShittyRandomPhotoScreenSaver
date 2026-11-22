@@ -85,7 +85,10 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     missed vsyncs at 60 Hz, also present with the diagnostic off), where the 21 Nov N5.2d session had none at ~185 fps.
     Record the display mode and take one session again (22 Nov: deferred, only the 4K panel at 60 Hz attached as
     primary; run `preflip_pack.py --rows` with the flicker session's eight, `--backend native-vulkan`, when Display 1
-    is back, with N5.2e's hitch session); unstable only if it repeats at the earlier mode.
+    is back); unstable only if it repeats at the earlier mode.
+  - [ ] N5.2e's native Vulkan hitch session, taken with it (Membrane, Page Curl, Exploding Tiles, registered 22 Nov
+    without it: a display that is off holds no phase): `preflip_pack.py --rows` for the three, `--backend native-vulkan`,
+    `--app-arg=--graphics-backend=vulkan`; no gap over 33 ms inside a run.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
@@ -1544,15 +1547,6 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     against `core_frame`), rule (a) on the single-sampled forms (`N52C_RULE_A` for Membrane and Page Curl; Exploding
     Tiles' moving tiles under the piece-edge class, its bloom's spread of the edge flips measured, for the lead), rule (b)
     on every form, `--cost` at 1440p and 4K on both backends, one native Vulkan hitch session, registration last.
-  - [ ] The Python conversion with its stills; the `native_scene` helpers (merged block, motion-free tiles) with GPU-free
-    tests whose controls fail (two blocks refused, a doubled name refused).
-  - [ ] `NativeScenePasses` for the three, the packs baked, the route check's N52E variants (each default; single-sampled
-    with options; Exploding Tiles with bloom, motion, trails, both and neither, and 4x), bounds measured, cost, the hitch
-    session, registration last.
-  - [ ] For the lead (agent, 22 Nov): the N52E bounds in `transition_route_check.py` (`N52E_EDGE_FLIPS_A`/`_B`, the
-    piece-edge class for Exploding Tiles and Page Curl's moving page; `MEMBRANE_RULE_B`, Membrane's 4x translucent sheet
-    at 14,544 one-level pixels a frame); then the hitch session (Display 1 off on 22 Nov: only the 4K panel at 60 Hz,
-    primary) and registration after it (the ported-equals-drawn test holds its interim form until then).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
