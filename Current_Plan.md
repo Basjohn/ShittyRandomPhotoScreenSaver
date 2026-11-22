@@ -4,7 +4,11 @@ Live, ordered work only. `[ ]` work remains; `[~]` a candidate exists but is una
 implicit pass). Remove completed work; retain only extremely brief, useful native-core reference boxes. Durable contracts live in
 `Spec.md` / `Docs/` (Reference, Architecture, Guardrails, Guides); rejected mechanisms in `Docs/Historical_Bugs/`. This
 is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
-All other work listed in this plan must be complete before SMP work can begin. SMP work should research and begin with a native audio core from the outset. You can remove this line if you place the instructions properly into the plan.
+**Operator sequencing, 23 Nov 2026:** finish the Vulkan-native core/flip, Reactive Liquid / Audio Melt Pool,
+Concrete Rain and a substantial operator-reviewed quality-of-life phase **before reconsidering SMP**. SMP is
+deferred in `Future_Work.md` §2.5 and its complete plan 02; nothing starts merely because NF or a native primitive
+lands. Only independently useful current-theme unification, material work and Theme Studio remain active from
+the former SMP prerequisites. Preserve SMP-compatible architecture without allocating SMP implementation work.
 
 ## 0. Scope and rules
 
@@ -333,7 +337,9 @@ rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot 
 N5.4, N5.6, N5.5, N5.3) and the **background track** (N5.2 a to h). Waveform Ribbon and Extruded Bubble go before
 the modes with no measured need: they are the triggers, and Expanded Visualizer M6 waits on Extruded Bubble. The
 **primitives track** (N4's unconsumed items, N6) runs whenever a High slot is free and never holds the flip. NF
-(the flip) follows both tracks. After NF: SMP's foundations (item 9).
+(the flip) follows both tracks. After NF: the new-mode track, **Reactive Liquid / Audio Melt Pool first, then
+Concrete Rain**, followed by substantial QoL work and operator review. SMP remains in `Future_Work.md`, not an
+automatic successor to NF, item 9 or the first new Visualizer.
 
 **P2 remainders (the worker is the default; none of these holds N0 to N2 open)**
 
@@ -1618,11 +1624,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     synchronisation, bounds/workgroup/primitive limits, GPU timing, teardown, device loss, display changes and
     operator visual acceptance against the authored mock. No raw pipeline is created on devices without support.
 
-### Item 9. After the native core: SMP foundations, then modes
+### Item 9. After the native core: new visualizers, then QoL; SMP separately deferred
 
 Existing-mode ports still obey every cross-backend parity/readiness rule. New post-flip Vulkan-only modes use the
-N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenGL twin. Expanded Visualizer continues meanwhile
-(item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
+N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenGL twin. Expanded Visualizer continues
+meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
 
 - [ ] Oscilloscope legibility (operator, 21 Nov; after the flip, with the other mode tweaks): a setting that slows
   the trace's apparent noise while it stays reactive and busy. Today every preset moves so fast the trace reads as
@@ -1630,36 +1636,22 @@ N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenG
   from noise), and how to slow what the eye sees without lagging the reaction. For example, temporal smoothing of the
   displayed trace shape against the reaction envelope, or persistence. Judge it with the music-response traces and
   live rendered motion, never twitch.
-
-- [ ] After the flip, SMP's foundations first (operator, 12 Nov: "SMP foundations first after native parity, as
-  you suggest"): the library, the playlists and a playback service that meets the measured audio bar
-  (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until
-  its Gate M9; section 0A the prerequisite phases, 13 to 16A the operator's audio, Settings-tab, artwork,
-  rearrangement and fullscreen-arrangement targets); then the question of how far to go before returning to
-  modes. Reasons on record: that work closes reliably without visual sign-off, gives the Visualizer decoded
-  audio with look-ahead instead of a loopback capture, and proves "one Visualizer owner, any surface". The visual
-  track meanwhile finishes what is open and stays on the primitives track of item 8b.
-  **Audio implementation decision (operator, 16 Nov):** M3 begins with one native C++ SMP audio engine
-  (FFmpeg native decoding, own PCM/DSP scheduling, event-driven WASAPI shared/exclusive), not a Qt
-  Multimedia playback prototype or a later backend migration. Native audio shares core tooling and
-  engineering contracts with the QRhi Native Core, but never its GPU/GUI thread, clock or lifetime;
-  Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
-  **SMP visual/library foundations (operator, 16 Nov):** M0/M1 must define/consume versioned semantic shape,
-  surface, type and motion tokens before building the panes, including full sharp-to-pill radii, inner junctions,
-  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The Theme Studio (visual authoring of the unified theme) is pre-SMP, after the native core, the flip and M4 (operator, 21 Nov; the 1B.8 box below); SMP M10 only extends that same Studio with skin authoring. Design and boundaries: plan 02 §8.2B and document 05.
-  M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
-  concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
-  **Pre-SMP admission (operator, 16 Nov):** NF (the native flip) is necessary but not sufficient: finish the
-  *admitted* native-core, compositor and planned N4/N6 primitive work before entering SMP foundations, including
-  the Context Menu backdrop-source defect, M3 material borders and M4 unified themes in 1B.8, and any chosen N5.9 material solution. Do not make hypothetical
-  unadmitted future primitives an indefinite blocker.
-- [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
-  the native core only, after it.
+- [ ] New native-core modes in this order: **Reactive Liquid / Audio Melt Pool, then Concrete Rain** (section 7,
+  lab and mock-fidelity proof first). Usu Moonscape remains a later, separately admitted long-horizon concept;
+  it does not block SMP re-evaluation just because it is listed after Concrete Rain.
 - [ ] Very low priority, after the native core and its new primitives (operator, 14 Nov): Extruded Bubble's arctic
   look is flat, with "nothing icey about it": no ice, frost or anything inventive. Rework it once the native
   primitives give it real material tools (frost and ice surfaces, refraction, a sparkle field), not with today's
   parameters alone. Presets are authored content: the work is new EB capabilities, plus authoring that preset with
   them. The lead judges it on showcase WebPs over bright and dark wallpapers.
+
+**Post-Concrete-Rain sequencing (operator, 23 Nov):** undertake a substantial round of product QoL improvements
+from the remaining current-plan defects and operator priorities. The operator, not an automatically satisfied
+date, phase counter, or a generic "native flip complete" gate, decides when that QoL phase is sufficient to
+consider SMP. No SMP M0-M10, library, audio playback, ZIP skin or desktop-host implementation is active in this
+plan. Its complete deferred implementation order and contracts live at `Future_Work.md` §2.5 and plan 02.
+Do not accidentally design out future SMP: `Docs/Guardrails/Presentation_Change_Preflight.md` keeps the small,
+host-agnostic architectural invariants binding on current work, without requiring speculative SMP features.
 
 ## 1B. Operator defects and requests (11 Nov; backlog under section 1's Order, in this internal order)
 
@@ -1759,7 +1751,7 @@ follow-ups with their evidence folders).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
 
-- [ ] **M4 Unified Appearance Theme (operator, 16 Nov):** after 1B.8 M3 / 1.7b material-border rendering and its proof, and **before SMP M0**. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
+- [ ] **M4 Unified Appearance Theme (operator, 16 and 23 Nov):** independent current-product QoL, after 1B.8 M3 / 1.7b material-border rendering and its proof; also precedes any eventual SMP M0. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
   - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
   - [ ] Retire roles left unused by the 22 Nov tile unification (System Stats' `metric_surface_color` and its theme role;
     tiles now take `tile_wash`) when the themes are regenerated here.
@@ -1776,8 +1768,8 @@ follow-ups with their evidence folders).
   - [ ] **Theme-authored legibility guard per eligible surface:** evaluate a typed semantic on/off (and inheritance precedence) for the guard/legibility panel, resolving theme default -> user Style Override if that component exposes one -> material child, with no duplicate shader or capture. Defaults mirror **current effective per-component states**: the ordinary Media card keeps its guard; the volume child and Media Control Bar do not have theirs restored by accident. Do not apply a global switch that disables guards on unrelated cards or sacrifices necessary contrast; prove light/dark/bright-scene ink accessibility and independently configurable card/child guards.
   - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
   - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
-- [ ] **Theme Studio (operator, 21 Nov; supersedes "Studio only at SMP M10"):** after the native core work, the flip
-  (NF) and its follow-ups, and M4, and **before SMP M0**; not worth building before then. One visual editor for the
+- [ ] **Theme Studio (operator, 21 and 23 Nov; supersedes "Studio only at SMP M10"):** independent current-product
+  theme authoring, after the native core work, the flip (NF), its follow-ups and M4; do not bring forward SMP M0. One visual editor for the
   unified Appearance Theme at the quality of the Visualizer Studios: live rendered previews of real Settings, ordinary
   widgets, Media, the Context Menu and fullscreen overlays on light and dark backdrops at real DPR; edits of every
   semantic role and sub-semantic (colours, materials, face and border transparency bias, border thickness, curvature,
@@ -1963,20 +1955,6 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
-
-### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
-
-The mock, its sixteen requirements (R1-R16), the lead's proposals and the operator's clarification are in
-`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md` and plan 02; the mock files are
-`references/` (ignored by git). SMP stays behind the native core, the open defects and the fullscreen Visualizer.
-
-- [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
-  list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
-  be retargeted between hosts and rendered at any aspect, strips included; Edit's handles, guides and snapping
-  stay reusable components; the native core renders into whatever surface its host gives it.
-- [ ] The operator's answers to the mock document's section 6 (what "CS" is; whether Lyrics and Artist Collage
-  are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
-  Nothing waits on them.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely
 
@@ -2470,9 +2448,6 @@ AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 t
 - [ ] `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch `widgets_tab_media.build_visualizers_ui`,
   which no longer exists anywhere (the Visualizer left the Widgets tab at V7), so those modes fail at `getattr`
   before measuring (its mode-body stub now targets `spec_mode_builder.build_mode_body`).
-- [ ] SMP import scan vs the registry: `ui/settings_tabs.py` imports the existing tabs' modules at import time. The
-  SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile") needs those imports
-  moved into the builders when the SMP descriptor lands.
 - [ ] Gate note: `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree (and in a fresh one on main) because the operator's Usu scene originals (`assets/usu/scenes/UsuScene*.png`)
   are untracked and exist only in the main checkout; environmental, not a product defect.
@@ -2653,8 +2628,6 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
-- [ ] A hot-plugged audio device: nothing in use is hot-plugged until SMP/Library exists; the real-endpoint
-  reopen test of 1B.14 covers the capture path. Revisit with SMP.
 - [ ] Linux engine worker (best effort, never run): the named wake pipe (FIFO), the worker's spawn under
   forkserver, the shared mapping's tracker, Pulse capture in the worker, the listener thread ending when the
   worker's writer closes, and a broken worker showing as a logged in-process fallback. `--viz-in-process` is
