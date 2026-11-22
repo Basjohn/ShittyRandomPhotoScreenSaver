@@ -84,7 +84,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     stays in the worktree on F:, copy it out before retiring). Doing: the ABI 43 C++ (field recipes as item textures,
     the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
     part; then the lead builds; then stop point 2 and the N5.2f hitch attribution (its box).
-  - Both are told not to stop for usage; the lead resumes after a cut. Push both branches after each report.
+  - Widget geometry defects (Now Playing artwork width and side flip, Achievement Pulse shelves; box below), agent
+    a033a7fb2fcd1e6bf (Sonnet Medium; operator go 22 Nov). Worktree
+    `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-a033a7fb2fcd1e6bf`, branch
+    `worktree-agent-a033a7fb2fcd1e6bf`; journal `.artifacts/handover/JOURNAL.md` there; renders under its
+    `.artifacts/evidence/widgets/`.
+  - All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
@@ -144,7 +149,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
     since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
     not; fold it there too, with a control.
-- [ ] Widget geometry defects (operator, 22 Nov; not critical, after native work; screenshots in
+- [ ] Widget geometry defects (operator, 22 Nov; agent a033a7fb2fcd1e6bf, Sonnet, started 22 Nov; screenshots in
   `.artifacts/evidence/widgets/media/20261122_operator_geometry/`; the operator's `--geo` logs and the evidence chest
   hold more runs):
   - [ ] Now Playing: the square artwork does not widen with the card, leaving a lot of empty text space; the card
