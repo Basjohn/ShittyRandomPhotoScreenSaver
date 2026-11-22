@@ -100,6 +100,10 @@ class _FollowedOwner:
         self._generation_token = self._work_token = self._deadline_token = 0
         self._in_flight = self._running = self._retired = False
         self._deadline_cancel: Callable[[], None] | None = None
+        # The generation's refresh/transition gate claim (R163): (gate, token, work token). A source job claims it
+        # before its worker starts and holds it through GUI publication, so its pure-Python source work never
+        # shares the GIL with an image transition (22 Nov: a 45-50 ms render gap inside native Exploding Tiles).
+        self._gate_claim: tuple[Any, object, int] | None = None
 
     @property
     def is_retired(self) -> bool:
@@ -135,6 +139,7 @@ class _FollowedOwner:
         self._cancel_deadline()
         self._in_flight = False
         self._snapshot = None
+        self._release_gate()
         self._retire_source()
 
     def detach(self, lease: "FollowedRuntimeLease") -> None:
@@ -154,6 +159,7 @@ class _FollowedOwner:
         self._cancel_deadline()
         self._in_flight = False
         self._snapshot = None
+        self._release_gate()
         self._retire_source()
         for lease in tuple(self._leases):
             lease._owner = None
@@ -167,6 +173,24 @@ class _FollowedOwner:
         cancel, self._deadline_cancel = self._deadline_cancel, None
         if cancel is not None:
             cancel()
+
+    def _gate_key(self) -> tuple[str, int]:
+        return ("steam_followed", id(self))
+
+    def _gate(self) -> Any:
+        from core.threading.refresh_transition_gate import current_gate
+        return current_gate(self._generation) if self._generation is not None else None
+
+    def _release_gate(self, work_token: int | None = None) -> None:
+        """Release this owner's gate claim (only the job ``work_token``'s, when given) and drop a deferred intent."""
+        claim = self._gate_claim
+        if claim is not None and (work_token is None or claim[2] == work_token):
+            self._gate_claim = None
+            claim[0].finish_refresh(claim[1])
+        if work_token is None:
+            gate = self._gate()
+            if gate is not None:
+                gate.cancel_refresh(self._gate_key())
 
     def _retire_source(self) -> None:
         source, self._source = self._source, None
@@ -190,10 +214,25 @@ class _FollowedOwner:
     def _submit(self, *, cache_only: bool) -> None:
         if self._in_flight or self._retired or not self._running:
             return
+        gate = self._gate()
+        gate_token = None
+        if gate is not None:
+            owner_ref = weakref.ref(self)
+
+            def resume() -> None:
+                # A deferred job asks again after the transition; a retired, dormant or busy owner declines.
+                owner = owner_ref()
+                if owner is not None and not owner._retired and owner._running and not owner._in_flight:
+                    owner._submit(cache_only=cache_only)
+            gate_token = gate.begin_refresh(self._gate_key(), resume)
+            if gate_token is None:
+                return
         self._in_flight = True
         self._deliver_refreshing(True)
         self._work_token += 1
         token, generation = self._work_token, self._generation_token
+        if gate_token is not None:
+            self._gate_claim = (gate, gate_token, token)
         source = self._source
 
         def work() -> tuple[object, FollowedNewsSnapshot]:
@@ -237,6 +276,7 @@ class _FollowedOwner:
         self._cancel_deadline()
         self._in_flight = False
         self._deliver_refreshing(False)
+        self._release_gate()
         self._retire_source()
         for lease in tuple(self._active):
             lease._running = False
@@ -247,6 +287,7 @@ class _FollowedOwner:
             self._retired or not self._running or generation != self._generation_token
             or token != self._work_token or not self._in_flight
         ):
+            self._release_gate(token)
             return
         self._in_flight = False
         self._deliver_refreshing(False)
@@ -261,6 +302,8 @@ class _FollowedOwner:
                 self._snapshot = snapshot
                 for lease in tuple(self._active):
                     lease._accept(snapshot)
+        # The job's claim ends with its GUI publication (above), before the next job asks for its own.
+        self._release_gate(token)
         if cache_only and self._source is not None:
             # A fully covered, recent disk snapshot is a real warm start, not
             # an invitation to re-scan 142 games on each widget reactivation.
