@@ -114,8 +114,9 @@ a game at ~40 ms frame age (2026-10-31, `Docs/Audits/EB_Performance_Investigatio
 these traps from the first slice, not after:
 
 - [ ] **Live check before acceptance:** `tools/visualizer_live_check.py` with a mode-specific **test-owned synthetic configuration** (adapt/create a harness option for this where necessary; never use `--preset N` to load operator-authored presets) (the lead adds `--load game60` only after the operator's yes)
-      (recorded music, invisible window, game-shaped load) for each preset that differs materially in population or
-      effects. No `FLAG` lines, or each one explained in the mode's own doc with the run's `summary.json`.
+      (recorded music, invisible window, game-shaped load) for each **synthetic test configuration** that differs
+      materially in population or effects. No `FLAG` lines, or each one explained in the mode's own doc with
+      the run's `summary.json`. Never iterate through or load real preset files for these tests.
 - [ ] **Logical tick budget:** median 2.5 ms or less live at the ~90 Hz cadence (about a quarter of the GIL). Under a
       game the live tick runs ~1.4x its offline single-thread time. Every millisecond counts twice: each GL call
       releases the GIL, and while pure-Python logical work runs a waiting render or GUI thread gets about one call
