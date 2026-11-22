@@ -100,6 +100,19 @@ def _count_names(scene) -> set[str]:
             if isinstance(count, str) and count != "mesh"}
 
 
+def test_every_route_variant_names_a_registered_transition():
+    """The route check's every variant (its default run) resolves its production run: each transition id is the
+    registry's (22 Nov: Warp's stale ``warp`` stopped a default route check with "unavailable transition warp")."""
+    trc = _trc()
+    failed = {}
+    for variant in trc.VARIANTS:
+        try:
+            _run(variant)
+        except ValueError as exc:
+            failed[variant] = str(exc)
+    assert failed == {}
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_every_member_is_filled_and_every_value_is_declared(variant):
     from rendering.native.mode import MODE_CORE_MEMBERS
