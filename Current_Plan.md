@@ -1634,12 +1634,12 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
-- [ ] **Idle parent bubbles occasionally teleport their wake bubbles (operator, 19 Nov):** this persists in Extruded Bubble with wakes enabled, less noticeably for small parent bubbles and more noticeably for larger parents. Reproduce on steady idle motion at contrasting parent radii with stable bubble/wake identity traces, world-space positions and successive frames; determine whether the cause is wrapping, spawn/expiry, parent-relative transform, interpolation or a GPU/CPU lifetime mismatch. Correct the owner, not by fading out the symptom; preserve authored wake motion and the already-required stable-world/camera contracts in `Docs/Reference/Extruded_Bubble/Target.md`. Cover Normal/paused/idle audio, large/small bubbles and camera motion with focused tests and real visual evidence. **Scheduled as N5.6's first step, before the port records its references (operator, 21 Nov).**
-- [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera (N5.6's first step):** at the authored default view, which is otherwise good at fullscreen 4K, a very fast flickering circular/star-like arrangement of bubble lines is briefly visible and difficult to capture in screenshots. Investigate whether an emission source or spawn geometry is leaking into view; gather high-frame-rate footage or captured successive frames, verify emitter culling and view transforms, and hide the source without hiding the legitimate emitted bubbles. Treat this as a shared Extruded Bubble system issue unless evidence isolates a preset defect.
-- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step):** confirm that all eligible *already-living parent bubbles*, not only newly emitted bubbles, respond to music-driven acceleration. Exclude microbubbles and particles. Compare old/new bubble identity and velocity under the same audio, checking pinning, age-dependent logic, lifetime state, spawn-time-only parameter propagation and native buffer updates. Preserve intentional pinned motion if explicitly authored, but correct accidental non-reactivity at its owner. Reproduce on Preset 9 and another preset, with paired real-audio and idle tests. **Both Preset 9 issues are N5.6's first step, fixed on the Python side before the port's references (operator, 21 Nov).**
-
-### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
-
+- [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera:** not reproduced (agent
+  ac5f7832a73527151, 22 Nov): wake veils end-on, the shaft shadow casters swapping, chains converging on a vanishing
+  point, the deep light and ray source, and Stream Lanes' short-track chains all ruled out; 5 s and 3 s at 60 fps and a
+  30 s 4K survey show no star (this preset's particle sparkle swamps automatic flicker detection). Needs a time, clip and
+  screen position (or footage) from the operator; probes in the agent's `.artifacts/scratch/n56/`. Wake teleport fixed
+  (R-249); living bubbles follow the stream exactly (test, no product change).
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
