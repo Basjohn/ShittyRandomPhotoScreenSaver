@@ -17,6 +17,7 @@ from rendering.gl_programs.framed_camera import FRAMED_CAMERA_GLSL
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL
 from rendering.quick.scene3d.probe import SCENE3D_PROBE_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
+from widgets.spotify_visualizer.extruded_bubble_material_paths import SCENE_CYCLE_FLOOR
 
 COMMON = FRAMED_CAMERA_GLSL + """
 uniform mat3 uViewToWorld;
@@ -1322,9 +1323,11 @@ void main() {
 """
 
 
-_SCENE_INLET_GLSL = """
+_SCENE_INLET_GLSL = f"const float SCENE_CYCLE_FLOOR = {SCENE_CYCLE_FLOOR:.1f};\n" + """
 // Shared physical inlet geometry for SCENE. The same weighted upstream
 // face law is used by the CPU bubble sampler. Camera-independent and bounded.
+// The length a SCENE population cycles over (material_paths.scene_cycles): its track, never under the floor.
+float sceneCycle(float span) { return max(span, SCENE_CYCLE_FLOOR); }
 vec4 sceneInlet(float faceSeed, vec2 uv, vec3 direction, vec3 centre, vec3 halfExt, vec3 faceWeights) {
     vec3 d = normalize(direction);
     // Weights already resolved once by the authored CPU world authority.
@@ -1542,10 +1545,11 @@ void beadInstance() {
                                      along, uWorldCenter, uWorldHalf, uSceneFaces);
         float span = uSceneEmission == 1 ? sceneEntry.w
                    : (pathEnabled ? pathLength : 2.0 * length(uWorldHalf));
+        float cycle = uSceneEmission == 1 ? sceneCycle(span) : span;   // N5.6: never wrapped within a frame
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
-        float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span
+        float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / cycle
                                + chainMaterialPhase(chain));
-        float s = progress * span;
+        float s = progress * cycle;
         float phase = 6.2832 * beadRandom(chain, 6u);
         // The same free-chain shape, but travel now follows the authored finite Source -> End.
         float arc = sin(s / scale * 0.23 + phase + uBeadTravel * 0.025) * 0.09
@@ -1704,11 +1708,12 @@ void beadInstance() {
     vec3 p;
     if (uSceneEmission == 1) {
         vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
-        float progress = cloudProgress(uSnowDriftOffset, material, fract(seed.y+uSnowDrift/sceneEntry.w));
-        p = sceneEntry.xyz + along * (progress * sceneEntry.w);
+        float cycle = sceneCycle(sceneEntry.w);
+        float progress = cloudProgress(uSnowDriftOffset, material, fract(seed.y+uSnowDrift/cycle));
+        p = sceneEntry.xyz + along * (progress * cycle);
         vec3 undrifted = p;
         p += material.xyz;
-        vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005)
+        vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * cycle, sceneEntry.w, 0.005)
                   * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
     } else if (pathEnabled) {
         float progress = cloudProgress(uSnowDriftOffset, material, fract(seed.y+uSnowDrift/pathLength));
@@ -1800,10 +1805,10 @@ void speckInstance() {
     vec4 sceneEntry = sceneInlet(speckRandom(i, 23u), seed.xz, pathDir,
                                   uWorldCenter, uWorldHalf, uSceneFaces);
     vec4 material=cloudMaterial(uSpeckDriftOffset,i);
-    float progress = cloudProgress(uSpeckDriftOffset, material, fract(seed.y+uSpeckTravel/
-                                   (uSceneEmission==1 ? sceneEntry.w : lengthPath)));
+    float cycle = uSceneEmission == 1 ? sceneCycle(sceneEntry.w) : lengthPath;
+    float progress = cloudProgress(uSpeckDriftOffset, material, fract(seed.y+uSpeckTravel/cycle));
     float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52 * uParticleSpread;
-    vec3 p = uSceneEmission == 1 ? sceneEntry.xyz + pathDir * (progress * sceneEntry.w)
+    vec3 p = uSceneEmission == 1 ? sceneEntry.xyz + pathDir * (progress * cycle)
              : mix(uSpeckSource, uSpeckEnd, progress)
                + side * (seed.x * 2.0 - 1.0) * sideWidth
                + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
@@ -1812,7 +1817,7 @@ void speckInstance() {
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float ends;
     if (uSceneEmission == 1) {
-        ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w,
+        ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * cycle, sceneEntry.w,
                              radius * uParticleRadiusShare)
              * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
     } else {
