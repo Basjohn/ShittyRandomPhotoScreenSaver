@@ -244,16 +244,31 @@ def _targets(scene, timeout_s: float = 10.0, publish: dict | None = None) -> dic
     return out
 
 
-def _streamed(core, engine, host, name, passes, targets, settings, entries, record, *, buffers=(), streams=()):
-    """A streamed scene (compute_pass_check's host) with raw ABI 42 entries."""
+def _streamed(core, engine, host, name, passes, targets, settings, entries, record, *, buffers=(), streams=(),
+              unread=()):
+    """A streamed scene (compute_pass_check's host) with raw ABI 42 entries; ``unread``: record fields its program reads
+    nowhere (a control's program without the "when" that reads them)."""
     import compute_pass_check as cpc
     import compute_passes as cp
     import mesh_buffers
+    from rendering.native import mode as face
 
     schema = mesh_buffers.schema(name, entries, code=CODES[name])
     spec = cp.SceneSpec(name, tuple(passes), tuple(targets), tuple(streams), settings, schema, record,
                         buffers=tuple(buffers))
-    return cpc.Scene(core, engine, host, spec)
+    if not unread:
+        return cpc.Scene(core, engine, host, spec)
+    real = face.NativeMode.program
+
+    def program(self, passes, settings=None, **kw):
+        kw.setdefault("unread", tuple(unread))
+        return real(self, passes, settings, **kw)
+
+    face.NativeMode.program = program          # compute_pass_check's scene sends its program through the face
+    try:
+        return cpc.Scene(core, engine, host, spec)
+    finally:
+        face.NativeMode.program = real
 
 
 def _close(scene, host, app) -> None:
@@ -392,7 +407,8 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _close(scene, host, app)
         # Control: the program-only form (no "when") still draws at 0.
-        scene = _streamed(core, engine, host, "skip_plain", (base, extra), (target,), settings, entries, {"w": 1})
+        scene = _streamed(core, engine, host, "skip_plain", (base, extra), (target,), settings, entries, {"w": 1},
+                          unread=("w",))
         try:
             plain = _targets(scene, publish={"w": 0})["scene.colour"]
             checks["control_program_only_form_still_draws_at_0"] = near(plain, both)
@@ -451,7 +467,7 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
         cp.CARD = card
         try:
             scene = _streamed(core, engine, small, "defocus_plain", plain_passes, plain_targets, plain_settings,
-                                  entries, {"w": 0})
+                          entries, {"w": 0}, unread=("w",))
         finally:
             cp.CARD = cp_card
         try:
