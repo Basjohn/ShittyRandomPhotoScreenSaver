@@ -71,7 +71,11 @@ one is found.
   load that stalls where it used to take seconds). Name the property for what it holds (`leftText`, `leftValue`); do
   not reuse a built-in Item property name for your own state.
 
-## SMP readiness (operator, 11 Nov 2026; binds now, long before SMP is built)
+## Future SMP compatibility only (operator, 11/23 Nov 2026; binds current designs, not implementation)
+
+**SMP implementation is deferred until after Melt Pool, Concrete Rain and substantial QoL, with renewed operator
+approval (Future_Work §2.5).** These are limited existing-code interface invariants, not a mandate to add SMP
+services, library/skin systems, multiple hosts or runtime profile switching while doing today's work.
 
 ShittyMusicPlayer is a long-term goal (`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md`
 sections 7 and 8). It will run in two hosts: inside the compositor on the screensaver and MC builds, and in desktop
