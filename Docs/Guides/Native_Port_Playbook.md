@@ -38,10 +38,17 @@ found in this kind of code: the port proves it absent, with the negative control
    transition fragments baked from Python strings and non-literal sizes (D12 "As built: Spline Curve"; audit 3 L1).
 8. **Integer hashes and uv from the pixel.** Float `fract(sin())` hashes seam and flip by backend; take uv from
    `floor(vUv * u_target_px)` and a row or column key through integers (D13 "As built" N5.2a and N5.2b; Lessons;
-   R-94).
+   R-94). The same holds for any hash a mode already ships (N5.4: Waveform's glint cells lit differently per API).
+   **Half floats overflow per API**: an additive write stack (lights, a reflection's summed alpha) that passes 65504
+   goes infinite in OpenGL's 4x resolve where Vulkan's stays finite, and a bloom spreads it into squares; cap each
+   write (hue kept) in the shared shader. **Hard cuts flip by compiler rounding** (a fog ground plane flipped whole
+   cell rows): a short continuous fade, never a tolerance (N5.4, 22 Nov).
 9. **Judge pixels only through the shared tolerance**, `tools/pixel_tolerance.py`: exact everywhere, the one-level
    class only through a mask derived from the reference, scatter and ties with measured caps, flips named by a
    decision. Never a histogram ("within 1 level") (D12 "The pixel tolerance"; audit 3 M1; audit 4 M2; audit 1 L1).
+   A scene whose edges run along rows of pixel centres (ribbons) flips whole rows, so pixel counts cannot bound it:
+   `pixel_tolerance.FrameStatistics` (mean, signed mean, share 2-3 levels, share past 3) with bounds 1.5x the clean
+   worst, every control failing (N5.4).
 10. **The hidden-host owner list in `tests/test_quick_backend_owner.py`**: a new hidden host or a changed Quick
     graphics configuration is entered there, and a hidden host calls the product's Quick graphics configuration
     (`Docs/Guardrails/Agent_Worktree_Rules.md`, Environment; the test is the list).
