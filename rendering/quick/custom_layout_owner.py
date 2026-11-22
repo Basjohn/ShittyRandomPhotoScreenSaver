@@ -172,6 +172,28 @@ class _ResizeOrigin:
     visualizer_uniform_scale: float | None
 
 
+_MIRRORED_HANDLES = {"left": "right", "right": "left", "top_left": "top_right", "top_right": "top_left",
+                     "bottom_left": "bottom_right", "bottom_right": "bottom_left"}
+
+
+def _mirrored_handle(handle: str, mirrored: bool) -> str:
+    """The handle a mirrored role's pointer handle is in its stored (unmirrored) frame."""
+    return _MIRRORED_HANDLES.get(handle, handle) if mirrored else handle
+
+
+def _mirrored_dx(dx: float, mirrored: bool) -> float:
+    return -dx if mirrored else dx
+
+
+def _mirrored_anchor(anchor: str) -> str:
+    """A semantic corner anchor on the other horizontal side (``top_left`` <-> ``top_right``)."""
+    if anchor.endswith("left"):
+        return anchor[: -len("left")] + "right"
+    if anchor.endswith("right"):
+        return anchor[: -len("right")] + "left"
+    return anchor
+
+
 @dataclass(frozen=True, slots=True)
 class _ChildResizeOrigin:
     role_id: str
@@ -187,6 +209,8 @@ class _ChildResizeOrigin:
     # sample by resolve_child_resize_geometry.
     size_compensation_width: float = 1.0
     size_compensation_height: float = 1.0
+    # The role's drawn X is the mirror image of its stored record (item.child_mirror_x at the press).
+    mirror_x: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +222,7 @@ class _ChildMoveOrigin:
     placement_compensation_x: float
     placement_compensation_y: float
     geometry: CustomChildSize
+    mirror_x: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1933,6 +1958,7 @@ class QuickCustomLayoutOwner:
             size=item.child_size(role.role_id),
             size_compensation_width=compensation_w,
             size_compensation_height=compensation_h,
+            mirror_x=bool(item.child_mirror_x.get(role.role_id, False)),
         )
         self._begin_undo_gesture(item, "child_resize")
         return True
@@ -1962,8 +1988,8 @@ class QuickCustomLayoutOwner:
         resolved = resolve_child_resize_geometry(
             role,
             origin.size,
-            handle=handle_id,
-            raw_dx=float(cursor.x() - origin.cursor.x()),
+            handle=_mirrored_handle(handle_id, origin.mirror_x),
+            raw_dx=_mirrored_dx(float(cursor.x() - origin.cursor.x()), origin.mirror_x),
             raw_dy=float(cursor.y() - origin.cursor.y()),
             visible_width=origin.visible_width,
             visible_height=origin.visible_height,
@@ -2016,8 +2042,8 @@ class QuickCustomLayoutOwner:
         resolved = resolve_child_resize_geometry(
             role,
             origin.size,
-            handle=handle_id,
-            raw_dx=float(cursor.x() - origin.cursor.x()),
+            handle=_mirrored_handle(handle_id, origin.mirror_x),
+            raw_dx=_mirrored_dx(float(cursor.x() - origin.cursor.x()), origin.mirror_x),
             raw_dy=float(cursor.y() - origin.cursor.y()),
             visible_width=origin.visible_width,
             visible_height=origin.visible_height,
@@ -2032,9 +2058,9 @@ class QuickCustomLayoutOwner:
         if role.centered_resize:
             width_delta *= 0.5
             height_delta *= 0.5
+        logical_dx = -width_delta if _mirrored_handle(handle_id, origin.mirror_x).endswith("left") else width_delta
         return QPoint(
-            origin.cursor.x()
-            + int(round(-width_delta if handle_id.endswith("left") else width_delta)),
+            origin.cursor.x() + int(round(_mirrored_dx(logical_dx, origin.mirror_x))),
             origin.cursor.y()
             + int(round(-height_delta if (handle_id == "top" or handle_id.startswith("top_")) else height_delta)),
         )
@@ -2085,6 +2111,7 @@ class QuickCustomLayoutOwner:
             placement_compensation_x=compensation_x,
             placement_compensation_y=compensation_y,
             geometry=item.child_size(role.role_id),
+            mirror_x=bool(item.child_mirror_x.get(role.role_id, False)),
         )
         self._begin_undo_gesture(item, "child_move")
         # --geo is an opt-in, event-boundary diagnostic. Do not log pointer
@@ -2124,7 +2151,7 @@ class QuickCustomLayoutOwner:
         next_geometry = resolve_child_move_geometry(
             role,
             origin.geometry,
-            raw_dx=float(cursor.x() - origin.cursor.x()),
+            raw_dx=_mirrored_dx(float(cursor.x() - origin.cursor.x()), origin.mirror_x),
             raw_dy=float(cursor.y() - origin.cursor.y()),
             normalization_width=origin.normalization_width,
             normalization_height=origin.normalization_height,
@@ -2240,6 +2267,8 @@ class QuickCustomLayoutOwner:
         folded = (release is not None and release[0] is item and bool(self._undo_history)
                   and self._undo_history[-1] is release[1] and self._undo_pending is None)
         before_undo = self._capture_undo(item)
+        if anchor and item.child_mirror_x.get(role.role_id, False):
+            anchor = _mirrored_anchor(str(anchor))
         next_geometry = set_child_semantic_anchor(
             role, item.child_size(role.role_id), anchor
         )
