@@ -374,6 +374,97 @@ class FollowedLeaseTests(unittest.TestCase):
         lease.retire()
 
 
+class FollowedTransitionGateTests(FollowedLeaseTests):
+    """R163: the followed source's jobs claim the generation's refresh/transition gate through GUI publication."""
+
+    def setUp(self):
+        super().setUp()
+        from core.threading.refresh_transition_gate import RefreshTransitionGate, install_gate
+        self.gate = RefreshTransitionGate(27)          # the leases' generation
+        install_gate(self.gate)
+        self.resumed = []
+
+    def tearDown(self):
+        from core.threading.refresh_transition_gate import install_gate
+        install_gate(None)
+        super().tearDown()
+
+    def _claims(self):
+        _transition, claims, _waiting_refreshes, _waiting_transition = self.gate.snapshot
+        return claims
+
+    def test_a_running_transition_defers_the_job_until_it_ends(self):
+        lease = self._lease(_Consumer())
+        self.assertEqual(self.gate.begin_transition(), "started")
+        self.assertTrue(lease.start())
+        self.assertEqual(self.manager.submissions, 0)       # no worker beside the transition
+        self.gate.end_transition()
+        self.assertEqual(self.manager.submissions, 1)       # resumed by the gate's event
+        self.assertEqual(self._claims(), 1)
+        lease.retire()
+
+    def test_the_claim_lasts_through_gui_publication_and_a_waiting_transition_resumes_after_it(self):
+        consumer = _Consumer()
+        lease = self._lease(consumer)
+        lease.start()
+        self.assertEqual(self._claims(), 1)
+        self.manager.complete()                              # worker done, GUI delivery still queued
+        self.assertEqual(self._claims(), 1)
+        self.assertEqual(self.gate.begin_transition(lambda: self.resumed.append("transition")), "deferred")
+        self.queue.pop(0)()                                   # GUI publication releases the claim
+        self.assertEqual(consumer.snapshots, [_snapshot()])
+        self.assertEqual(self.resumed, ["transition"])
+        self.assertEqual(self.manager.submissions, 1)        # the follow-on refresh waits for the transition
+        self.gate.end_transition()
+        self.assertEqual(self.manager.submissions, 2)
+        lease.retire()
+        self.assertEqual(self._claims(), 0)
+
+    def test_retirement_releases_the_claim_and_drops_a_deferred_intent(self):
+        lease = self._lease(_Consumer())
+        lease.start()
+        self.assertEqual(self._claims(), 1)
+        lease.retire()
+        self.assertEqual(self._claims(), 0)
+        second = self._lease(_Consumer())
+        self.gate.begin_transition()
+        second.start()
+        second.retire()
+        self.assertEqual(self.gate.snapshot[2], 0)            # no deferred intent left behind
+        self.gate.end_transition()
+        self.assertEqual(self.manager.submissions, 1)
+
+    def test_an_undeliverable_completion_keeps_its_claim_until_the_gui_owner_retires(self):
+        lease = self._lease(_Consumer())
+        lease._ui_dispatch = lambda _callback: False
+        lease.start()
+        self.manager.complete()
+        self.assertEqual(self._claims(), 1)
+        lease.retire()
+        self.assertEqual(self._claims(), 0)
+
+    def test_a_failed_submission_releases_the_claim(self):
+        lease = self._lease(_Consumer())
+
+        def refuse(*_args, **_kwargs):
+            raise RuntimeError("pool closed")
+        self.manager.submit_io_task = refuse
+        lease.start()
+        self.assertEqual(self._claims(), 0)
+        self.gate.begin_transition()                          # nothing left holding the gate
+        self.assertEqual(self.gate.snapshot[0], True)
+        lease.retire()
+
+    def test_a_closed_generation_gate_admits_nothing_and_a_late_completion_is_inert(self):
+        lease = self._lease(_Consumer())
+        lease.start()
+        self.manager.complete()
+        self.gate.close()                                     # the display generation retires first
+        self.queue.pop(0)()
+        lease.retire()
+        self.assertEqual(self._claims(), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

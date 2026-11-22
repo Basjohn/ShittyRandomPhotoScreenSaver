@@ -225,7 +225,11 @@
 // u_scene_rows_up (0 for every other program: their composites read as before). Waveform draws its scene so: drawn
 // flipped, its anti-aliased edges met the multisample pattern mirrored and differed from Python's (the bloom carried
 // them; one sample a pixel drew alike).
-// 41: reserved (the transitions agent's).
+// 41 (N5.2f with N4.c): the storage state's device facts draw_indirect and draw_indirect_multi (QRhi::DrawIndirect and
+// DrawIndirectMulti, compute_passes.cpp computeDeviceFacts) and mesh_buffer_control's hide_draw_indirect, the harness
+// control under which an indirect pass is refused with its reason, both facts read false and the draw-parameters forms
+// fall back to one draw a batch (mesh_buffers.h drawIndirectAvailable: the one answer every reader takes). Backward
+// compatible for every program and caller (the facts are new keys; the control is off unless set).
 // 42 (N5.6, Extruded Bubble's core boxes; reserved by the lead, 22 Nov): (1) the scene probe (scene_targets.h,
 // cube_prefilter.h): a target's "cube": true (an explicit square size, one rgba16f attachment, one sample, exact; a
 // D32F depth shared by its faces), a pass's "face": 0..5 into it (one render target per face, cleared per face, drawn

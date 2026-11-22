@@ -40,6 +40,7 @@ QAtomicInteger<qint64> g_recordNs { 0 };
 QAtomicInteger<qint64> g_streamWriteNs { 0 };
 QAtomicInteger<quint64> g_meshGenerations { 0 };
 QAtomicInteger<int> g_hideDrawParameters { 0 };
+QAtomicInteger<int> g_hideDrawIndirect { 0 };     // ABI 41 (N5.2f, N4.c)
 QAtomicInteger<quint32> g_directFirstInstance { 0 };
 QAtomicInteger<int> g_recreateStreams { 0 };
 QAtomicInteger<int> g_skipMeshRelease { 0 };
@@ -504,10 +505,23 @@ bool skipMeshRelease() { return g_skipMeshRelease.loadRelaxed() != 0; }
 void setInstancesPastUsed(bool past) { g_instancesPastUsed.storeRelaxed(past ? 1 : 0); }
 bool instancesPastUsed() { return g_instancesPastUsed.loadRelaxed() != 0; }
 
+void setHideDrawIndirect(bool hide) { g_hideDrawIndirect.storeRelaxed(hide ? 1 : 0); }
+bool hideDrawIndirect() { return g_hideDrawIndirect.loadRelaxed() != 0; }
+
+bool drawIndirectAvailable(QRhi *rhi)
+{
+    return rhi && !hideDrawIndirect() && rhi->isFeatureSupported(QRhi::DrawIndirect);
+}
+
+bool drawIndirectMultiAvailable(QRhi *rhi)
+{
+    return drawIndirectAvailable(rhi) && rhi->isFeatureSupported(QRhi::DrawIndirectMulti);
+}
+
 bool drawParametersAvailable(QRhi *rhi)
 {
-    return rhi && !hideDrawParameters() && rhi->isFeatureSupported(QRhi::DrawIndirect)
-        && rhi->isFeatureSupported(QRhi::DrawIndirectMulti) && rhi->isFeatureSupported(QRhi::ShaderDrawParameters);
+    return rhi && !hideDrawParameters() && drawIndirectMultiAvailable(rhi)
+        && rhi->isFeatureSupported(QRhi::ShaderDrawParameters);
 }
 
 // ------------------------------------------------------------------------------------------- ModeMeshes

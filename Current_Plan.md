@@ -76,16 +76,10 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
-- [ ] Background track: N5.2e landed 22 Nov; agent abfa6e30ec8e2366d (Opus Medium, ABI 41 reserved): the Exploding Tiles
-  stall (watch item below), then N5.2f to stop point 1 (its frame blocks take N5.2e's `native_one_block` helper).
+- [ ] Background track: agent abfa6e30ec8e2366d (Opus Medium) on N5.2f's ABI 41 C++ (the `draw_indirect` device facts),
+  built in one batch with N5.6's ABI 42. Exploding Tiles' stall (the Steam refresh outside the transition gate) fixed
+  and passing on Display 1, 22 Nov.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] Exploding Tiles' repeatable mid-run stall on native Vulkan (D1 session 22 Nov, 4K panel at ~185 fps, Usu
-    wallpaper and recorded music; `tools/baselines/preflip/d1_transitions_native_vulkan_20261122`): session gaps 49.5
-    (first frame) and 37.0 ms, per-row rerun 49.8 ms (not the first frame); every other row 0 over 33 ms, including
-    3D Block Spins and Beam, whose 60 Hz gaps did not repeat at the earlier mode (that watch item closes). Attribute
-    with the kept frame trace (`.artifacts/evidence/performance/preflip_pack/20261122_d1_transitions_native_vulkan_20261122_session_2160p_idle`;
-    suspect a pipeline first used mid-run: the sparks going live or the bloom chain) and prewarm it under the warm-up
-    rule; then the row again. With N5.2f's agent (same track).
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
     Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
@@ -1355,6 +1349,82 @@ whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a 
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
+  Reading (agent, 22 Nov; both implementations and programs, `rendering/quick/scene3d/population.py`, the N3.3 harness's
+  `population` scene in `native/core/python/compute_passes`, `mode_content.cpp`'s pass, storage and indirect admission):
+  - Shared. Linear easing; each ends on the photographs (progress 0 the old, 1 the new; Python draws the effect between,
+    though Disintegrate's grains are gone by 0.97 and Volumetric is exact after 0.93), so `eased_show(progress)`. Samples
+    are the request's (`scene3d_request_samples`; 0 draws straight into Quick's framebuffer, the core's one-sample target
+    copied exactly, as N5.2c). The grid is of the viewport's device pixels (`disintegrate_grid` / `volumetric_grid`: the
+    grain or particle size grows until the cells fit 600,000 / 400,000; 4K at size 2 gives 960 x 540 = 518,400 grains),
+    so `scene_pixels`. No depth, no bloom, motion or trails; no Python conversion (checklist 16) is needed.
+  - The population (N4.c): three compute dispatches a frame over every member (`population_count_source(hooks)`: 256 a
+    group, a shared count; `POPULATION_SCAN_SOURCE`: one group of 1,024, the offsets and the command (vertices, live
+    count, 0, 0); `population_scatter_source(hooks)`: each live member's id and `vec4` state at its slot, in id order),
+    then one `glDrawArraysIndirect` strip of 4 a live member (`populationIds` / `populationStates[gl_InstanceID]`,
+    readonly std430 at 6 and 7). Five buffers at 3-7 (counts and offsets 4 a group, command 16, ids 4 and states 16 a
+    member: 10.4 MB at 518,400). The hooks read the transition's frame block (binding 15); the dispatches also read
+    `PopulationDispatch` (`uPopulation`, `uGroups`, `uVertices`) at 16: two blocks in count and scatter, one in scan.
+  - Disintegrate: `intact` (item quad, `uOldTex`/`uNewTex`, the old picture before a cell's release and the new after;
+    blocks `DisintegrateIntact` + `DisintegrateFrame`: `uGrid` uvec2, `uDirection`, `uFrameSize` (logical), `uProgress`,
+    `uSeed` uint, `uWind`), replace; then the population `grains` (`DISINTEGRATE_HOOKS`), its draw `grains` (`uOldTex`;
+    one block `DisintegrateGrains`: `uMatrix`, `uItemSize`, `uGrid`: it reads no frame block), blended colour add one /
+    one_minus_src_alpha, alpha add zero / one (`blend_scope`: the alpha kept).
+  - Volumetric Dissolve: two photo environments, the new picture's (`uNewCopy`, unit 2, `textureLod` 1-5) and the old
+    one's (`uOldCopy`, unit 3, lod 3.5 and 3) (`PhotoEnvironment` roles destination and source); `backdrop` (item quad,
+    `uOldTex`, `uNewTex`, `uNewCopy`, `uOldCopy`; blocks `VolumetricBackdrop` + `VolumetricFrame`: `uGrid`, `uDirection`,
+    `uFrameSize`, `uProgress`, `uSeed`, `uDepth`, `uMist`, `uRadial`), replace; the population `particles`
+    (`VOLUMETRIC_HOOKS`); its draw `particles` (`uOldTex`, `uOldCopy`; blocks `VolumetricParticles` (`uMatrix`,
+    `uItemSize`) + `VolumetricFrame`, its vertex recomputing the particle from its id), blended as Disintegrate's.
+  - What the core has: compute entries with storage buffers sized by a setting, groups by a setting, the "draw" trigger
+    (the one a still admits, ABI 37), readonly vertex-stage storage from a compute-written buffer, an indirect draw from
+    a storage buffer (`drawIndirect`, refused with its reason where QRhi lacks `DrawIndirect`), two environment steps
+    (`kMaxEnvironmentStages`, "Python's two roles"), uint and uvec2 settings. The N3.3 harness already draws the product's
+    own population texts (count, scan, scatter, indirect, all five bound read_write) and checks them against its direct
+    draw (`population` / `population_direct`, `compute_pass_check.py`; not rerun here). What it lacks: a second block a pass (count, scatter, intact, backdrop, the particles' draw), taken as data with
+    N5.2e's `native_one_block`; and any way for Python to read QRhi's `DrawIndirect` / `DrawIndirectMulti` answers
+    (`computeDeviceFacts` has neither), which N4.c's runtime query and cull path need.
+  Design (agent, 22 Nov):
+  - Frame blocks as data (`native_one_block`, as N5.2e): the native packs of intact, backdrop and the particles' draw
+    merge the frame block into the pass block; the count and scatter packs merge it into `PopulationDispatch` (a compute
+    stage is a one-stage tuple); the scan pack is the product's text verbatim. The grains' draw takes its text as is.
+  - `NativeScenePopulation` (`native_scene.py`): its name, its hooks, the transition's frame block and its draw pass's
+    name; a renderer's `native_scene_populations()` lists them for the bake (`tools/regen_qrc.py --shaders`:
+    `<transition>_<population>_count.comp.qsb` and `_scatter.comp.qsb`; one shared `scene3d_population_scan.comp.qsb`
+    beside the motion posts; `native_transition_renderer`'s shipped check counts them). `scene_program` expands one into
+    the five `StorageBuffer`s (`<pop>_counts`, `_offsets`, `_command` with `indirect`, `_ids`, `_states`, each sized by a
+    setting), the three `ComputePass`es (trigger "draw", groups `(<pop>_groups, 1, 1)` and `(1, 1, 1)`, all five bound
+    read_write as the harness: qsb reflects every declared block), placed after the environment steps and before the
+    passes (the hooks read no draw; no run of passes on the scene target is split), and its draw pass's `PassGeometry`
+    (`indirect=<pop>_command`, `draw_count=1`, `storage=(("PopulationIds", ids), ("PopulationStates", states))`, strip).
+    `scene_program` also returns the buffers for `mode.program(..., buffers=)`.
+  - Values, one owner: a `population_values(name, population, vertices)` helper beside `CompactedPopulation`'s
+    `_DISPATCH_BLOCK` (`uPopulation`, `uGroups`, `uVertices`, the group count and the three byte sizes) that the
+    renderers' `scene_values` add, from the same grid as Python's `render`.
+  - Volumetric's second environment: `NativeScene.source_environment` and the sampler kind `"source_environment"`, an
+    `EnvironmentStep` of the old slot (`environment_size` of the source's pixels), sampled linear with linear mips.
+  - N4.c's open boxes (Opus High, with the port): ABI 41 (one small core change, reserved for this track) adds
+    `draw_indirect` and `draw_indirect_multi` to `computeDeviceFacts` and a harness control that hides `DrawIndirect`
+    (as `hideDrawParameters`), so the port reads and records each backend's answer and the cull path is proved on this
+    machine; the cull path is data: the draw drawn with `instances=uPopulation` and a vertex text whose id is
+    `srpssInstanceIndex`, evaluating `populationActive` / `populationState` itself (a dead member collapsed off-screen),
+    no compute entries, chosen by Python from the fact. Live order is id order in both forms, so the pixels are equal.
+  - Traps to check first: the compute-to-indirect and compute-to-vertex-storage barriers (QRhi derives them; NVIDIA hid
+    a missing one before), so the route check runs Vulkan with synchronization validation; the scan's 1,024 invocations
+    against `max_threads_per_thread_group` (Vulkan guarantees 128; refuse with the reason, never clamp); `firstInstance`
+    stays 0 (the scan writes it).
+  - Proof (proof guide section 3): row order first (checklist 17); rule (a) on the single-sampled forms (the grains and
+    particles are small moving quads, so start from `N52C_RULE_A` and measure, the piece-edge class only if measured), rule
+    (b) on every form, through the route check's N52F variants (each default; Disintegrate grain 2 at 4K (the grown
+    size), wind 0.5 and 2, a diagonal, 4x; Volumetric center out, mist 0 and 1, depth 0 and 1, size 2, 4x), several image
+    pairs, full canonical durations, both dprs; the cull form equal to the indirect one; N4.c's harness at one million
+    sprites, indirect against cull, same pixels, cost; `--cost` at 1440p and 4K on both backends; one native Vulkan
+    hitch session; registration last.
+  - [ ] ABI 41: the two facts and the hide-`DrawIndirect` control, with their test (stop and report before relying on
+    the build).
+  - [ ] The `native_scene` population helpers and the second environment, with GPU-free tests whose controls fail (two
+    blocks in a compute pack refused, a population pack missing from the bake refused).
+  - [ ] `NativeScenePasses` for the two, the packs baked, the N52F route-check variants, bounds measured, the cull form,
+    N4.c's harness, cost, the hitch session, registration last.
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
 - [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):

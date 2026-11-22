@@ -6586,7 +6586,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                          .arg(QString::fromLatin1(pass.name)).arg(pass.block.size()).arg(uniformRange);
             return false;
         }
-        if (!pass.indirect.isEmpty() && !rhi->isFeatureSupported(QRhi::DrawIndirect)) {
+        if (!pass.indirect.isEmpty() && !drawIndirectAvailable(rhi)) {   // ABI 41: less the harness control
             *error = QStringLiteral("pass '%1' draws from the indirect stream '%2', and this device does not report "
                                     "QRhi::DrawIndirect").arg(QString::fromLatin1(pass.name),
                                                               QString::fromLatin1(pass.indirect));

@@ -1,0 +1,182 @@
+{
+ "schema": 1,
+ "name": "et_stall_ab_steam_on",
+ "commit": "83915122c",
+ "created": "2026-11-22T13:29:20",
+ "updated": "2026-11-22T13:33:22",
+ "backend": "native-vulkan",
+ "clip": "anything_mixed2.jsonl",
+ "wallpaper": "D:\\Temp\\Scratch\\SRPSS\\wallpaper_usu",
+ "load": null,
+ "controls": {},
+ "rows": {
+  "transition/exploding_tiles/2160p/idle": {
+   "key": "transition/exploding_tiles/2160p/idle",
+   "kind": "transition",
+   "id": "exploding_tiles",
+   "label": "Exploding Tiles",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 0,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-abfa6e30ec8e2366d\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_et_stall_ab_steam_on_session_2160p_idle",
+   "measured_in_s": 61.9,
+   "conditions_before": {
+    "captured_at": "2026-11-22T13:32:17",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 2051.8
+     },
+     {
+      "pid": 19352,
+      "name": "Spotify.exe",
+      "cpu_core_pct": 105.0
+     },
+     {
+      "pid": 27636,
+      "name": "python.exe",
+      "cpu_core_pct": 100.2
+     },
+     {
+      "pid": 20548,
+      "name": "firefox.exe",
+      "cpu_core_pct": 16.3
+     },
+     {
+      "pid": 17044,
+      "name": "cam_helper.exe",
+      "cpu_core_pct": 12.5
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 20548,
+      "name": "firefox.exe",
+      "gpu_pct": 23.46
+     },
+     {
+      "pid": 1116,
+      "name": "dwm.exe",
+      "gpu_pct": 0.35
+     },
+     {
+      "pid": 4,
+      "name": "System",
+      "gpu_pct": 0.12
+     },
+     {
+      "pid": 1608,
+      "name": "csrss.exe",
+      "gpu_pct": 0.09
+     },
+     {
+      "pid": 6636,
+      "name": "claude.exe",
+      "gpu_pct": 0.01
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P3",
+     "util_pct": 23.0,
+     "clocks_gr_mhz": 555.0,
+     "clocks_mem_mhz": 5001.0,
+     "temp_c": 47.19,
+     "power_w": 70.11,
+     "memory_used_mb": 3238.0,
+     "throttle_reasons": "0x0000000000000001"
+    },
+    "gpu_clock_mhz": 555.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 15.9,
+    "cpu_others_max": 24.5,
+    "cpu_system_median": 16.1,
+    "cpu_system_max": 24.7,
+    "gpu_clock_mhz_median": 1725.0,
+    "gpu_clock_mhz_max": 2700.0,
+    "gpu_temp_c_median": 49.2,
+    "gpu_temp_c_max": 53.0,
+    "gpu_util_median": 28.0,
+    "gpu_util_max": 46.0,
+    "memory_used_median": 53.4,
+    "memory_used_max": 57.2
+   },
+   "status": "ok",
+   "figures": {
+    "fps": 184.4,
+    "render_median_ms": 1.01,
+    "render_p90_ms": 1.5,
+    "render_source": "quick_render_ms",
+    "swap_gap_median_ms": 5.32,
+    "swap_gap_p90_ms": 6.16,
+    "frame_source": "quick_after_rendering",
+    "late_pct": 0.1,
+    "hitches_per_min": 0.0,
+    "cpu_core_pct": 59.7,
+    "gpu_pct": 25.29,
+    "gpu_ms_per_frame": 1.371,
+    "rss_mb": 898.5,
+    "private_mb": 1744.5,
+    "first2s_frames": null,
+    "first2s_late_pct": null,
+    "steady_seconds": 7.99,
+    "late_frames": 1,
+    "hitches": 0,
+    "frames": 1472,
+    "run_id": 2,
+    "gap_ms": {
+     "median": 5.32,
+     "p90": 6.16,
+     "max": 45.86,
+     "count": 1472
+    },
+    "first_frame_ms": 11.82,
+    "gaps_over_limit": 1,
+    "gap_limit_ms": 33.0,
+    "hitch_verdict": "fail: 1 gap(s) over 33 ms ([45.86])"
+   },
+   "commit": "83915122c",
+   "backend": "native-vulkan"
+  }
+ },
+ "settings": {
+  "viz_seconds": 45.0,
+  "transition_seconds": 75.0,
+  "transition_interval_s": 8,
+  "session_transitions": [
+   "exploding_tiles",
+   "volumetric_dissolve",
+   "disintegrate",
+   "jigsaw",
+   "crossfade"
+  ]
+ }
+}
