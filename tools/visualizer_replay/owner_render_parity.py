@@ -474,32 +474,45 @@ MASK_BACKDROP = (255, 0, 255)
 #: follows the viewport), differs by at most 52 such pixels a frame: 48 at 1.5 and 52 at 48/35, over 7 runs x 36
 #: frames each (n5_1_oscilloscope/20261121_viewport_class_1_5/ and _48_35/, viewport_probe.py). Bound: that worst,
 #: not multiplied. Every other mode admits none.
-RULE_A_SCATTER_PIXELS = {"bubble": 68, "oscilloscope": 52, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
+RULE_A_SCATTER_PIXELS = {"bubble": 68, "oscilloscope": 52}
 #: The scatter's spread per mode (checkpoint audit 7 M1): the largest group of touching scatter pixels a frame may hold.
 #: Bubble: measured largest 15 on the 5.5 s replay's 2,430 steady pixels (1,908 with no scatter neighbour; most
 #: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22 (17 on the
 #: four 60 s takes with ties joined, checkpoint audit 8 M1). A solid block fails, and so do ties inside one: ties join
 #: the groups they touch (the 17 Nov isolation clause this replaced was retired by the lead, 21 Nov).
-RULE_A_SCATTER_GROUP = {"bubble": 22, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
+RULE_A_SCATTER_GROUP = {"bubble": 22}
 #: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
 #: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;
 #: fast_proof/20261120_m2_* and 20261121_m2_*, ties joined), times 1.5 rounded up: 26.
-RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26, "waveform_ribbon": 10 ** 9}   # Waveform: P measuring
-#: A mode's own tie and flip allowances where the composite's (RULE_A_EDGE_PIXELS_PER_FRAME ties, no flip) do not hold:
-#: mode -> (ties a frame, flips a frame). Waveform: P measuring.
-RULE_A_EDGE_ALLOWANCE: dict[str, tuple[int, int]] = {"waveform_ribbon": (10 ** 9, 10 ** 9)}
+RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
+#: A mode judged by its frame statistics instead of the classes (``pixel_tolerance`` "Statistics"): mode -> (mean
+#: absolute, mean signed, share 2 to 3 levels off, share past 3), its single-sampled form against Python's.
+#: Waveform Ribbon: the lead's provisional bound (22 Nov), until layer P's measurement fixes it. Its scene's geometry is
+#: placed through the core's target clip (a 64-pixel bucket) where Python's viewport places it directly, so where a
+#: ribbon edge runs along a row of pixel centres the whole row flips (P, ragdoll Frozen Past, input 997: 339 pixels past
+#: 3 levels and 1,142 at 2 to 3 along one near-horizontal edge, no frame offset: Python's neighbouring frames differ by
+#: 129,000), and its bloom and fog round one level apart over wide soft regions (groups of 3,097 one-level pixels).
+RULE_A_STATISTICS: dict[str, tuple[float, float, float, float]] = {"waveform_ribbon": (0.16, 0.10, 0.030, 0.006)}
+#: A statistical mode's classes: counted and reported, never a reason.
+_COUNTED = 10 ** 9
 
 
 def composite_tolerance(mode: str | None = None):
     """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``; ``mode`` adds its D12
-    scatter (``RULE_A_SCATTER_PIXELS``) and its own tie and flip allowance (``RULE_A_EDGE_ALLOWANCE``)."""
+    scatter (``RULE_A_SCATTER_PIXELS``), or its statistical bound (``RULE_A_STATISTICS``)."""
     from tools import pixel_tolerance
 
+    statistics = RULE_A_STATISTICS.get(mode)
+    if statistics is not None:
+        return pixel_tolerance.Tolerance(f"composite (rule a, {mode}, statistical)", masked_level=RULE_A_FILL_LEVEL,
+                                         scatter_pixels=_COUNTED, tie_pixels=_COUNTED, flip_pixels=_COUNTED,
+                                         tie_level=RULE_A_EDGE_LEVEL, edge_class=True,
+                                         scatter_cluster_pixels=_COUNTED, scatter_window_pixels=_COUNTED,
+                                         statistics=pixel_tolerance.FrameStatistics(*statistics))
     scatter = RULE_A_SCATTER_PIXELS.get(mode, 0)
-    ties, flips = RULE_A_EDGE_ALLOWANCE.get(mode, (RULE_A_EDGE_PIXELS_PER_FRAME, 0))
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
-                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter, flip_pixels=flips,
-                                     tie_pixels=ties, tie_level=RULE_A_EDGE_LEVEL,
+                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
+                                     tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
                                      edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode),
                                      scatter_window_pixels=RULE_A_SCATTER_WINDOW.get(mode))
 

@@ -26,6 +26,12 @@ pixel by pixel, never by a histogram of levels:
   of the shader ties, at most ``flip_pixels`` in a frame, isolated from every other pixel past its allowance, and on a
   content edge of the reference (a threshold can only tie where the reference itself changes abruptly). The one
   decision so far: Surface Tension's specular flip where pools pinch (D13, N5.2b), one pixel a frame.
+- **Statistics** (``statistics``, a ``FrameStatistics``; the lead's decision for Waveform Ribbon, 22 Nov, N5.4): a
+  whole 3D scene whose geometry the two paths place through different float arithmetic (the core's target clip against
+  Python's viewport) flips whole rows of pixel centres where an edge runs along them, and its bloom and fog round in
+  wide soft regions, so counts of pixels do not bound it. Its frame is judged by shares instead: the mean absolute and
+  the mean signed difference (8-bit levels over every channel compared), the share of pixels 2 to 3 levels off and the
+  share past 3. With ``statistics`` set these four are the frame's only reasons; the class counts are still reported.
 
 Harness code only: no product path imports it.
 """
@@ -43,6 +49,38 @@ COMPOSITE_EDGE_LEVEL = 3
 #: The density window of the spread rule (checkpoint audit 8 M1): the most scatter and tie pixels any window of this
 #: many device pixels a side may hold (``Tolerance.scatter_window_pixels``).
 SCATTER_WINDOW = 16
+
+
+@dataclass(frozen=True)
+class FrameStatistics:
+    """A frame's statistical bound (module docstring, "Statistics"): each figure at most this, over the frame."""
+
+    mean_abs: float                     # mean |candidate - reference|, levels, every compared channel
+    mean_signed: float                  # |mean (candidate - reference)|, levels
+    tie_share: float                    # share of pixels whose largest channel is 2 to 3 levels off (0 to 1)
+    flip_share: float                   # share of pixels past 3 levels (0 to 1)
+
+    def __post_init__(self) -> None:
+        if min(self.mean_abs, self.mean_signed, self.tie_share, self.flip_share) < 0:
+            raise ValueError("a statistical bound is never negative")
+        if max(self.tie_share, self.flip_share) > 1:
+            raise ValueError("a share is at most the whole frame")
+
+
+def frame_statistics(candidate, reference) -> dict:
+    """The four figures ``FrameStatistics`` bounds, for two same-shaped 8-bit frames: their colour channels (an RGBA
+    frame's alpha left out, as the bound was measured)."""
+    import numpy as np
+
+    diff = np.asarray(candidate).astype(np.int16) - np.asarray(reference).astype(np.int16)
+    if diff.ndim == 3 and diff.shape[-1] == 4:
+        diff = diff[..., :3]
+    largest = np.abs(diff).max(axis=-1) if diff.ndim == 3 else np.abs(diff)
+    pixels = max(1, largest.size)
+    return {"mean_abs": float(np.abs(diff).mean()) if diff.size else 0.0,
+            "mean_signed": float(diff.mean()) if diff.size else 0.0,
+            "tie_share": float(((largest >= 2) & (largest <= 3)).sum()) / pixels,
+            "flip_share": float((largest > 3).sum()) / pixels}
 
 
 @dataclass(frozen=True)
@@ -65,6 +103,8 @@ class Tolerance:
     #: ``SCATTER_WINDOW`` x ``SCATTER_WINDOW`` window may hold (None: no density bound), so a one-level patch dithered
     #: into small groups fails.
     scatter_window_pixels: int | None = None
+    #: The statistical bound (module docstring, "Statistics"; None: the classes above judge the frame).
+    statistics: FrameStatistics | None = None
 
     def __post_init__(self) -> None:
         if self.masked_level not in (0, 1):
@@ -89,6 +129,9 @@ class Tolerance:
         if self.scatter_window_pixels is not None:
             bound["scatter_window_pixels"] = self.scatter_window_pixels
             bound["scatter_window"] = SCATTER_WINDOW
+        if self.statistics is not None:
+            bound["statistics"] = {"mean_abs": self.statistics.mean_abs, "mean_signed": self.statistics.mean_signed,
+                                   "tie_share": self.statistics.tie_share, "flip_share": self.statistics.flip_share}
         return bound
 
 
@@ -309,7 +352,25 @@ def judge(candidate, reference, tolerance: Tolerance, *, mask=None, delta=None) 
                 "max_level": None, "masked_differing": 0, "mask_pixels": 0, "scatter": -1, "ties": -1, "flips": -1}
     delta = levels(a, b) if delta is None else delta
     contrast = tolerance.edge_contrast
-    return judge_delta(delta, tolerance, mask=mask, edges=lambda flags: content_edges_at(b, flags, contrast))
+    verdict = judge_delta(delta, tolerance, mask=mask, edges=lambda flags: content_edges_at(b, flags, contrast))
+    bound = tolerance.statistics
+    if bound is None:
+        return verdict
+    # The statistical bound: the four shares are the frame's only reasons; the class counts stay reported.
+    figures = frame_statistics(a, b)
+    reasons = []
+    if figures["mean_abs"] > bound.mean_abs:
+        reasons.append(f"mean difference {figures['mean_abs']:.4f} levels (at most {bound.mean_abs})")
+    if abs(figures["mean_signed"]) > bound.mean_signed:
+        reasons.append(f"mean signed difference {figures['mean_signed']:+.4f} levels (within {bound.mean_signed})")
+    if figures["tie_share"] > bound.tie_share:
+        reasons.append(f"{100 * figures['tie_share']:.3f}% of pixels 2 to 3 levels off (at most "
+                       f"{100 * bound.tie_share:.3f}%)")
+    if figures["flip_share"] > bound.flip_share:
+        reasons.append(f"{100 * figures['flip_share']:.3f}% of pixels past 3 levels (at most "
+                       f"{100 * bound.flip_share:.3f}%)")
+    return dict(verdict, **figures, pass_classes=verdict["pass"], class_reasons=verdict["reasons"], reasons=reasons,
+                **{"pass": not reasons})
 
 
 def peer_mask(*masks):
@@ -380,4 +441,9 @@ def summarise(frames) -> dict:
             "scatter_window_worst_frame": max((f.get("scatter_window", 0) for f in frames), default=0),
             "ties_worst_frame": max((f.get("ties", 0) for f in frames), default=0),
             "flips_worst_frame": max((f.get("flips", 0) for f in frames), default=0),
+            **({"mean_abs_worst_frame": max(f.get("mean_abs", 0.0) for f in frames),
+                "mean_signed_worst_frame": max((abs(f.get("mean_signed", 0.0)) for f in frames), default=0.0),
+                "tie_share_worst_frame": max(f.get("tie_share", 0.0) for f in frames),
+                "flip_share_worst_frame": max(f.get("flip_share", 0.0) for f in frames)}
+               if any("mean_abs" in f for f in frames) else {}),
             "first_reasons": [r for f in failed[:3] for r in f.get("reasons", [])]}
