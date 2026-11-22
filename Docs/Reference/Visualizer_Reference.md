@@ -23,7 +23,20 @@ This reference documents shared policy plus mode-specific exceptions where they 
 state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
 metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own their persisted technical and source profiles; old borrowed values are promoted only once. **Spectrum bar shaping is a descriptor-declared capability**, not a universal BeatEngine operation. Only Spectrum, Extruded Spectrum and Neon Lake (`shockwave_grid`) evaluate authored Spectrum shape nodes/lane strengths. Bubble and Sphere consume raw FFT/zone/control/transient data without that stage. Spline Curve (`devcurve`) layer motion consumes a pre-AGC musical-energy output instead of shaped Spectrum bars; Spline Curve applies its separate authored layer shaper in its logical runtime. Oscilloscope retains waveform analysis. The single shared engine fences the policy on every activation/compute snapshot, with no second DSP/capture authority. Bubble's accepted response is protected by differential synthetic PCM tests against the former shaper-enabled path (energy, transient, onsets and adaptive-floor history); never replace this with static curated preset-value assertions. Heavy implementation resources remain lazy and retire through the normal owner.
 
-### Settings declarations
+### Settings declarations**Approved optional post-NF primitives, 23 Nov:** Existing-mode ports and
+the native Studio N5.8 switch are parity obligations before any of the
+six approved artistic extensions. The active N4/N6 art box in
+`Current_Plan.md` governs all six optional additions to existing
+Extruded Bubble, Waveform Ribbon and Neon Lake. Each must be reachable
+in its existing Studio with canonical appearance AND music-reactivity
+controls, preserve the original effect when off, and have a new,
+freely editable demonstration preset. **No automated test may ever
+read or use ANY real operator/curated preset**, even for schema,
+roundtrip, saved bytes or visual snapshots. Create test-owned synthetic
+settings and temporary preset-shaped files instead. Live human
+reference captures and preset demonstrations do not define correctness.
+
+
 
 `core/settings/visualizer_mode_settings.py` owns every registered original mode's body declarations; `iter_mode_settings()` is
 the membership authority. Canonical defaults and editable presets own values. The model, appliers and lazy body use
