@@ -1451,6 +1451,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 - [ ] N5.2h The background family switches on OpenGL (D10 point 4): presenter, backdrop and all 28 transitions
   native in production; the native backdrop compared with the blit on the same frames; the Python presenter, the
   Python transitions, the blit backdrop and the wrapped-texture bridge deleted in that change.
+  - [ ] Gate (operator, 22 Nov: a start below Python OpenGL is a bad place to start; general optimisation stays its own
+    phase after the flip): every transition's native OpenGL cost at or below Python's own on the same frames before the
+    switch. Known: the native OpenGL route's fixed cost (Crossfade control 0.15 ms against Python's 0.04 at 4K,
+    `n52f_cost`) puts N5.2f's native OpenGL (0.53-0.77 ms) above Python's (0.27-0.46); find that route overhead first.
+    Behaviour under modest load (a game running) is a target, never an excuse: hitch rows run and must pass under it.
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
