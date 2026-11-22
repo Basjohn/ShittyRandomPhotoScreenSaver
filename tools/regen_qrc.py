@@ -498,7 +498,7 @@ def _native_scene_classes() -> list[type]:
 def transition_scene_sources() -> dict[str, str]:
     """N5.2c: every scene pass a native 3D transition may draw (``NativeScenePasses.native_scene_passes``):
     ``<id>_<pass>.vert`` and ``<id>_<pass>.frag`` -> the texts its Python renderer compiles."""
-    from rendering.quick.transitions.native_scene import motion_post_sources
+    from rendering.quick.transitions.native_scene import motion_post_sources, population_scan_sources
 
     found: dict[str, str] = {}
     for cls in _native_scene_classes():
@@ -507,8 +507,14 @@ def transition_scene_sources() -> dict[str, str]:
                 continue                      # N5.2d: a shared post pass (motion_post_sources), baked once
             found[f"{cls.transition_id}_{scene_pass.name}.vert"] = scene_pass.vertex_source
             found[f"{cls.transition_id}_{scene_pass.name}.frag"] = scene_pass.fragment_source
-    # N5.2d (N4.i): the motion blur's tile max and gather and the trails' edges, once for every scene.
+        # N5.2f (N4.c): each population's count and scatter, the frame block merged into the dispatch block.
+        for population in cls.native_scene_populations():
+            found[f"{cls.transition_id}_{population.name}_count.comp"] = population.count_source()
+            found[f"{cls.transition_id}_{population.name}_scatter.comp"] = population.scatter_source()
+    # N5.2d (N4.i): the motion blur's tile max and gather and the trails' edges, once for every scene; N5.2f the
+    # population's scan.
     found.update(motion_post_sources())
+    found.update(population_scan_sources())
     return found
 
 

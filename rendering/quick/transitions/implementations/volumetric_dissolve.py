@@ -32,9 +32,29 @@ from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
+from ..native_scene import (QUAD_MESH, NativeScene, NativeScenePass, NativeScenePasses, NativeScenePopulation,
+                            eased_show, native_one_block, population_values)
 from ..render_contract import QuickTransitionRenderFrame
 
 _DIRECTION_CODES = frozenset(VOLUMETRIC_DIRECTIONS.values())
+
+# N5.2f: the native scene's passes, each with the frame block merged into its pass block, and its population (the
+# frame block merged into the count and scatter packs' dispatch block); the particles are blended premultiplied over,
+# the alpha kept (``blend_scope``). The copies are the two photo environments (Python's roles destination and source).
+_FRAME = VOLUMETRIC_FRAME_BLOCK.name
+_OVER = (("add", "one", "one_minus_src_alpha"), ("add", "zero", "one"))
+_SCENE_PASSES = (
+    NativeScenePass("backdrop", *native_one_block((VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
+                                                  _FRAME),
+                    QUAD_MESH, "triangle_strip", 4,
+                    samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uNewCopy", "environment"),
+                              ("uOldCopy", "source_environment"))),
+    NativeScenePass("particles", *native_one_block((VOLUMETRIC_PARTICLE_VERTEX_SOURCE,
+                                                    VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE), _FRAME),
+                    None, "triangle_strip", VOLUMETRIC_VERTICES,
+                    samplers=(("uOldTex", "old"), ("uOldCopy", "source_environment")), blend=_OVER),
+)
+_POPULATION = NativeScenePopulation("particles", VOLUMETRIC_HOOKS, _FRAME, "particles")
 
 
 def volumetric_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float, float]:
@@ -61,8 +81,48 @@ def volumetric_sweep(direction: object) -> tuple[tuple[float, float], float]:
     return direction_vector(direction), 0.0
 
 
-class QuickVolumetricDissolveRenderer:
+class QuickVolumetricDissolveRenderer(NativeScenePasses):
     transition_id = "volumetric_dissolve"
+    scene_pixels = True                  # N5.2f: the particle grid is of the item's device pixels
+
+    # ------------------------------------------------------------------------------- N5.2f: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    @classmethod
+    def native_scene_populations(cls) -> tuple[NativeScenePopulation, ...]:
+        return (_POPULATION,)
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        volumetric_parameters(parameters)
+        return NativeScene(_SCENE_PASSES, (), scene3d_request_samples(parameters), True, source_environment=True,
+                           populations=(_POPULATION,))
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(max(0.0, min(1.0, float(sample.eased_progress))))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float],
+                     pixels: tuple[int, int] | None = None) -> dict[str, object]:
+        """The frame block's values (``frame_values``, one owner with ``render``) and the population's over the item's
+        device ``pixels``."""
+        if pixels is None:
+            pixels = (round(logical_size[0]), round(logical_size[1]))
+        progress = max(0.0, min(1.0, float(sample.eased_progress)))
+        seed, size, mist, depth = volumetric_parameters(run.request.parameter_dict())
+        sweep, radial = volumetric_sweep(run.request.direction)
+        columns, rows, _size = volumetric_grid(int(pixels[0]), int(pixels[1]), size)
+        values = self.frame_values(progress, seed, mist, depth, sweep, radial, columns, rows, logical_size)
+        values.update(population_values(_POPULATION, columns * rows, VOLUMETRIC_VERTICES))
+        return values
+
+    @staticmethod
+    def frame_values(progress: float, seed: int, mist: float, depth: float, sweep, radial: float, columns: int,
+                     rows: int, logical_size) -> dict[str, object]:
+        return {"uGrid": (columns, rows), "uDirection": sweep, "uFrameSize": tuple(logical_size),
+                "uProgress": progress, "uSeed": seed, "uDepth": depth, "uMist": mist, "uRadial": radial}
 
     # The photographs each program reads (bind_frame binds them); the copies' samplers are bound in the sources, the
     # quad's values are in each program's pass block and the rest in the frame block.
@@ -98,8 +158,7 @@ class QuickVolumetricDissolveRenderer:
             columns, rows, _size = volumetric_grid(frame.viewport[2], frame.viewport[3], size)
             new_copy = self._environment.texture(frame, self._resources, "destination")
             old_copy = self._environment.texture(frame, self._resources, "source")
-            values = {"uGrid": (columns, rows), "uDirection": sweep, "uFrameSize": frame.logical_size,
-                      "uProgress": progress, "uSeed": seed, "uDepth": depth, "uMist": mist, "uRadial": radial}
+            values = self.frame_values(progress, seed, mist, depth, sweep, radial, columns, rows, frame.logical_size)
             samples = scene3d_request_samples(parameters)
             if samples:
                 with self._target.scope(frame, samples, self._resources):

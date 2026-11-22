@@ -98,7 +98,7 @@ REST_FRAMES = 4
 #: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
 #: its sparks pass in the program the route builds at the run's start).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks", "cube_turn", "jigsaw_options",
-                  "block_spins_both", "exploding_tiles_both")
+                  "block_spins_both", "exploding_tiles_both", "disintegrate_fine", "volumetric_dissolve_center")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
 #: production defaults and with their options.
@@ -317,8 +317,23 @@ N52E_VARIANTS = {
                              "force": 2.0},
     "exploding_tiles_both_4x": {"samples": 4, "bloom": 0.6, "motion_blur": True, "motion_trails": True},
 }
-SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS
-SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS}
+#: N5.2f (N4.c): the compacted populations (Disintegrate's grains, Volumetric Dissolve's particles and its two photo
+#: environments). Each at its production defaults, and single-sampled at the options' extremes (rule a's forms): the
+#: finest grain or particle (2 px: the grid grows to its cap at 4K), the strongest and weakest wind, a diagonal, the
+#: sweep from the centre, mist and depth at 0 and 1.
+N52F_TRANSITIONS = ("disintegrate", "volumetric_dissolve")
+N52F_VARIANTS = {
+    "disintegrate": {},
+    "disintegrate_fine": {"grain_size": 2, "wind": 2.0, "request_direction": "diag_tl_br", "samples": 0},
+    "disintegrate_calm": {"grain_size": 8, "wind": 0.5, "request_direction": "left", "seed": 9, "samples": 0},
+    "volumetric_dissolve": {},
+    "volumetric_dissolve_center": {"request_direction": "center_out", "mist": 1.0, "depth": 1.0, "particle_size": 2,
+                                   "samples": 0},
+    "volumetric_dissolve_flat": {"request_direction": "up", "mist": 0.0, "depth": 0.0, "particle_size": 8, "seed": 5,
+                                 "samples": 0},
+}
+SCENE_TRANSITIONS = N52C_TRANSITIONS + N52D_TRANSITIONS + N52E_TRANSITIONS + N52F_TRANSITIONS
+SCENE_VARIANTS = {**N52C_VARIANTS, **N52D_VARIANTS, **N52E_VARIANTS, **N52F_VARIANTS}
 #: N5.2e: the piece-edge flip class (N5.2d's rule, for the lead) for Exploding Tiles' tiles (moving pieces; the gather
 #: and the bloom smear their edge flips) and Page Curl's moving page edge, per variant: 1.5 times the measured worst
 #: pixels past one level a frame (n52e_r2, both dprs, ceiling); every other guard of the class unchanged. Page Curl's
@@ -334,10 +349,27 @@ N52E_EDGE_FLIPS_B = {
     "exploding_tiles": 110, "exploding_tiles_plain": 12, "exploding_tiles_bloom": 6, "exploding_tiles_motion": 41,
     "exploding_tiles_trails": 9, "exploding_tiles_both": 20, "exploding_tiles_both_4x": 126,
 }
+#: N5.2f, PROPOSED for the lead (22 Nov, n52f_r3 on the ABI 41 build, both dprs): the grains and particles are many
+#: small moving quads, so the piece-edge class (N5.2d's rule) judges them. Their single-sampled forms draw no gather and
+#: are judged against Python drawn in the core's frame: against Python's own frame they put up to 886 pixels a frame
+#: past two levels (Disintegrate at grain 2, r2), F1's mirrored snap of every quad edge; in the core's frame at most 8
+#: (Volumetric from the centre), all on moving quad edges, none compact. Bounds 1.5 times the measured worst, ceiling.
+N52F_EDGE_FLIPS_A = {"disintegrate_fine": 3, "disintegrate_calm": 0, "volumetric_dissolve_center": 12,
+                     "volumetric_dissolve_flat": 8}
+N52F_EDGE_FLIPS_B = {"disintegrate": 53, "disintegrate_fine": 21, "disintegrate_calm": 0, "volumetric_dissolve": 47,
+                     "volumetric_dissolve_center": 72, "volumetric_dissolve_flat": 32}
+#: N5.2f, PROPOSED for the lead: Volumetric Dissolve's backdrop resolves the new picture from its environment copy
+#: (``textureLod`` 1 to 5) and tints the mist from the old one's (3.5): the two drivers' trilinear filtering of the mips
+#: differs by one level over smooth patches (n52f_r3: up to 2,870 pixels a frame at one level, the 4x default, in
+#: compact bands up to 486 pixels where the haze resolves; nothing there past four levels). Its rule (b) takes that
+#: scatter (times 1.5) and judges compact groups past one level only (a shifted particle or patch is still compact past
+#: one level, and every pixel past one level must still lie on a moving particle's edge).
+N52F_SAMPLER_RULE_B = {"volumetric_dissolve": 4305, "volumetric_dissolve_center": 4305, "volumetric_dissolve_flat": 4305}
 #: Every variant judged by the piece-edge class, and its bounds.
-PIECE_EDGE_VARIANTS = {**N52D_VARIANTS, **{v: N52E_VARIANTS[v] for v in set(N52E_EDGE_FLIPS_A) | set(N52E_EDGE_FLIPS_B)}}
-EDGE_FLIPS_A = {**N52D_EDGE_FLIPS_A, **N52E_EDGE_FLIPS_A}
-EDGE_FLIPS_B = {**N52D_EDGE_FLIPS_B, **N52E_EDGE_FLIPS_B}
+PIECE_EDGE_VARIANTS = {**N52D_VARIANTS, **{v: N52E_VARIANTS[v] for v in set(N52E_EDGE_FLIPS_A) | set(N52E_EDGE_FLIPS_B)},
+                       **N52F_VARIANTS}
+EDGE_FLIPS_A = {**N52D_EDGE_FLIPS_A, **N52E_EDGE_FLIPS_A, **N52F_EDGE_FLIPS_A}
+EDGE_FLIPS_B = {**N52D_EDGE_FLIPS_B, **N52E_EDGE_FLIPS_B, **N52F_EDGE_FLIPS_B}
 #: N5.2e: Membrane's 4x default, rule (b), for the lead: its translucent sheet blended over 4 samples and averaged puts
 #: many pixels one level apart between the two drivers (n52e_r2: at most 9,696 a frame, both dprs; Python's own 4x
 #: Membrane differs from run to run by a level, tens of pixels), times 1.5, and N52C_RULE_B's ties and 3 edge flips
@@ -349,7 +381,8 @@ VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS, **SCENE_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp_dissolve", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS, *N52E_VARIANTS)
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS, *N52C_VARIANTS, *N52D_VARIANTS, *N52E_VARIANTS,
+                  *N52F_VARIANTS)
 
 
 def variant_progress(variant: str) -> tuple[float, ...]:
@@ -548,23 +581,26 @@ def compact_groups(flags, limit: int) -> list[int]:
     return sizes
 
 
-def judge_piece_edges(candidate, reference, flips: int, allowed, *, ties: int = 0) -> dict:
-    """N5.2d's piece-edge flip class for one frame: at most N52C_SCATTER_PIXELS one-level pixels (their spread is the
-    gather's: the compact check judges it); at most ``flips`` pixels past one level, every one in ``allowed``
-    (``piece_edges``); no compact group of differing pixels past N52C_SCATTER_GROUP."""
+def judge_piece_edges(candidate, reference, flips: int, allowed, *, ties: int = 0,
+                      scatter_pixels: int = N52C_SCATTER_PIXELS, compact_past: int = 0) -> dict:
+    """N5.2d's piece-edge flip class for one frame: at most ``scatter_pixels`` (N52C_SCATTER_PIXELS) one-level pixels
+    (their spread is the gather's: the compact check judges it); at most ``flips`` pixels past one level, every one in
+    ``allowed`` (``piece_edges``); no compact group of pixels past ``compact_past`` levels (0: every differing pixel)
+    larger than N52C_SCATTER_GROUP. N5.2f: Volumetric Dissolve's rule (b) takes its own scatter and judges compact
+    groups past one level (``N52F_SAMPLER_RULE_B``)."""
     import numpy as np
 
     delta = np.abs(candidate[..., :3].astype(np.int16) - reference[..., :3].astype(np.int16)).max(axis=2)
     past = delta > 1
     reasons = []
     scatter = int((delta == 1).sum())
-    if scatter > N52C_SCATTER_PIXELS:
-        reasons.append(f"{scatter} pixels one level off (scatter: at most {N52C_SCATTER_PIXELS})")
+    if scatter > scatter_pixels:
+        reasons.append(f"{scatter} pixels one level off (scatter: at most {scatter_pixels})")
     count = int(past.sum())
     off = past & ~np.asarray(allowed, bool)
     tie_off = int((off & (delta <= TIE_LEVEL)).sum())
     stray = int(off.sum()) - (tie_off if tie_off <= ties else 0)
-    compact = compact_groups(delta > 0, N52C_SCATTER_GROUP)
+    compact = compact_groups(delta > compact_past, N52C_SCATTER_GROUP)
     if count > flips:
         reasons.append(f"{count} pixels past one level (piece-edge flips admitted: {flips})")
     if stray:
@@ -669,9 +705,9 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     entry["control_next_progress_differs"] = not blc.compare(
                         frames[f"dpr{dpr}_{variant}_{progress_key(here)}"], expected[(variant, there)])["equal"]
                 # N5.2c: N4.j's copy drawn once over the run (a scene reading it), never for any other run.
-                reads = entry["scene"] and _reads_environment(run)
+                reads = _reads_environment(run) if entry["scene"] else 0
                 entry["environment_copies"] = _environment_copies(core) - copies_before
-                entry["environment_once_per_photo"] = entry["environment_copies"] == (1 if reads else 0)
+                entry["environment_once_per_photo"] = entry["environment_copies"] == reads
                 # The run's end: the item ends the run, then hands over the destination (the runtime's order).
                 uploads = _mode_counts(scene)["uploads"]
                 scene.layer.transition(None)
@@ -965,12 +1001,15 @@ def _environment_copies(core) -> int:
     return copies
 
 
-def _reads_environment(run) -> bool:
+def _reads_environment(run) -> int:
+    """The photo environments a run's scene copies (N5.2f: Volumetric Dissolve also the old picture's)."""
     from rendering.quick.render.native_background import native_transition_renderer
 
     renderer = native_transition_renderer(run.request.transition_id)
-    return bool(renderer is not None and getattr(renderer, "native_scene", None)
-                and renderer.native_scene(run, blc.DISPLAY).environment)
+    if renderer is None or not getattr(renderer, "native_scene", None):
+        return 0
+    scene = renderer.native_scene(run, blc.DISPLAY)
+    return int(bool(scene.environment)) + int(bool(getattr(scene, "source_environment", False)))
 
 
 def _neighbour_frames(frames, key: str) -> list:
@@ -1011,8 +1050,10 @@ def vulkan_against_opengl(work: Path) -> dict:
         if drawn in EDGE_FLIPS_B:               # N5.2d: the piece-edge flip class (rule b); the gather-free N52C_RULE_B
             moved = velocity[key] if key in velocity else None
             allowed = piece_edges(vk[key], gl[key], _neighbour_frames(gl, key), moved, N52D_LONGEST)
-            judged.setdefault(variant, []).append(judge_piece_edges(vk[key], gl[key], EDGE_FLIPS_B[drawn],
-                                                                    allowed, ties=N52C_RULE_B.tie_pixels))
+            sampler = N52F_SAMPLER_RULE_B.get(drawn)
+            judged.setdefault(variant, []).append(judge_piece_edges(
+                vk[key], gl[key], EDGE_FLIPS_B[drawn], allowed, ties=N52C_RULE_B.tie_pixels,
+                **({"scatter_pixels": sampler, "compact_past": 1} if sampler is not None else {})))
             continue
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
