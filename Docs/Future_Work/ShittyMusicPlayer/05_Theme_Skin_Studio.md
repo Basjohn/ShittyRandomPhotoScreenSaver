@@ -1,6 +1,11 @@
 # 05 | Unified Theme, Optional ZIP Skins and Theme & Skin Studio
 
-**Approved planning direction, 16 November 2026.** This is a bounded two-layer appearance architecture, not a universal third-party skin engine or a change to the current runtime. Read Current Plan 1B.8 M3/M4 and SMP plan 02 §8.2B. It is subordinate to native-core and pre-SMP ordering.
+**Approved planning direction, 16 November 2026; scheduling clarified 23 Nov.** This is a bounded two-layer
+appearance architecture, not a universal third-party skin engine or a change to the current runtime. **Current
+M3 material work, M4 unified Appearance Theme and the Theme Studio are independently valuable Standard/MC
+work that stays active** in Current Plan 1B.8. The scoped ZIP-skin runtime, SMP-specific panes/previews
+and the skin-authoring expansion at M10 remain deferred with SMP plan 02 §8.2B until **after Melt Pool,
+Concrete Rain, a substantial QoL phase and explicit operator readmission** (Future_Work §2.5).
 
 ## 1. Two layers and deliberately small skin scope
 
@@ -16,7 +21,7 @@
 - **Current Plan 1B.8 M4, pre-SMP:** unify Settings and Widget catalogue/theme selection into one authored semantic authority. Theme-authored face/border transparency bias (-1..1 with neutral 0), face/border material, border thickness and four-corner curvature including concentric inner contour are first-class and independently scoped. Existing user Style Overrides apply *relative* to authored baselines; a neutral user override inherits them. No double material density or faux glass.
 - **SMP M0/M1:** consume the already unified theme; build the minimal `.srskin` format, safe loader, appearance-context lookup and one demonstration on actual pane/Media QML. Do NOT build a giant skin framework or the whole Studio.
 - **SMP M7:** prove full/compact styling in Standard/MC compositor and standalone player, the optional user-enabled ordinary Media target, unchanged unrelated widgets and Settings, accessibility, mixed DPI, lifecycle and no playback/Visualizer restart.
-- **Theme Studio, pre-SMP (operator, 21 Nov 2026; supersedes the earlier "whole Studio at M10"):** after the native core, the flip and M4, before SMP M0: the visual editor of the unified theme over the production renderer (Current Plan 1B.8, "Theme Studio").
+- **Theme Studio, current-product scope (operator, 21/23 Nov):** after the native core, the flip and M4, independently of SMP M0: the visual editor of the unified theme over the production renderer (Current Plan 1B.8, "Theme Studio"). No SMP skin or pane implementation is necessary.
 - **SMP M10, after M9 release:** the same Studio gains skin authoring and the SMP Full/Compact previews over the production skin loader. It is an authoring milestone, NOT a second runtime theme migration, a second Studio or a player-release prerequisite.
 
 ## 3. One Themes tab and scoped opt-in
