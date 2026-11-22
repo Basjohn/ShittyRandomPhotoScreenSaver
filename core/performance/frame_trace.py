@@ -147,6 +147,10 @@ class FrameTraceEvent(IntEnum):
     # (``tools/live_check_transition_session.py``).
     NATIVE_TRANSITION_TICK = 81
     NATIVE_TRANSITION_END = 82
+    # With the run's END (black flicker, 22 Nov): revision = the records the core kept the frame its target held while
+    # the run's program waited for its textures (the destination's upload job on Vulkan: ``waiting_kept``), the frames
+    # that were black before ABI 39; auxiliary = the run's id.
+    NATIVE_TRANSITION_WAITING_KEPT = 83
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

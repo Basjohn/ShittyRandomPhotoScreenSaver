@@ -203,8 +203,17 @@
 // stage_environment_copies, and the lost edge's "mesh:<name>" (a mesh a content made again has nothing to upload from:
 // the owner sends it again). Backward compatible for every earlier program (no program declares either; an owner without
 // a mesh listener ignores the name).
-// 37: N5.2d's (on its branch).
-// 38 (N5.4, the Waveform port's own-camera scene): a record's f64 field fills a vec2, vec3, vec4 or mat4 member (its
+// 37 (N4.i motion blur and trails, with N5.2d): a compute entry's "trigger": "draw" (dispatched at every record that
+// draws the program's passes: a still's only compute trigger, the motion blur's tile max over this record's velocity);
+// the target format "r8" (the trails' ghost buffer); an attachment a pass masks ("write": false) may be left unwritten
+// by its shader; a setting scoped to one pass ("<member>@<pass>": the trails' ghosts, one pass a ghost from one pack);
+// a pass's "viewport": "allocation" (the core's triangle over a scene target's whole allocation: the trails' edges);
+// the item texture format rgba32f (composite_mode_texture's eighth argument full_float, no mips: Crumble's motion
+// table). Backward compatible for every earlier program and caller (none declares any of them).
+// 39 (black flicker at a transition's start on Vulkan): a content waiting for its textures or meshes keeps the frame its
+// target holds (as a refused build does, M4) instead of recording no pass over a cleared target; composite_mode_state's
+// waiting_kept counts those records. Backward compatible for every caller (only a waiting content's frame changes).
+// 40 (N5.4, the Waveform port's own-camera scene): a record's f64 field fills a vec2, vec3, vec4 or mat4 member (its
 // numbers the member's components times its elements, columns first) and its u32 field an int vector under a range
 // rule at most 2147483647 (program_blocks.cpp recordFieldFits); the conventions block's w is 1 where the target's clip
 // depth runs 0 to 1 (QRhi::isClipDepthZeroToOne: Vulkan, D3D, Metal; it was a reserved 0), read by
@@ -216,4 +225,4 @@
 // u_scene_rows_up (0 for every other program: their composites read as before). Waveform draws its scene so: drawn
 // flipped, its anti-aliased edges met the multisample pattern mirrored and differed from Python's (the bloom carried
 // them; one sample a pixel drew alike).
-#define SRPSS_NATIVE_CORE_ABI 38
+#define SRPSS_NATIVE_CORE_ABI 40

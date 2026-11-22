@@ -63,9 +63,7 @@ def test_a_frame_is_published_only_for_its_drawn_cards_view(monkeypatch):
     snapshot = _snapshot()                                         # its framed view (1.5, 1.0, 1.0)
     monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.5, 1.0, 1.0))
     assert route.waveform_frame_ready(snapshot)
-    with route.waveform_registered():
-        assert route.GENERIC_MODE_FRAME_GATES["waveform_ribbon"] is route.waveform_frame_ready
-    assert "waveform_ribbon" not in route.GENERIC_MODE_FRAME_GATES
+    assert route.GENERIC_MODE_FRAME_GATES["waveform_ribbon"] is route.waveform_frame_ready
     # Negative controls: another card's view, no view yet, and a card covering no pixel all hold the frame.
     monkeypatch.setattr(framed_view, "resolve_framed_view", lambda _presentation: (1.6, 1.0, 1.0))
     assert not route.waveform_frame_ready(snapshot)
@@ -116,7 +114,7 @@ def test_rule_a_single_samples_the_routes_scene_as_pythons():
     assert waveform.SCENE_SAMPLES == product and scene_samples() == product
 
 
-def test_a_variant_program_mode_loads_without_a_fragment_pack():
+def test_a_variant_program_mode_loads_without_a_fragment_pack(monkeypatch):
     """Waveform builds every pass from its variant's packs: loading it reads no single fragment pack (it has none)."""
     import pytest
 
@@ -124,17 +122,19 @@ def test_a_variant_program_mode_loads_without_a_fragment_pack():
 
     content = route._ModeContent.__new__(route._ModeContent)
     content._pack = None
-    with route.waveform_registered():
-        content.load("waveform_ribbon")
+    content.load("waveform_ribbon")
     assert content._pack == ("waveform_ribbon", b"")
-    # Negative control: unregistered, the mode is a single-fragment mode, and it has no such pack.
+    # Negative control: without its program variants, the mode is a single-fragment mode, and it has no such pack.
     content._pack = None
+    variants = dict(route.GENERIC_MODE_PROGRAM_VARIANTS)
+    del variants["waveform_ribbon"]
+    monkeypatch.setattr(route, "GENERIC_MODE_PROGRAM_VARIANTS", variants)
     with pytest.raises(KeyError):
         content.load("waveform_ribbon")
 
 
 def test_the_scene_is_composited_in_opengl_rows():
-    """ABI 38: Waveform's scene holds OpenGL's rows (drawn unflipped, Python's SceneTarget memory), so its composite
+    """ABI 40: Waveform's scene holds OpenGL's rows (drawn unflipped, Python's SceneTarget memory), so its composite
     declares "scene_rows": "up"; the step admits it on overlay_glow alone."""
     import pytest
 

@@ -110,8 +110,16 @@ def test_bubbles_world_and_speed_are_the_drawn_cards_at_card_and_display_size(qt
     for result, world in ((card, card_world), (wide, wide_world)):
         for frame in result["frames"][_WARMUP_FRAMES:]:
             assert _sim_world(frame) == pytest.approx(world, rel=1e-9)
-    # So travel on the drawn card, against the drawn bubbles' size, does not depend on the card's size.
+    # So travel on the drawn card, against the drawn bubbles' size, does not depend on the card's size, once the
+    # display-wide card's motion scale (the card rule's square-root zoom over its own zoom-out, operator 22 Nov:
+    # on-screen speed kept) is taken out: zoom = overflow ** E, so motion_scale = zoom ** (0.5 / E - 1).
+    from widgets.spotify_visualizer.bubble_viewport_profile import DISPLAY_WIDE_ZOOM_EXPONENT
+
     (card_x, card_y), (wide_x, wide_y) = _speeds(card), _speeds(wide)
+    wide_zoom = wide["frames"][-1].mode_state.world_scale
+    motion_scale = wide_zoom ** (0.5 / DISPLAY_WIDE_ZOOM_EXPONENT - 1.0)
+    assert motion_scale > 1.0
+    wide_x, wide_y = wide_x / motion_scale, wide_y / motion_scale
     assert card_y > 0.0 and wide_y > 0.0
     assert math.isclose(wide_y, card_y, rel_tol=0.25), (card_y, wide_y)
     assert math.isclose(wide_x, card_x, rel_tol=0.25, abs_tol=1e-3), (card_x, wide_x)

@@ -93,9 +93,9 @@ SRPSS_CONVENTIONS_FRAGMENT_GLSL = "\n#define SRPSS_CONVENTIONS_FRAGMENT" + SRPSS
 # a target of the drawing renderer's (N5.4), held in OpenGL's rows on every renderer: every backend puts clip -Y at a
 # target's memory row 0, so drawn unflipped the scene's memory is the Python renderer's own, row for row, and its
 # anti-aliased edges meet the multisample pattern as Python's do (drawn flipped they met it mirrored and differed). The
-# native core reads such a scene through its composite's "scene_rows": "up" (ABI 38). It follows the conventions
+# native core reads such a scene through its composite's "scene_rows": "up" (ABI 40). It follows the conventions
 # include and reads the block's z (1 on the native core's targets) and w (1 where the target's clip depth runs 0 to 1:
-# Vulkan, ABI 38); this OpenGL renderer writes 0 to both, so each function is its argument, bit for bit. A native
+# Vulkan, ABI 40); this OpenGL renderer writes 0 to both, so each function is its argument, bit for bit. A native
 # surface-sized scene target is its 64-pixel bucket (``mode_content.cpp`` sceneAnchor, Python's SceneTarget):
 # ``viewport`` is the scene's pixels and ``targetPx`` the target's (the core's ``u_target_px``; equal for an
 # explicit-size target, whose share is then exactly 1), and the scene takes the bucket's first ``viewport`` columns and

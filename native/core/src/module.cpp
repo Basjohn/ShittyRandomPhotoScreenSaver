@@ -1290,7 +1290,9 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
     int mips = 0;
     int inFrame = 0; // N3.8, a harness control: the in-frame form where the device has a job service
     int halfFloat = 0; // ABI 33: RGBA16F half floats (8 bytes a texel)
-    if (!PyArg_ParseTuple(args, "Ls(ii)O|ppp", &handle, &name, &width, &height, &pixels, &mips, &inFrame, &halfFloat))
+    int fullFloat = 0; // ABI 37: RGBA32F floats (16 bytes a texel, no mips)
+    if (!PyArg_ParseTuple(args, "Ls(ii)O|pppp", &handle, &name, &width, &height, &pixels, &mips, &inFrame, &halfFloat,
+                          &fullFloat))
         return nullptr;
     srpss_core::CompositeItem *item = compositeOf(handle);
     if (!item)
@@ -1305,7 +1307,7 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
         return nullptr;
     QString error;
     if (!item->textureMode(QByteArray(name), QByteArray(data, qsizetype(size)), QSize(width, height), mips != 0,
-                           &error, inFrame != 0, halfFloat != 0)) {
+                           &error, inFrame != 0, halfFloat != 0, fullFloat != 0)) {
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
@@ -3020,9 +3022,10 @@ PyMethodDef methods[] = {
       "(handle, card_json) -> None: the item as shown (rendering/native/mode.py mode_card), which the core's members "
       "read." },
     { "composite_mode_texture", composite_mode_texture, METH_VARARGS,
-      "(handle, name, (width, height), pixels_bytes, mips=False, in_frame=False, half_float=False) -> None: the item's "
-      "texture of that name (N4.a): RGBA8 rows top first, tight (ABI 33, half_float: RGBA16F half floats, 8 bytes a "
-      "texel), copied once into the core and uploaded from the next record (mips "
+      "(handle, name, (width, height), pixels_bytes, mips=False, in_frame=False, half_float=False, full_float=False) -> "
+      "None: the item's texture of that name (N4.a): RGBA8 rows top first, tight (ABI 33, half_float: RGBA16F half "
+      "floats, 8 bytes a texel; ABI 37, full_float: RGBA32F floats, 16 bytes a texel, no mips), copied once into the "
+      "core and uploaded from the next record (mips "
       "generated on the GPU): by the device's job service where it has one (N3.8), else in the frame; in_frame is the "
       "harness control of the in-frame form. ValueError for a bad name, size or byte count, too many textures, or mips "
       "the program samples that it lacks." },

@@ -612,7 +612,8 @@ class BubbleFrame:
     extras: tuple[float, ...] = ()
     trails: tuple[float, ...] = ()
     bubble_count: int = 0
-    big_class_bits: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # Eight uint32 words (bubble_hero_occlusion); four are admitted and padded.
+    big_class_bits: tuple[int, ...] = (0, 0, 0, 0)
     ambient_points: tuple[float, ...] = ()
     ambient_occluders: tuple[float, ...] = ()
     source_timestamp: float = 0.0
@@ -642,7 +643,8 @@ class BubbleFrame:
             raise ValueError("Bubble ambient records are not bounded complete points")
         object.__setattr__(self, "ambient_points", ambient)
         occluders = _float_tuple(self.ambient_occluders, name="Bubble ambient occluder")
-        if len(occluders) % 4 or len(occluders) > 110 * 4:
+        from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_RENDER_CAPACITY
+        if len(occluders) % 4 or len(occluders) > BUBBLE_RENDER_CAPACITY * 4:
             raise ValueError("Bubble ambient occluders must be bounded complete circles")
         if not ambient and occluders:
             raise ValueError("Bubble ambient occluders require an active ambient layer")

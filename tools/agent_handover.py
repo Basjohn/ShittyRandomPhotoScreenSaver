@@ -20,7 +20,10 @@ running process, copies the worktree's whole ``.artifacts/evidence`` and ``.arti
 exists here is never overwritten; a differing one is reported), and only then removes the worktree and deletes the
 branch. Paths past Windows' 260 characters are copied and deleted through extended-length paths, and a file that
 fails to copy is reported and stops the removal. The folder is deleted by this tool's own walk, which removes a
-junction or symlink as a link and never enters it; git's own ``worktree remove`` is not used, because it follows
+junction or symlink as a link and never enters it (the worktree's own ``.artifacts/{evidence,webp,scratch}`` are
+junctions to ``D:\\Temp\\Scratch\\SRPSS\\worktrees\\<name>\\...``: the copy goes through them, and only after it
+succeeded the targets inside that worktree's own folder are deleted; any other junction is neither entered nor
+deleted); git's own ``worktree remove`` is not used, because it follows
 junctions and deletes their targets (measured 21 Nov 2026) and fails on long paths. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
 sheets were lost that way), so the handbook's merge steps use this instead. ``--keep <paths file>`` copies only
 the paths the file lists (one per line, relative to the worktree's ``.artifacts``, a file or a folder) plus the
@@ -250,6 +253,25 @@ def copy_kept(root: Path, worktree: Path, keep: list[str] | None = None
     return copied, kept, differing, failed, links
 
 
+def drive_targets(worktree: Path, drive_root: Path | None = None) -> list[str]:
+    """The scratch-drive folders a worktree's ``.artifacts/{webp,evidence,scratch}`` junctions point at (links made by
+    ``artifact_paths``). Only a target inside ``<drive root>/worktrees/<worktree name>`` is returned; a junction
+    pointing anywhere else is never reported, so never deleted."""
+    drive_root = artifact_paths.SCRATCH_DRIVE_ROOT if drive_root is None else drive_root
+    own = drive_root / artifact_paths.WORKTREE_TARGETS / worktree.name
+    found = []
+    for name in (artifact_paths.WEBP_ROOT.name, EVIDENCE_NAME, artifact_paths.SCRATCH_ROOT.name):
+        link = worktree / ARTIFACTS_NAME / name
+        if not _is_link(_long(str(link))):
+            continue
+        target = artifact_paths.junction_target(_long(str(link)))
+        if target is not None:
+            target = target[4:] if target.startswith("\\\\?\\") else target
+        if target and os.path.isdir(_long(target)) and artifact_paths._inside(target, own)                 and artifact_paths._norm(target) != artifact_paths._norm(own):
+            found.append(target)
+    return found
+
+
 def retire(worktree: Path, keep: list[str] | None = None) -> int:
     """Copy a merged agent's evidence into this checkout, then remove its worktree and branch."""
     if not (worktree / ".git").exists():
@@ -292,6 +314,21 @@ def retire(worktree: Path, keep: list[str] | None = None) -> int:
     if differing:
         print(f"{worktree.name}: REFUSED to remove, {len(differing)} evidence file(s) differ; resolve them first")
         return 1
+    # The copy above went through the junctions (the top of each kept folder may be one); only after it succeeded are
+    # the worktree's own targets on the scratch drive deleted. Links inside them are removed as links, never entered.
+    targets = drive_targets(worktree)
+    for target in targets:
+        try:
+            remove_tree(target)
+        except OSError as exc:
+            print(f"{worktree.name}: could not delete scratch-drive folder {target}: {exc}")
+            return 1
+    # The worktree's own folder on the scratch drive (the targets' parent) goes once it is empty; never anything else.
+    for parent in {str(Path(target).parent) for target in targets}:
+        try:
+            Path(parent).rmdir()
+        except OSError:
+            pass                                  # not empty or already gone: left as it is
     error = remove_worktree(ROOT, worktree)
     if error:
         print(f"{worktree.name}: worktree remove failed: {error}")

@@ -343,8 +343,9 @@ extent is truth outside edit mode; an active CUSTOM working extent is a temporar
 the new extent, Cancel restores the old committed extent, and ending CUSTOM removes the override without assuming canonical
 `(420,280)`. Bubble is the strict case (R-170): its world is in canonical-card units on every card, so motion,
 collision, spawn and trail distances are canonical literals and each shape moves and sizes like the canonical card at
-equal uniform scale; only the population follows area, and only the 110-hero render capacity may zoom the whole world
-(`world_scale`). Circles remain round and the renderer projects radius once through the canonical card's equal-area
+equal uniform scale; only the population follows area, and only the hero capacity (110 on a card) may zoom the whole
+world (`world_scale`); the display-wide card zooms out from that rule with more heroes (`bubble_viewport_profile`,
+`display_wide`). Circles remain round and the renderer projects radius once through the canonical card's equal-area
 response height at the current uniform scale and inset, times `world_scale`. Geometry never becomes a clock.
 
 ## 9A. Extreme viewport scaling contract — axis, amplitude and time are separate

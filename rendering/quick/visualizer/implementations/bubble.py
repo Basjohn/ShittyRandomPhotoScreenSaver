@@ -104,7 +104,7 @@ class QuickBubblePayload:
     extras: tuple[float, ...]
     trails: tuple[float, ...]
     bubble_count: int
-    big_class_bits: tuple[int, int, int, int] = (0, 0, 0, 0)
+    big_class_bits: tuple[int, ...] = (0,) * 8
     ambient_points: tuple[float, ...] = ()
     ambient_occluders: tuple[float, ...] = ()
     protected: bool = False
@@ -249,7 +249,7 @@ BUBBLE_UNWRITTEN_MEMBERS = ("u_time", "u_playing", "u_overall_energy", "u_bass_e
 #: BubbleDraw's per-frame members (``bubble_frame_values``): the native record's block fields
 #: (``core.visualizer_engine.bubble_native_schema``). The ambient points and occluders are the record's two streams.
 BUBBLE_FRAME_MEMBERS = ("u_bubbles_pos", "u_bubbles_extra", "u_bubbles_trail", "u_bubble_count", "u_big_class_bits",
-                        "u_trail_strength", "u_tail_opacity", "u_rainbow_hue_offset", "u_ambient_enabled",
+                        "u_big_class_bits_hi", "u_trail_strength", "u_tail_opacity", "u_rainbow_hue_offset", "u_ambient_enabled",
                         "u_ambient_light_enabled")
 
 
@@ -325,7 +325,9 @@ def bubble_frame_scalars(mode_state: BubbleFrame, payload: QuickBubblePayload) -
         hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)
     return {
         "u_bubble_count": payload.bubble_count,
-        "u_big_class_bits": tuple(payload.big_class_bits),
+        # Eight class words in two uvec4 members: heroes 0-127, then 128-191 (bubble.frag).
+        "u_big_class_bits": tuple(payload.big_class_bits[:4]),
+        "u_big_class_bits_hi": tuple(payload.big_class_bits[4:8]),
         "u_trail_strength": trail_strength,
         "u_tail_opacity": tail_opacity,
         "u_rainbow_hue_offset": hue,
@@ -562,6 +564,7 @@ class QuickBubbleRenderer:
             "u_fade",
             "u_bubble_count",
             "u_big_class_bits",
+            "u_big_class_bits_hi",
             "u_bubbles_pos",
             "u_bubbles_extra",
             "u_bubbles_trail",

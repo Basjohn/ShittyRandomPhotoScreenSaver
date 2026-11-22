@@ -67,19 +67,28 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a. Its branch holds 17a4bb9e0 (placement, bucket
-  discard, row order; Python stills unchanged) and e3a84a443 (core C++, not compiled: record f64/u32 into vector and
-  matrix members, the conventions `w` flag, the sampler W-wrap fix). Next: lead reserves ABI 38 (37 is N5.2d's), the
-  agent renumbers, lead builds; rule (a) needs a measured Waveform bound (bloom rounding 13-29k px at 2-3 levels,
-  edges 400-1,200 past 3) decided on the rerun after the W-wrap fix; then L, P, rule (b), C, T.
-- [ ] Background track: N5.2d with N4.i (motion blur and trails), agent a52b367bbd9c11f5c (Opus Medium), ABI 37 reserved; N5.2c merged 21 Nov (ABI 36, main built).
-- [ ] Black flicker at a transition's start on Vulkan (`--vulkan`, operator, 21 Nov): a visible black frame when a
-  wallpaper transition begins. A serious class (fade, never vanish). Background track, the N5.2d agent's next box
-  after its merge (it holds the background layer's run path), before any further transition batch. Reproduce on a
-  live Vulkan run with `--frame-trace` (which transitions; first frame of the run: the destination upload, the slot
-  swap, the photo environment's first copy, a target made at run start, a cleared frame presented before the first
-  record); compare OpenGL native and Python. Fix at the owner so the first frame of every run shows the source or the
-  run's own first frame, never black; a test whose control is the old path, and a trace-checked run on Display 1.
+- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, branch at a5a5a292b (core still ABI 38, 40 at
+  its merge). L (12/12 IDENTICAL), P (35,544 frames, rule (a) statistical bound fixed: mean 0.063, signed 0.062,
+  2-3 levels 0.52 %, past 3 0.6 %; all 5 controls caught), readback and C (2.0-3.6 ms whole surface) done. Open:
+  - [ ] Group Wave's saturated yellow/red squares: a mode defect (Python shows them on 13 P frames; native OpenGL
+    on 4,301 of 5,250 rule (b) frames; Vulkan never). Lead decision: root-cause by bisecting one failing frame
+    pass by pass on both APIs (first pass non-finite or divergent; suspect NaN/Inf or a read before write, spread
+    in blocks), check the OpenGL GL_INVALID_ENUM on the first 4x frame against it, fix at the source in the one
+    shared shader or resource (Python and native alike), re-cache variant b's references only.
+  - [ ] Rule (b) soft-glow failures (Frozen Past 44, Travelling Pulse 23, Whole Swell 12 frames, max 79; same
+    single-sampled): same bisect on one failing frame; a defect is fixed, never admitted by a wider bound.
+  - [ ] Then rule (b) and the affected P rerun (30 s of each take, section 7), T, stop point 2.
+- [ ] Background track: N5.2e landed 22 Nov (agent a4f18f4449f3e8a5b retired); N5.2f next, held at the weekly
+  usage checkpoint (82 %); its frame blocks take N5.2e's `native_one_block` helper.
+- [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
+  - [ ] Display 1 session gaps: the final flicker session had two runs over 33 ms (3D Block Spins 55, Beam 35; single
+    missed vsyncs at 60 Hz, also present with the diagnostic off), where the 21 Nov N5.2d session had none at ~185 fps.
+    Record the display mode and take one session again (22 Nov: deferred, only the 4K panel at 60 Hz attached as
+    primary; run `preflip_pack.py --rows` with the flicker session's eight, `--backend native-vulkan`, when Display 1
+    is back); unstable only if it repeats at the earlier mode.
+  - [ ] N5.2e's native Vulkan hitch session, taken with it (Membrane, Page Curl, Exploding Tiles, registered 22 Nov
+    without it: a display that is off holds no phase): `preflip_pack.py --rows` for the three, `--backend native-vulkan`,
+    `--app-arg=--graphics-backend=vulkan`; no gap over 33 ms inside a run.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
@@ -114,30 +123,38 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
-- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (agent ad98162c77b175a12, Opus Medium; operator, 21 Nov, after R-248 fixed the
-  speed): R-248's check matched breathing as displayed/nominal radius in logical frames, yet on screen fullscreen
-  breathes and reacts visibly less. Log: `logs/worker_visualizer.log` 21 Nov 20:19:17-20:21:24 fullscreen (world
-  1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
-  (the capacity zoom, a pixel or world-unit cap or floor on pulse/breath amplitude, size-class thresholds that move
-  with the zoom, the renderer's mapping), measured on drawn output not only logical ratios; fix at the owner so the
-  visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
-  never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
-  take at card and fullscreen size with the take's envelope above.
-- [ ] Widget consistency with the Feed/Games You Follow tile treatment (agent a46843a7773612d34, Sonnet Medium; operator, 21 Nov; pattern: 8b5bf3454, Games You
-  Follow's tile = Feed's ink wash + header hairline, no opaque slab, no tile shadow):
-  - [ ] System Stats: its four stat tiles (CPU, Memory, Uptime, Network) draw the extra opaque slab, and keep a
-    (pink, accent) border even with Borderless on.
-  - [ ] Friend Pulse: its friend tiles draw the extra opaque slab.
-  - [ ] Abandonment Issues: the "BACKLOG n/m" badge has a semantically poor fill (pink-red), a border, and off-centre
-    text; give it a proper semantic role colour like the other header badges, no border, text centred.
-  - [ ] Abandonment Issues: the "LAST VISIT" box draws the extra slab; its artwork under Borderless shows stray lines
-    around it; artwork behaves exactly like Achievement Pulse's and Games You Follow's.
-  - [ ] Renders before/after on a real wallpaper, dark and light theme, Borderless off and on, each beside Feed; tests
-    with controls.
+- [ ] Guard output lean (operator, 22 Nov): native guard runs keep hashes per frame and images only for failing
+  frames, never lossless full-take frame folders (Bubble's guard wrote 26 GB on F: on 22 Nov).
+- [ ] Defect: `tests/test_artifact_paths_contract.py::test_png_output_goes_through_the_evidence_publisher` fails on
+  `tools/visualizer_replay/bubble_display_wide_response.py` (writes PNG without `tools/evidence_media.py`).
+- [ ] Bubble's fast-proof baseline and record check (found by the C guard, 22 Nov):
+  - [ ] The accepted `native_render_parity.json` used by `--accepted` predates the card quad (ABI 31/32), so no frame
+    keeps its verdict and every guard judges all frames; take a fresh accepted Bubble baseline on main (ABI 39), with
+    input 22's tracked exception, and point the guide's Bubble guard command at it.
+  - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
+    since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
+    not; fold it there too, with a control.
+- [ ] Widget geometry defects (operator, 22 Nov; not critical, after native work; screenshots in
+  `.artifacts/evidence/widgets/media/20261122_operator_geometry/`; the operator's `--geo` logs and the evidence chest
+  hold more runs):
+  - [ ] Now Playing: the square artwork does not widen with the card, leaving a lot of empty text space; the card
+    needs excess width before the artwork can grow.
+  - [ ] Now Playing side flip: flipping the artwork to the other side is a move, not a mirrored layout, so after a
+    CUSTOM edit the artwork overlaps the title, artist, progress and controls; the flip must mirror the resolved
+    layout (artwork and text column swap sides, keeping each child's custom offsets relative to its column).
+  - [ ] Achievement Pulse: resizing the card or its children sometimes cuts children (the shelves) out of the widget
+    entirely; children must stay inside the card's content rect at every size.
+  Root-cause each at the layout owner with the `--geo` evidence; a resize test per case with a control.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
+- [ ] Circle selector for direction controls (operator, 22 Nov; much later, with the Studio work): Bubble's gradient
+  direction and the other direction controls use the circular visual control, `DirectionMapper` /
+  `DirectionChoiceMapper` in `ui/widgets/visual_controls.py` (NOT Bubble's old gradient control, which it replaces),
+  adapted for Qt Quick where the Studios need it. It allows custom positions, and where the
+  element makes sense a two-node "pie" range: e.g. specular with two pie points creates speculars anywhere between
+  them. Defaults stay exactly as now (presets untouched); Settings spec system owns the values.
 - [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
   test runs on a never-shown window), D1 run (1B.14 harness) with the lead's checks:
   - [ ] Edit Reaction Mode while Waveform plays (the Studio keeps responding; the sidecar log shows the replay).
@@ -628,11 +645,6 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   pass (legal on both backends). The shader branches on `isClipDepthZeroToOne()`. Depth bias is tuned per backend
   and measured, never one shared number (the offset unit is implementation-defined, and Qt sets Vulkan's bias clamp
   to 0). Outside the light frustum is handled in the shader (no clamp-to-border in QRhi).
-- [ ] N4.i Motion blur and trails (a velocity attachment, the tile-max compute, trails and motion uniforms): five
-  transitions.
-  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): the velocity is the formats-service decision above (two R16F); the
-  tile-max runs as compute over a storage image (D16) in a format the research lists as load-store on both
-  backends.
 - [ ] N4.j Backdrop environment (`BackdropEnvironment`: Extruded Spectrum and Sphere's wallpaper reflection), with N5.3;
   the photo half landed with N5.2c (ABI 36).
 - [ ] N4.k Light shafts: the shared owner (Neon Lake today) and Extruded Bubble's own second implementation
@@ -1501,8 +1513,6 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
-- [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
@@ -1528,6 +1538,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 
 **NF. The flip (P3.5): Vulkan the default, OpenGL selectable**
 
+- [ ] One row-order convention again (lead, 22 Nov): N5.4 draws Waveform in Python's row order through the composite's
+  `scene_rows: "up"` so its 4x edges match Python exactly; every other program draws top row first. Once the Python
+  renderers are retired (N5.2h and the modes' flip), return Waveform to the core's row order, delete `scene_rows` and
+  `u_scene_rows_up`, and re-baseline Waveform native-only (rule (b) and its reaction check); a test that no program
+  declares another row order.
 - [ ] N5.8 The Studio's preview host and window, and the release-media and capture tools, render through the
   same core; no Python OpenGL node is left in any Qt Quick surface of the process.
 - [ ] The translucent-window question settled from N0.6 (the Studio's window: see-through if Vulkan can, else an
@@ -1711,6 +1726,8 @@ follow-ups with their evidence folders).
 
 - [ ] **M4 Unified Appearance Theme (operator, 16 Nov):** after 1B.8 M3 / 1.7b material-border rendering and its proof, and **before SMP M0**. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
   - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
+  - [ ] Retire roles left unused by the 22 Nov tile unification (System Stats' `metric_surface_color` and its theme role;
+    tiles now take `tile_wash`) when the themes are regenerated here.
   - [ ] **Semantic completeness audit alongside unification (operator, 18 Nov):** inventory presently hardcoded colours, alpha, tint and *reasonably independent* material surfaces across Settings, ordinary widgets and fullscreen overlays; give missing eligible elements typed roles **where the element genuinely has an authored surface/ink purpose**, especially the Media Control Bar (distinct from the Media card), volume child, branded headers, seekbar track/fill and overlay controls. Seed every new role with the **effective visual value the element renders today**, including existing style overrides, so the default unified theme is visually unchanged unless the operator explicitly requests a change. Preserve fullscreen Now Playing’s two fill-opacity biases as neutral-zero adjustments on the resolved Normal semantic alpha, not new standalone colour authority or preset metadata. Preserve shared renderer/semantic ownership and per-element inheritance/Normal overrides; avoid indiscriminate material passes for decorative lines, tiny fills or already-correct surfaces. Prove baseline parity with before/after pixels before re-authoring aesthetics.
   - [ ] **Media application-volume child border thickness becomes semantic at M4 (operator, 19 Nov):** introduce an authored, typed `media.volume.outline.width` thickness role shared by both the vertical track and its filled-level outline, and use the current **2.5 logical px** as the unified-theme baseline. The Widgets → Media → Volume Control **Outline Width** setting, added before M4, must then become an explicit override of that role; an untouched/default value must inherit the theme instead of freezing all users at 2.5 px. Preserve non-default user-authored widths across migration, including zero (intentional no outline). Keep the material-border 20% alpha adjustment and the single-stroke clipping behavior independent of thickness. Confirm round-trip, theme switch/reset, DPI scaling, both alignment sides, Normal/material states and no new renderer or capture.
   - [ ] **Hierarchical sub-semantics (operator, 20 Nov), if architecture and cost allow.** Each role (for example

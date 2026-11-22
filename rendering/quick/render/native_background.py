@@ -62,9 +62,17 @@ FALLBACK_TRANSITION = "crossfade"
 #: environment step (its mipped copy is "<step>.environment").
 SCENE_TARGET = "scene"
 SCENE_ENVIRONMENT = "environment"
+#: N5.2d (N4.i): the trails' ghost buffer, the motion blur's gathered scene, its tile image, and a run's motion table
+#: (Crumble's, an item texture sent with the run's meshes).
+SCENE_GHOSTS = "ghosts"
+SCENE_BLURRED = "blurred"
+SCENE_MOTION_TILES = "motion_tiles"
+SCENE_MOTION_TABLE = "motion_table"
+SCENE_BLOOM = "scene_bloom"                 # N5.2e: the bloom step (its glow "scene_bloom.glow")
 #: The frame trace's records of a run on the layer (``FrameTraceEvent.NATIVE_TRANSITION_TICK`` / ``_END``; a test holds
 #: them equal).
 _TRACE_TICK, _TRACE_END = 81, 82
+_TRACE_WAITING_KEPT = 83                 # FrameTraceEvent.NATIVE_TRANSITION_WAITING_KEPT (ABI 39's waiting_kept)
 
 
 def _other_slot(slot: str) -> str:
@@ -132,44 +140,122 @@ def native_transition_renderer(transition_id: str) -> Any:
     except ValueError:
         return None                                               # not a transition the product knows
     if isinstance(renderer, NativeScenePasses):
-        shipped = all(path.is_file() for p in renderer.native_scene_passes()
+        shipped = all(path.is_file() for p in renderer.native_scene_passes() if not p.core_triangle
                       for path in scene_pack_paths(transition_id, p.name))
-        return renderer if shipped else None
+        shared = all(shared_pack_path(name.rsplit(".", 1)[0], "." + name.rsplit(".", 1)[1]).is_file()
+                     for name in _motion_post_names())
+        return renderer if shipped and shared else None
     if not transition_pack_path(transition_id).is_file() or not isinstance(renderer, NativeFragmentPass):
         return None
     shipped = all(path.is_file() for p in renderer.instanced_passes for path in instanced_pack_paths(p.name))
     return renderer if shipped else None
 
 
-def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_size: tuple[int, int]) -> tuple:
+def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_size: tuple[int, int],
+                  pixels: tuple[int, int] | None = None) -> tuple:
     """N5.2c: the program of a run's scene (``NativeScene``): N4.j's photo environment of the new picture (when a pass
     reads it), each pass into the scene target (colour RGBA8 cleared to opaque black and D32F depth, the run's
     samples: the Python renderer's ``SceneTarget`` scope, or Quick's framebuffer, which a one-sample target copies
-    exactly), then the opaque composite onto the layer. Returns (passes, targets)."""
-    from rendering.native.mode import (BUILTIN_QUAD_MESH, BlendState, CompositeStep, EnvironmentStep, ModePass,
-                                       ModeTarget, PassGeometry, PassSampler, TargetAttachment)
+    exactly), then the opaque composite onto the layer. Returns (passes, targets, images).
+
+    N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity as two
+    R16F attachments (``vx``, ``vy``: QRhi has no RG16F; cleared to no motion), written by the passes that move (the
+    others mask them, Python's ``velocity_writes``); then the tile max (a compute entry triggered by every drawn record,
+    into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
+    the composite of that. With trails each ghost pass (target ``ghosts``) is drawn once a ghost into an R8 buffer,
+    MAX-blended, and the edges are a pass of the scene's list."""
+    from rendering.gl_programs.scene3d import SCENE3D_TRAIL_GHOSTS
+    from rendering.native.mode import (BUILTIN_QUAD_MESH, BlendState, BloomStep, ComputeBinding, ComputePass,
+                                       CompositeStep,
+                                       EnvironmentStep, ModePass, ModeTarget, PassGeometry, PassOutput, PassSampler,
+                                       StorageImage, TargetAttachment)
     from rendering.quick.scene3d.environment import environment_size
-    from rendering.quick.transitions.native_scene import QUAD_MESH
+    from rendering.quick.transitions.native_scene import (MOTION_GATHER, MOTION_TILE_MAX, QUAD_MESH, ghost_pass_name,
+                                                          motion_geometry)
 
     environment = f"{SCENE_ENVIRONMENT}.environment"
-    textures = {"old": old, "new": new, "environment": environment}
+    textures = {"old": old, "new": new, "environment": environment, "motion": SCENE_MOTION_TABLE,
+                "ghosts": f"{SCENE_GHOSTS}.ghost"}
+    nearest = {"motion", "ghosts"}            # texelFetch reads, never filtered (Python's GL_NEAREST)
+    motion = bool(getattr(scene, "motion", False))
+    trails = bool(getattr(scene, "trails", False))
     passes: list = []
     if scene.environment:
         passes.append(EnvironmentStep(SCENE_ENVIRONMENT, new, environment_size(destination_size)))
     for p in scene.passes:
-        vertex, fragment = (path.read_bytes() for path in scene_pack_paths(renderer.transition_id, p.name))
-        samplers = tuple(PassSampler(name, textures[kind], "linear", "clamp",
+        samplers = tuple(PassSampler(name, textures[kind], "nearest" if kind in nearest else "linear", "clamp",
                                      "linear" if kind == "environment" else "none") for name, kind in p.samplers)
+        blend = p.blend if isinstance(p.blend, str) else BlendState(tuple(p.blend[0]), tuple(p.blend[1]))
+        target = getattr(p, "target", "scene")
+        # With motion blur every pass on the scene writes its colour; only a moving one writes the velocity.
+        outputs = ()
+        if motion and target == "scene":
+            outputs = (PassOutput(True),) + ((PassOutput(True),) * 2 if getattr(p, "moves", False)
+                                              else (PassOutput(False),) * 2)
+        if getattr(p, "core_triangle", False):
+            fragment = shared_pack_path(p.name, ".frag").read_bytes()
+            passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
+                                   viewport=getattr(p, "viewport", "content")))
+            continue
+        vertex, fragment = (path.read_bytes() for path in scene_pack_paths(renderer.transition_id, p.name))
         mesh = BUILTIN_QUAD_MESH if p.mesh == QUAD_MESH else p.mesh
         geometry = PassGeometry(vertex, topology=p.topology, vertices=p.vertices, instances=p.instances, mesh=mesh,
                                 instance_from=mesh if p.instances == "mesh" else None)
-        blend = p.blend if isinstance(p.blend, str) else BlendState(tuple(p.blend[0]), tuple(p.blend[1]))
-        passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET,
-                               depth_test="less" if p.depth else None, depth_write=bool(p.depth), geometry=geometry))
-    passes.append(CompositeStep("scene_composite", "opaque", f"{SCENE_TARGET}.colour"))
-    target = ModeTarget(SCENE_TARGET, (TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 1.0)),), depth=True,
-                        samples=max(1, int(scene.samples)))
-    return passes, (target,)
+        if target == "ghosts":
+            # One pass a ghost, each with its own values (<member>@<pass>): MAX-blended, no depth (trails.py).
+            for age in range(SCENE3D_TRAIL_GHOSTS):
+                passes.append(ModePass(ghost_pass_name(p.name, age), fragment,
+                                       BlendState(("max", "one", "one"), ("max", "one", "one")), samplers,
+                                       target=SCENE_GHOSTS, geometry=geometry))
+            continue
+        passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
+                               depth_test="less" if p.depth else None,
+                               depth_write=bool(getattr(p, "writes_depth", p.depth)), geometry=geometry))
+    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears to 0).
+    bloom = float(getattr(scene, "bloom", 0.0) or 0.0)
+    colour = [TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0))]
+    targets: list = []
+    images: list = []
+    scene_texture = f"{SCENE_TARGET}.colour"
+    if motion:
+        colour += [TargetAttachment("vx", "r16f"), TargetAttachment("vy", "r16f")]
+        geometry = motion_geometry(pixels if pixels is not None else destination_size)
+        images.append(StorageImage(SCENE_MOTION_TILES, geometry.tiles, "rgba16f"))
+        velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.vx", "nearest"),
+                    PassSampler("uVelocityY", f"{SCENE_TARGET}.vy", "nearest"))
+        passes.append(ComputePass(MOTION_TILE_MAX, shared_pack_path(MOTION_TILE_MAX, ".comp").read_bytes(),
+                                  (ComputeBinding("uTiles", SCENE_MOTION_TILES, "image", "write"),),
+                                  groups=(geometry.tiles[0], geometry.tiles[1], 1), trigger="draw", samplers=velocity))
+        # N5.2e: with bloom the gather covers the allocation (Python's), whose margin the bloom chain reads.
+        passes.append(ModePass(MOTION_GATHER, shared_pack_path(MOTION_GATHER, ".frag").read_bytes(), "replace",
+                               (PassSampler("uScene", scene_texture, "nearest"), *velocity,
+                                PassSampler("uTiles", SCENE_MOTION_TILES, "nearest")), target=SCENE_BLURRED,
+                               viewport="allocation" if bloom > 0.0 else "content"))
+        scene_texture = f"{SCENE_BLURRED}.colour"
+    if bloom > 0.0:
+        # N5.2e: Python's bloom chain of the (gathered) scene, its glow added by the opaque composite.
+        passes.append(BloomStep(SCENE_BLOOM, scene_texture))
+        passes.append(CompositeStep("scene_composite", "opaque_glow", scene_texture, f"{SCENE_BLOOM}.glow"))
+    else:
+        passes.append(CompositeStep("scene_composite", "opaque", scene_texture))
+    targets.append(ModeTarget(SCENE_TARGET, tuple(colour), depth=True, samples=max(1, int(scene.samples))))
+    if trails:
+        targets.append(ModeTarget(SCENE_GHOSTS, (TargetAttachment("ghost", "r8"),)))
+    if motion:
+        targets.append(ModeTarget(SCENE_BLURRED, (TargetAttachment(
+            "colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0)),)))
+    return passes, tuple(targets), tuple(images)
+
+
+def _motion_post_names() -> tuple[str, ...]:
+    from rendering.quick.transitions.native_scene import motion_post_sources
+
+    return tuple(motion_post_sources())
+
+
+def shared_pack_path(name: str, suffix: str) -> Path:
+    """N5.2d: a shared post pass's pack (``native_scene.motion_post_sources``), beside the transitions' packs."""
+    return transition_pack_path(name).parent / f"{name}{suffix}.qsb"
 
 
 def scene_mesh(mesh: Any) -> tuple:
@@ -190,13 +276,24 @@ def scene_mesh(mesh: Any) -> tuple:
         layout(mesh.instance_attributes)
 
 
-def scene_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float]) -> dict:
+def scene_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float],
+                   pixels: tuple[int, int] | None = None, scene: Any = None) -> dict:
     """N5.2c: the scene program's settings for this frame: the renderer's own values (``scene_values``, its one owner)
-    less the core's members, an array given flat."""
+    less the core's members, an array given flat. N5.2d: a renderer that reads the item's device ``pixels``
+    (``scene_pixels``: the motion's ``uViewport``, Pixel Accretion's grid) is given them, and a scene with motion blur
+    or trails adds its post passes' values (``motion_post_values``, Python's own)."""
     from rendering.native.mode import MODE_CORE_MEMBERS
-    from rendering.quick.transitions.native_scene import flat_values
+    from rendering.quick.transitions.native_scene import flat_values, motion_post_values
 
-    values = flat_values(renderer.scene_values(run, sample, logical_size))
+    if getattr(renderer, "scene_pixels", False):
+        values = renderer.scene_values(run, sample, logical_size, pixels=pixels)
+    else:
+        values = renderer.scene_values(run, sample, logical_size)
+    values = flat_values(values)
+    if scene is not None and (getattr(scene, "motion", False) or getattr(scene, "trails", False)):
+        values.update(motion_post_values(scene, pixels))
+    if scene is not None and float(getattr(scene, "bloom", 0.0) or 0.0) > 0.0:
+        values["u_bloom_strength"] = float(scene.bloom)          # N5.2e: Python's uBloomStrength (the request's bloom)
     return {name: _flat(value) for name, value in values.items() if name not in MODE_CORE_MEMBERS}
 
 
@@ -287,7 +384,9 @@ class NativeBackgroundLayer:
         self._scene: Any = None
         self._show: int | None = None
         self._meshes: list[str] = []
+        self._run_textures: list[str] = []   # N5.2d: a scene run's own textures (Crumble's motion table)
         self.runs = 0                    # runs the core drew
+        self._waiting_kept_seen = 0      # the core's waiting_kept at the last traced run's end (--frame-trace only)
         self.ticks = 0                   # frames of a run given their progress
         self._settings: dict | None = None
         self._placed: tuple | None = None
@@ -423,6 +522,9 @@ class NativeBackgroundLayer:
             vertices, layout, instances, instance_layout = scene_mesh(mesh)
             mode.mesh(mesh.name, vertices, layout, instances=instances, instance_layout=instance_layout)
             self._meshes.append(mesh.name)
+        for texture in getattr(scene, "textures", ()):           # N5.2d: Crumble's motion table
+            mode.texture(SCENE_MOTION_TABLE, texture.pixels, texture.size, format=texture.format)
+            self._run_textures.append(SCENE_MOTION_TABLE)
         self._scene = scene
         self._show = SHOW_OLD
         self._scene_frame()
@@ -438,11 +540,12 @@ class NativeBackgroundLayer:
         show = renderer.scene_show(run, sample)
         logical = self._logical()
         if show == SHOW_EFFECT:
-            settings = scene_settings(renderer, run, sample, logical)
+            pixels = self._item_pixels()
+            settings = scene_settings(renderer, run, sample, logical, pixels, self._scene)
             if self._show != SHOW_EFFECT:
-                passes, targets = scene_program(renderer, self._scene, self._slot, _other_slot(self._slot),
-                                                self._next_image.pixel_size)
-                mode.program(passes, settings, targets=targets)
+                passes, targets, images = scene_program(renderer, self._scene, self._slot, _other_slot(self._slot),
+                                                        self._next_image.pixel_size, pixels)
+                mode.program(passes, settings, targets=targets, images=images)
             else:
                 mode.settings(settings)
         elif show != self._show:
@@ -450,6 +553,17 @@ class NativeBackgroundLayer:
                            else (_other_slot(self._slot), self._next_image))
             mode.program(background_layer_program(texture=slot), background_layer_settings(image.pixel_size, logical))
         self._show = show
+
+    def _item_pixels(self) -> tuple[int, int]:
+        """N5.2d: the item's device pixels (Python's frame viewport: the motion's ``uViewport`` and the scene's
+        allocation), from the window's own ratio once read, else its device pixel ratio."""
+        width, height = self._logical()
+        ratio = self._pixel_ratio() if self._mode is not None else None
+        if ratio is None:
+            window = self._item.window()
+            dpr = float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
+            ratio = (dpr, dpr)
+        return max(1, round(width * ratio[0])), max(1, round(height * ratio[1]))
 
     def _frame_settings(self) -> dict:
         sample = self._run.sample(self._clock_ns())
@@ -485,12 +599,38 @@ class NativeBackgroundLayer:
         except Exception:
             pass                                                  # a diagnostic record never stops the run
 
+    def _waiting_kept(self) -> int | None:
+        """The core's ``waiting_kept`` (ABI 39), read only with a frame trace sink (a diagnostic: nothing at rest)."""
+        if self._trace is None or self._mode is None:
+            return None
+        try:
+            value = self._mode.state().get("waiting_kept")
+        except Exception:
+            return None
+        return int(value) if isinstance(value, (int, float)) else None
+
+    def _trace_waiting_kept(self, run: Any) -> None:
+        """The run's records kept while it waited for its textures (``NATIVE_TRANSITION_WAITING_KEPT``), read once at
+        its end, after its END record (outside its window: the core's state read at a run's start stalled the run, A/B
+        22 Nov, max gap 136 ms with it against 43 without), against the last traced run's end; never raises."""
+        end = self._waiting_kept() if run is not None else None
+        if end is None:
+            return
+        start, self._waiting_kept_seen = self._waiting_kept_seen, end
+        try:
+            self._trace.record(_TRACE_WAITING_KEPT, screen_index=self._trace_screen, revision=end - start,
+                               auxiliary=int(run.run_id))
+        except Exception:
+            pass
+
     def _end_run(self) -> None:
         run, self._run = self._run, None
         self._trace_run(_TRACE_END, run)
+        self._trace_waiting_kept(run)
         self._disconnect_clock()
         self._renderer = None
         meshes, self._meshes = self._meshes, []                   # N5.2c: a scene run's, removed once not drawn
+        run_textures, self._run_textures = self._run_textures, []  # N5.2d: likewise
         self._scene = self._show = None
         if run is None or self._mode is None:
             self._next_image = None
@@ -509,6 +649,8 @@ class NativeBackgroundLayer:
             self._mode.remove_texture(previous)                   # the source goes once the destination is drawn
         for name in meshes:
             self._mode.remove_mesh(name)                          # N5.2c: after the program that drew them went
+        for name in run_textures:
+            self._mode.remove_texture(name)                       # N5.2d: likewise
         self._sync(force=True)
 
     def _connect_clock(self) -> None:
@@ -620,11 +762,17 @@ class NativeBackgroundLayer:
             return
         held = {self._slot: self._image, _other_slot(self._slot): self._next_image}
         lost = [(name, held[name]) for name in names if held.get(name) is not None]
-        if not lost:
+        # N5.2d: a scene run's own texture (Crumble's motion table), sent again from the run's scene.
+        tables = [t for t in getattr(self._scene, "textures", ()) if SCENE_MOTION_TABLE in names
+                  and SCENE_MOTION_TABLE in self._run_textures]
+        if not lost and not tables:
             return
         try:
             for name, image in lost:
                 self._mode.texture(name, image.rgba8, image.pixel_size)
+                self.resent += 1
+            for table in tables:
+                self._mode.texture(SCENE_MOTION_TABLE, table.pixels, table.size, format=table.format)
                 self.resent += 1
             self._mode.update()
         except Exception as exc:

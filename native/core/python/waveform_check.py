@@ -816,14 +816,11 @@ api_verdict = base.api_verdict
 
 
 def owner(argv: list[str]) -> int:
-    """``owner_render_parity.py`` with the route drawing Waveform, registered for this process only
-    (``native_route.waveform_registered``; its production registration is the port's last step); every argument passed
-    through (``--native --mode waveform_ribbon`` added)."""
-    from rendering.quick.visualizer import native_route as route
+    """``owner_render_parity.py`` with the route drawing Waveform; every argument passed through (``--native --mode
+    waveform_ribbon`` added)."""
     from tools.visualizer_replay import owner_render_parity as parity
 
-    with route.waveform_registered():
-        return parity.main(["--native", "--mode", MODE_ID, *argv])
+    return parity.main(["--native", "--mode", MODE_ID, *argv])
 
 
 def main(argv: list[str] | None = None) -> int:

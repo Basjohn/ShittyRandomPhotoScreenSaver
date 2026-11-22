@@ -63,7 +63,13 @@
 // setting that names a record field, is refused (one owner per member); a member none of the three fills is refused
 // (unfilled). The checks run when the program, the schema and the settings meet (at bind, program and settings), so a
 // mode whose data does not match its shaders never draws zeros. A program whose members the core and the record fill
-// alone draws with no settings at all (audit L5).
+// alone draws with no settings at all (audit L5). ABI 37 (N4.i): a setting named "<member>@<pass>" fills that member of
+// that one pass over the unscoped setting of the member (the motion trails' ghosts: one pass a ghost, one pack, each at
+// its own moment); its pass must declare the member, and the member's owner rules are the unscoped name's.
+// ABI 37 (N4.i): a pass on the core's triangle into a scene target may declare "viewport": "allocation" (drawn over the
+// target's whole allocation, as Python draws its post passes; default "content"); an attachment a pass masks
+// ("write": false) may be left unwritten by its shader; a compute entry may be triggered by "draw" (every record that
+// draws the passes), the one compute a still admits.
 //
 // The passes (ModeContent): the surface's target is cleared by a draw (targets.h rule B), then every pass draws one
 // triangle over the whole target, in order, blended as it says (PassBlend): replace, alpha (straight alpha over:
@@ -249,7 +255,7 @@ struct ModeCard
     // Derived, never JSON: the program draws its scene in the content's orientation (its composite steps declare
     // "scene_frame": "oriented"), set on the card the composite's members are packed under (packFrame).
     bool orientedFrame = false;
-    // Derived, never JSON (ABI 38): the program's scene holds OpenGL's rows (its composite steps declare "scene_rows":
+    // Derived, never JSON (ABI 40): the program's scene holds OpenGL's rows (its composite steps declare "scene_rows":
     // "up"), set on the card the composite's members are packed under (packFrame): u_scene_rows_up.
     bool sceneRowsUp = false;
 
@@ -417,7 +423,7 @@ struct ModePass
     CompositeForm compositeForm = CompositeForm::Overlay;
     bool sceneFrameWindow = false;                   // ABI 29: a composite's "scene_frame": "window"
     bool sceneFrameOriented = false;                 // ABI 35: a composite's "scene_frame": "oriented"
-    bool sceneRowsUp = false;                        // ABI 38: a composite's "scene_rows": "up"
+    bool sceneRowsUp = false;                        // ABI 40: a composite's "scene_rows": "up"
     // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
     QShader sorted;
     QList<PassOutput> sortedOutputs;
@@ -425,6 +431,9 @@ struct ModePass
     // waits for it as for any texture it samples).
     QByteArray environmentSource;
     QSize environmentSize;
+    // ABI 37 (N4.i): "viewport": "allocation", a pass on the core's triangle drawn over its scene target's whole
+    // allocation (Python's post passes over the SceneTarget's allocation: the trails' edges).
+    bool allocationViewport = false;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
@@ -466,6 +475,8 @@ struct ModeProgram
     const StorageBufferDeclaration *storageBuffer(const QByteArray &name) const;
     const StorageImageDeclaration *storageImage(const QByteArray &name) const;
     bool hasCompute() const;
+    // ABI 37 (N4.i): every compute entry (if any) is triggered by "draw" (the one trigger a still admits).
+    bool computeOnDrawOnly() const;
     // N3.2: the settings' numbers the draws name, from `settings`.
     QHash<QByteArray, double> drawSettingNumbers(const QJsonObject &settings) const;
     bool needsCard() const;
@@ -501,7 +512,7 @@ struct ModeProgram
     bool sceneFrameWindow() const;
     // ABI 35: the program has a composite step and every composite step declares "scene_frame": "oriented".
     bool sceneFrameOriented() const;
-    // ABI 38: the program has a composite step and every composite step declares "scene_rows": "up" (its scene
+    // ABI 40: the program has a composite step and every composite step declares "scene_rows": "up" (its scene
     // drawn in OpenGL's rows: the scene's bottom row at the target's memory row 0, as Python's SceneTarget holds it).
     bool sceneRowsUp() const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's,
@@ -529,7 +540,9 @@ int modeContentObjects();
 // runs the same text, rendering/gl_programs/mip_chain.py) in the record that commits it, before any pass samples it,
 // on either route (in the frame, or after a job's output is imported); never QRhi's generateMips, whose odd levels are
 // the driver's. A device without compute refuses such a texture with its reason (a failure, the owner told).
-enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1 };
+// ABI 37 (N5.2d): RGBA32F (16 bytes a texel, floats in the platform's byte order: Crumble's motion table, Python's
+// GL_RGBA32F keyframes read with texelFetch, never filtered), never with mips (the box kernel is RGBA8 and RGBA16F).
+enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1, RGBA32F = 2 };
 bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out);
 QString modeTextureFormatName(ModeTextureFormat format);
 QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format);
@@ -586,6 +599,7 @@ struct TextureReport
     qint64 retired = 0;          // job outputs handed to the window's retire list
     qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
     qint64 stillKept = 0;        // N5.7a: a still's records that kept the target (what it draws had not changed)
+    qint64 waitingKept = 0;      // records that kept the target's frame while the content waited for textures or meshes
 };
 
 // One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":

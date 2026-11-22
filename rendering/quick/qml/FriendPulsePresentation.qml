@@ -510,23 +510,8 @@ OverlayWidget {
             border.color: friendRoot.friendPulseModel.rowBorderColor
             border.width: friendRoot.friendStrokeWidth(1.0)
             antialiasing: true
-            // Negative z paints the contact shadow behind the existing row
-            // surface without wrapping/replacing its stable edit role target.
-            Rectangle {
-                objectName: "friendPulseRowContactShadow_" + index
-                z: -1
-                visible: friendRoot.cardShadowEnabled && activityRow.visible
-                x: Math.max(-3.0, Math.min(3.0,
-                    friendRoot.cardShadowOffsetX * 0.45))
-                y: Math.max(-3.0, Math.min(3.0,
-                    friendRoot.cardShadowOffsetY * 0.45))
-                width: parent.width
-                height: parent.height
-                radius: parent.radius
-                color: Qt.rgba(friendRoot.cardShadowColor.r,
-                    friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
-                    friendRoot.cardShadowColor.a * 0.22)
-            }
+            // No shadow slab under the row: the Feed tile has none, and under its
+            // translucent wash a shadow rectangle would show through as a darker backdrop.
             HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
             // On a surface material: one rounded box filling the friend row over its
@@ -856,21 +841,7 @@ OverlayWidget {
                 border.color: friendRoot.friendPulseModel.rowBorderColor
                 border.width: friendRoot.friendStrokeWidth(1.0)
                 antialiasing: true
-                Rectangle {
-                    objectName: "friendPulseGridContactShadow_" + index
-                    z: -1
-                    visible: friendRoot.cardShadowEnabled && gridTile.visible
-                    x: Math.max(-3.0, Math.min(3.0,
-                        friendRoot.cardShadowOffsetX * 0.45))
-                    y: Math.max(-3.0, Math.min(3.0,
-                        friendRoot.cardShadowOffsetY * 0.45))
-                    width: parent.width
-                    height: parent.height
-                    radius: parent.radius
-                    color: Qt.rgba(friendRoot.cardShadowColor.r,
-                        friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
-                        friendRoot.cardShadowColor.a * 0.22)
-                }
+                // No shadow slab under the tile (see the row above).
                 HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
                 // On a surface material: one rounded box filling the friend tile over its

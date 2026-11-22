@@ -34,6 +34,32 @@ from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatc
 from .post import FULLSCREEN_VERTEX_SOURCE
 from .uniforms import PassBlocks
 
+#: N5.2d (N4.i): the define the native core's packs of these texts are baked with (``rendering.gl_programs.conventions``).
+NATIVE_FRAME_DEFINE = "SRPSS_NATIVE_CORE"
+
+# N5.2d (N4.i): the post passes read the scene in this renderer's frame (OpenGL rows, bottom first; motion y up). Under
+# the native core (its packs baked with SRPSS_NATIVE_CORE) the scene target is this allocation flipped whole (its content
+# at rows [H - h, H), native/core/src/scene_targets.h), its motion y is this one's negated, and its velocity is two R16F
+# attachments (QRhi has no RG16F): these helpers read the same texel there, so every pass below computes in this frame
+# on both. Without the define they are the plain reads (checklist 16: Python's stills byte-identical).
+NATIVE_FRAME_GLSL = f"""
+#ifdef {NATIVE_FRAME_DEFINE}
+ivec2 sceneMemoryTexel(ivec2 texel, ivec2 size) {{ return ivec2(texel.x, size.y - 1 - texel.y); }}
+vec2 sceneVelocityAt(sampler2D x, sampler2D y, ivec2 texel) {{
+    ivec2 memory = sceneMemoryTexel(texel, textureSize(x, 0));
+    return vec2(texelFetch(x, memory, 0).x, -texelFetch(y, memory, 0).x);
+}}
+#else
+ivec2 sceneMemoryTexel(ivec2 texel, ivec2 size) {{ return texel; }}
+vec2 sceneVelocityAt(sampler2D x, sampler2D y, ivec2 texel) {{ return texelFetch(x, texel, 0).xy; }}
+#endif
+"""
+
+
+def _velocity_y_glsl(declaration: str) -> str:
+    """The native velocity's y attachment, declared under the define only (this renderer's RG16F holds both)."""
+    return f"\n#ifdef {NATIVE_FRAME_DEFINE}\n{declaration}\n#else\n#define uVelocityY uVelocity\n#endif\n"
+
 MOTION_BLUR_TAPS = 16
 # Rows one tile-max workgroup can hold: K <= 256 covers targets up to ~10,000 px high.
 MOTION_BLUR_MAX_TILE = 256
@@ -50,7 +76,8 @@ _TILE_MAX_COMPUTE = f"""#version 460 core
 layout(local_size_x = {_TILE_ROW_INVOCATIONS}) in;
 layout(binding = 0) uniform sampler2D uVelocity;
 layout(rgba16f, binding = 1) writeonly uniform image2D uTiles;
-{_TILE_MAX_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}shared vec2 rowLongest[{MOTION_BLUR_MAX_TILE}];
+{_TILE_MAX_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}{_velocity_y_glsl("layout(binding = 2) uniform sampler2D uVelocityY;")}
+{NATIVE_FRAME_GLSL}shared vec2 rowLongest[{MOTION_BLUR_MAX_TILE}];
 void main() {{
     ivec2 size = textureSize(uVelocity, 0);
     ivec2 tile = ivec2(gl_WorkGroupID.xy);
@@ -62,7 +89,7 @@ void main() {{
         for (int i = 0; i < uTile; ++i) {{
             ivec2 texel = origin + ivec2(i, row);
             if (texel.x >= size.x) break;
-            vec2 motion = texelFetch(uVelocity, texel, 0).xy;
+            vec2 motion = sceneVelocityAt(uVelocity, uVelocityY, texel);
             float squared = dot(motion, motion);
             if (squared > longestSquared) {{
                 longestSquared = squared;
@@ -95,6 +122,7 @@ uniform sampler2D uTiles;
 uniform int uTile;
 uniform ivec2 uSize;
 uniform float uLongest;   // the longest blur, in pixels
+{_velocity_y_glsl("uniform sampler2D uVelocityY;")}{NATIVE_FRAME_GLSL}
 const int TAPS = {MOTION_BLUR_TAPS};
 
 vec2 bounded(vec2 motion) {{
@@ -118,8 +146,9 @@ uint mixBits(uint value) {{
 }}
 {SRPSS_CONVENTIONS_FRAGMENT_GLSL}
 void main() {{
-    ivec2 pixel = fragTexel(uSize);
-    vec4 centre = texelFetch(uScene, pixel, 0);
+    // This renderer's texel of the fragment (the native core's memory row flipped back: an involution).
+    ivec2 pixel = sceneMemoryTexel(fragTexel(uSize), uSize);
+    vec4 centre = texelFetch(uScene, sceneMemoryTexel(pixel, uSize), 0);
     // The longest motion in this pixel's 3 x 3 tile neighbourhood, rows then columns, first longest wins.
     ivec2 tileCount = textureSize(uTiles, 0);
     ivec2 home = pixel / uTile;
@@ -140,7 +169,7 @@ void main() {{
         FragColor = centre;   // nothing nearby moves: exact
         return;
     }}
-    float centreSpan = halfSpan(texelFetch(uVelocity, pixel, 0).xy);
+    float centreSpan = halfSpan(sceneVelocityAt(uVelocity, uVelocityY, pixel));
     float total = 1.0 / centreSpan;
     vec4 sum = centre * total;
     // Integer-hash jitter (R-94) of a quarter tap either way: enough to break up banding,
@@ -151,12 +180,12 @@ void main() {{
         vec2 offset = dominant * 0.5 * along;
         ivec2 tap = clamp(ivec2(floor(vec2(pixel) + 0.5 + offset)), ivec2(0), uSize - 1);
         float distance = length(offset);
-        float tapSpan = halfSpan(texelFetch(uVelocity, tap, 0).xy);
+        float tapSpan = halfSpan(sceneVelocityAt(uVelocity, uVelocityY, tap));
         // The tap smears over this pixel if its blur reaches it; this pixel shows what is
         // behind it within its own blur; two surfaces blurring together blend.
         float weight = cone(distance, tapSpan) + cone(distance, centreSpan)
                      + 2.0 * cylinder(distance, tapSpan) * cylinder(distance, centreSpan);
-        sum += texelFetch(uScene, tap, 0) * weight;
+        sum += texelFetch(uScene, sceneMemoryTexel(tap, uSize), 0) * weight;
         total += weight;
     }}
     FragColor = sum / total;
@@ -165,7 +194,8 @@ void main() {{
 # N1.6: the gather's values in one std140 pass block (``portable_program``): the scene, the velocity and the tiles at
 # units 0-2, the tile size, the target's size and the longest blur in the block.
 _, (_GATHER_FRAGMENT,), _GATHER_BLOCK = portable_program(
-    None, (_GATHER_FRAGMENT,), block="MotionGather", samplers={"uScene": 0, "uVelocity": 1, "uTiles": 2})
+    None, (_GATHER_FRAGMENT,), block="MotionGather",
+    samplers={"uScene": 0, "uVelocity": 1, "uTiles": 2, "uVelocityY": 3})   # uVelocityY: the native core's only
 
 
 def motion_blur_tile(height: int) -> int:

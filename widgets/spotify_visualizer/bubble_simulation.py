@@ -27,6 +27,7 @@ from widgets.spotify_visualizer.bubble_viewport_profile import (
     BubbleWorld,
     resolve_bubble_world,
     scale_bubble_population,
+    DISPLAY_WIDE_BREATH_GAIN_SHARE,
 )
 from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
 from core.authored_clock import authored_now
@@ -35,6 +36,7 @@ _SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
 
 logger = get_logger(__name__)
 
+# The most heroes any world holds; each world's own cap is ``BubbleWorld.hero_capacity`` (the card's is lower).
 MAX_BUBBLES = BUBBLE_RENDER_CAPACITY
 
 
@@ -415,23 +417,25 @@ class BubbleSimulation:
         """Return the latest Bubble-owned perf breakdown for audit logging."""
         return dict(self._last_perf_diag)
 
-    def _apply_viewport_domain(self, extent: object, authored_population: int = 0) -> None:
-        """Commit Bubble's world for the committed extent and authored population.
+    def _apply_viewport_domain(self, extent: object, authored_population: int = 0,
+                               display_wide: bool = False) -> None:
+        """Commit Bubble's world for the committed extent and authored population (``display_wide``: the extent is
+        the display-wide card's drawn world, ``resolve_bubble_world``).
 
-        Resolved only when either changes; ordinary ticks consume the cached
-        world. When the capacity zoom changes (a capacity-bound card resized, or
-        its authored population edited) live bubbles keep their place on the
-        card: their world coordinates rescale by the zoom ratio.
+        Resolved only when any changes; ordinary ticks consume the cached
+        world. When the capacity zoom changes (a capacity-bound card resized, its
+        authored population edited, or the card expanded) live bubbles keep their
+        place on the card: their world coordinates rescale by the zoom ratio.
         """
 
         key = (
             None if extent is None else tuple(extent) if isinstance(extent, (tuple, list)) else extent,
             int(authored_population),
-        )
+        ) + ((True,) if display_wide else ())
         if key == self._world_key:
             return
         self._world_key = key
-        world = resolve_bubble_world(extent, authored_population=authored_population)
+        world = resolve_bubble_world(extent, authored_population=authored_population, display_wide=display_wide)
         previous_scale = self._world_scale
         self._world = world
         self._domain_w = world.domain_w
@@ -489,6 +493,7 @@ class BubbleSimulation:
         prev_domain_h = self._domain_h
         self._apply_viewport_domain(
             settings.get("_bubble_viewport_extent"), big_target + small_target,
+            bool(settings.get("_bubble_display_wide", False)),
         )
         if (
             self._domain_w < prev_domain_w - 1e-9
@@ -512,7 +517,7 @@ class BubbleSimulation:
         # Density is the only thing a card's size changes: the authored counts
         # describe one canonical card's area. Speeds are never shape-modified.
         big_target, small_target = scale_bubble_population(
-            big_target, small_target, self._world.population_scale,
+            big_target, small_target, self._world.population_scale, self._world.hero_capacity,
         )
         stream_reactivity = float(settings["bubble_stream_reactivity"])
         rotation_amount = float(settings["bubble_rotation_amount"])
@@ -710,6 +715,8 @@ class BubbleSimulation:
                 for bb in small_pool[:promote_count]:
                     bb.promoted = True
                     bb.promote_timer = promote_duration
+        # This world's screen gain (BubbleWorld.screen_gain): 1 on every card, so card motion is unchanged.
+        motion_gain = float(self._world.screen_gain)
         # Tick down promotion timers
         for b in self._bubbles:
             if b.promoted:
@@ -1207,6 +1214,9 @@ class BubbleSimulation:
                 move_y - stream_move_y,
             )
 
+            if motion_gain != 1.0:
+                move_x *= motion_gain
+                move_y *= motion_gain
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
             if b.impulse_vx != 0.0 or b.impulse_vy != 0.0:
@@ -1503,7 +1513,7 @@ class BubbleSimulation:
             big_spawn_budget = 2
         while (
             big_count < big_target
-            and len(self._bubbles) < MAX_BUBBLES
+            and len(self._bubbles) < self._world.hero_capacity
             and big_spawn_budget > 0
         ):
             if allow_initial_fill:
@@ -1522,7 +1532,7 @@ class BubbleSimulation:
             small_spawn_budget = 3
         while (
             small_count < small_target
-            and len(self._bubbles) < MAX_BUBBLES
+            and len(self._bubbles) < self._world.hero_capacity
             and small_spawn_budget > 0
         ):
             is_initial = allow_initial_fill
@@ -1552,7 +1562,7 @@ class BubbleSimulation:
             for c in range(count):
                 if (
                     small_count >= small_target
-                    or len(self._bubbles) >= MAX_BUBBLES
+                    or len(self._bubbles) >= self._world.hero_capacity
                     or small_spawn_budget <= 0
                 ):
                     break
@@ -2861,6 +2871,9 @@ class BubbleSimulation:
         # the canonical response height and this world's ``world_scale``.
         inv_domain_w = 1.0 / self._domain_w
         inv_domain_h = 1.0 / self._domain_h
+        # The breathing swing about the base radius takes DISPLAY_WIDE_BREATH_GAIN_SHARE of the world's screen gain's
+        # extra (1 on every card, so the card is unchanged).
+        breath_gain = 1.0 + DISPLAY_WIDE_BREATH_GAIN_SHARE * (float(self._world.screen_gain) - 1.0)
 
         for idx, b in enumerate(self._bubbles):
             # Pulse: smoothed energy drives visible size thump.
@@ -2882,6 +2895,8 @@ class BubbleSimulation:
                     small_freq_pulse=small_freq_pulse,
                 )
 
+            if breath_gain != 1.0:
+                pulse_factor = 1.0 + (pulse_factor - 1.0) * breath_gain
             target_radius = b.radius * pulse_factor
 
             # Contraction bias: during quiet passages (low pulse_energy),
@@ -2896,6 +2911,8 @@ class BubbleSimulation:
             # Max size clamp: cap the pulsed radius to base_radius * clamp
             if b.is_big and big_size_clamp > 0.0:
                 clamp_limit = self._resolve_big_clamp_limit(b.radius, big_size_clamp)
+                if breath_gain != 1.0:
+                    clamp_limit = b.radius + (clamp_limit - b.radius) * breath_gain
                 if target_radius >= clamp_limit - 1e-5:
                     big_render_diag["big_clamp_hits"] += 1.0
                 target_radius = min(target_radius, clamp_limit)

@@ -494,6 +494,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # Expanded Visualizer (operator, 7 Nov): capable with no perf gate on the flag; its full-display figures are
         # recorded at plan 01 M6 (already over budget under game load at the card).
         supports_expanded_display=True,
+        # N5.4: the native core draws it on Vulkan (rendering.quick.visualizer.native_route), at parity with the
+        # Python renderer (rules (a) and (b); layer T waits for Display 1).
+        renderer_backends=("opengl", "vulkan"),
     ),
 )
 

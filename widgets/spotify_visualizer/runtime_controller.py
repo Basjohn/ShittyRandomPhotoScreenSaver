@@ -507,6 +507,12 @@ class VisualizerRuntimeController:
         return drawn
 
     @property
+    def logical_world_is_display_wide(self) -> bool:
+        """Whether ``logical_world_extent`` is the display-wide card's drawn world (``set_drawn_world_extent``)."""
+        with self._lock:
+            return self._drawn_world_extent is not None
+
+    @property
     def framed_view(self) -> FramedView | None:
         """The drawn card's framed view (``core.framed_view``): the exact camera inputs the logical side builds a
         framed camera from (``core.waveform_ribbon_view.card_span``); None until a card is drawn."""

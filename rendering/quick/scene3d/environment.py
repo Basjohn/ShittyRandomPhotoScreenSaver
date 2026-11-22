@@ -24,6 +24,7 @@ from rendering.gl_programs.mip_chain import MIP_BOX_RGBA8_COMP, dispatch_mip_cha
 from rendering.gl_programs.scene3d import SCENE3D_ENVIRONMENT_SIZE, Scene3DBlockLayout
 from rendering.quick import gl_query
 
+from .compute import handed_back_image_units
 from .post import FULLSCREEN_VERTEX_SOURCE
 from .uniforms import PASS_BLOCK_BINDING
 
@@ -175,7 +176,10 @@ class PhotoEnvironment:
             # Only our owned copy gets mip levels: the shared box kernel's (the core's environment step runs the same
             # text, mip_box_rgba8.comp), one dispatch a level.
             mips = resources.compute_program(PHOTO_ENVIRONMENT_MIPS_PROGRAM[0], PHOTO_ENVIRONMENT_MIPS_PROGRAM[1])
-            dispatch_mip_chain(mips, texture, size, mip_levels(size), "rgba8")
+            # The kernel binds image units 0 and 1 a level; they are handed back (a run's own units, its motion blur's
+            # tile max on 1 among them, must find what they left).
+            with handed_back_image_units(0, 1):
+                dispatch_mip_chain(mips, texture, size, mip_levels(size), "rgba8")
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, draw)
             gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read)

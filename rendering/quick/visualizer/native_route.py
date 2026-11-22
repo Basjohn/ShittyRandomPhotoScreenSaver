@@ -553,41 +553,12 @@ def waveform_frame_ready(snapshot: Any) -> bool:
     view = tuple(getattr(state, "framed_view", ()) or ())
     drawn = resolve_framed_view(snapshot.presentation)
     return bool(view) and drawn is not None and view == tuple(drawn)
-#: Waveform's route entries (N5.4), registered only by the port's last step (playbook checklist 18) and, until then,
-#: process-locally by its harness (``native/core/python/waveform_check.py owner``): each table above's entry.
-WAVEFORM_ROUTE = {"settings": _waveform_settings, "variants": (waveform_variant, waveform_program),
-                  "target_sizes": _waveform_target_sizes, "resources": waveform_resources,
-                  "frame_gate": waveform_frame_ready}
-
-
-def waveform_registered():
-    """A context manager: the route draws Waveform (``WAVEFORM_ROUTE`` in every table) inside it, for the process's
-    harness runs only (never the product's registration)."""
-    import contextlib
-    import sys
-
-    module = sys.modules[__name__]
-
-    @contextlib.contextmanager
-    def registered():
-        names = ("GENERIC_MODE_SETTINGS", "NATIVE_MODE_IDS", "GENERIC_MODE_PROGRAM_VARIANTS",
-                 "GENERIC_MODE_TARGET_SIZES", "GENERIC_MODE_RESOURCES", "GENERIC_MODE_FRAME_GATES")
-        saved = {name: getattr(module, name) for name in names}
-        mode = "waveform_ribbon"
-        module.GENERIC_MODE_SETTINGS = {**saved["GENERIC_MODE_SETTINGS"], mode: WAVEFORM_ROUTE["settings"]}
-        module.NATIVE_MODE_IDS = saved["NATIVE_MODE_IDS"] | {mode}
-        module.GENERIC_MODE_PROGRAM_VARIANTS = {**saved["GENERIC_MODE_PROGRAM_VARIANTS"],
-                                                mode: WAVEFORM_ROUTE["variants"]}
-        module.GENERIC_MODE_TARGET_SIZES = {**saved["GENERIC_MODE_TARGET_SIZES"], mode: WAVEFORM_ROUTE["target_sizes"]}
-        module.GENERIC_MODE_RESOURCES = {**saved["GENERIC_MODE_RESOURCES"], mode: WAVEFORM_ROUTE["resources"]}
-        module.GENERIC_MODE_FRAME_GATES = {**saved["GENERIC_MODE_FRAME_GATES"], mode: WAVEFORM_ROUTE["frame_gate"]}
-        try:
-            yield
-        finally:
-            for name, value in saved.items():
-                setattr(module, name, value)
-
-    return registered()
+#: Waveform's route entries (N5.4; registered at the port's acceptance, playbook checklist 18): each table above's entry.
+GENERIC_MODE_SETTINGS["waveform_ribbon"] = _waveform_settings
+GENERIC_MODE_PROGRAM_VARIANTS["waveform_ribbon"] = (waveform_variant, waveform_program)
+GENERIC_MODE_TARGET_SIZES["waveform_ribbon"] = _waveform_target_sizes
+GENERIC_MODE_RESOURCES["waveform_ribbon"] = waveform_resources
+GENERIC_MODE_FRAME_GATES["waveform_ribbon"] = waveform_frame_ready
 #: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
 #: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
 NATIVE_MODE_IDS = frozenset({"spectrum", *GENERIC_MODE_SETTINGS})

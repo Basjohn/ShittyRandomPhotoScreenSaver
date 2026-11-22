@@ -448,14 +448,8 @@ MODES: dict[str, LMode] = {
         positional={"u_target_px": "the core's target pixels: the scene's placement in its bucket (layer P)"},
         streams={"ribbon_knots": ("ribbon_knot_floats", (), ""), "ribbon_cohorts": ("ribbon_cohort_floats", (), ""),
                  "ribbon_bursts": ("ribbon_burst_floats", (), ""), "ribbon_pulse": ("ribbon_pulse_floats", (), "")},
-        ulp_field="ribbon_u_mvp", register=lambda: _waveform_registered(), python=lambda d: WaveformPython(d)),
+        ulp_field="ribbon_u_mvp", python=lambda d: WaveformPython(d)),
 }
-
-
-def _waveform_registered():
-    from rendering.quick.visualizer import native_route
-
-    return native_route.waveform_registered()
 
 
 # ------------------------------------------------------------------------------------------- the recording GL

@@ -51,6 +51,7 @@ from .theme_projection import (
     resolve_header_colors,
     resolve_primary_text_color,
     resolve_rgba_role,
+    tile_wash,
 )
 from .steam_common import (
     SteamCardFieldListModel,
@@ -1102,6 +1103,11 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def fontSize(self) -> float:
         return float(self.config.font_size)
+
+    @Property(QColor, notify=stateChanged)
+    def tileColor(self) -> QColor:
+        # The Feed tile's fill: a faint wash of the body ink, not the palette's opaque slab.
+        return QColor(*tile_wash(self.config.text_color))
 
     @Property(QColor, notify=stateChanged)
     def headerFillColor(self) -> QColor:

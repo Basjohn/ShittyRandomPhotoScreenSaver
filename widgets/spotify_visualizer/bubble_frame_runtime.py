@@ -179,13 +179,15 @@ class BubbleFrameRuntime:
         source_activation_id: int,
         edge_token: int,
         viewport_extent: tuple[float, float] | None = None,
+        display_wide: bool = False,
     ) -> BubbleResolvedFrame | None:
         """Integrate exactly one authored step and freeze its visible result.
 
         ``viewport_extent`` is the latest committed CUSTOM logical world (or
         ``None`` for the canonical baseline). It is spatial configuration, not an
         authored temporal event: it enters the current step and coalesces freely,
-        never creating a step or altering cadence.
+        never creating a step or altering cadence. ``display_wide``: that world is
+        the display-wide card's drawn world (``resolve_bubble_world``).
         """
 
         with self._lock:
@@ -207,6 +209,7 @@ class BubbleFrameRuntime:
                 source_activation_id=source_activation_id,
                 edge_token=edge_token,
                 viewport_extent=viewport_extent,
+                display_wide=display_wide,
             )
 
     def _advance_locked(
@@ -227,6 +230,7 @@ class BubbleFrameRuntime:
         source_activation_id: int,
         edge_token: int,
         viewport_extent: tuple[float, float] | None = None,
+        display_wide: bool = False,
     ) -> BubbleResolvedFrame:
 
         identity = (
@@ -245,6 +249,7 @@ class BubbleFrameRuntime:
         # resolves its world from it (canonical/None is the 1x1 canonical card);
         # this is state, not a clock.
         settings_payload["_bubble_viewport_extent"] = viewport_extent
+        settings_payload["_bubble_display_wide"] = bool(display_wide)
         event_recorder: _EventRecorder | None = None
         scheduler = settings_payload.get("_event_scheduler")
         if bool(playing) and not bool(source_ready):

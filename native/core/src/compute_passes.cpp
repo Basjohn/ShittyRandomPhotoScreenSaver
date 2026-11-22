@@ -331,6 +331,8 @@ QJsonValue ComputeTrigger::toJson() const
 {
     if (kind == Kind::Field)
         return QJsonObject { { QStringLiteral("field"), QString::fromLatin1(field) } };
+    if (kind == Kind::Draw)
+        return QStringLiteral("draw");        // ABI 37
     return QStringLiteral("frame");
 }
 
@@ -338,6 +340,11 @@ bool parseComputeTrigger(const QJsonValue &value, ComputeTrigger *out)
 {
     ComputeTrigger t;
     if (value.isString() && value.toString() == QLatin1String("frame")) {
+        *out = t;
+        return true;
+    }
+    if (value.isString() && value.toString() == QLatin1String("draw")) {
+        t.kind = ComputeTrigger::Kind::Draw;  // ABI 37 (N4.i): every record that draws the program's passes
         *out = t;
         return true;
     }

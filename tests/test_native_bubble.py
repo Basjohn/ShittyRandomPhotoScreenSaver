@@ -118,8 +118,10 @@ def test_the_record_is_a_runtime_schema_of_the_frame_members_and_the_ambient_str
     assert native_schema.schema_for_mode("bubble") is schema
     streams = {"ambient_points", "ambient_point_floats", "ambient_occluders", "ambient_occluder_floats"}
     assert set(schema.fields) == set(BUBBLE_FRAME_MEMBERS) | streams
-    # Version 1's layout (a change is a new version).
-    assert (schema.layout.size, schema.layout.fingerprint()) == (24048, "520ca3fa9ccdadc7")
+    # Version 2's layout (a change is a new version): the render capacity's heroes, eight class words.
+    from widgets.spotify_visualizer.bubble_viewport_profile import BUBBLE_RENDER_CAPACITY
+    assert schema_module.BUBBLES == BUBBLE_RENDER_CAPACITY
+    assert (schema.layout.size, schema.layout.fingerprint()) == (38496, "e733f42a89e9d012")
     # The route's slot holds it (whole 4096-byte steps); Spline Curve's stays one step.
     assert schema.layout.size <= native_route._slot_bytes("bubble") - SLOT_OVERHEAD
     assert native_route._slot_bytes("bubble") % native_route._SLOT_BYTES == 0
@@ -137,7 +139,7 @@ def test_the_record_round_trips_and_carries_the_renderers_values():
     mode_state = logical.mode_state
     count = mode_state.bubble_count
     assert decoded["u_bubble_count"] == count
-    assert decoded["u_big_class_bits"] == tuple(mode_state.big_class_bits)
+    assert decoded["u_big_class_bits"] + decoded["u_big_class_bits_hi"] == tuple(mode_state.big_class_bits)
     flat = [v for row in decoded["u_bubbles_pos"][:count] for v in row]
     assert flat == pytest.approx(mode_state.positions)
     assert all(row == (0.0,) * 4 for row in decoded["u_bubbles_pos"][count:])
@@ -184,15 +186,16 @@ def test_class_words_round_trip_into_the_shader_block_without_unsigned_or_stride
     from rendering.quick.visualizer.implementations.bubble import BUBBLE_BLOCK
 
     # Synthetic membership boundaries, including the high bit of each word and nonzero later words.
-    words = tuple((1 << 31) | (1 << index) for index in range(4))
+    words = tuple((1 << 31) | (1 << index) for index in range(8))
     logical = _logical()
     object.__setattr__(logical.mode_state, "big_class_bits", words)
     record = schema_module.decode(schema_module.encode(logical))
-    assert record["u_big_class_bits"] == words
+    assert record["u_big_class_bits"] + record["u_big_class_bits_hi"] == words
     layout = BUBBLE_BLOCK
-    index = next(i for i, (name, _kind) in enumerate(layout.fields) if name == "u_big_class_bits")
     packed = pack_block(layout, record)
-    assert struct.unpack_from("<4I", packed, layout.offsets[index]) == words
+    for member, part in (("u_big_class_bits", words[:4]), ("u_big_class_bits_hi", words[4:])):
+        index = next(i for i, (name, _kind) in enumerate(layout.fields) if name == member)
+        assert struct.unpack_from("<4I", packed, layout.offsets[index]) == part
 
 
 # ------------------------------------------------------------------------------------------------- the sources

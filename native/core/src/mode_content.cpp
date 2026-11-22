@@ -275,7 +275,7 @@ const ModeCoreMember kModeCoreMembers[] = {
     // surface's own unturned, the window's frame under a turned card (Python's gl_FragCoord.xy - uOrigin).
     { "u_scene_from_target_x", 3, true, valueSceneFromTargetX },
     { "u_scene_from_target_y", 3, true, valueSceneFromTargetY },
-    // ABI 38: 1 where the program's scene holds OpenGL's rows (its composite's "scene_rows": "up"), else 0.
+    // ABI 40: 1 where the program's scene holds OpenGL's rows (its composite's "scene_rows": "up"), else 0.
     { "u_scene_rows_up", 1, false, valueSceneRowsUp }, // the program's (packFrame sets it on the card), no card key
     // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
     // 2 L7's scan of implementations/oscilloscope.py).
@@ -875,7 +875,11 @@ bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, c
             seen[output.location] = true;
         }
         for (int i = 0; i < expected; ++i) {
-            if (!seen[i]) {
+            // ABI 37 (N4.i): an attachment the pass masks ("write": false) may be left unwritten by its shader (Python's
+            // passes that do not move draw with the velocity's write mask off and write no motion: the underlay, the
+            // void, the trails' edges); its pipeline's write mask is empty, so nothing reaches it.
+            const bool masked = i < int(pass.outputs.size()) && !pass.outputs.at(i).write;
+            if (!seen[i] && !masked) {
                 *error = QStringLiteral("pass '%1' writes nothing at location %2 (target '%3''s attachment '%4')")
                              .arg(name).arg(i).arg(QString::fromLatin1(target->name),
                                                    QString::fromLatin1(target->colour.at(i).name));
@@ -1365,8 +1369,8 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
         }
         pass.inputs.append(PassInput { input.name, input.location, components });
     }
-    if (pass.inputs.size() > 2 * kMaxMeshAttributes) {
-        *error = QStringLiteral("pass '%1' reads more than %2 vertex inputs").arg(name).arg(2 * kMaxMeshAttributes);
+    if (pass.inputs.size() > kMaxPassInputs) {
+        *error = QStringLiteral("pass '%1' reads more than %2 vertex inputs").arg(name).arg(kMaxPassInputs);
         return false;
     }
     // The fragment's inputs: the vertex stage's outputs at the same locations, of the same types.
@@ -1549,14 +1553,14 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
     for (auto it = o.begin(); it != o.end(); ++it)
         known = known && allowed.contains(it.key());
     if (!known || !passName(pass.name) || o.value(QStringLiteral("compute")) != QJsonValue(true)) {
-        *error = QStringLiteral("compute entry '%1' is {\"name\", \"compute\": true, \"trigger\"?: \"frame\" or "
-                                "{\"field\"}, \"groups\": [x, y, z] or {\"over\": a resource}, \"bindings\": [...], "
-                                "\"samplers\"?: [...]}").arg(label);
+        *error = QStringLiteral("compute entry '%1' is {\"name\", \"compute\": true, \"trigger\"?: \"frame\", "
+                                "\"draw\" (ABI 37) or {\"field\"}, \"groups\": [x, y, z] or {\"over\": a resource}, "
+                                "\"bindings\": [...], \"samplers\"?: [...]}").arg(label);
         return false;
     }
     if (o.contains(QStringLiteral("trigger")) && !parseComputeTrigger(o.value(QStringLiteral("trigger")), &pass.trigger)) {
-        *error = QStringLiteral("compute entry '%1': \"trigger\" is \"frame\" or {\"field\": a record u32 scalar}")
-                     .arg(label);
+        *error = QStringLiteral("compute entry '%1': \"trigger\" is \"frame\", \"draw\" (ABI 37) or {\"field\": a record "
+                                "u32 scalar}").arg(label);
         return false;
     }
     const QJsonValue groups = o.value(QStringLiteral("groups"));
@@ -2348,6 +2352,8 @@ bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out)
         *out = ModeTextureFormat::RGBA8;
     else if (text == QLatin1String("rgba16f"))
         *out = ModeTextureFormat::RGBA16F;
+    else if (text == QLatin1String("rgba32f"))
+        *out = ModeTextureFormat::RGBA32F;    // ABI 37
     else
         return false;
     return true;
@@ -2355,17 +2361,41 @@ bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out)
 
 QString modeTextureFormatName(ModeTextureFormat format)
 {
-    return format == ModeTextureFormat::RGBA16F ? QStringLiteral("rgba16f") : QStringLiteral("rgba8");
+    switch (format) {
+    case ModeTextureFormat::RGBA16F:
+        return QStringLiteral("rgba16f");
+    case ModeTextureFormat::RGBA32F:
+        return QStringLiteral("rgba32f");     // ABI 37
+    case ModeTextureFormat::RGBA8:
+        break;
+    }
+    return QStringLiteral("rgba8");
 }
 
 QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format)
 {
-    return format == ModeTextureFormat::RGBA16F ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
+    switch (format) {
+    case ModeTextureFormat::RGBA16F:
+        return QRhiTexture::RGBA16F;
+    case ModeTextureFormat::RGBA32F:
+        return QRhiTexture::RGBA32F;          // ABI 37
+    case ModeTextureFormat::RGBA8:
+        break;
+    }
+    return QRhiTexture::RGBA8;
 }
 
 int modeTextureTexelBytes(ModeTextureFormat format)
 {
-    return format == ModeTextureFormat::RGBA16F ? 8 : 4;
+    switch (format) {
+    case ModeTextureFormat::RGBA16F:
+        return 8;
+    case ModeTextureFormat::RGBA32F:
+        return 16;                            // ABI 37
+    case ModeTextureFormat::RGBA8:
+        break;
+    }
+    return 4;
 }
 
 qint64 modeTextureBytes(const QSize &size, bool mips, ModeTextureFormat format)
@@ -2604,7 +2634,7 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             // ABI 35: "oriented": drawn in the content's orientation, Python's orient_visualizer_scene_frame).
             const bool withFrame = o.contains(QStringLiteral("scene_frame"));
             const QJsonValue frame = o.value(QStringLiteral("scene_frame"));
-            // ABI 38: "scene_rows": "up" (overlay_glow only): the scene holds OpenGL's rows.
+            // ABI 40: "scene_rows": "up" (overlay_glow only): the scene holds OpenGL's rows.
             const bool withRows = o.contains(QStringLiteral("scene_rows"));
             const QJsonValue rows = o.value(QStringLiteral("scene_rows"));
             const bool parsed = parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form);
@@ -2626,7 +2656,7 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
             pass.sceneFrameWindow = withFrame && frame == QJsonValue(QStringLiteral("window"));
             pass.sceneFrameOriented = withFrame && frame == QJsonValue(QStringLiteral("oriented")); // ABI 35
-            pass.sceneRowsUp = withRows;                                                            // ABI 38
+            pass.sceneRowsUp = withRows;                                                            // ABI 40
             coreFragment = compositeShader(form);
             QJsonArray samplers;
             samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uScene") },
@@ -2752,7 +2782,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                  QStringLiteral("cull"), QStringLiteral("front_face"),
                                                  QStringLiteral("indirect"), QStringLiteral("draw_count"),
                                                  QStringLiteral("batches"), QStringLiteral("batch_count"),
-                                                 QStringLiteral("sorted") }; // N3.4: a transparent pass's
+                                                 QStringLiteral("sorted"),   // N3.4: a transparent pass's
+                                                 QStringLiteral("viewport") }; // ABI 37: "content" or "allocation"
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
@@ -2777,6 +2808,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 || !parsePassTargetState(o, pass, program.targets, error)
                 || !transparentPassState(o, pass, program.targets, !sortedPack.isEmpty(), error)) // N3.4
                 return false;
+            if (o.contains(QStringLiteral("viewport"))) {
+                // ABI 37 (N4.i): "allocation" draws the core's triangle over the scene target's whole allocation (its
+                // viewport and scissor), as Python draws a post pass over its SceneTarget's allocation (the trails'
+                // edges, trails.py: what lands in the slack is what Python's motion blur gather reads there); the
+                // default "content" is the content viewport every pass on a target draws over.
+                const QJsonValue viewport = o.value(QStringLiteral("viewport"));
+                const bool allocation = viewport == QJsonValue(QStringLiteral("allocation"));
+                if ((!allocation && viewport != QJsonValue(QStringLiteral("content")))
+                    || (allocation && (pass.target < 0 || vertex || program.targets.at(pass.target).transparency()))) {
+                    *error = QStringLiteral("pass '%1': \"viewport\" is \"content\" or \"allocation\" (the latter only "
+                                            "for a pass on the core's triangle into a scene target that is not a "
+                                            "transparency target)").arg(QString::fromLatin1(pass.name));
+                    return false;
+                }
+                pass.allocationViewport = allocation;
+            }
             for (const PassSampler &s : pass.samplers) {
                 if (!targetTextureName(s.texture))
                     continue;
@@ -3032,8 +3079,10 @@ QJsonObject ModeProgram::toJson() const
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("window")); // ABI 29
         if (pass.sceneFrameOriented)
             p.insert(QStringLiteral("scene_frame"), QStringLiteral("oriented")); // ABI 35
+        if (pass.allocationViewport)
+            p.insert(QStringLiteral("viewport"), QStringLiteral("allocation")); // ABI 37
         if (pass.sceneRowsUp)
-            p.insert(QStringLiteral("scene_rows"), QStringLiteral("up")); // ABI 38
+            p.insert(QStringLiteral("scene_rows"), QStringLiteral("up")); // ABI 40
         p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
         QJsonArray outputs;
         for (const PassOutput &output : pass.outputs)
@@ -3162,6 +3211,15 @@ bool ModeProgram::hasCompute() const
             return true;
     }
     return false;
+}
+
+bool ModeProgram::computeOnDrawOnly() const
+{
+    for (const ModePass &pass : passes) {
+        if (pass.compute && pass.trigger.kind != ComputeTrigger::Kind::Draw)
+            return false;
+    }
+    return true;
 }
 
 void ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized,
@@ -3565,7 +3623,28 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
     }
     if (settings) {
         for (auto it = settings->begin(); it != settings->end(); ++it) {
-            const QByteArray name = it.key().toLatin1();
+            QByteArray name = it.key().toLatin1();
+            // ABI 37 (N4.i): "<member>@<pass>" fills that member of that one pass's block over the unscoped setting
+            // (the motion trails' ghosts: one pass per ghost, each at its own moment and fade, from one pack).
+            const qsizetype at = name.indexOf('@');
+            if (at >= 0) {
+                const QByteArray member = name.left(at);
+                const QByteArray scope = name.mid(at + 1);
+                const ModePass *scoped = nullptr;
+                for (const ModePass &pass : passes) {
+                    if (pass.name == scope)
+                        scoped = &pass;
+                }
+                if (!scoped || !scoped->block.valid() || !scoped->block.member(member)) {
+                    *error = QStringLiteral("'%1' scopes a setting to pass '%2', which %3 (a scoped setting is "
+                                            "\"<member>@<pass>\" of a member that pass's block declares)")
+                                 .arg(it.key(), QString::fromLatin1(scope),
+                                      scoped ? QStringLiteral("does not declare '%1'").arg(QString::fromLatin1(member))
+                                             : QStringLiteral("is no pass of the program"));
+                    return false;
+                }
+                name = member;                // the member's owner rules below (never a core member or a field)
+            }
             if (isModeCoreMember(name)) {
                 *error = QStringLiteral("'%1' is a core member, filled by the core: a setting may not name it")
                              .arg(it.key());
@@ -3671,6 +3750,9 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 field = member.name == schema->fields[i].name;
             if (field || (settings && settings->contains(QString::fromLatin1(member.name))))
                 continue;
+            // ABI 37: or by its pass's scoped setting ("<member>@<pass>").
+            if (settings && settings->contains(QString::fromLatin1(member.name + '@' + pass.name)))
+                continue;
             waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name),
                                                        QString::fromLatin1(member.name)));
         }
@@ -3693,14 +3775,24 @@ bool ModeProgram::packSettings(const QJsonObject &settings, QList<BlockValues> *
     for (const ModePass &pass : passes)
         blocks.append(pass.block.valid() ? BlockValues(pass.block) : BlockValues());
     QList<double> numbers;
-    for (auto it = settings.begin(); it != settings.end(); ++it) {
-        if (!settingNumbers(it.key(), it.value(), &numbers, error))
-            return false;
-        const QByteArray name = it.key().toLatin1();
-        for (int i = 0; i < passes.size(); ++i) {
-            if (passes.at(i).block.valid() && passes.at(i).block.member(name)
-                && !blocks[i].set(name, numbers.constData(), int(numbers.size()), error))
+    // ABI 37 (N4.i): the unscoped settings first, then each "<member>@<pass>" over its one pass's member (a scoped value
+    // wins in its pass whatever the keys' order).
+    for (int scopedRound = 0; scopedRound < 2; ++scopedRound) {
+        for (auto it = settings.begin(); it != settings.end(); ++it) {
+            const QByteArray key = it.key().toLatin1();
+            const qsizetype at = key.indexOf('@');
+            if ((at >= 0) != (scopedRound == 1))
+                continue;
+            if (!settingNumbers(it.key(), it.value(), &numbers, error))
                 return false;
+            const QByteArray name = at >= 0 ? key.left(at) : key;
+            const QByteArray scope = at >= 0 ? key.mid(at + 1) : QByteArray();
+            for (int i = 0; i < passes.size(); ++i) {
+                if ((at < 0 || passes.at(i).name == scope) && passes.at(i).block.valid()
+                    && passes.at(i).block.member(name)
+                    && !blocks[i].set(name, numbers.constData(), int(numbers.size()), error))
+                    return false;
+            }
         }
     }
     *out = blocks;
@@ -3721,7 +3813,7 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
     // nothing allocated).
     ModeCard surfaceCard = card;
     surfaceCard.orientedFrame = sceneFrameOriented();
-    surfaceCard.sceneRowsUp = sceneRowsUp();      // ABI 38
+    surfaceCard.sceneRowsUp = sceneRowsUp();      // ABI 40
     if (quint32(record.size()) != schema.recordBytes) {
         *error = QStringLiteral("a %1-byte record is not schema 0x%2's %3").arg(record.size())
                      .arg(schema.schemaId, 0, 16).arg(schema.recordBytes);
@@ -3860,8 +3952,10 @@ bool ModeSource::admit(const ModeProgram &program, const QSharedPointer<const Ru
         return true;                          // nothing to check against yet
     // A still (N5.7a) is checked against its empty schema: no record, so every member is the core's or a setting.
     const fa::Schema *checked = schema ? &schema->schema() : (m_still ? &stillSchema() : nullptr);
-    if (!schema && m_still && program.hasCompute()) {
-        *error = QStringLiteral("a still draws no compute (N3.3: a compute entry's work comes with the record)");
+    if (!schema && m_still && program.hasCompute() && !program.computeOnDrawOnly()) {
+        // ABI 37 (N4.i): a still's compute entry derives from what the record draws ("trigger": "draw") or is refused.
+        *error = QStringLiteral("a still draws no compute but entries triggered by \"draw\" (N3.3: a compute entry's "
+                                "work comes with the record; ABI 37: or with what the record draws)");
         return false;
     }
     if (!program.check(checked, settings, ready, error))
@@ -4018,6 +4112,11 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
         *error = QStringLiteral("texture '%1': %2 bytes are not %3 x %4 %5 pixels, rows top first and tight")
                      .arg(QString::fromLatin1(name)).arg(pixels.size()).arg(size.width()).arg(size.height())
                      .arg(modeTextureFormatName(format).toUpper());
+        return false;
+    }
+    if (mips && format == ModeTextureFormat::RGBA32F) {
+        // ABI 37: the box kernel makes RGBA8 and RGBA16F chains only (mip_chain.h); a float table has no levels.
+        *error = QStringLiteral("texture '%1': an rgba32f texture has no mips").arg(QString::fromLatin1(name));
         return false;
     }
     QMutexLocker lock(&m_mutex);
@@ -4421,6 +4520,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
+    o.insert(QStringLiteral("waiting_kept"), double(r.waitingKept)); // black flicker: the held frame while waiting
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("storage"), m_storageState);                             // N3.3 (noted at an edge)
@@ -6125,11 +6225,16 @@ void ModeContent::decideDispatches()
             value = field ? recordU32At(record, field->offset) : 0u;
         }
         ComputeTrack &t = m_compute[i];
+        // ABI 37 (N4.i): a "draw" entry derives from what this record draws, so every drawn record has its work (its
+        // trigger the count of its dispatches, strictly rising; this runs only for a record that draws its passes).
+        const bool drawn = pass.trigger.kind == ComputeTrigger::Kind::Draw;
+        if (drawn)
+            value = t.dispatched ? t.lastTrigger + 1 : 1;
         // Audit 5 M2: fresh per entry, from its own storage bindings (a buffer or image of another entry made again, or
         // the same program sent again, restarts nothing).
         const quint64 freshKey = entryFreshKey(pass);
         const bool fresh = !t.dispatched || t.freshSeen != freshKey;
-        const bool due = fresh || t.changed || value != t.lastTrigger || everyRecord;
+        const bool due = drawn || fresh || t.changed || value != t.lastTrigger || everyRecord;
         if (!due) {
             countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
             continue;
@@ -6642,7 +6747,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
         if (!ok)
             break;
-        // The samplers (N4.a): each with its declared state (passBindings binds them over their textures). ABI 38
+        // The samplers (N4.a): each with its declared state (passBindings binds them over their textures). ABI 40
         // (N5.4): the declared wrap on W too, as a compute entry's samplers have it; QRhi's default W is Repeat, so a
         // 3D image (Waveform's fog volume, read at its far and near slices) blended its first and last slices.
         p.samplerCount = int(pass.samplers.size());
@@ -7135,8 +7240,15 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // clipping. The scissor remains the content rect; the product always uses v for both.
             const QRect viewport = sceneOversizeViewport() ? QRect(QPoint(), t.allocation) : v;
             const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? sceneInput : ownInput;
-            for (int k = i; k <= last; ++k)
-                drawPass(rhi, cb, k, viewport, input, v); // N3.2
+            const QRect whole(QPoint(), t.allocation);
+            for (int k = i; k <= last; ++k) {
+                // ABI 37 (N4.i): a pass declaring "viewport": "allocation" covers the whole allocation (the trails'
+                // edges, as Python draws them); every other pass the content viewport, as before.
+                if (program.passes.at(k).allocationViewport)
+                    drawPass(rhi, cb, k, whole, ownInput, whole);
+                else
+                    drawPass(rhi, cb, k, viewport, input, v); // N3.2
+            }
             cb->endPass();
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
             // ABI 33 (N5.4): a self-mipped target's chains from what this run drew (the core's box kernel, the text the
@@ -7270,6 +7382,17 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                       triangle + (kFirstBloomTriangle + n) * kTriangleFloats);
     m_keptTarget = false;
     const bool readback = m_source->targetReadRequests() != m_targetReadsDone; // N3.1, harness
+    if (m_draw && !withPasses && !readback && holdsFrame(target)) {
+        // Black flicker (operator, 21 Nov): a content waiting for its textures or meshes (a transition's destination
+        // uploading by its job on Vulkan, the program already the run's) keeps the frame its target holds, as a refused
+        // build does (M4), instead of recording no pass over a cleared target: the layer showed one black frame at
+        // every run's start. The record after the commit draws the new program (its still signature is new).
+        cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
+        m_keptTarget = true;
+        ++m_report.waitingKept;
+        reportTextures();
+        return true;
+    }
     if (draw && m_source->drawnStill()) {
         // A still (N5.7a) draws again only when what it draws changed: its program, its blocks (settings and the core's
         // members), its triangle (card and target), its target and the textures its passes sample. A record that only

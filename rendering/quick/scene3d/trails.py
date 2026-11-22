@@ -23,6 +23,7 @@ from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.portable import pack_block, portable_program
 from rendering.quick import gl_query
 
+from .motion import NATIVE_FRAME_GLSL
 from .passes import blend_scope
 from .post import FULLSCREEN_VERTEX_SOURCE
 from .uniforms import PassBlocks
@@ -36,12 +37,15 @@ uniform sampler2D uGhosts;
 uniform ivec2 uSize;
 uniform float uRadius;
 uniform float uStrength;
+""" + NATIVE_FRAME_GLSL + """
+// N5.2d: in this renderer's frame on both (motion.NATIVE_FRAME_GLSL): the clamp at its allocation's edges, then the
+// native core's memory row.
 float ghost(ivec2 texel) {
-    return texelFetch(uGhosts, clamp(texel, ivec2(0), uSize - 1), 0).r;
+    return texelFetch(uGhosts, sceneMemoryTexel(clamp(texel, ivec2(0), uSize - 1), uSize), 0).r;
 }
 """ + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    ivec2 pixel = fragTexel(uSize);
+    ivec2 pixel = sceneMemoryTexel(fragTexel(uSize), uSize);
     float here = ghost(pixel);
     float edge = 0.0;
     for (int i = 0; i < 8; ++i) {

@@ -80,7 +80,7 @@ INT_LIMIT = 2147483647
 
 def field_kind(glsl_type: str, numbers: int) -> tuple[str, int]:
     """A member's record field (kind, count) by its GLSL type: a vec4 (or an array of them) ``f64x4`` per vec4, an
-    int or int vector ``u32`` per number (under ``INT_LIMIT``), any other float member ``f64`` per number (ABI 38: the
+    int or int vector ``u32`` per number (under ``INT_LIMIT``), any other float member ``f64`` per number (ABI 40: the
     core fills a vec2, vec3 or mat4 from an f64 sequence)."""
     base = glsl_type.split("[")[0]
     if base == "vec4":
