@@ -558,7 +558,9 @@ int modeContentObjects();
 // the driver's. A device without compute refuses such a texture with its reason (a failure, the owner told).
 // ABI 37 (N5.2d): RGBA32F (16 bytes a texel, floats in the platform's byte order: Crumble's motion table, Python's
 // GL_RGBA32F keyframes read with texelFetch, never filtered), never with mips (the box kernel is RGBA8 and RGBA16F).
-enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1, RGBA32F = 2 };
+// ABI 43 (N5.2g): R32F (4 bytes a texel, never with mips): a field's output (Capillary Bloom's arrival and extent), made
+// by a field recipe (field_recipe.h), sampled linear where the device filters it (storageImageLinearFilter).
+enum class ModeTextureFormat { RGBA8 = 0, RGBA16F = 1, RGBA32F = 2, R32F = 3 };
 bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out);
 QString modeTextureFormatName(ModeTextureFormat format);
 QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format);

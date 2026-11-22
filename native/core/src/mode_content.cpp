@@ -2422,6 +2422,8 @@ bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out)
         *out = ModeTextureFormat::RGBA16F;
     else if (text == QLatin1String("rgba32f"))
         *out = ModeTextureFormat::RGBA32F;    // ABI 37
+    else if (text == QLatin1String("r32f"))
+        *out = ModeTextureFormat::R32F;       // ABI 43
     else
         return false;
     return true;
@@ -2434,6 +2436,8 @@ QString modeTextureFormatName(ModeTextureFormat format)
         return QStringLiteral("rgba16f");
     case ModeTextureFormat::RGBA32F:
         return QStringLiteral("rgba32f");     // ABI 37
+    case ModeTextureFormat::R32F:
+        return QStringLiteral("r32f");        // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -2447,6 +2451,8 @@ QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format)
         return QRhiTexture::RGBA16F;
     case ModeTextureFormat::RGBA32F:
         return QRhiTexture::RGBA32F;          // ABI 37
+    case ModeTextureFormat::R32F:
+        return QRhiTexture::R32F;             // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -2460,6 +2466,8 @@ int modeTextureTexelBytes(ModeTextureFormat format)
         return 8;
     case ModeTextureFormat::RGBA32F:
         return 16;                            // ABI 37
+    case ModeTextureFormat::R32F:
+        return 4;                             // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -4353,9 +4361,10 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
                      .arg(modeTextureFormatName(format).toUpper());
         return false;
     }
-    if (mips && format == ModeTextureFormat::RGBA32F) {
+    if (mips && (format == ModeTextureFormat::RGBA32F || format == ModeTextureFormat::R32F)) {
         // ABI 37: the box kernel makes RGBA8 and RGBA16F chains only (mip_chain.h); a float table has no levels.
-        *error = QStringLiteral("texture '%1': an rgba32f texture has no mips").arg(QString::fromLatin1(name));
+        *error = QStringLiteral("texture '%1': an %2 texture has no mips").arg(QString::fromLatin1(name),
+                                                                              modeTextureFormatName(format));
         return false;
     }
     QMutexLocker lock(&m_mutex);
