@@ -86,7 +86,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
     part; built clean at 6e8f36059 (72 module tests pass); now its built proofs, stop point 2, the N5.2f hitch
     attribution (its box).
-  - All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
+  - Winding down (operator, 22 Nov): N5.6 saves its running reference renders, updates docs and stops; N5.2g merges if
+    it finishes well. All are told not to stop for usage; the lead resumes after a cut. Push each branch after each report.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
