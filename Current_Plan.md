@@ -306,7 +306,12 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 - Every primitive and service is proved on its own off-screen harness scene (GPU time median and p90, lazy
   creation, no work when dormant, clean retirement); none becomes a second renderer, clock or camera. Read the 3D
   foundation lessons (`Docs/Reference/Transitions.md`) before a 3D slice and append after it.
-- A native route beside QRhi is one of D5.3's services, wins a measurement first and ships its OpenGL twin.
+- A native route required for the original **existing-mode port** is a measured D5.3 service with its
+  mandated OpenGL counterpart. Once the original mode is ported and accepted, a NEW optional fidelity
+  feature may explicitly require Vulkan features, such as mesh shading, without duplicating that
+  extra artwork on OpenGL (operator's D5.3 supersession of 23 Nov). Its absence must be accurately shown
+  as feature-unavailable in the Studio while the mode's original OpenGL path stays unaffected.
+  No experimental extras change the accepted original appearance or hold up the flip.
 - No new 3D primitive is built in the Python OpenGL renderer unless an open defect needs it; new modes are built
   on the native core only (was N1.5), through its generic mode content (N2.9): a new mode is a Python simulation in
   the engine worker (off the render thread, publishing its frame record), its shaders loaded at runtime and its
@@ -314,11 +319,23 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   for a mode is an optimisation admitted only after those goals are met and a measurement shows the hot path; a
   new GPU technique is a primitive, built and proved once in C++ and then used by every mode as data (lead,
   14 Nov, from the operator's question).
-- High-potential primitives are built without a consumer, low-potential ones only when a consumer is admitted
-  (operator, 12 Nov: "High potential primitives should be built regardless, low potential only when a consumer.
-  We can always improve."). The lead classifies; the class is written at each item. When one lands it gets one
-  showcase WebP and a "what this makes possible" note in `Docs/Reference/Primitives.md` (resource detail stays in
-  `Docs/Reference/Scene3D_Resources.md`).
+- High-potential primitives are built without an existing consumer; low-potential ones only with an admitted
+  consumer (operator, 12 Nov). **Operator refinement, 23 Nov: their preferred artistic result is an
+  optional, genuinely music-reactive feature in an existing accepted Visualizer, demonstrated by a NEW
+  mutable authored preset, rather than a standalone showcase WebP.** This does not replace the primitive's
+  standalone harness, median/p90 GPU timings, validation, dormancy or retirement proofs. All SIX integrations
+  in the N6 demonstration box below are **approved implementation work** once their dependencies and modes
+  are ready. They must not block native mode-port parity, N5.8 Studio migration, NF (the Vulkan flip), or
+  existing accepted modes. Add the feature as an adjustable, real production Studio surface, with visual
+  AND musical-response controls; no hard-coded showcase-only effect or on/off-only implementation.
+  **ABSOLUTE PRESET TEST BAN:** NEVER use ANY shipped/operator-authored preset as a test input, fixture,
+  schema oracle, screenshot golden, hash, saved-value expectation, parity baseline or regression pin.
+  That includes all demonstration presets and their slot/file identities. Do not read them in automated
+  tests, restore them to an older version, or make a test pass depend on their current contents. Tests
+  construct synthetic TEST-OWNED configurations/audio/seeds/files and check the actual feature contracts.
+  Presets are mutable demonstration ART, and a human may reauthor them freely without breaking tests.
+  The catalogue's "what this makes possible" notes remain in `Docs/Reference/Primitives.md`, with
+  underlying resource facts in `Docs/Reference/Scene3D_Resources.md`.
 - The protected clip and background commits (ce07b991, 07486d83, 985b9d53) are not retuned while the Python path
   lives; the native background must measure no worse than them before it replaces them.
 - The native module is compiled only by the GitHub workflow (operator, 12 Nov; handbook section 8; N0.9): an agent
@@ -1623,6 +1640,200 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     MSL 1.2. Proof includes compilation failure controls, feature-disabled refusal, live validation and
     synchronisation, bounds/workgroup/primitive limits, GPU timing, teardown, device loss, display changes and
     operator visual acceptance against the authored mock. No raw pipeline is created on devices without support.
+
+**N4 / N6 approved primitive demonstration integrations (operator, 23 Nov; POST-FLIP ARTISTIC WORK)**
+
+**Ordering is non-negotiable:** finish required original-mode primitives, port parity, **N5.8's native Studio
+preview/host/capture migration, then NF's Vulkan-default flip** without waiting for any of the six additional
+artistic integrations. Unconsumed high-potential primitives continue on their independent, non-blocking
+primitives track; an approved optional integration is scheduled only **after its host mode's native parity
+and native Studio have been accepted**, when its underlying native service is ready. An earlier core harness
+may be used to prove the primitive itself, but the six new Studio integrations and new presets are NEVER
+new NF, Studio-flip, Waveform/EB/Neon Lake parity or existing preset migration gates. Work may proceed in
+parallel after those prerequisites if resources allow, without displacing Melt Pool then Concrete Rain's
+post-flip order or generating a second renderer. These six are **approved/scheduled**, not speculative
+ideas; each must eventually receive the independently reviewed Studio integration and authored preset.
+
+**Common engineering, fidelity, Studio and reactivity admission contract (every integration):**
+- Feature must be independently enabled/disabled, using canonical per-mode typed settings and the
+  *production* renderer/logical owner, with inactive feature causing no simulation, native draw pass,
+  extra analysis, recurring work or allocated effect-only GPU resources. Existing presets, Custom,
+  user selection, Studio state and base-mode behaviour are unchanged; there is no global default-on
+  surprise, hidden extra clock, second renderer or unsupervised photo/wallpaper replacement.
+- **Studio implementation is part of 'done'.** Expose Enable plus adequate and meaningfully independent
+  appearance/geometry/colour/material, placement/density, dynamics and music-response parameters
+  in the mode's EXISTING Studio through canonical schema/adapter/property admission. Use appropriate
+  typed shapes, directions, gradients, colour, quiet-to-peak ranges and intensity curves as supported.
+  One toggle or a single overall strength slider is inadequate. Every setting must visibly affect
+  the production picture within its admitted range (when enabled), round-trip through Studio preview,
+  Save/Cancel, undo/redo, Custom, Settings, preset authoring and restart. No separate Studio renderer,
+  bespoke settings source, raw frame-thread editing or inconsistent setting fallback. Give sufficient
+  discoverable grouping and explanatory labels so an operator can art-direct the feature in detail.
+- **Music response must be authored rather than generic noise**: reuse the existing mode's canonical
+  production audio snapshot and sole logical clock. Distinguish sustained musical motion, transients,
+  envelope/phrasing and silence recovery where useful, with independent mapping for each
+  visually meaningful reaction. Avoid the assumption that all effects should follow bass, a
+  lone shared scalar or identical peaks. Controls should provide quiet/peak response, modulation
+  strength, sensitivity, attack/decay/recovery, speed or lag and event emphasis only as appropriate
+  to that physical component; don't duplicate native DSP or mask the mode's existing musical output.
+  Continuous motion should have inertia, no pops, strobe, clipping or reset on the next beat.
+- **Visual fidelity bar:** no static substitute for a reactive element, geometry made of conspicuous
+  camera-facing cards, identical repeated pattern, broken attachment/contact, depth/sort flicker,
+  shimmery aliasing, disconnected reflection/shadow, foreground clipping, overly uniform noise,
+  uncontrolled bloom or cheap fullscreen postprocessing passed off as 3D structure. Judge close
+  and distant views, orbit/pan, stereo-free depth cues, quiet/medium/loud music, multiple aspect
+  ratios, card/fullscreen, DPR, light/dark backgrounds and movements between two displays.
+  Preserve readable original composition; never blanket-mask a visualizer with the new feature.
+- **Test proof uses NO PRESETS, EVER.** Synthetic test-owned parameter sets (including off/default,
+  extremes and unusual combinations), deterministic source/seed/input, fixture-owned audio traces,
+  feature-independent base-mode parity, each control's visible or measurable effect, physical
+  continuity, life-cycle/retirement/device-loss and performance (CPU/GPU p50/p90 and tail, card
+  and 4K, feature off/on) form the automated acceptance. DO NOT test preset format using real
+  preset files either: fabricate ephemeral test-owned preset-shaped files if exercising persistence.
+  Rendered WebPs, native live sessions and the new editable demonstration preset are **human review
+  and artistic evidence only**, never automated image or value goldens. A Studio Save To Preset
+  explicitly creates a *new* editable demonstration, preserving all existing authored files.
+- **Portability:** a new optional feature that truly requires mesh shaders may be exposed on
+  Vulkan only, with specific capability reason and disabled/inapplicable controls on OpenGL;
+  the existing base mode retains its original OpenGL/Vulkan parity. Do not fabricate a
+  lower-quality OpenGL twin just for the new feature; where shared cross-backend primitives
+  already suffice, use them. Versioned lifetime, warm-up, quality tier and bounded populations
+  follow the established native core. A primitive may land first with its harness; it counts
+  as a *finished approved visual integration* only with the Studio and new preset.
+
+- [ ] **1. Extruded Bubble: Kelp Cathedral (N6.7 mesh shaders if valuable, N6.2 geometry, N4.h shadows,
+  existing N4.k shafts).** Build a genuine small underwater kelp habitat in the same scene coordinate
+  frame as the bubbles: individually rooted and tapered curved stalks with physically attached
+  fronds, coherent variation in height, spacing, branching, shape, leaf size, curl, translucency,
+  surface normals, light interception and real depth/occlusion. Spatial composition should
+  leave clear routes for the bubbles instead of turning the entire view into a green curtain;
+  near and distant kelp should separate naturally as the framed camera moves. Stalk bases
+  resist displacement while tips sweep; fronds inherit host-stalk velocity and attachment,
+  lag with their own bending/recoil and gradually settle. Water current varies continuously
+  across the environment rather than all stalks performing an identical sine-wave dance.
+  Reactivity: distinct mappings for slow background current, sustained phrase-driven bending
+  and bounded phrase/onset flourishes in tip speed/leaf flutter; quiet scene remains alive,
+  peaks have headroom and recovery retains inertia. Never detach leaves, tunnel stalks
+  through bubbles without depth, billboard them to the camera, reset old stalks on a hit,
+  or conflate their motion with newly spawned bubbles only. Studio: enable, habitat coverage,
+  root zones, stalk count/spacing, height, thickness/taper, curvature/stiffness, frond
+  density/size/curl, tint/material/transmission, optional shadow/shaft influence and
+  orientation; current direction/base speed, sustained bend quiet-to-peak range, onset
+  influence, leaf flutter/lag, response attack/relax, spatial coherence and turbulence
+  limit. Segments, draw dispatch and shadow participation are bounded by quality.
+  **Mesh-shader kelp is a genuine optional Vulkan-only feature if that fidelity warrants
+  it; the existing accepted EB remains untouched on OpenGL.**
+
+- [ ] **2. Waveform Ribbon: Smoke Signals (N6.3 advected smoke, N4.f2 reduced-res volumes).**
+  Real volumetric smoke emerges from art-directable sources ON the moving ribbons
+  (specified edges, points, ends or contact zones) and continues moving in world space
+  after emission, inheriting ribbon velocity at birth. Long graceful wisps curl,
+  stretch, roll, diffuse and dissipate; density, colour and soft light vary through
+  3D depth; smoke properly occludes and mixes with the ribbons instead of behaving
+  like flat scrolling texture or general fog. Avoid obvious sprite balls, repeated
+  plumes, volume banding, hard depth intersections and a cloud that entirely obscures
+  the original lattice. Reactivity: separate baseline ambient trail, sustained musical
+  generation/turbulence/vertical drift and a bounded transient accent plume; lingering
+  smoke retains history as a phrase ends, no instant reset/disappearance on silence.
+  Studio: enable, emitter geometry/position, amount/rate, thickness, lifetime, colour
+  gradient/opacity, buoyancy/direction, inherited motion, advection/curl/turbulence,
+  diffusion, depth softness, occlusion and quality; independently controllable
+  musical emission, curl force, ascent/spread, transient accents and decay/inertia
+  mappings. A music-controlled recolour of existing fog **does not count**.
+
+- [ ] **3. Neon Lake (`shockwave_grid`): Rainfall Echo (N6.1 surface field, N4.d wet/rough optics,
+  N4.c bounded impacts where needed).** An optional physically coherent layer of
+  droplets striking actual basin water coordinates, each creating locally
+  propagating, perspective-correct wavelets. Different impacts interfere
+  and decay in a bounded height/velocity field; displaced surface normals alter
+  genuine nearby reflections with stable spatial correspondence. Near/far impact
+  sizes, crests and light/shading must read as water rather than painted rings,
+  glowing stickers or fullscreen distortion. Respect the original authored
+  shoreline, heightfield brush, analytic baseline reflection and music response:
+  no land-crossing rings, moving shoreline or replacement water renderer.
+  Reactivity: map sustained musical energy to an evolving rain density/placement
+  and wave texture; accents independently increase selected impact energy,
+  ring/crown emphasis or local disturbance; preserve distinct quiet, sustained
+  and busy looks without hitting a permanent high-water ceiling. Studio: enable,
+  density, coverage/strike region, placement seed/distribution, drop scale,
+  impulse energy, ring width/speed, damping/viscosity, interference strength,
+  detail/crown/spray, wet reflectance/roughness and tint; quiet-to-peak mapping
+  separately for strike rate, impact strength, surface propagation and reflection
+  breakup, plus transient probability/weight, attack and relaxation. History
+  continues across events, bounded for long takes; off is exactly original lake.
+
+- [ ] **4. Waveform Ribbon: Shadow Theatre (N4.h shared directional shadow maps).**
+  Moving 3D ribbons cast meaningful, physically attached world-space shadows
+  onto the existing floor or a declared receiver. Shadows trace individual
+  curved ribbon portions and overlapping silhouettes with convincing penumbrae,
+  contact definition, changing distance falloff and plausible light direction.
+  Stable across orbit, tilt, zoom, raster size and music-driven geometry:
+  no projected grey blob, fake detached double-image, crawling texels,
+  peter-panning, acne, or shadow remaining static when the ribbon moves.
+  The floor's colour, lighting and existing reflections remain separately
+  readable. Reactivity is primarily the *actual* music-driven ribbon
+  deformation causing continuously evolving silhouettes; optional gently
+  varied shadow intensity/penumbra can respond separately but must stay
+  physically coherent with the caster and light. Studio: enable, caster/receiver
+  participation and light selection/direction, shadow opacity/colour,
+  filtering softness, contact falloff, projection reach, bias within safe
+  limits, quality resolution and optional music-controlled shadow
+  emphasis/softness with response curves/smoothing. Validate depth-sampling
+  and backend bias via synthetic harness; never tie correctness to the
+  demonstration preset's ribbon pose or camera.
+
+- [ ] **5. Extruded Bubble: Abyssal Lanterns (N4.m shared soft-light array; optionally
+  N4.c compacted populations).** Submerged bioluminescent organisms/clusters
+  travel among the existing bubbles. They are real local light emitters:
+  near bubbles show moving reflections, transmission/rim shading and
+  sensible distance/angle falloff, distant bubbles show less. Light colour,
+  size, spatial distribution, softness, grouping and travel speed vary
+  enough to make recognisable colonies instead of a fixed array of bright
+  dots. Brightness must be energy-bounded to avoid uniform exposure,
+  neon fog or strobing; don't assign every particle a full shadow caster
+  or duplicate the shared N4.m service. Reactivity: continuous drift
+  carries light fields, sustained musical phrases make rolling
+  illumination, distinct accents pulse selected clusters with delayed
+  fade; genuine bubble lighting changes, not a glow overlay floating
+  on top. Studio: enable, population size/cluster density/regions,
+  emitter shape/size, colour/temperature/gradient, brightness,
+  light radius/falloff/softness, affected geometry, motion direction,
+  drift speed/coherence and quality cap; independently controllable
+  quiet-to-peak brightness, pulse probability/strength, travel
+  acceleration, phrase speed, transient accent and decay. Maintain
+  stable identities across source updates and camera moves.
+
+- [ ] **6. Waveform Ribbon: Rain-Slick Floor (N4.d wet masks, planar reflections and
+  rough receivers).** Actual floor-space patches of damp and shallow pooled
+  water, with irregular believable contours, roughness gradation,
+  varied micro-normal relief and wet/dry transitions that retain
+  visible floor material. Reflected ribbon silhouettes must originate
+  from current world-space ribbon positions and respond to camera
+  movement, floor normals and wetness: sharp in calmer deeper areas,
+  blurred/broken over rough thin films. Light grazing across wet
+  edges should show sensible specular variation, not solid black
+  mirror plastic or random circles pasted over the frame.
+  The *wet patch geography is fixed in the environment*, not a
+  beat-synchronised flashing mask. Music: the moving source ribbon
+  produces corresponding moving reflections; optional bounded
+  micro-disturbance changes local ripples/roughness/reflection
+  breakup with sustained phrasing and gentle transient emphasis
+  while the wet coverage itself remains anchored. Studio: enable,
+  coverage/seed/patch density/scale/irregularity, wet and dry
+  tint/roughness, film-depth impression, micro-normal strength,
+  glancing highlight and reflection strength/blur, distortion
+  anisotropy and quality; separate response intensity, quiet/peak
+  disturbance, transient detail, attack and smoothing/recovery.
+  Reject spatially disconnected reflections, sliding/teleporting
+  puddles, uniform polished mirror and postprocessing pretending
+  to be surface physics.
+
+**Do not convert the above six checkboxes into mere request fulfilment screenshots.** Their art targets
+are concrete quality bars for the live, editable, reactive Studio/production-renderer behaviour; the
+recorded demonstration preset is only one freely mutable example of what the canonical controls can do.
+For new, genuinely post-flip Vulkan-exclusive modes Melt Pool then Concrete Rain, N6.7's distinct
+no-OpenGL-twin policy continues to apply. This optional existing-mode work must not delay either the
+port/Studio/native flip or the designated new-mode order.
 
 ### Item 9. After the native core: new visualizers, then QoL; SMP separately deferred
 
