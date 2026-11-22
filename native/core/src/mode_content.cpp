@@ -5858,8 +5858,9 @@ bool ModeContent::meshesReady() const
 quint64 ModeContent::missingMeshMask() const
 {
     // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list); bit
-    // 2 * pass for a pass's mesh, the next bit for its instance source (kMaxModePasses 28: 56 bits).
-    static_assert(2 * kMaxModePasses <= 64, "a pass's two mesh names are bits of a quint64");
+    // `pass` when its mesh or its instance source is missing (ABI 42: one bit a pass, kMaxModePasses 48 of 64; the
+    // waiting reason names the meshes themselves, so the edge needs only which passes wait).
+    static_assert(kMaxModePasses <= 64, "a pass's missing meshes are a bit of a quint64");
     quint64 mask = 0;
     const ModeProgram &program = m_source->drawnProgram();
     const auto isStream = [&program](const QByteArray &name) {
@@ -5875,12 +5876,12 @@ quint64 ModeContent::missingMeshMask() const
         for (int slot = 0; slot < 2; ++slot) {
             const QByteArray &name = *names[slot];
             if (!name.isEmpty() && name != kBuiltinQuadMesh && !isStream(name) && !m_meshes.find(name))
-                mask |= quint64(1) << (2 * i + slot);
+                mask |= quint64(1) << i;
         }
         // N3.3: a mesh a compute entry reads (a compute entry draws no mesh of its own: its bit is the pass's first).
         for (const ComputeBinding &b : pass.computeBindings) {
             if (b.kind == ComputeResource::Mesh && !m_meshes.find(b.resource))
-                mask |= quint64(1) << (2 * i);
+                mask |= quint64(1) << i;
         }
     }
     return mask;

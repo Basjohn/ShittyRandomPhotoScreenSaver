@@ -83,7 +83,8 @@ class QJsonValue;
 
 namespace srpss_core {
 
-constexpr int kMaxSceneTargets = 4;
+// ABI 42 (N5.6): 6, Extruded Bubble's targets with its probe cube (Waveform's 4 within).
+constexpr int kMaxSceneTargets = 6;
 constexpr int kMaxTargetColour = 4;
 constexpr int kSceneBucket = 64;
 constexpr int kMaxSceneSamples = 8;

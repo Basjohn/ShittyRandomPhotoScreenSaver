@@ -210,7 +210,9 @@ namespace srpss_core {
 // ABI 33 (N5.4): Waveform's program (7 compute entries and about 15 draws, 28 with its continuation draws as passes of
 // their own; Current_Plan.md N5.4's reading); 16 at ABI 32, 8 before N3.1. A pass's two mesh names are bits of a quint64
 // (missingMeshMask: 2 * 28 bits).
-constexpr int kMaxModePasses = 28;
+// ABI 42 (N5.6): 48, Extruded Bubble's program (its cube's face passes, the prefilter and the check among them)
+// with room; the missing-mesh mask holds one bit a pass (missingMeshMask), so up to 64.
+constexpr int kMaxModePasses = 48;
 constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;

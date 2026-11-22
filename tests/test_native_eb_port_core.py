@@ -468,3 +468,51 @@ def test_a_check_entry_is_once_writes_its_readback_and_is_one_a_program():
     module = _source("module.cpp")
     assert all(f'QStringLiteral("check_{n}")' in module for n in ("readbacks", "readback_bytes", "reports"))
     assert 'o.insert(QStringLiteral("check"), m_checkState);' in mode_cpp
+
+
+# --------------------------------------------------------------------------------------------- box 4: the limits
+
+#: The plan's counts for Extruded Bubble (Current_Plan.md N5.6 limits box): 32 passes, 33 with the check as a pass,
+#: and 5 targets, 6 with the probe cube. Box 1 drew the cube's faces as passes of their own (six at least) beside the
+#: prefilter step, so the pass limit leaves room past 33 (the built proof admits the real program).
+EB_PASSES_WITH_CHECK = 33
+EB_TARGETS_WITH_CUBE = 6
+
+
+def _int_constant(text: str, name: str) -> int:
+    return int(re.search(rf"constexpr int {name} = (\d+);", text).group(1))
+
+
+def limits_hold_extruded_bubble(mode_h: str, targets_h: str, mode_cpp: str) -> bool:
+    from rendering.native import mode
+
+    passes = _int_constant(mode_h, "kMaxModePasses")
+    targets = _int_constant(targets_h, "kMaxSceneTargets")
+    mask = _function(mode_cpp, "quint64 ModeContent::missingMeshMask() const", "\n}\n")
+    return (passes >= EB_PASSES_WITH_CHECK and targets >= EB_TARGETS_WITH_CUBE
+            and passes == mode.MAX_PASSES and targets == mode.MAX_TARGETS
+            and passes <= 64 and "static_assert(kMaxModePasses <= 64" in mask
+            and "(2 * i" not in mask and mask.count("mask |= quint64(1) << i;") == 2)
+
+
+def test_the_limits_hold_extruded_bubbles_program_and_the_mesh_mask_holds_them():
+    mode_h, targets_h, mode_cpp = _source("mode_content.h"), _source("scene_targets.h"), _source("mode_content.cpp")
+    assert limits_hold_extruded_bubble(mode_h, targets_h, mode_cpp)
+    # One past each limit is refused with its reason (the parse's own checks).
+    assert "declared.isEmpty() || declared.size() > kMaxModePasses" in mode_cpp
+    assert "targets.toArray().size() > kMaxSceneTargets" in mode_cpp
+    # Negative controls: Waveform's limits (28 passes, 4 targets) and the two-bit mesh mask (32 passes at most).
+    assert not limits_hold_extruded_bubble(mode_h.replace("kMaxModePasses = 48;", "kMaxModePasses = 28;"), targets_h,
+                                           mode_cpp)
+    assert not limits_hold_extruded_bubble(mode_h, targets_h.replace("kMaxSceneTargets = 6;", "kMaxSceneTargets = 4;"),
+                                           mode_cpp)
+    assert not limits_hold_extruded_bubble(mode_h, targets_h, mode_cpp.replace(
+        "mask |= quint64(1) << i;\n        }\n        // N3.3", "mask |= quint64(1) << (2 * i + slot);\n        }\n"
+        "        // N3.3"))
+
+
+def test_waveforms_one_past_programs_follow_the_raised_limits():
+    # Its shape program one past MAX_PASSES is test_native_waveform_primitives.py's; its harness reads the limits.
+    check = (ROOT / "native" / "core" / "python" / "scene_target_check.py").read_text(encoding="utf-8")
+    assert 'f"{MAX_PASSES} passes" in refusals["one_pass_past"]' in check
+    assert "for n in range(MAX_TARGETS + 1 - len(targets)))" in check

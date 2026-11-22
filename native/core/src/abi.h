@@ -244,6 +244,7 @@
 // (3) The drift pair check's readback: a compute trigger "once" (the entry's first record with its storage) and an
 // entry's "readback": <a buffer it writes> (one a program, at most 4096 bytes), read once after its dispatch, taken
 // at a later record and reported once (the content's state "check": floats and hex; one log line); composite_live's
-// check_readbacks, check_readback_bytes and check_reports.
+// check_readbacks, check_readback_bytes and check_reports. (4) The limits: kMaxModePasses 28 to 48 (the missing-mesh
+// mask one bit a pass) and kMaxSceneTargets 4 to 6 (the probe cube among them); the face's MAX_PASSES and MAX_TARGETS.
 // Backward compatible for every earlier program (none declares a cube or a geometry buffer).
 #define SRPSS_NATIVE_CORE_ABI 42
