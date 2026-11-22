@@ -236,6 +236,17 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   new baselines with system usage before the next shared-path comparison. Today's merges (12 Nov: N2.3's changed
   Spectrum per-frame reads, N1.6's GL-call cuts) were measured on branches without a 6.12 baseline: compare
   Spectrum against the new one.
+- [ ] **Replace legacy preset-dependent tests with synthetic fixtures (operator, 23 Nov; cross-suite
+  cleanup, independent of the artistic work):** audit existing `tests/`, harnesses and CI for
+  any test that reads `presets/visualizer_modes/`, invokes `--preset N`, imports an operator
+  preset for schema/roundtrip/preservation or asserts a real preset's name, count, file,
+  key/value, rendered pixel, screenshot or response. Convert to synthetic test-owned settings,
+  isolated temporary preset-shaped files and controlled recorded/synthetic audio. **Do not
+  delete tests merely to pass**: preserve their real schema/serialization/migration/response
+  contracts with independent negative controls. The current `test_3d_curated_preset_ownership.py`
+  and `test_foundry_nav_and_eb_postport_20261119.py` deserve inspection, not presumed guilt
+  without reading. Protect the operator's mutable files; no auto-repair, no pinning or
+  replacement of curated presets. New Studio integrations must not introduce any such test.
 - [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
   `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
   and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
@@ -1607,13 +1618,18 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   its harness proof like the other primitives, then the consumer.
 - [ ] N6.7 Dense procedural geometry route (operator, 13 and 23 Nov: `VK_EXT_mesh_shader` for fidelity, not
   merely speed). **Two distinct consumers, with different compatibility contracts:**
-  - **Existing Visualizers as they are ported:** preserve Python OpenGL -> native OpenGL -> native Vulkan
-    parity and current accepted appearance. If an existing mode later gains a mesh-shader acceleration, it is an
-    **optional enhancement**; its QRhi/indirect or compute-cull + indirect-draw twin keeps the same original output
-    available on OpenGL and Vulkan devices lacking the extension. The optional path cannot change accepted presets
-    or become a port/flip dependency. Candidates remain Extruded Bubble's beads/bubbles, Neon Lake terrain/culling,
-    Waveform ribbons, N6.2 scene geometry and N6.3 smoke. Proof: visual parity with the twin, N2.6 per-pass
-    GPU median and p90, validation clean, and the unmodified original path on OpenGL.
+  - **Existing Visualizers during their original port:** preserve Python OpenGL -> native OpenGL ->
+    native Vulkan parity and all accepted rendering. If mesh shaders subsequently **accelerate/rewrite
+    that original accepted rendering**, its QRhi/indirect or compute-cull + indirect twin must
+    preserve the same original picture on OpenGL and Vulkan without the feature. Candidates
+    remain existing EB beads/bubbles, Neon Lake terrain/culling and Waveform ribbons.
+    Proof: original-mode visual parity with the twin, N2.6 GPU median/p90, clean validation.
+    A **new** optional artistic effect ADDED after native port acceptance (approved N6 Kelp
+    Cathedral, for example) may instead be feature-gated Vulkan-only, with no OpenGL
+    reproduction of its *new art*, and disabled without perturbing the base mode.
+    Neither class changes existing presets or holds up the native Studio or NF flip.
+    N6.2 scene geometry and N6.3 smoke remain shared primitive candidates; their
+    new artistic consumers are in the N4/N6 approved integration box below.
   - **New modes authored only after the Vulkan-default flip:** may explicitly require Vulkan and
     `VK_EXT_mesh_shader` when it enables their intended geometry and fidelity; **no OpenGL or non-mesh twin and no
     pixel-parity obligation to an implementation that never existed.** Selectable OpenGL remains for existing modes,
@@ -1622,11 +1638,15 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     Consumers in order: **Reactive Liquid / Audio Melt Pool first, Concrete Rain second** (their contracts are in
     `Docs/Future_Work/`). Neither is obliged to use mesh shaders for every pass; admit where it helps the authored
     target. Higher fidelity is a valid admission reason without proving that traditional rendering was too slow.
-  - **Optional early visual proof, only if N6.7 needs a real post-parity consumer before those modes:** opt-in
-    kelp stalks for *already ported and accepted* Extruded Bubble, with curved stalks and attached leaves moving
-    together, leaves independently lagging with the drift. Use a separate experimental switch, disabled by default,
-    no preset/default/accepted-look changes, no new OpenGL responsibility. A harness-only proof is preferable if
-    sufficient; kelp is neither a required EB feature nor a blocker to the flip.
+  - **Optional early N6.7 proof route:** if a real mesh-shader consumer is needed *after N5.8/NF
+    and EB native parity but before the new modes*, the approved Kelp Cathedral is the
+    appropriate Extruded Bubble integration. Rooted curved stalks and attached leaves
+    with delayed current-driven movement are fully specified in the N4/N6 artistic
+    integrations below. Kelp Cathedral **is approved eventual work** even if a
+    harness proves mesh shaders first; it must have real Studio visual/reactivity
+    controls and a new editable demonstration preset at final admission.
+    A harness alone can satisfy the early pipeline proof, avoiding any artificial
+    Kelp-before-flip gate. No change to existing accepted EB, presets or OpenGL output.
   - **Native seam:** use the core-owned Vulkan device (D6), enabled feature bits and reported limits; a reusable
     raw-Vulkan graphics-pass service inside the frame driver's existing pass graph, with
     `QRhiCommandBuffer::ExternalContent` and `beginExternal()/endExternal()`, retrieving the current native command
