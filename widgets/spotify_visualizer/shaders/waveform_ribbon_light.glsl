@@ -267,7 +267,15 @@ float ribbonLattice(float across, float phase) {
     return la+lb-la*lb;
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
-float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
+
+uint ribbonCellHash(uint x) {
+    x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; x^=x>>16;
+    return x;
+}
+float cellHash(float k, float j) {
+    return float(ribbonCellHash(uint(int(k))*0x9e3779b9u^uint(int(j))*0x85ebca6bu)&0xffffffu)/16777215.0;
+}
+
 // One-sided rim of half-width h (across units) at an edge, box-filtered over w.
 float rimCoverage(float edgeDistance, float h, float w) {
     return clamp((h-edgeDistance)/max(w,1e-4)+0.5,0.0,1.0)*min(1.0,2.0*h/max(w,1e-4)+0.25);
@@ -317,6 +325,13 @@ float pulseRimField(float x) {
 float pulseRimResponse(float x) {
     float level=max(pulseRimField(x),0.0)*uPulseRimShape.x;
     return uPulseRimShape.y*tanh(level*level/uPulseRimShape.y);
+}
+
+const float RIBBON_LIGHT_CEILING=1024.0;
+// The write scaled down (its hue kept) so its largest channel stays at most the ceiling; below it, unchanged.
+vec3 ribbonLightCeiling(vec3 light) {
+    float largest=max(max(light.r,light.g),light.b);
+    return largest>RIBBON_LIGHT_CEILING?light*(RIBBON_LIGHT_CEILING/largest):light;
 }
 
 void main() {
@@ -381,8 +396,9 @@ void main() {
     vec3 light=(sheet*sheetScale+boundary)*scale+net;
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
-    FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
+    vec3 written=ribbonLightCeiling(light);
+    FragColor=vec4(written,dot(written,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
     // The lattice keeps its own (smaller) bloom share: a lit net must stay a net, not a white haze.
-    vec3 glowing=light-net*(1.0-uLatticeTone.y);
-    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
+    vec3 glowing=ribbonLightCeiling((light-net*(1.0-uLatticeTone.y))*uGlow.x);
+    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)));
 }

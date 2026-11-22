@@ -710,6 +710,20 @@ float ribbonStrandCoordinate(float across,float phase,float strength,float frequ
 }
 """
 
+# A glint cell's draw from its integer (strand, phase cell) pair, exact on every backend. The phase cell grows with the
+# absolute path phase, and the former fract(sin(large)*43758) depended on each compiler's sin reduction: OpenGL and
+# Vulkan lit different cells of the same frame (N5.4 rule (b), Frozen Past input 4433: the reflection's first mip 3.7x
+# apart at three texels; with this hash every reflection texel agrees within 4.5 of 762).
+RIBBON_CELL_HASH_GLSL = """
+uint ribbonCellHash(uint x) {
+    x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; x^=x>>16;
+    return x;
+}
+float cellHash(float k, float j) {
+    return float(ribbonCellHash(uint(int(k))*0x9e3779b9u^uint(int(j))*0x85ebca6bu)&0xffffffu)/16777215.0;
+}
+"""
+
 # Shared by the body and light passes; every input is packet-local (the owner rebases eye/view with the MVP).
 _RIBBON_MATERIAL_GLSL = """
 in vec3 vWorld;
@@ -760,7 +774,7 @@ float ribbonLattice(float across, float phase) {
     return la+lb-la*lb;
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
-float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
+""" + RIBBON_CELL_HASH_GLSL + """
 // One-sided rim of half-width h (across units) at an edge, box-filtered over w.
 float rimCoverage(float edgeDistance, float h, float w) {
     return clamp((h-edgeDistance)/max(w,1e-4)+0.5,0.0,1.0)*min(1.0,2.0*h/max(w,1e-4)+0.25);
@@ -842,9 +856,27 @@ float pulseRimResponse(float x) {
 """
 # The one line the light pass gains; without it (or with uPulseRim.z 0) the rims are exactly today's.
 PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*pulseRimResponse(vWorld.x+uMistOrigin.x);\n"
+#: The largest channel one light write may carry (N5.4, the Group Wave squares; the Python renderer's defect too). The
+#: scene targets are 4x half floats that add every layer's write: Group Wave's folds stacked up to 12 writes of up to
+#: ~8000 into one sample (31,344 single-sampled), and OpenGL's 4x resolve went infinite where Vulkan's did not (still so
+#: with every write under 4096, so every sample finite: its arithmetic overflows, as summing in half floats would); the
+#: bloom chain spread that texel into squares. At this ceiling a sample of 15
+#: writes still resolves finite (4 x 15 x 1024 < 65504), the frame that failed resolves at most 8,792, and the light
+#: it clips is far past white: the frame's look keeps to the unclipped Vulkan one but for a halo edge a pixel or two in.
+#: Variant a (emission at most a few hundred) is untouched, pixel for pixel.
+RIBBON_LIGHT_CEILING = 1024.0
+RIBBON_LIGHT_CEILING_GLSL = """
+const float RIBBON_LIGHT_CEILING=""" + repr(RIBBON_LIGHT_CEILING) + """;
+// The write scaled down (its hue kept) so its largest channel stays at most the ceiling; below it, unchanged.
+vec3 ribbonLightCeiling(vec3 light) {
+    float largest=max(max(light.r,light.g),light.b);
+    return largest>RIBBON_LIGHT_CEILING?light*(RIBBON_LIGHT_CEILING/largest):light;
+}
+"""
 RIBBON_LIGHT_FRAGMENT = ("#version 460 core\n" + SRPSS_TARGET_CLIP_FRAGMENT_GLSL +
                          "layout(location=0) out vec4 FragColor;\nuniform vec2 u_target_px;\n" +
-                         SCENE_EMISSION_OUTPUT_GLSL + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
+                         SCENE_EMISSION_OUTPUT_GLSL + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + RIBBON_LIGHT_CEILING_GLSL
+                         + """
 void main() {
     srpssItemOnly(uViewport,u_target_px);
     float across=acrossClamped();
@@ -906,10 +938,11 @@ void main() {
     vec3 light=(sheet*sheetScale+boundary)*scale+net;
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
-    FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
+    vec3 written=ribbonLightCeiling(light);
+    FragColor=vec4(written,dot(written,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
     // The lattice keeps its own (smaller) bloom share: a lit net must stay a net, not a white haze.
-    vec3 glowing=light-net*(1.0-uLatticeTone.y);
-    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
+    vec3 glowing=ribbonLightCeiling((light-net*(1.0-uLatticeTone.y))*uGlow.x);
+    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)));
 }
 """)
 

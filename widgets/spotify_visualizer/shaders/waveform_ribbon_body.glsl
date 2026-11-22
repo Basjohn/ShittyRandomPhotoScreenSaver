@@ -275,7 +275,15 @@ float ribbonLattice(float across, float phase) {
     return la+lb-la*lb;
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
-float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
+
+uint ribbonCellHash(uint x) {
+    x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; x^=x>>16;
+    return x;
+}
+float cellHash(float k, float j) {
+    return float(ribbonCellHash(uint(int(k))*0x9e3779b9u^uint(int(j))*0x85ebca6bu)&0xffffffu)/16777215.0;
+}
+
 // One-sided rim of half-width h (across units) at an edge, box-filtered over w.
 float rimCoverage(float edgeDistance, float h, float w) {
     return clamp((h-edgeDistance)/max(w,1e-4)+0.5,0.0,1.0)*min(1.0,2.0*h/max(w,1e-4)+0.25);

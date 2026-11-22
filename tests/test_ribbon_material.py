@@ -276,6 +276,100 @@ void main() {
     assert eigenvalues[-1]/eigenvalues[0]<1.3, eigenvalues
 
 
+def _cell_hash_reference(k, j):
+    """The integer glint-cell hash in numpy (uint32 arithmetic): what every backend must reproduce bit for bit."""
+    with np.errstate(over='ignore'):
+        x = (k.astype(np.uint32) * np.uint32(0x9e3779b9)) ^ (j.astype(np.uint32) * np.uint32(0x85ebca6b))
+        x ^= x >> np.uint32(16); x *= np.uint32(0x7feb352d); x ^= x >> np.uint32(15); x *= np.uint32(0x846ca68b)
+        x ^= x >> np.uint32(16)
+    return x & np.uint32(0xffffff)
+
+
+def _cell_draws(scene, hash_glsl):
+    """Each column's glint-cell draw (24 bits) from ``hash_glsl``'s cellHash at strand k = column and phase cell
+    j = 250000 + 997 k (the absolute path phase grows without bound)."""
+    vertex = ('#version 460 core\nvoid main() { vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0; '
+              'gl_Position=vec4(p,0,1); }\n')
+    fragment = '#version 460 core\nlayout(location=0) out vec4 FragColor;\n' + hash_glsl + '''
+void main() {
+    float k=floor(gl_FragCoord.x);
+    uint b=uint(round(cellHash(k,250000.0+997.0*k)*16777215.0));
+    FragColor=vec4(float(b&255u),float((b>>8)&255u),float((b>>16)&255u),255.0)/255.0;
+}
+'''
+    scene.target.bind(clear=(0., 0., 0., 0.))
+    program = scene.resources.program('cell hash ' + str(hash(hash_glsl)), vertex, fragment)
+    gl.glUseProgram(program)
+    gl.glDisable(gl.GL_DEPTH_TEST)
+    gl.glDisable(gl.GL_BLEND)
+    gl.glBindVertexArray(scene.target.vao)
+    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+    row = scene.target.read_rgba()[H // 2, :, :3].astype(np.uint32)
+    return row[:, 0] | (row[:, 1] << 8) | (row[:, 2] << 16)
+
+
+def test_glint_cells_draw_bit_exactly_at_large_phase_cells(scene):
+    # OpenGL and Vulkan lit different glint cells of one frame while the draw was fract(sin(large)*43758): each
+    # compiler reduces a large sin its own way (N5.4 rule (b)). The integer hash is exact: it equals uint32 arithmetic.
+    from rendering.gl_programs.ribbon import RIBBON_CELL_HASH_GLSL, RIBBON_LIGHT_FRAGMENT
+    assert RIBBON_LIGHT_FRAGMENT.count(RIBBON_CELL_HASH_GLSL) == 1
+    k = np.arange(W)
+    np.testing.assert_array_equal(_cell_draws(scene, RIBBON_CELL_HASH_GLSL), _cell_hash_reference(k, 250000 + 997 * k))
+    # Negative control: the former sin draw is not what an exact evaluation of its own formula gives.
+    sin_glsl = 'float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }\n'
+    exact = np.round(np.modf(np.sin(k * 12.9898 + (250000 + 997 * k) * 78.233 + 1.7) * 43758.5453)[0] % 1.0
+                     * 16777215.0).astype(np.uint32)
+    assert np.mean(_cell_draws(scene, sin_glsl) != exact) > .5
+
+
+def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):
+    # Group Wave stacked writes of thousands into one 4x half-float sample and OpenGL's resolve went infinite (the
+    # bloom's squares, N5.4): each write is scaled to at most RIBBON_LIGHT_CEILING, its hue kept.
+    import rendering.quick.scene3d.ribbon as ribbon_module
+    from rendering.gl_programs import ribbon as programs
+    from rendering.quick.scene3d.reflection import PlanarReflection
+
+    def light(emission):
+        reflection = PlanarReflection('ceiling test')
+        try:
+            scene.target.bind()
+            reflection.begin(W, H)
+            gl.glDisablei(gl.GL_BLEND, 0)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            scene.primitive.draw(strip(0., -10., (.2, .6, 1., 1.), emission=emission), MVP, shading='light', view=VIEW,
+                                 material=material)
+            reflection.end()
+            pixels = np.empty((H, W, 4), np.float32)
+            gl.glGetTextureImage(reflection.texture, 0, gl.GL_RGBA, gl.GL_FLOAT, pixels.nbytes, pixels)
+            return pixels[..., :3].reshape(-1, 3).astype(float)
+        finally:
+            with scene.target.current():
+                reflection.release()
+
+    # Light linear in the knot's emission (no lattice, glints not admitted by the music): 64x the quiet strip's light
+    # would pass the ceiling wherever the quiet strip is past a 64th of it.
+    material = RibbonMaterial(fill_light=100., lattice_light=0.)
+    ceiling = programs.RIBBON_LIGHT_CEILING
+    quiet = light(1.)
+    assert 0. < quiet.max() < ceiling
+    hot = light(64.)
+    assert ceiling * .99 <= hot.max() <= ceiling * 1.001
+    lit = quiet.max(axis=1) > 1.1 * ceiling / 64.
+    assert lit.sum() > 100 and (hot[lit].max(axis=1) >= ceiling * .99).all()
+    np.testing.assert_allclose(hot[lit] / hot[lit].max(axis=1, keepdims=True),
+                               quiet[lit] / quiet[lit].max(axis=1, keepdims=True), atol=.01)
+    # Negative control: the light pass without its ceiling writes the hot strip far past it.
+    unclipped = programs.RIBBON_LIGHT_FRAGMENT.replace(
+        'const float RIBBON_LIGHT_CEILING=' + repr(ceiling), 'const float RIBBON_LIGHT_CEILING=6e4')
+    assert unclipped != programs.RIBBON_LIGHT_FRAGMENT
+    monkeypatch.setitem(ribbon_module._FRAGMENTS, 'light', unclipped)
+    with scene.target.current():
+        scene.primitive.release()
+        scene.resources.release_resources()
+    assert light(64.).max() > ceiling * 2
+    np.testing.assert_array_equal(light(1.), quiet)   # under the ceiling a write is exactly what it was
+
+
 def test_light_pass_alpha_carries_luminance_weighted_world_height(scene):
     # Reflection receivers recover the height of reflected light as alpha/luminance (contact hardening).
     # The packet's own rebased origin and the caller's frame both count; scene targets keep their alpha.

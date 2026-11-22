@@ -49,3 +49,28 @@ def test_a_target_is_judged_as_a_single_slice():
     near = ("rgba16f", (1, 1), 7, np.array([.5, .25, .125 + 2 ** -10, 1.], np.float16).tobytes())
     judged = wc.compare_readback({"reflection@7": texel}, {"reflection@7": near})
     assert judged["pass"] and judged["resources"]["reflection@7"]["row_reversed_mean_abs"] is None
+
+
+def test_an_opengl_row_pitch_is_read_past_its_padding():
+    import waveform_check as wc
+
+    # fog_steady's shape in small: r16f, 27 columns (54 bytes a row), which OpenGL packs at 56 with garbage after.
+    values = (np.arange(3 * 4 * 27).reshape(3, 4, 27) * 1e-3).astype(np.float16)
+    tight = ("r16f", (27, 4, 3), 0, values.tobytes())
+    rows = values.reshape(12, 27).view(np.uint8)
+    padded_bytes = np.concatenate([rows, np.full((12, 2), 0x7e, np.uint8)], axis=1).tobytes()  # 0x7e7e: a NaN half
+    padded = ("r16f", (27, 4, 3), 0, padded_bytes)
+    decoded = wc._decoded(padded)
+    assert decoded.shape == (3, 4, 27, 1) and np.isfinite(decoded).all()
+    assert np.array_equal(decoded, wc._decoded(tight))
+    assert wc.compare_readback({"fog_steady": tight}, {"fog_steady": padded})["resources"]["fog_steady"]["exact"]
+    # Negative control: read tight, the padded rows drift a column a row and carry the padding's NaN halves.
+    drifted = np.frombuffer(padded_bytes, np.float16)[:values.size].reshape(values.shape)
+    assert not np.isfinite(drifted).all() and not np.array_equal(drifted, values)
+    # Fewer bytes than the rows need is refused, never decoded short.
+    try:
+        wc._decoded(("r16f", (27, 4, 3), 0, values.tobytes()[:-2]))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a short readback must be refused")
