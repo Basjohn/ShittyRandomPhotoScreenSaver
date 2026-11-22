@@ -67,8 +67,14 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249), now its five
-  core C++ boxes, ABI 42 reserved; the Preset 9 flicker waits on the operator. Waveform leftovers:
+- [ ] Paused for a system restart (22 Nov, weekly usage 92 %); both branches pushed, each worktree's
+  `.artifacts/handover/JOURNAL.md` holds its state. Resume ONE (operator), by SendMessage to its id (or a successor per
+  `agent_handover.py`'s brief): N5.6 agent ac5f7832a73527151 at a0230959d (GPU proofs not started; next: write
+  `eb_core_check.py`, `--rounds limits` then skip, readback, geometry, probe); N5.2f agent abfa6e30ec8e2366d at
+  8ebb6dcac (ABI 41 proofs pass ec314d93b; route check n52f_r4 passes on its proposed bounds, for the lead; cost done;
+  next: register both on Vulkan, merge main, copy the ABI 42 module, retake the hitch row on a quiet machine).
+- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
+  merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
     54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
     C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.

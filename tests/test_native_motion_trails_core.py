@@ -58,7 +58,7 @@ def draw_trigger_wired(compute_cpp: str, mode_cpp: str) -> bool:
 def test_a_draw_trigger_dispatches_at_every_drawn_record_and_is_a_stills_compute():
     compute_cpp, mode_cpp = _source("compute_passes.cpp"), _source("mode_content.cpp")
     assert draw_trigger_wired(compute_cpp, mode_cpp)
-    assert "enum class Kind { Frame = 0, Field = 1, Draw = 2 };" in _source("compute_passes.h")
+    assert "enum class Kind { Frame = 0, Field = 1, Draw = 2" in _source("compute_passes.h")   # ABI 42 adds Once = 3
     # Negative controls: the ABI 36 forms (no "draw" in the parse; a draw entry due only on new work; a still refusing
     # every compute entry) each fail.
     assert not draw_trigger_wired(compute_cpp.replace('value.toString() == QLatin1String("draw")',

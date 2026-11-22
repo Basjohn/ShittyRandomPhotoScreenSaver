@@ -181,6 +181,7 @@
 #pragma once
 
 #include "compute_passes.h"
+#include "cube_prefilter.h"
 #include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
@@ -192,6 +193,7 @@
 #include "rhi_owned.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QSharedPointer>
@@ -208,7 +210,9 @@ namespace srpss_core {
 // ABI 33 (N5.4): Waveform's program (7 compute entries and about 15 draws, 28 with its continuation draws as passes of
 // their own; Current_Plan.md N5.4's reading); 16 at ABI 32, 8 before N3.1. A pass's two mesh names are bits of a quint64
 // (missingMeshMask: 2 * 28 bits).
-constexpr int kMaxModePasses = 28;
+// ABI 42 (N5.6): 48, Extruded Bubble's program (its cube's face passes, the prefilter and the check among them)
+// with room; the missing-mesh mask holds one bit a pass (missingMeshMask), so up to 64.
+constexpr int kMaxModePasses = 48;
 constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;
@@ -413,6 +417,11 @@ struct ModePass
     QList<ComputeBinding> computeBindings;
     quint32 localSize[3] = { 1, 1, 1 };              // reflected
     int computeMemberOffset = -1;                    // u_srpss_compute's offset in its block (-1: not declared)
+    QByteArray readback;                             // ABI 42: a "once" check entry's results buffer, read once
+    // ABI 42 (N5.6): "when": a record u32 scalar; at a record whose field is 0 the entry records nothing (a pass
+    // draws nothing in its run; a defocus step makes none of its passes). The program puts it
+    // on every entry of work that may be absent (the near layer's passes and its defocus step at zero shells).
+    QByteArray when;
     // N3.4 (D17): a stage entry (post_stages.h). A resolve's `target` is the owner and `stageSource` the transparency
     // target; a bloom's `stageSource` and `stageAttachment` its source (`target` -1: it has its own); a defocus's
     // `target` the onto target and `stageSource` the layer; a composite is a surface pass with the core's fragment.
@@ -434,13 +443,19 @@ struct ModePass
     // ABI 37 (N4.i): "viewport": "allocation", a pass on the core's triangle drawn over its scene target's whole
     // allocation (Python's post passes over the SceneTarget's allocation: the trails' edges).
     bool allocationViewport = false;
+    // ABI 42 (N5.6, the scene probe): a pass into a cube target draws its face ("face": 0..5; -1 for any other pass),
+    // and a prefilter step ({"name", "prefilter": <cube target>}, an empty pack) makes the cube's levels
+    // (cube_prefilter.h), its `target` the cube.
+    int face = -1;
+    bool prefilter = false;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
     // A bloom, defocus or (N5.2c) environment step: recorded outside the runs of passes, with render passes of its own.
     bool stepOfItsOwn() const
     {
-        return stage == StageKind::Bloom || stage == StageKind::Defocus || stage == StageKind::Environment;
+        return stage == StageKind::Bloom || stage == StageKind::Defocus || stage == StageKind::Environment
+            || prefilter;                     // ABI 42
     }
 };
 
@@ -726,6 +741,15 @@ public:
     // item for a frame), and its bytes once QRhi completed it (any thread; taken once). The record it rides on
     // dispatches nothing (no new work).
     void requestStorageRead();
+    // ABI 42 (D3, geometry_arena.h), GUI thread: the geometry arena's mapping name (the activation's; empty: none). The
+    // render thread opens it at its next record and keeps its own view (geometryArenaSerial changes with each name).
+    void setGeometryArena(const QByteArray &name);
+    quint64 geometryArenaSerial() const { return m_geometryArenaSerial.loadAcquire(); }
+    QByteArray geometryArenaName() const;
+    // ABI 42 (N5.6), render thread: a check entry's readback started (held here: the source outlives the content and
+    // QRhi's completion), and its report once taken (the state's "check").
+    void setCheckReadback(const std::shared_ptr<CheckReadback> &check);
+    void noteCheck(const QJsonObject &report);
     quint64 storageReadRequests() const { return m_storageReads.loadAcquire(); }
     void setStorageReadback(const std::shared_ptr<StorageReadback> &readback);
     bool takeStoragePixels(QList<StoragePixels> *out);
@@ -788,6 +812,10 @@ private:
     QJsonObject m_storageState;                 // N3.3, under m_textureReportMutex
     std::shared_ptr<StorageReadback> m_storageReadback; // N3.3, under m_textureReportMutex
     QAtomicInteger<quint64> m_storageReads { 0 };
+    QByteArray m_geometryArenaName;             // ABI 42, under m_textureReportMutex
+    std::shared_ptr<CheckReadback> m_checkReadback; // ABI 42, under m_textureReportMutex
+    QJsonObject m_checkState;                   // ABI 42, under m_textureReportMutex
+    QAtomicInteger<quint64> m_geometryArenaSerial { 0 };
 };
 
 class ModeContent final : public SurfaceContent
@@ -877,6 +905,9 @@ private:
     // N3.3 (D16): the storage at this record (made, kept or made again; its edge kernels recorded now, before any pass);
     // false with the reason (the content's failure, latched like a build's).
     bool syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error);
+    // ABI 42 (D3): each geometry buffer's key read from the record and made resident (ModeStorage::syncGeometry), the
+    // arena opened when the source names a new one; m_geometryWaiting when a geometry buffer has no key resident yet.
+    bool syncGeometry(QRhi *rhi, QRhiCommandBuffer *cb, const ModeProgram &program, QString *error);
     // N3.3: which compute entries dispatch at this drawn record (their trigger has new work), u_srpss_compute filled into
     // the arena's copy for each.
     void decideDispatches();
@@ -940,7 +971,8 @@ private:
     ContentLatch m_latch;
     GpuTexture m_textures[kMaxModeTextures];
     MipChainKernel m_textureChains;          // ABI 35: the item textures' box kernel (mip_chain.h)
-    quint64 m_textureObjects = 0;            // a texture object created or released: the bindings are rebuilt
+    CubePrefilter m_cubePrefilter;           // ABI 42: a cube target's levels (cube_prefilter.h)
+    quint64 m_textureObjects = 0;           // a texture object created or released: the bindings are rebuilt
     QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
     QStringList m_texturesLost;
     QStringList m_lostNames;                 // the names last reported lost (the edge fires for a new one)
@@ -972,6 +1004,7 @@ private:
     int m_waitingJobs = 0;
     quint64 m_waitingMeshes = 0;
     QStringList m_waitingLost;
+    bool m_waitingGeometry = false;          // ABI 42
     QString m_waitingReason;
     QByteArray m_batchShadow;                // N3.2: the batched passes' indirect commands (form 3), written per record
     quint64 m_meshBuffersNoted = ~quint64(0); // N3.2: the meshes' and streams' objects the state was last noted for
@@ -998,6 +1031,17 @@ private:
     // Audit 5 M2: the tracks of a new program, each entry's kept from the last program by its name.
     void retrackCompute(const ModeProgram &program);
     ModeStorage m_storage;
+    GeometryArena m_geometryArena;           // ABI 42 (D3): the content's own view of the activation's arena
+    quint64 m_geometryArenaSerial = 0;       // the source's name this view was opened for
+    QHash<QByteArray, GeometryKey> m_geometryKeys; // the record's keys, assigned in place (no allocation per record)
+    bool m_geometryWaiting = false;          // a geometry buffer has no resident key: the frame is kept
+    // ABI 42 (N5.6): the check entry's readback in flight (taken at a later record, reported once), and whether a
+    // results buffer past kMaxCheckReadbackBytes was noted.
+    std::shared_ptr<CheckReadback> m_check;
+    bool m_checkRefusedNoted = false;
+    void reportCheck();
+    // ABI 42 (N5.6): the entry's "when" field is 0 at this record (counted: mode_entries_skipped).
+    bool entrySkipped(int index) const;
     ComputeTrack m_compute[kMaxModePasses];
     bool m_dispatch[kMaxModePasses] = {};
     quint64 m_computeProgram = 0;            // the program the tracks are of

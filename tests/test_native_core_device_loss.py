@@ -211,7 +211,7 @@ def test_the_m3_program_holds_every_owner_the_crossfade_round_never_crossed_a_lo
     packs = {name: b"pack" for name in ("field.comp", "sample.frag", "box.vert", "box.frag")}
     spec = dlc.mix_spec(packs, "vulkan")
     assert mix_owners(spec) == MIX_OWNERS
-    assert set(dlc.SCENES) == {"program", "spectrum", "background"}
+    assert set(dlc.SCENES) == {"program", "spectrum", "background", "transition"}   # transition: N5.2c audit (1)
     # Negative controls: the program without its bloom step, and without its mesh.
     no_bloom = replace(spec, passes=tuple(p for p in spec.passes if not isinstance(p, BloomStep)))
     assert mix_owners(no_bloom) == MIX_OWNERS - {"bloom"}

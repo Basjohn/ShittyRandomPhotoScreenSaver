@@ -100,8 +100,10 @@ set(_sources
     src/mode_content.cpp
     src/scene_targets.cpp
     src/mip_chain.cpp
+    src/cube_prefilter.cpp
     src/mesh_buffers.cpp
     src/compute_passes.cpp
+    src/geometry_arena.cpp
     src/post_stages.cpp
     src/job_service.cpp
     src/pipeline_cache.cpp

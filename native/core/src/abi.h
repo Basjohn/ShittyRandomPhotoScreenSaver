@@ -230,4 +230,24 @@
 // control under which an indirect pass is refused with its reason, both facts read false and the draw-parameters forms
 // fall back to one draw a batch (mesh_buffers.h drawIndirectAvailable: the one answer every reader takes). Backward
 // compatible for every program and caller (the facts are new keys; the control is off unless set).
-#define SRPSS_NATIVE_CORE_ABI 41
+// 42 (N5.6, Extruded Bubble's core boxes; reserved by the lead, 22 Nov): (1) the scene probe (scene_targets.h,
+// cube_prefilter.h): a target's "cube": true (an explicit square size, one rgba16f attachment, one sample, exact; a
+// D32F depth shared by its faces), a pass's "face": 0..5 into it (one render target per face, cleared per face, drawn
+// in OpenGL's cube-map rows: the cube triangle's flipped uv and the uMatrix's extra Y flip; no culling), a prefilter
+// step ({"name", "prefilter": <cube>}, an empty pack: probe.py's 32-tap cone filter per level and face into a stage
+// cube, copied into the cube's level), a samplerCube reading "<cube>.<attachment>" with mips; the readback's
+// "<target>.<attachment>#<face>@<level>"; composite_live's scene_cube_face_runs, scene_cube_prefilters and
+// scene_cube_level_copies. (2) Geometry once per key (D3, geometry_arena.h): a storage buffer's {"name", "geometry":
+// {"family", "key"}} form (read only; its key the record's u32 array of 8 words), composite_mode_geometry_arena(handle,
+// name) naming the activation's arena, "<name>@previous" bindable by a compute entry (the rebase record), and
+// composite_live's geometry_resident, _uploads, _failed, _released, _waits, _arenas, _reads_found and _reads_torn.
+// (3) The drift pair check's readback: a compute trigger "once" (the entry's first record with its storage) and an
+// entry's "readback": <a buffer it writes> (one a program, at most 4096 bytes), read once after its dispatch, taken
+// at a later record and reported once (the content's state "check": floats and hex; one log line); composite_live's
+// check_readbacks, check_readback_bytes and check_reports. (4) The limits: kMaxModePasses 28 to 48 (the missing-mesh
+// mask one bit a pass) and kMaxSceneTargets 4 to 6 (the probe cube among them); the face's MAX_PASSES and MAX_TARGETS.
+// (5) A pass's "when": a record u32 scalar; at a record where it is 0 a draw pass draws nothing and a defocus step makes
+// none of its passes (never on a compute entry, capture, cube face, prefilter, bloom or environment step);
+// composite_live's mode_entries_skipped.
+// Backward compatible for every earlier program (none declares a cube or a geometry buffer).
+#define SRPSS_NATIVE_CORE_ABI 42

@@ -46,6 +46,16 @@
 // levels. With "allocation": "exact" its allocation is the content's size (no bucket: Waveform's reflection reads its
 // coarse levels and its 1x1 level as the scene's mean, which a bucket's empty texels would dilute); its odd levels are
 // then the backends' own (the driver's box on OpenGL, Python's call; a linear blit on Vulkan), judged by the proof.
+// ABI 42 (N5.6, the scene probe; N4.d's Extruded Bubble half, the lead's decision of 15 Nov): a cube target ("cube":
+// true) is rendering/quick/scene3d/probe.py's SceneProbe: one RGBA16F cube of an explicit square size with its full mip
+// chain, its own clear, and one D32F depth (2D, the face's size) shared by the six faces and cleared per face. Each face
+// is a render target of its own over the cube's level 0 (QRhiColorAttachment::setLayer), drawn by the passes that
+// declare that face (mode_content.h); the faces hold OpenGL's cube-map convention (each face's bottom row at memory
+// row 0, the rows Python's glFramebufferTextureLayer draws), so the shells' lookups read the same texel on every
+// backend. The chain is the core's prefilter (cube_prefilter.h: probe.py's 32 Gaussian taps over a cone, never
+// generateMips, no geometry-shader gl_Layer): level L of each face is drawn into a per-level stage cube from the cube's
+// level L - 1, then copied into the cube's level L (QRhi tracks a texture whole: one texture is never read and written
+// in one pass). A sampler reads the cube as a samplerCube with its mips.
 //
 // Render thread only, but the counts (any thread) and the readback's results (taken by the GUI thread through
 // SceneReadback's own lock).
@@ -73,10 +83,14 @@ class QJsonValue;
 
 namespace srpss_core {
 
-constexpr int kMaxSceneTargets = 4;
+// ABI 42 (N5.6): 6, Extruded Bubble's targets with its probe cube (Waveform's 4 within).
+constexpr int kMaxSceneTargets = 6;
 constexpr int kMaxTargetColour = 4;
 constexpr int kSceneBucket = 64;
 constexpr int kMaxSceneSamples = 8;
+// ABI 42: a cube target's faces (OpenGL's order: +X, -X, +Y, -Y, +Z, -Z) and its levels (16384 a side: 15).
+constexpr int kCubeFaces = 6;
+constexpr int kMaxCubeLevels = 15;
 
 // ABI 37 (N4.i): R8, the motion trails' ghost buffer (one unorm channel, MAX-blended: Python's GL_R8).
 enum class TargetFormat { RGBA8 = 0, RGBA16F = 1, R16F = 2, R32F = 3, R8 = 4 };
@@ -142,6 +156,9 @@ struct TargetDeclaration
     // at every size (a resize makes the same objects again at the new size), so the coarse levels and the 1x1 mean hold
     // the content alone and a pass reading it needs no content-to-allocation ratio.
     bool exact = false;
+    // ABI 42 (N5.6): a cube target (the header): an explicit square size, one RGBA16F attachment, single-sampled, its
+    // allocation exact; its levels are the full chain of its side (mipChainLevels), made by its prefilter step.
+    bool cube = false;
 
     bool surfaceSized() const { return size.isEmpty(); }
     bool transparency() const { return !transparencyOf.isEmpty(); }
@@ -153,7 +170,7 @@ struct TargetDeclaration
 
 // {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a], "resolve"?: "average" |
 // "nearest"}, ...], "depth"?: bool, "samples"?: n, "previous_frame"?: bool (single-sampled only), "mips"?: bool,
-// "allocation"?: "bucket" | "exact" (ABI 33)}; false with the reason.
+// "allocation"?: "bucket" | "exact" (ABI 33), "cube"?: bool (ABI 42)}; false with the reason.
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error);
 // N3.4 (D17 point 2): each transparency target's owner resolved (declared before it, surface-sized, with depth, not a
 // transparency target, one transparency target an owner), its borrowed attachments checked (the owner's, never its
@@ -214,7 +231,13 @@ struct SceneTargetCounts
     qint64 resolvePrimes = 0; // resolve barriers recorded by the core before a run (audit 2, H1)
     qint64 nearestResolves = 0; // nearest resolve passes recorded
     qint64 generatedMips = 0;   // ABI 33: a self-mipped target's attachment chains generated (after its runs)
+    qint64 cubeFaceRuns = 0;    // ABI 42: runs of passes on a cube target's face
+    qint64 cubePrefilters = 0;  // ABI 42: prefilter steps recorded (every level of every face)
+    qint64 cubeLevelCopies = 0; // ABI 42: a stage face copied into the cube's level
 };
+// ABI 42: counted by the content's record (mode_content.cpp) and the prefilter (cube_prefilter.cpp).
+void countCubeFaceRun();
+void countCubePrefilter(int levelCopies);
 SceneTargetCounts sceneTargetCounts();
 
 // One attachment's pixels as read back (harness only): RGBA8 bytes, half floats or floats as stored, rows in the
@@ -229,6 +252,7 @@ struct SceneTargetPixels
     int samples = 1;       // the target's effective samples (a multisampled attachment is read through its resolve)
     QByteArray data;
     int level = 0;         // N3.4: a mipped target's level (every level is read back; `size` is the level's)
+    int face = -1;         // ABI 42: a cube target's face (0..5, OpenGL's order), every level of every face read back
 };
 
 // A content's targets as plain values (audit 2, M5): copied by the render thread only when they changed (a new
@@ -317,6 +341,18 @@ public:
         MipChain chain[kMaxTargetColour];
         quint64 chainGeneration = 0;
         int chainBindings() const;
+        // ABI 42 (N5.6): a cube target's objects. `colour[0]` is the cube itself (CubeMap | MipMapped | RenderTarget |
+        // UsedAsTransferSource), `depth` the faces' shared D32F; `renderTarget` and `renderPass` are face 0's (the
+        // passes' pipelines are built over its descriptor, compatible with every face's), `faceTarget[f]` face f's
+        // (level 0, setLayer(f)). The prefilter's stage cube of each level L >= 1 (one level, `stage[L]`) and its face
+        // render targets (`stageTarget[L][f]`, one descriptor a level: `stagePass[L]`).
+        RhiOwned<QRhiTextureRenderTarget> faceTarget[kCubeFaces];
+        RhiOwned<QRhiTexture> stage[kMaxCubeLevels];
+        RhiOwned<QRhiRenderPassDescriptor> stagePass[kMaxCubeLevels];
+        RhiOwned<QRhiTextureRenderTarget> stageTarget[kMaxCubeLevels][kCubeFaces];
+        int cubeLevels = 0;
+        // The render target a run on face `face` draws into (face 0 is the content's renderTarget).
+        QRhiTextureRenderTarget *faceRenderTarget(int face) const;
 
         bool ready() const { return dormant || (stepsDone >= stepsTotal && renderTarget); }
         // The texture a sampler reads for this attachment: the resolve when multisampled.

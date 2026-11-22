@@ -547,10 +547,12 @@ void main()
 
 
 def shape_program(packs: dict, layer_packs: dict, *, extra_pass: bool = False, extra_image: bool = False):
-    """(passes, targets, images) of Waveform's shape: 28 passes (29 with ``extra_pass``), 9 storage images (10 with
+    """(passes, targets, images) of Waveform's shape: 28 passes (one past ``MAX_PASSES`` with ``extra_pass``: body
+    passes added, ABI 42 raised the limit past the shape), 9 storage images (10 with
     ``extra_image``), 4 targets. ``layer_packs`` are N3.4's transparent layer packs (``post_stages``: ``eb_layer1`` and
     its sorted pack), drawn on the transparency target as Waveform's ribbon body."""
-    from rendering.native.mode import (BloomStep, ComputeBinding, ComputePass, CompositeStep, ModePass, ModeTarget,
+    from rendering.native.mode import (MAX_PASSES, BloomStep, ComputeBinding, ComputePass, CompositeStep, ModePass,
+                                       ModeTarget,
                                        PassOutput, PassSampler, StorageImage, TargetAttachment, TransparencyResolve,
                                        TransparencyTarget)
 
@@ -581,7 +583,8 @@ def shape_program(packs: dict, layer_packs: dict, *, extra_pass: bool = False, e
                                              PassSampler("u_fog", "fog_integrated", "linear", "clamp", "none"))))
         else:
             passes.append(ModePass(name, packs["shape_out2"], "replace", target="scene", outputs=two))
-    for n in (1, 2, 3) if extra_pass else (1, 2):
+    bodies = 2 + (MAX_PASSES + 1 - SHAPE_PASSES if extra_pass else 0)
+    for n in range(1, bodies + 1):
         passes.append(ModePass(f"body{n}", layer_packs["eb_layer1"], "additive", target="glass",
                                sorted_pack=layer_packs["eb_layer1_sorted"]))
     passes.append(TransparencyResolve("resolve", "glass"))

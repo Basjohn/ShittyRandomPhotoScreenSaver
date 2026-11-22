@@ -79,13 +79,14 @@ TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f", "r8")
 TARGET_RESOLVES = ("average", "nearest")
 DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_equal", "greater_equal", "always")
 #: N3.1: the most targets a program declares, attachments a target holds, samples a target requests.
-MAX_TARGETS = 4
+MAX_TARGETS = 6     # ABI 42 (N5.6): Extruded Bubble's targets with its probe cube
 MAX_TARGET_COLOUR = 4
 MAX_TARGET_SAMPLES = 8
 #: ABI 33 (N5.4): a scene target's allocation rule (D14 point 2's 64 px buckets, or the content's exact size).
 TARGET_ALLOCATIONS = ("bucket", "exact")
-#: ABI 33 (N5.4): the most passes a program declares (``kMaxModePasses``; Waveform's 28).
-MAX_PASSES = 28
+#: ABI 33 (N5.4): the most passes a program declares (``kMaxModePasses``; Waveform's 28, ABI 42 Extruded Bubble's
+#: with its cube faces, prefilter and check: 48).
+MAX_PASSES = 48
 #: ABI 33 (N5.4): an item texture's formats (``ModeTextureFormat``: RGBA8, or RGBA16F half floats).
 TEXTURE_FORMATS = ("rgba8", "rgba16f", "rgba32f")
 #: ABI 37 (N5.2d): "rgba32f" (floats, 16 bytes a texel, never with mips: Crumble's motion table).
