@@ -232,8 +232,18 @@ A feature with no OpenGL form is allowed only as an opt-in extra that changes no
 upscaling is the known example). This supersedes the 8 Nov sentence "Such a pass is Vulkan-only: on OpenGL it is
 unavailable or takes its QRhi form" (see the addendum in `Graphics_Backend_Decision_2026-11-05.md`).
 
-Each service is a measured admission that must ship its OpenGL twin; two (formats, per-sample reads) are expected not
-to be needed for parity.
+Each service for **port parity or an enhancement to an existing accepted mode** is a measured admission that must ship
+its OpenGL twin; two (formats, per-sample reads) are expected not to be needed for parity.
+
+**Operator supersession, 23 Nov 2026 (D5.3 / D8 / N6.7):** This paired-native-services rule is a parity rule for
+existing modes and the pre-flip port, **not** a permanent ban on new Vulkan-native visualizers. Once Vulkan is the
+default and the existing modes have passed their required parity gates, a newly authored mode may require Vulkan
+and optional capabilities such as `VK_EXT_mesh_shader` for its intended fidelity. Such a mode needs no OpenGL
+equivalent (nor a feature-disabled mesh-free copy) because no legacy implementation exists to preserve. Keep its
+Vulkan-required capability contract visible and refuse its selection on unsupported backends/devices; preserve
+OpenGL's selectable fallback for every already-portable mode. Existing modes remain pixel/behaviour/cost-parity
+bound; their optional mesh paths must not silently replace accepted rendering. N6.7 records the feature-admission,
+shader, lifetime and proof requirements; this exception adds no second rendering core or host.
 
 **D5.4 No Python on any thread the core runs on.** The render thread and the job thread (D9) never hold a Python
 thread state for a native surface: connections are made in C++, introspection lives in C++, and every port reruns
@@ -550,8 +560,9 @@ designed until the next refresh (up to 19 levels on the bright photo); the proof
 4. *Stability on Vulkan.* Rehearsal hours (D10), sleep and wake, a display arrangement change, device loss
    recovered by rebuilding from the last packet, and the start-up fallback proved by a forced failure.
 
-**The plus, ranked by reward against cost.** Each is built on the core, proved on its own harness, costs nothing at
-rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
+**The plus, ranked by reward against cost.** Each is built on the core, proved on its own harness and costs nothing
+at rest. Existing-mode port/performance pluses have an OpenGL form under D5.3; explicitly post-flip Vulkan-native
+new-mode capabilities follow D5.3's 23 Nov supersession instead. The gate is what admits it into the product.
 
 | # | Plus | What the user or the project gains | Cost | Risk | Gate that admits it |
 |---|---|---|---|---|---|
@@ -565,7 +576,7 @@ rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
 | 8 | Persistent high-rate rings | Larger histories and denser strands and particles at one copy per frame | Small | Low | D5.3's measurement; not built if QRhi's dynamic buffers are within 0.05 ms |
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
 | 10 | Per-pass temporal upscaling, descriptor indexing, ray tracing | None today | High | High | Not admitted: low potential until a consumer exists (the operator's rule); D6 keeps the door open |
-| 10a | Mesh shaders (plan N6.7; operator, 13 Nov: for fidelity) | Geometry that needs them | High | Moderate | A measured candidate, admitted when N2.6's timers show a ported mode's geometry pass is primitive-bound or a fidelity target needs the geometry. Raw Vulkan on the core's device (D6) with a compute-cull and indirect-draw twin for OpenGL; never the only path |
+| 10a | Mesh shaders (plan N6.7; operator, 13 and 23 Nov: for fidelity) | Procedural geometry, especially new real 3D environments | High | Moderate | Two routes: existing accepted-mode enhancements need an optional parity-preserving OpenGL/indirect twin; new post-flip Vulkan-native modes (Melt Pool then Concrete Rain) may use `VK_EXT_mesh_shader` as a required capability without a fake OpenGL twin. Admit on demonstrated fidelity or measured GPU cost, with feature-gated device creation, raw graphics-pass and SPIR-V validation proof. Optional kelp with drifting leaves in already-port-parity Extruded Bubble only if an early real consumer is needed; opt-in and never a parity/flip blocker |
 
 Multi-threaded command recording, which the lead listed as a CPU-side plus, is **not** a plus worth building: a
 frame here is a handful of passes and well under a millisecond of recording, and QRhi's command buffer is
