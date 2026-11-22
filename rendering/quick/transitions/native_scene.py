@@ -28,8 +28,9 @@ from .fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD
 
 #: What a sampler of a scene pass reads: the run's old picture, its new one, the photo environment's mipped copy, (N5.2d)
 #: a run texture the scene sends (``NativeSceneTexture``: Crumble's motion table, sampled nearest) or the trails'
-#: ghost buffer (``ghosts``).
-SCENE_TEXTURES = ("old", "new", "environment", "motion", "ghosts")
+#: ghost buffer (``ghosts``); N5.2f: the old picture's environment (``source_environment``: Python's
+#: ``PhotoEnvironment`` role "source", Volumetric Dissolve's ``uOldCopy``).
+SCENE_TEXTURES = ("old", "new", "environment", "motion", "ghosts", "source_environment")
 #: The built-in mesh: the item quad's four corners (``aPosition``, 0..1), drawn as a strip.
 QUAD_MESH = "quad"
 #: N5.2d (N4.i): the targets a scene pass draws into: the scene, or the trails' ghost buffer (R8, MAX).
@@ -113,6 +114,70 @@ class NativeScene:
     #: each pass emits, and the bloom chain of the scene (after the gather with motion blur) adds its glow at the
     #: composite (Python's ``SceneTarget`` with ``bloom``).
     bloom: float = 0.0
+    #: N5.2f: whether a pass reads the old picture's environment (``source_environment``), and the populations drawn
+    #: (``NativeScenePopulation``, by name: each a pass of ``passes`` draws).
+    source_environment: bool = False
+    populations: tuple["NativeScenePopulation", ...] = ()
+
+
+# ------------------------------------------------------------------------------- N5.2f (N4.c): compacted populations
+
+#: The shared scan pack (``population.py``'s ``POPULATION_SCAN_SOURCE`` verbatim), baked once beside the motion posts.
+POPULATION_SCAN = "scene3d_population_scan"
+#: The population's storage blocks and the resources' suffixes (``population.py``: bindings 3 to 7).
+POPULATION_BLOCKS = (("PopulationCounts", "counts"), ("PopulationOffsets", "offsets"), ("PopulationCommand", "command"),
+                     ("PopulationIds", "ids"), ("PopulationStates", "states"))
+
+
+@dataclass(frozen=True)
+class NativeScenePopulation:
+    """N5.2f (N4.c): a compacted population a scene runs (``rendering/quick/scene3d/population.py``): its ``name``, its
+    GLSL ``hooks`` (``populationActive`` / ``populationState``), the transition's ``frame_block`` the hooks read (merged
+    into the dispatch block of the native count and scatter packs, ``native_one_block``) and the pass that ``draw``s its
+    live members (from the command the scan writes, reading the ids and states)."""
+
+    name: str
+    hooks: str
+    frame_block: str
+    draw: str
+
+    def resource(self, suffix: str) -> str:
+        return f"{self.name}_{suffix}"
+
+    def count_source(self) -> str:
+        from rendering.quick.scene3d.population import population_count_source
+
+        return native_one_block((population_count_source(self.hooks),), self.frame_block)[0]
+
+    def scatter_source(self) -> str:
+        from rendering.quick.scene3d.population import population_scatter_source
+
+        return native_one_block((population_scatter_source(self.hooks),), self.frame_block)[0]
+
+    def settings(self) -> tuple[str, ...]:
+        """The settings that size its storage and its dispatches (no block member: the core's sizes and counts)."""
+        return tuple(self.resource(s) for s in ("groups", "group_bytes", "id_bytes", "state_bytes"))
+
+
+def population_values(population: NativeScenePopulation, members: int, vertices: int) -> dict[str, object]:
+    """One frame's values of ``population`` over ``members`` (its owner: ``CompactedPopulation.update``'s dispatch block
+    and allocation): the dispatch block's members (the scan writes ``uVertices`` into the command) and the settings that
+    size its storage and dispatches."""
+    from rendering.quick.scene3d.population import POPULATION_GROUP
+
+    if members < 1:
+        raise ValueError("a population needs at least one member")
+    groups = -(-int(members) // POPULATION_GROUP)
+    return {"uPopulation": int(members), "uGroups": groups, "uVertices": int(vertices),
+            population.resource("groups"): groups, population.resource("group_bytes"): 4 * groups,
+            population.resource("id_bytes"): 4 * int(members), population.resource("state_bytes"): 16 * int(members)}
+
+
+def population_scan_sources() -> dict[str, str]:
+    """The shared scan pack's source by file name (``tools/regen_qrc.py`` bakes ``<name>.qsb``)."""
+    from rendering.quick.scene3d.population import POPULATION_SCAN_SOURCE
+
+    return {f"{POPULATION_SCAN}.comp": POPULATION_SCAN_SOURCE}
 
 
 def item_quad_pass(name: str, vertex_source: str, fragment_source: str, samplers: tuple[tuple[str, str], ...] = (),
@@ -131,6 +196,11 @@ class NativeScenePasses:
         """Every pass any run of the transition may draw (packs are baked from these, discovered). A class method, so a
         renderer whose shader module loads lazily (Blinds' 3D Slats) loads it only when asked."""
         raise NotImplementedError
+
+    @classmethod
+    def native_scene_populations(cls) -> tuple[NativeScenePopulation, ...]:
+        """N5.2f: every population any run may draw (its count and scatter packs are baked from these)."""
+        return ()
 
     def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
         raise NotImplementedError
@@ -352,7 +422,8 @@ def flat_values(values: Mapping[str, object]) -> dict[str, object]:
 
 
 __all__ = ["MOTION_GATHER", "MOTION_TILE_MAX", "MotionGeometry", "NativeScene", "NativeSceneMesh", "NativeScenePass",
-           "NativeScenePasses", "NativeSceneTexture", "QUAD_MESH", "SCENE_TARGETS", "SCENE_TEXTURES", "SHOW_EFFECT",
+           "NativeScenePasses", "NativeScenePopulation", "POPULATION_BLOCKS", "POPULATION_SCAN", "population_scan_sources",
+           "population_values", "NativeSceneTexture", "QUAD_MESH", "SCENE_TARGETS", "SCENE_TEXTURES", "SHOW_EFFECT",
            "SHOW_NEW", "SHOW_OLD", "TRAIL_EDGES", "TRAIL_EDGES_PASS", "eased_show", "flat_values", "ghost_pass_name",
            "ghost_values", "item_quad_pass", "motion_geometry", "motion_post_sources", "motion_post_values",
            "NATIVE_CLIP_DEPTH_LINE", "native_clip_depth", "native_frame_text", "native_one_block",

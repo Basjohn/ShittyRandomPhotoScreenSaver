@@ -96,13 +96,21 @@ def _program_members(scene) -> dict[str, set[str]]:
         from post_stages import STAGE_MEMBERS
 
         found["scene_composite"] = set(STAGE_MEMBERS["opaque_glow"])
+    for population in getattr(scene, "populations", ()):       # N5.2f: each compute entry's one block
+        from rendering.quick.transitions.native_scene import population_scan_sources
+
+        found[population.resource("count")] = _members(population.count_source())
+        found[population.resource("scan")] = _members(next(iter(population_scan_sources().values())))
+        found[population.resource("scatter")] = _members(population.scatter_source())
     return found
 
 
 def _count_names(scene) -> set[str]:
-    """The settings that fill a pass's draw count (N5.2d: Pixel Accretion's tile instances)."""
-    return {count for p in scene.passes for count in (p.vertices, p.instances)
-            if isinstance(count, str) and count != "mesh"}
+    """The settings that fill a pass's draw count (N5.2d: Pixel Accretion's tile instances); N5.2f: a population's
+    storage sizes and group count."""
+    return ({count for p in scene.passes for count in (p.vertices, p.instances)
+             if isinstance(count, str) and count != "mesh"}
+            | {name for population in getattr(scene, "populations", ()) for name in population.settings()})
 
 
 def test_every_route_variant_names_a_registered_transition():
@@ -159,6 +167,9 @@ def test_every_vertex_input_is_its_meshs_and_every_sampler_the_shaders(variant):
         inputs = set(_INPUT.findall(_COMMENT.sub("", scene_pass.vertex_source)))
         if scene_pass.mesh == QUAD_MESH:
             attributes = {"aPosition"}
+        elif scene_pass.mesh is None:                           # N5.2f: a population's draw reads no vertex buffer
+            assert scene_pass.name in {p.draw for p in scene.populations}
+            attributes = set()
         else:
             mesh = meshes[scene_pass.mesh]
             attributes = {name for name, _n in mesh.attributes} | {name for name, _n in mesh.instance_attributes}
@@ -188,10 +199,22 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
     declared, packs = program_json(passes, targets, images=images)
     program = json.loads(declared)
     steps = [p for p in passes if isinstance(p, EnvironmentStep)]
-    assert len(steps) == (1 if scene.environment else 0)
-    if steps:
+    assert len(steps) == int(scene.environment) + int(scene.source_environment)
+    if scene.environment:
         assert passes[0] is steps[0] and steps[0].source == nb.NEXT_TEXTURE
         assert tuple(steps[0].size) == environment_size((2560, 1440))
+    if scene.source_environment:                                # N5.2f: the old picture's, second
+        assert passes[len(steps) - 1] is steps[-1] and steps[-1].source == nb.TEXTURE
+    # N5.2f: each population's count, scan and scatter after the environments and before every drawn pass.
+    from rendering.native.mode import ComputePass
+
+    computes = [p for p in passes if isinstance(p, ComputePass)]
+    expected_computes = [population.resource(step) for population in scene.populations
+                         for step in ("count", "scan", "scatter")]
+    assert [p.name for p in computes if p.name in expected_computes] == expected_computes
+    if computes and expected_computes:
+        assert passes[len(steps):len(steps) + len(expected_computes)] == computes[:len(expected_computes)]
+        assert all(p.trigger == "draw" for p in computes[:len(expected_computes)])
     drawn = [p for p in passes if isinstance(p, ModePass)]
     # N5.2d: each ghost pass once a ghost, the edges and (with motion blur) the gather.
     expected = []
@@ -634,7 +657,7 @@ def test_the_n52e_bounds_cover_every_moving_form():
     assert set(trc.N52E_EDGE_FLIPS_A) == moving
     assert set(trc.N52E_EDGE_FLIPS_B) == {v for v in trc.N52E_VARIANTS if v.startswith("exploding_tiles")} | {
         "page_curl_options"}
-    assert set(trc.EDGE_FLIPS_A) == set(trc.N52D_EDGE_FLIPS_A) | moving
+    assert set(trc.EDGE_FLIPS_A) == set(trc.N52D_EDGE_FLIPS_A) | moving | set(trc.N52F_EDGE_FLIPS_A)
     # Control: the gather-free judgement (against Python in the core's frame) never takes a form with bloom.
     assert trc.n52d_gather_free("exploding_tiles_plain") and trc.n52d_gather_free("page_curl_options")
     assert not trc.n52d_gather_free("exploding_tiles_bloom") and not trc.n52d_gather_free("membrane_options")
@@ -733,3 +756,91 @@ def test_exploding_tiles_values_are_the_python_renderers_frame_block():
     assert scene_settings(renderer, run, early, LOGICAL, PIXELS, scene).get(SPARK_INSTANCES) == 0
     assert scene_settings(renderer, run, run.sample(run.start_ns + (run.end_ns - run.start_ns) // 8), LOGICAL,
                           PIXELS, scene)[SPARK_INSTANCES] > 0
+
+
+# ------------------------------------------------------------------------------- N5.2f (N4.c): compacted populations
+
+def _populations():
+    return [(transition_id, population) for transition_id in ("disintegrate", "volumetric_dissolve")
+            for population in _renderer(transition_id).native_scene_populations()]
+
+
+def test_each_population_pack_holds_one_block_with_the_frame_merged_into_the_dispatch_block():
+    """The core admits one block a pass: the count and scatter packs merge the hooks' frame block into
+    PopulationDispatch (``native_one_block``); the control, the product's own two-block text, is caught."""
+    from rendering.quick.scene3d.population import population_count_source
+
+    for _transition_id, population in _populations():
+        for text in (population.count_source(), population.scatter_source()):
+            own = _own_blocks(text)
+            assert list(own) == ["PopulationDispatch"]
+            members = set(_MEMBER.findall(own["PopulationDispatch"]))
+            assert {"uPopulation", "uGroups", "uVertices", "uProgress", "uSeed", "uGrid"} <= members
+        assert len(_own_blocks(population_count_source(population.hooks))) == 2      # control: unmerged
+
+
+def test_population_values_are_the_compacted_populations_dispatch_and_allocation():
+    from rendering.quick.scene3d.population import _DISPATCH_BLOCK, POPULATION_GROUP
+    from rendering.quick.transitions.native_scene import population_values
+
+    _transition_id, population = _populations()[0]
+    values = population_values(population, 518_400, 4)
+    assert {name for name, _kind in _DISPATCH_BLOCK.fields} <= set(values)
+    groups = -(-518_400 // POPULATION_GROUP)
+    assert values["uGroups"] == values[population.resource("groups")] == groups
+    assert values[population.resource("group_bytes")] == 4 * groups
+    assert values[population.resource("id_bytes")] == 4 * 518_400
+    assert values[population.resource("state_bytes")] == 16 * 518_400
+    with pytest.raises(ValueError):
+        population_values(population, 0, 4)
+
+
+def test_a_population_draw_is_indirect_over_its_storage(monkeypatch):
+    from rendering.quick.render import native_background as nb
+
+    for transition_id in ("disintegrate", "volumetric_dissolve"):
+        run = _run(transition_id)
+        renderer = _renderer(transition_id)
+        scene = renderer.native_scene(run, LOGICAL)
+        passes, _targets, _images = nb.scene_program(renderer, scene, nb.TEXTURE, nb.NEXT_TEXTURE, (2560, 1440),
+                                                     PIXELS, source_size=(1920, 1080))
+        buffers = {b.name: b for b in nb.scene_storage(scene)}
+        for population in scene.populations:
+            draw = next(p for p in passes if getattr(p, "name", None) == population.draw)
+            assert draw.geometry.indirect == population.resource("command") and draw.geometry.draw_count == 1
+            assert dict(draw.geometry.storage) == {"PopulationIds": population.resource("ids"),
+                                                   "PopulationStates": population.resource("states")}
+            assert buffers[population.resource("command")].indirect
+            assert all(buffers[population.resource(s)] for s in ("counts", "offsets", "ids", "states"))
+
+
+def test_a_population_pack_missing_from_the_bake_refuses_the_native_route(monkeypatch, tmp_path):
+    from rendering.quick.render import native_background as nb
+
+    assert nb.native_transition_renderer("disintegrate") is not None
+    monkeypatch.setattr(nb, "population_pack_paths", lambda transition_id, population: (tmp_path / "missing.qsb",) * 2)
+    assert nb.native_transition_renderer("disintegrate") is None                    # control: drawn as Crossfade
+
+
+def test_the_n52f_bounds_cover_every_form_and_the_sampler_rule_keeps_its_guards():
+    """Every single-sampled N5.2f form is judged by the piece-edge class against Python in the core's frame (rule a),
+    every form by it under rule (b); Volumetric Dissolve's rule (b) takes its sampler scatter with compact groups past
+    one level only. Controls: a compact patch two levels off still fails the sampler rule, and the same one-level
+    band fails the default class."""
+    import numpy as np
+
+    trc = _trc()
+    single = {v for v, o in trc.N52F_VARIANTS.items() if o.get("samples") == 0}
+    assert set(trc.N52F_EDGE_FLIPS_A) == single and set(trc.N52F_EDGE_FLIPS_B) == set(trc.N52F_VARIANTS)
+    assert all(trc.n52d_gather_free(v) for v in single)
+    assert set(trc.N52F_SAMPLER_RULE_B) == {v for v in trc.N52F_VARIANTS if v.startswith("volumetric")}
+    reference = np.full((120, 160, 4), 100, np.uint8)
+    band = reference.copy()
+    band[20:60, 20:100, :3] += 1                                  # a one-level compact band (the mips' filtering)
+    allowed = np.zeros((120, 160), bool)
+    assert trc.judge_piece_edges(band, reference, 0, allowed, scatter_pixels=4305, compact_past=1)["pass"]
+    assert not trc.judge_piece_edges(band, reference, 0, allowed)["pass"]                     # control: default class
+    patch = reference.copy()
+    patch[20:30, 20:30, :3] += 2                                  # a compact patch past one level
+    assert not trc.judge_piece_edges(patch, reference, 1000, np.ones_like(allowed), scatter_pixels=4305,
+                                     compact_past=1)["pass"]                                  # control: still caught
