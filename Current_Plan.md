@@ -1425,12 +1425,12 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     pairs, full canonical durations, both dprs; the cull form equal to the indirect one; N4.c's harness at one million
     sprites, indirect against cull, same pixels, cost; `--cost` at 1440p and 4K on both backends; one native Vulkan
     hitch session; registration last.
-  - [ ] ABI 41: the two facts and the hide-`DrawIndirect` control, with their test (stop and report before relying on
-    the build).
-  - [ ] The `native_scene` population helpers and the second environment, with GPU-free tests whose controls fail (two
-    blocks in a compute pack refused, a population pack missing from the bake refused).
-  - [ ] `NativeScenePasses` for the two, the packs baked, the N52F route-check variants, bounds measured, the cull form,
-    N4.c's harness, cost, the hitch session, registration last.
+  - [ ] The hitch session on Display 1 on a quiet machine (`preflip_pack.py --name n52f_native_vulkan --rows
+    "transition/disintegrate/*,transition/volumetric_dissolve/*" --per-row --backend native-vulkan
+    --app-arg=--graphics-backend=vulkan --keep-logs`), twice each, no gap over 33 ms; the first try (before
+    registration) recorded no native run; 22 Nov the operator's game held the machine (about 300 % CPU, GPU 40 %).
+  - [ ] The cull form (the draw without `DrawIndirect`, chosen from the ABI 41 fact) and N4.c's harness at one million
+    sprites, indirect against cull, same pixels, cost.
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
 - [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):
