@@ -322,16 +322,14 @@ def test_glint_cells_draw_bit_exactly_at_large_phase_cells(scene):
     assert np.mean(_cell_draws(scene, sin_glsl) != exact) > .5
 
 
-def _below_ground(scene, ground_glsl, heights):
-    """Per column, whether ``ground_glsl``'s atmosphereBelowGround calls the GPU-computed height ``heights[column]``
-    below ground (the heights reach the shader as an exact float table and are rebuilt there with rounding)."""
+def _ground(scene, ground_glsl, heights):
+    """Per column, ``ground_glsl``'s atmosphereGround at ``heights[column]`` (an exact float table), read in 8 bits."""
     vertex = ('#version 460 core\nvoid main() { vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0; '
               'gl_Position=vec4(p,0,1); }\n')
     fragment = ('#version 460 core\nlayout(location=0) out vec4 FragColor;\nuniform float uHeights[' + str(W) + '];\n'
                 + ground_glsl + '''
 void main() {
-    float y=uHeights[int(gl_FragCoord.x)];
-    FragColor=vec4(atmosphereBelowGround(y)?1.0:0.0,0.0,0.0,1.0);
+    FragColor=vec4(atmosphereGround(uHeights[int(gl_FragCoord.x)]),0.0,0.0,1.0);
 }
 ''')
     scene.target.bind(clear=(0., 0., 0., 0.))
@@ -342,24 +340,31 @@ void main() {
     gl.glDisable(gl.GL_BLEND)
     gl.glBindVertexArray(scene.target.vao)
     gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-    return scene.target.read_rgba()[H // 2, :, 0] > 127
+    return scene.target.read_rgba()[H // 2, :, 0].astype(float) / 255.
 
 
-def test_the_fog_ground_plane_is_medium_whatever_the_rounding(scene):
-    # A mirror-volume cell row centred on the ground plane computes y a few ulps either side of 0 by each compiler's
-    # rounding; a strict y<0 cleared that row on OpenGL and kept it on Vulkan (N5.4 rule (b)). The plane is medium.
-    from rendering.gl_programs.waveform_atmosphere import ATMOSPHERE_GROUND_GLSL, MEDIUM_GLSL
+def test_the_fog_fades_below_the_ground_plane_continuously(scene):
+    # The mirror volume's cell rows sweep through the ground plane; a hard cut there flipped a whole row by each
+    # compiler's rounding of its height (N5.4 rule (b), at y<0 and again at y<-1e-3). The fade is continuous: heights a
+    # rounding apart get the same medium, wherever the row lies.
+    from rendering.gl_programs.waveform_atmosphere import ATMOSPHERE_GROUND_BAND, ATMOSPHERE_GROUND_GLSL, MEDIUM_GLSL
     assert MEDIUM_GLSL.count(ATMOSPHERE_GROUND_GLSL) == 1
-    heights = np.zeros(W, np.float32)
-    heights[:50] = np.float32(-1e-6) * np.arange(1, 51)       # rounding below the plane: medium
-    heights[50:100] = np.float32(1e-6) * np.arange(1, 51)     # rounding above it: medium
-    heights[100:] = -np.linspace(.01, 5., W - 100)            # clearly below: none
-    below = _below_ground(scene, ATMOSPHERE_GROUND_GLSL, heights)
-    assert not below[:100].any() and below[100:].all()
-    # Negative control: the strict test cuts the plane's rounding-below half.
-    strict = ATMOSPHERE_GROUND_GLSL.replace('y<-1e-3', 'y<0.0')
-    assert strict != ATMOSPHERE_GROUND_GLSL
-    assert _below_ground(scene, strict, heights)[:50].all()
+    band = ATMOSPHERE_GROUND_BAND
+    heights = np.linspace(-1.5 * band, .5 * band, W).astype(np.float32)
+    nudged = heights + np.float32(2e-6)                       # a rounding's worth higher, every column
+    ground, again = _ground(scene, ATMOSPHERE_GROUND_GLSL, heights), _ground(scene, ATMOSPHERE_GROUND_GLSL, nudged)
+    assert np.abs(ground - again).max() <= 1.5 / 255.
+    assert (ground[heights >= 0.] == 1.).all() and (ground[heights <= -band] == 0.).all()
+    assert (np.diff(ground) >= 0.).all() and np.abs(np.diff(ground)).max() < .05
+    # Negative control: a hard cut at any height flips the columns a rounding apart from it.
+    for cut in ('0.0', '-1e-3'):
+        hard = 'float atmosphereGround(float y) { return y<' + cut + '?0.0:1.0; }\n'
+        at = np.float32(float(cut))
+        edge = np.array([at - np.float32(1e-6)] * (W // 2) + [at + np.float32(1e-6)] * (W - W // 2), np.float32)
+        flipped = _ground(scene, hard, edge)
+        assert flipped[:W // 2].max() == 0. and flipped[W // 2:].min() == 1.
+        smooth = _ground(scene, ATMOSPHERE_GROUND_GLSL, edge)
+        assert np.abs(smooth[:W // 2].max() - smooth[W // 2:].min()) <= 1.5 / 255.
 
 
 def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):

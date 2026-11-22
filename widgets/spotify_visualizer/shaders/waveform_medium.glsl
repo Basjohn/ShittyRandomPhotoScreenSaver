@@ -257,7 +257,7 @@ vec3 atmosphereLight(vec3 local,vec3 ambient) {
     return lit*hue/max(dot(hue,vec3(0.2126,0.7152,0.0722)),1e-3);
 }
 
-bool atmosphereBelowGround(float y) { return y<-1e-3; }
+float atmosphereGround(float y) { return smoothstep(-0.05,0.0,y); }
 
  // ground extinction, height e-fold, clearance transition, local light gain
  // time, drift speed, noise amount, world noise scale
@@ -268,7 +268,8 @@ float atmosphereNoise(vec3 p) {
         +0.25*sin(p.z*1.41+p.x*0.39)*cos(p.x*0.57-p.y*0.68);
 }
 void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float steady) {
-    if(atmosphereBelowGround(world.y)){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
+    float ground=atmosphereGround(world.y);
+    if(ground<=0.0){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
     vec4 body=bodyField(world);
     vec3 moving=world*uAtmosphereMotion.w+uAtmosphereMotion.x*uAtmosphereMotion.y*vec3(0.07,-0.11,0.03);
     float variation=mix(1.0,0.6+0.8*atmosphereNoise(moving),uAtmosphereMotion.z);
@@ -280,7 +281,7 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
     float distanceWeight=1.0+min(pow(behind/12.0,2.0),64.0);
     float foreground=mix(1.0,0.15,smoothstep(4.0,35.0,world.z));
     extinction=uAtmosphere.x*(0.0004+exp(-world.y/max(uAtmosphere.y,0.05))*distanceWeight)
-        *foreground*variation*clearance;
+        *foreground*variation*clearance*ground;
     steady=extinction;
     radiance=uAtmosphereAmbient*(0.4+0.6*exp(-behind/30.0))+atmosphereLight(body.rgb*uAtmosphere.w,uAtmosphereAmbient);
 }
