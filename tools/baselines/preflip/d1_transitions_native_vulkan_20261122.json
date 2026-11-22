@@ -3,7 +3,7 @@
  "name": "d1_transitions_native_vulkan_20261122",
  "commit": "a177e2d01",
  "created": "2026-11-22T12:50:35",
- "updated": "2026-11-22T12:57:11",
+ "updated": "2026-11-22T13:42:45",
  "backend": "native-vulkan",
  "clip": "anything_mixed2.jsonl",
  "wallpaper": "D:\\Temp\\Scratch\\SRPSS\\wallpaper_usu",
@@ -324,10 +324,10 @@
    "state": "idle",
    "seconds": 75.0,
    "exit_code": 0,
-   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_d1_transitions_native_vulkan_20261122_session_2160p_idle",
-   "measured_in_s": 62.5,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-abfa6e30ec8e2366d\\.artifacts\\evidence\\performance\\preflip_pack\\20261122_d1_transitions_native_vulkan_20261122_session_2160p_idle",
+   "measured_in_s": 62.9,
    "conditions_before": {
-    "captured_at": "2026-11-22T12:56:05",
+    "captured_at": "2026-11-22T13:41:39",
     "displays": {
      "displays_on": true,
      "missing": {},
@@ -354,49 +354,49 @@
      {
       "pid": 0,
       "name": "System Idle Process",
-      "cpu_core_pct": 2095.6
+      "cpu_core_pct": 2102.8
      },
      {
-      "pid": 22420,
-      "name": "python.exe",
-      "cpu_core_pct": 99.2
+      "pid": 19352,
+      "name": "Spotify.exe",
+      "cpu_core_pct": 106.6
      },
      {
-      "pid": 4064,
-      "name": "MsMpEng.exe",
-      "cpu_core_pct": 46.6
+      "pid": 21720,
+      "name": "firefox.exe",
+      "cpu_core_pct": 52.7
      },
      {
-      "pid": 22288,
-      "name": "claude.exe",
-      "cpu_core_pct": 23.5
+      "pid": 20548,
+      "name": "firefox.exe",
+      "cpu_core_pct": 27.0
      },
      {
-      "pid": 6636,
-      "name": "claude.exe",
-      "cpu_core_pct": 5.2
+      "pid": 13640,
+      "name": "firefox.exe",
+      "cpu_core_pct": 9.8
      }
     ],
     "other_processes_gpu": [
      {
-      "pid": 1608,
-      "name": "csrss.exe",
-      "gpu_pct": 0.35
+      "pid": 20548,
+      "name": "firefox.exe",
+      "gpu_pct": 1.05
      },
      {
-      "pid": 16756,
-      "name": "NZXT CAM.exe",
-      "gpu_pct": 0.03
+      "pid": 4,
+      "name": "System",
+      "gpu_pct": 0.5
+     },
+     {
+      "pid": 1608,
+      "name": "csrss.exe",
+      "gpu_pct": 0.37
      },
      {
       "pid": 1116,
       "name": "dwm.exe",
-      "gpu_pct": 0.01
-     },
-     {
-      "pid": 6636,
-      "name": "claude.exe",
-      "gpu_pct": 0.01
+      "gpu_pct": 0.26
      }
     ],
     "nvidia_smi": {
@@ -404,66 +404,66 @@
      "name": "NVIDIA GeForce RTX 4090",
      "driver": "621.01",
      "pstate": "P8",
-     "util_pct": 0.0,
-     "clocks_gr_mhz": 225.0,
+     "util_pct": 11.0,
+     "clocks_gr_mhz": 360.0,
      "clocks_mem_mhz": 405.0,
-     "temp_c": 41.28,
-     "power_w": 35.16,
-     "memory_used_mb": 2932.0,
+     "temp_c": 49.13,
+     "power_w": 36.98,
+     "memory_used_mb": 3562.0,
      "throttle_reasons": "0x0000000000000001"
     },
-    "gpu_clock_mhz": 225.0
+    "gpu_clock_mhz": 360.0
    },
    "session": true,
    "conditions_during": {
-    "cpu_others_median": 9.2,
-    "cpu_others_max": 16.3,
-    "cpu_system_median": 9.4,
-    "cpu_system_max": 16.6,
-    "gpu_clock_mhz_median": 810.0,
-    "gpu_clock_mhz_max": 2595.0,
-    "gpu_temp_c_median": 43.1,
-    "gpu_temp_c_max": 45.6,
-    "gpu_util_median": 5.0,
-    "gpu_util_max": 54.0,
-    "memory_used_median": 51.2,
-    "memory_used_max": 51.4
+    "cpu_others_median": 11.3,
+    "cpu_others_max": 24.2,
+    "cpu_system_median": 11.6,
+    "cpu_system_max": 24.4,
+    "gpu_clock_mhz_median": 435.0,
+    "gpu_clock_mhz_max": 2685.0,
+    "gpu_temp_c_median": 49.2,
+    "gpu_temp_c_max": 53.3,
+    "gpu_util_median": 9.0,
+    "gpu_util_max": 46.0,
+    "memory_used_median": 48.0,
+    "memory_used_max": 48.8
    },
    "status": "ok",
    "figures": {
-    "fps": 185.9,
-    "render_median_ms": 0.85,
-    "render_p90_ms": 1.3,
+    "fps": 155.3,
+    "render_median_ms": 0.78,
+    "render_p90_ms": 1.29,
     "render_source": "quick_render_ms",
-    "swap_gap_median_ms": 5.31,
-    "swap_gap_p90_ms": 6.08,
+    "swap_gap_median_ms": 5.28,
+    "swap_gap_p90_ms": 5.97,
     "frame_source": "quick_after_rendering",
-    "late_pct": 0.1,
-    "hitches_per_min": 0.0,
-    "cpu_core_pct": 60.8,
-    "gpu_pct": 23.18,
-    "gpu_ms_per_frame": 1.247,
-    "rss_mb": 905.3,
-    "private_mb": 1748.5,
+    "late_pct": 0.5,
+    "hitches_per_min": 15.08,
+    "cpu_core_pct": 48.35,
+    "gpu_pct": 20.82,
+    "gpu_ms_per_frame": 1.341,
+    "rss_mb": 897.1,
+    "private_mb": 1741.6,
     "first2s_frames": null,
     "first2s_late_pct": null,
     "steady_seconds": 7.99,
-    "late_frames": 1,
-    "hitches": 0,
-    "frames": 1483,
+    "late_frames": 6,
+    "hitches": 2,
+    "frames": 1237,
     "run_id": 2,
     "gap_ms": {
-     "median": 5.31,
-     "p90": 6.08,
-     "max": 49.8,
-     "count": 1483
+     "median": 5.28,
+     "p90": 5.97,
+     "max": 1085.36,
+     "count": 1237
     },
-    "first_frame_ms": 10.74,
-    "gaps_over_limit": 1,
+    "first_frame_ms": 24.16,
+    "gaps_over_limit": 6,
     "gap_limit_ms": 33.0,
-    "hitch_verdict": "fail: 1 gap(s) over 33 ms ([49.8])"
+    "hitch_verdict": "fail: 6 gap(s) over 33 ms ([37.28, 46.59, 38.15, 1085.36, 89.38])"
    },
-   "commit": "a177e2d01",
+   "commit": "83915122c",
    "backend": "native-vulkan"
   },
   "transition/pixel_accretion/2160p/idle": {
