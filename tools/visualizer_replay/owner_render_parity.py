@@ -1331,6 +1331,58 @@ def _python_masks(mode: str, script, settings: dict, python: dict) -> tuple[dict
     return rule_a_masks(python, backdrop), len(backdrop["pixels"])
 
 
+def python_references_root() -> Path:
+    from tools.visualizer_replay.python_references import DEFAULT_ROOT
+    return DEFAULT_ROOT
+
+
+def references_only(out: Path, *, mode: str, offers: bool, seconds: float, recording: str, references: Path,
+                    placements: tuple[str, ...], only: tuple[str, ...] = ()) -> dict:
+    """Port preparation (the guide's section 3, P): draw and store the cached Python references of ``mode``'s run set
+    (``conventions_identity.mode_runs``, ``OVERSCAN_RUNS`` again at each other placement) for one take, before the mode
+    has a native route. The same Python run, masks and cache key as ``native_parity`` (single-sampled scene targets,
+    the placement's card), so the port's first native run reads them; a reference that already exists is kept. Each
+    run's key, folder, frame count and wall time are reported."""
+    import tools.expanded_visualizer_evidence as evidence
+    from PySide6.QtGui import QGuiApplication
+    from tools import conventions_identity
+    from tools.visualizer_replay import python_references
+    from widgets.spotify_visualizer import engine_worker_link
+
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    clip = evidence.load_recording(recording, seconds)
+    runs = conventions_identity.mode_runs(mode, offers)
+    planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
+    planned += [(suffix, settings, placement) for placement in placements if placement != "display"
+                for suffix, settings in runs if suffix in OVERSCAN_RUNS]
+    report: dict = {"mode": mode, "clip": clip.name, "clip_frames": len(clip.frames), "seconds": seconds,
+                    "references": str(references), "results": {}}
+    dpr = float(QGuiApplication.primaryScreen().devicePixelRatio())
+    for suffix, settings, placement in planned:
+        key_name = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
+        if only and key_name not in only:
+            continue
+        engine_worker_link.reset_run_state_for_testing()
+        key, made_of = python_references.reference_key(mode, suffix, settings, clip.name, clip.frames, placement, dpr)
+        folder = Path(references) / key
+        started = time.perf_counter()
+        if python_references.load(folder, made_of) is not None:
+            state, frames = "kept (already stored)", None
+        else:
+            script = parity_script(clip.frames, mode)
+            with single_sample_scene_targets(), card_placement(placement):
+                python, mappings = _python_reference(mode, script, settings)
+                masks, backdrop_frames = _python_masks(mode, script, settings, python)
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+            state, frames = "drawn and stored", len(python["pixels"])
+        report["results"][key_name] = {"key": key, "folder": str(folder), "state": state, "frames": frames,
+                                       "seconds": round(time.perf_counter() - started, 1)}
+        (out / "python_references.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(key_name, report["results"][key_name], flush=True)
+    return report
+
+
 def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path, placement: str = "display", *,
                 against: dict | None = None) -> dict:
     """Native before against native after (the guide's section 3, an optimisation of a landed port): the native run
@@ -1814,6 +1866,9 @@ def main(argv=None) -> int:
                         help="with --native: cached Python references (tools/visualizer_replay/python_references.py): "
                              "read when one made of exactly this run exists, else drawn and stored; the folder "
                              "(default D:\\Temp\\Scratch\\SRPSS\\fast_proof\\references)")
+    parser.add_argument("--references-only", action="store_true",
+                        help="draw and store the cached Python references of --mode's runs for --recording (port "
+                             "preparation, before the mode has a native route); with --runs, only those run keys")
     parser.add_argument("--native-only", action="store_true",
                         help="with --native: the native runs alone, each frame's hash written as it is drawn; with "
                              "--against, every frame whose hash changed from that report's (native before against "
@@ -1863,6 +1918,14 @@ def main(argv=None) -> int:
 
     app = QApplication(["owner-render-parity"])
     try:
+        if args.references_only:
+            report = references_only(args.out, mode=args.mode, offers=args.offers, seconds=args.seconds,
+                                     recording=args.recording,
+                                     references=args.references or python_references_root(),
+                                     placements=tuple(args.placements), only=tuple(args.runs))
+            del app
+            evidence_media.finish(0)
+            return 0
         if args.native:
             global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS, NATIVE_CONTROL, NATIVE_SHADER_CONTROL
             global NATIVE_STAGE_CONTROL
