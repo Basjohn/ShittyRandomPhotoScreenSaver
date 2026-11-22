@@ -214,7 +214,7 @@ def test_a_statistical_bound_judges_shares_and_still_counts_the_classes():
     reference[..., 3] = 255
     reference[100:, :, :3] = 200                                    # an edge along row 100
     candidate = reference.copy()
-    candidate[100, :int(400 * 200 * bound.flip_share * .5), :3] = 180  # half the flip share: a row 20 levels off
+    candidate[100, :int(400 * 200 * bound.flip_share * .5), :3] = 190  # half the flip share: a row 10 levels off
     rng = np.random.default_rng(5)
     scatter = rng.choice(200 * 400, 2000, replace=False)
     flat = candidate.reshape(-1, 4)

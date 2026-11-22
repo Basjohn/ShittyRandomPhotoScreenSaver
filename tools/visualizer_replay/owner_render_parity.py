@@ -487,12 +487,20 @@ RULE_A_SCATTER_GROUP = {"bubble": 22}
 RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
 #: A mode judged by its frame statistics instead of the classes (``pixel_tolerance`` "Statistics"): mode -> (mean
 #: absolute, mean signed, share 2 to 3 levels off, share past 3), its single-sampled form against Python's.
-#: Waveform Ribbon: the lead's provisional bound (22 Nov), until layer P's measurement fixes it. Its scene's geometry is
+#: Waveform Ribbon: layer P's measured worst times 1.5 (two significant figures, rounded up), within the lead's
+#: provisional bound (0.16, 0.10, 3 %, 0.6 %, 22 Nov), over 35,531 judged frames of every reaction mode (one full take
+#: each, display and overscan for variants a and b, coverage windows from the other two takes, late-song windows
+#: included; n5_4/20261122_p_*): worst mean 0.042 and signed 0.041 (human Group Wave input 3835), 2-3 levels 0.34 %
+#: (ragdoll Group Wave window, input 66), past 3 0.48 % (human Group Wave input 1255), whose 1.5 times (0.72 %) the
+#: provisional 0.6 % caps. 13 frames holding a saturated square (variant b, the Python renderer's own defect too) are
+#: set aside, never admitted. Each planted control fails it on almost every frame (human Frozen Past windows, 1,158
+#: frames): the ribbons half a pixel right 1,153, the fog x 1.03 1,146, the bloom x 1.03 1,155, the camera x 1.05 and
+#: the bloom off 1,158 (n5_4/20261122_p_control_*). Its scene's geometry is
 #: placed through the core's target clip (a 64-pixel bucket) where Python's viewport places it directly, so where a
 #: ribbon edge runs along a row of pixel centres the whole row flips (P, ragdoll Frozen Past, input 997: 339 pixels past
 #: 3 levels and 1,142 at 2 to 3 along one near-horizontal edge, no frame offset: Python's neighbouring frames differ by
 #: 129,000), and its bloom and fog round one level apart over wide soft regions (groups of 3,097 one-level pixels).
-RULE_A_STATISTICS: dict[str, tuple[float, float, float, float]] = {"waveform_ribbon": (0.16, 0.10, 0.030, 0.006)}
+RULE_A_STATISTICS: dict[str, tuple[float, float, float, float]] = {"waveform_ribbon": (0.063, 0.062, 0.0052, 0.006)}
 #: A statistical mode's classes: counted and reported, never a reason.
 _COUNTED = 10 ** 9
 

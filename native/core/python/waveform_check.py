@@ -78,9 +78,14 @@ def _generic_rounds():
 base = _generic_rounds()
 
 MODE_ID = "waveform_ribbon"
-#: Rule (b) (D12 "The pixel tolerance"): not yet measured on Waveform; the shared form at one level under the mask,
-#: no scatter, until the measured worst is set here with the lead's decision.
-VULKAN_RULE_B = pt.Tolerance("waveform ribbon, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=0)
+#: Rule (b) (D12 "The pixel tolerance"): the product's 4x scene, Vulkan against OpenGL. Rule (a)'s statistical form
+#: (``pixel_tolerance`` "Statistics"; ``owner_render_parity.RULE_A_STATISTICS``), at rule (a)'s provisional bound until
+#: the long takes' measurement and the lead's decision set it: the two backends' 4x sample coverage differs along
+#: every edge (the standard run, 176 frames: worst mean 0.049 levels, signed 0.022, 0.75 % of pixels 2-3 levels off,
+#: 0.032 % past 3, max 16; class counts up to 19,438 ties a frame), which pixel counts cannot bound.
+VULKAN_RULE_B = pt.Tolerance("waveform ribbon, Vulkan against OpenGL (rule b, statistical)", masked_level=1,
+                             scatter_pixels=10 ** 9, tie_pixels=10 ** 9, flip_pixels=10 ** 9,
+                             statistics=pt.FrameStatistics(0.16, 0.10, 0.030, 0.006))
 CONTROLS = {
     "mvp_nudged": {"rounds": ["pixels"], "breaks": "every record's ribbon camera matrix (its first element) x 1.05"},
     "bloom_dropped": {"rounds": ["pixels"], "breaks": "every record's bloom strength set to 0"},
