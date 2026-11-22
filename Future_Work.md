@@ -27,18 +27,22 @@ eventual Vulkan backend is a native render core on Qt Quick's Vulkan RHI (DLSS/F
 measured triggers (never a Python-driven Vulkan port); mixed resolution for soft layers meanwhile (whole-frame
 upscalers rejected); port-readiness rules bind new GPU code.
 
-*Superseded in part on 12 Nov 2026 (the document's own addendum and `Native_Core_P3_Decisions.md` D5 to D11):* the
-native core is no longer waiting on triggers. It is admitted work, `Current_Plan.md` item 8b, with Vulkan the
-default and OpenGL selectable; SMP's foundations follow it (item 9).
+*Superseded in part on 12 Nov 2026 (the document's own addendum and `Native_Core_P3_Decisions.md` D5 to D11):*
+the native core is no longer waiting on triggers. It is admitted work, `Current_Plan.md` item 8b, with Vulkan the
+default and OpenGL selectable. **Further superseded by the operator on 23 Nov:** SMP no longer immediately follows
+NF; it is deferred until **after Melt Pool, Concrete Rain and substantial QoL work**, on renewed operator admission
+(§2.5).
 
 ## 3. Visual concepts
 
 Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
 
-The remaining Visualizer modes are **queued in `Current_Plan.md` §7** (Waveform Ribbon → Reactive Liquid / Melt Pool →
-Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6, and (12 Nov 2026, `Current_Plan.md` item 9) only on the native core, after it: SMP's foundations come first after the native flip, then new modes
-(Expanded Visualizer is accepted and is no longer a gate; the port-readiness rules of
-`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md` still bind new GPU code). Their contracts:
+The Visualizer programme in `Current_Plan.md` §7 retains Waveform Ribbon's existing work, then after the
+native-core flip the **new** modes run **Reactive Liquid / Audio Melt Pool → Concrete Rain**. Usu Moonscape stays
+a separately admitted, later long-horizon concept (not a blocker to eventual SMP consideration). The shared
+3D primitives are planned in `Current_Plan.md` item 8b (N4/N6). These new modes precede SMP, not the reverse;
+Expanded Visualizer is already accepted. The cross-backend port-readiness rules remain binding on legacy
+mode ports; N6.7 governs explicitly Vulkan-only new content. Their contracts:
 `Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
 `Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). **23 Nov 2026 implementation refinement:**
 existing modes retain OpenGL/native-Vulkan port parity; the first two *new* modes after the Vulkan-default flip,
@@ -99,20 +103,76 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 ### EB composition-lab clean. Clean up scratch and no longer needed files related to labs unless they explicitly help a future visualizer lab implementation.
 
 
-### 2.5 SMP & Full Display
+### 2.5 SMP: deferred long-term work, not an active milestone (operator, 23 Nov 2026)
 
-Decided 5 Nov (§2): this series follows Waveform and the Studios; the Vulkan core waited for a recorded trigger
-(superseded 12 Nov: the native core is admitted, `Current_Plan.md` item 8b, and SMP's foundations follow it). The
-plans are live tracked documents (extracted 7 Nov; the zip they shipped in was never tracked and is superseded):
+**Admission order:** finish the native-core parity/flip, Reactive Liquid / Audio Melt Pool, Concrete Rain and a
+substantial QoL pass over the current product. SMP is considered **only on renewed operator instruction**, after
+reviewing the result of that QoL work. The earlier "SMP foundations first after NF" decision of 12 November is
+superseded. Completion of NF, theme unification, N6 primitives or a specific date **does not** automatically
+authorise SMP M0. No SMP implementation or proto-service now, including the library, playback engine, SMTC,
+`--smp` gating, skin ZIP system or desktop profile.
 
-- `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`: full-display Visualizer
-  (EB first), with its phase ladder, 4K budgets and the backend triggers (§0).
-- `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`: the music player, gated behind
-  `--smp` until Gate M9, with its prerequisite phases, the SMP Settings tab with pills, the audio quality bar, the
-  icon/artwork rules and full rearrangement (§0A, §13-16).
+**Sole complete implementation plan:** `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`
+(§0A phase ladder M0-M10, §13-16A operator targets), with source/PCM contract
+`03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`, the complete full-player visual brief
+`04_Full_Player_Mock_2026-11-11.md` (all R1-R16, proposals and operator clarifications), and
+`05_Theme_Skin_Studio.md`. The original phase **internal order** is preserved when eventually admitted; the
+old *entry date/order* is not. References and images in ignored `references/` remain operator-owned, not
+reconstructed or deleted. Prior planning ZIPs were superseded by the tracked documents.
 
-The prerequisite architecture work both plans name (AC-01 Settings tab registry, AC-02 Visualizer host binding,
-AC-03 application-service tier) lives in `Docs/Reference/Architecture_Checklist.md`; `Current_Plan.md` promotes it.
+**Preserved decisions transferred out of Current Plan item 9 (12-21 Nov):**
+
+- SMP remains a **separate build/profile in the same SRPSS repository**, not a new repository or a runtime
+  profile-switching service. Its future library, playlist and playback work begins at M0/M1 in the original
+  MC-first sequence, with the two panes as one feature; `--smp` remains an opt-in until accepted Gate M9.
+  The exact order of Library/Playlists, playback, Expanded Media, dock/host, live Settings and release is
+  already specified in plan 02 and is not reopened by this deferral.
+- **Native audio from the first real audio slice** (operator, 16 Nov): M3 is one C++ SMP audio engine,
+  FFmpeg native decoding, own PCM/DSP scheduling and event-driven WASAPI shared/exclusive output. No temporary
+  Qt Multimedia prototype or later backend rewrite. Share native-core tooling, tracing and ownership
+  conventions but **not** the GPU device, render/GUI thread, audio clock, event loop or failure domain;
+  Python handles application policy, not sample delivery. Prove decoded PCM versus audible timing;
+  keep the existing one-Visualizer-owner, any-host design. See plan 02 §4/§13 and seam 03.
+- **Appearance/UX:** M0/M1 consume typed versioned semantic shapes, surfaces, typography and motion tokens,
+  full sharp-to-pill/inner-junction geometry and reusable Qt Quick Studio hover/bounce motion with
+  reduced-motion policy. M0/M1 later adds safe opt-in target-scoped `.srskin` ZIP support. M2 retains
+  SQLite/FTS5, virtualised indexed views and measured 50k/250k-track concurrency, recovery and migration,
+  without a custom database core (plan 02 §3.3 / §8.2A). The standalone SMP and MC/library presentation
+  share the existing native renderer, not a duplicate.
+- **Existing current-product theme/material work stays active, independently of SMP:** `Current_Plan.md`
+  1B.8 M3 material border, Context Menu/Now Playing/seeking surfaces and M4 **Unified Appearance Theme**;
+  the pre-existing **Theme Studio** still follows the native-core flip and M4. It edits current themes only.
+  Future SMP M10 extends that same studio with ZIP skin authoring and Full/Compact previews, without
+  a second studio or retroactive theme migration. Nothing in current M4/Theme Studio adds an SMP pane or
+  skin loader ahead of SMP admission.
+- **Original pre-SMP prerequisites** in plan 02 §0A remain conditional entry requirements, **not**
+  newly opened current-plan checklist tasks. The historical checklist records AC-01/02/03, service lifetimes,
+  one Media/Visualizer owner and dormancy. Complete the *admitted* shared compositor, material and native
+  primitives necessary for the current modes; don't treat speculative future primitives or all deferred
+  work (for example Usu) as automatic gates to SMP.
+- **Retained full-player mock requirements:** R1-R16 and the 11 Nov clarifications stay in document 04,
+  with the two host types, one logical Visualizer owner, reusable Edit controls, custom layouts, skin/playlist
+  needs and explicit design freedom. The three outstanding clarifications in its §6
+  (`CS`, Lyrics/Artist Collage first milestone, wider dock model) remain deferred until the operator answers;
+  no current work waits on them.
+- **Retained future import isolation:** `ui/settings_tabs.py` currently imports Settings tab modules at
+  import time. Plan 02 §14's SMP-only build import-scan requires moving those imports into appropriate
+  builders **when the SMP profile descriptor is implemented**, not in unrelated current-theme work.
+- **Retained hot-plug watch:** a future audio-output-device hotplug/reopen case belongs with SMP/Library
+  audio endpoint work. Current capture-path testing remains in `Current_Plan.md` 1B.14; revisit the
+  playback endpoint only when M3 is admitted.
+
+**Design-not-to-lock-out boundary, binding on today's work but not an SMP implementation task:**
+`Docs/Guardrails/Presentation_Change_Preflight.md` keeps Media/Now Playing/seekbar host-independent;
+Visualizer retargetable across displays and future hosts at arbitrary aspect; Edit handles/transactions
+reusable; and native rendering independent of a wallpaper compositor. No new SMP abstractions,
+services, layout registrations, settings tabs or speculative dual-host implementations are required to
+honour these invariants. The native core already establishes its future host boundary.
+
+**Other graphics plan:** `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`
+records the already accepted fullscreen Visualizer architecture, its 4K budgets and original
+backend triggers. It is not a new SMP-phase prerequisite. SMP plan 02 still requires Expanded Media
+in MC before the standalone SMP profile once SMP work is explicitly admitted.
 
 ### Remaining non-code organization
 
