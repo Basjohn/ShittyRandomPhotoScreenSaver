@@ -64,7 +64,29 @@ def test_the_artwork_widens_to_the_square_its_height_asks_for_and_the_seek_bar_w
     column = _rect(_root(display).findChild(QQuickItem, "expandedOverlayNowPlayingText"), _root(display))
     seek = _parts(display)["seek"]
     assert seek.width() > seek_before + 20.0
-    assert seek.width() == pytest.approx(column.width(), abs=1.5)
+    # ... and stops short of the block's far border by the gap the artwork side has (no run into the border).
+    gap = float(slot.property("gap"))
+    assert seek.width() == pytest.approx(column.width() - gap, abs=1.5)
+    assert seek.left() == pytest.approx(column.left(), abs=1.5)
+    edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_width_given_to_a_wide_short_block_goes_to_the_artwork_not_to_an_empty_text_column(display, tmp_path):
+    settings = _open_block(display, tmp_path, corner="bottom_left")
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    art = _root(display).findChild(QQuickItem, PARTS["artwork"])
+    edit.side("now_playing", "right", 220)
+    _run(display, 90)
+    column = _rect(_root(display).findChild(QQuickItem, "expandedOverlayNowPlayingText"), _root(display))
+    keep = float(slot.property("artTextKeep"))
+    # The text column keeps what the text needs and no more; the artwork took the rest (up to its widest shape).
+    assert column.width() <= keep + 1.5 or art.width() >= art.height() * float(slot.property("artMaxAspect")) - 1.5, (
+        column.width(), keep, art.width(), art.height())
+    assert art.width() > art.height()
     edit.owner.cancel()
 
 

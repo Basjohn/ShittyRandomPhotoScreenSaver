@@ -19,10 +19,13 @@ var widthShare = 0.35
 // shape that height asks for (``squareAspect``, width over height; 1 is a square) lets the artwork widen to that shape
 // as soon as the box is given width (or none was taken), instead of only by the share of the extra width: a tall box
 // otherwise leaves a narrow strip beside a wide empty text column. Width taken still shrinks it by the share.
-function provisionalWidth(baseWidth, extraWidth, contentWidth, metadataRoom, floorWidth, heightRoom, squareAspect) {
+function provisionalWidth(baseWidth, extraWidth, contentWidth, metadataRoom, floorWidth, heightRoom, squareAspect, keepRoom) {
     var wanted = baseWidth + extraWidth * widthShare
     if (extraWidth >= 0.0 && heightRoom > 0.0 && squareAspect > 0.0)
         wanted = Math.max(wanted, heightRoom * squareAspect)
+    // ``keepRoom`` (an owner that passes it): width given goes to the artwork, leaving the text this room.
+    if (keepRoom > 0.0 && extraWidth > 2.0)
+        wanted = Math.max(wanted, contentWidth - keepRoom)
     return Math.min(Math.max(floorWidth, wanted),
                     Math.max(1.0, contentWidth - metadataRoom))
 }

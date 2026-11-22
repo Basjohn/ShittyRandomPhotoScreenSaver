@@ -393,7 +393,11 @@ Item {
         // so the first sample of any gesture moves nothing; from then on the artwork follows the stored geometry only,
         // never the current track's text. Never edited (no base): the natural block, hugging its text beside a natural
         // artwork.
-        readonly property real artMaxAspect: 16.0 / 9.0
+        // Width given to the block goes to the artwork (operator, 22 Nov: no wide empty text column beside it), leaving
+        // the text a column of 12 ems of the block's font (never the current track's text: it never sizes the artwork)
+        // and at least its minimum room; the artwork may go as wide as 3:1.
+        readonly property real artTextKeep: Math.max(artRoom, Math.round(fontSize * 12.0))
+        readonly property real artMaxAspect: 3.0
         readonly property real artFloor: Math.round(artBase * 0.4)
         readonly property real textRoom: Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0)
         readonly property real setBaseWidth: {
@@ -414,7 +418,7 @@ Item {
         readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
             ArtworkRule.provisionalWidth(artBase, artExtraWidth,
                                          (boxWidth > 0.0 ? boxWidth : artBase + gap + artRoom) - gap, artRoom, artFloor,
-                                         blockHeight, 1.0),
+                                         blockHeight, 1.0, artTextKeep),
             blockHeight, artMaxAspect))
         readonly property real artHeight: Math.round(blockHeight)
         readonly property real naturalBlockWidth: artWidth + gap + naturalTextWidth
@@ -831,9 +835,12 @@ Item {
                     // It spans the text column and follows the text group's displacement and scale (plan 1C.3: the group
                     // moved or scaled, the bar goes with it), on its own row under the metadata; so it widens with the
                     // box (operator, 22 Nov). Its own record moves and sizes it on top.
-                    readonly property real authoredWidth: Math.max(1.0, Math.round(textColumn.width * textGroup.partScale))
+                    // The far side keeps the gap the artwork side has, so the bar does not run into the block's border.
+                    readonly property real authoredWidth: Math.max(1.0, Math.round(
+                        Math.max(1.0, textColumn.width - nowPlayingSlot.gap) * textGroup.partScale))
                     readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
-                    x: nowPlayingSlot.containX(nowPlayingSlot.placedX(nowPlayingSlot.columnX + groupShift.x,
+                    x: nowPlayingSlot.containX(nowPlayingSlot.placedX(nowPlayingSlot.columnX + groupShift.x
+                                                                      + (nowPlayingSlot.contentRightSide ? nowPlayingSlot.gap : 0.0),
                                                                       nowPlayingSlot.childOffsetX("seek_bar"),
                                                                       authoredWidth, width), width)
                        - nowPlayingSlot.columnX

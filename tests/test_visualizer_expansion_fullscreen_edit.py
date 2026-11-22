@@ -864,7 +864,7 @@ def _media_rule_artwork(slot) -> tuple[float, float]:
     content = (box if box > 0.0 else value("artBase") + value("gap") + room) - value("gap")
     width = engine.evaluate(
         f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, {extra}, {content}, "
-        f"{room}, {value('artFloor')}, {value('blockHeight')}, 1.0), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
+        f"{room}, {value('artFloor')}, {value('blockHeight')}, 1.0, {value('artTextKeep')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
     return float(width), float(round(value("blockHeight")))
 
 
@@ -948,7 +948,7 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
     _run(display, 60)
     follows_the_rule("width given")
     assert art_item.width() > before_art[0]
-    assert art_item.width() <= art_item.height() * 16.0 / 9.0 + 1.0
+    assert art_item.width() <= art_item.height() * float(slot.property("artMaxAspect")) + 1.0
     # The block's extra height goes to the title's lines (it wraps or fits into them), never to gaps between rows.
     assert int(layer.findChild(QQuickItem, "expandedOverlayTitle").property("maximumLineCount")) >= 2
     payload = edit.item("now_playing").current_size_payload
@@ -1839,7 +1839,10 @@ def test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_hand
     assert (abs(before["artist"].left() - group.left()) <= 1.0) is not right
     # The Seek Bar spans the text column (it widens with the box, operator 22 Nov), which holds the group.
     column = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
-    assert abs(before["seek"].width() - column.width()) <= 1.0 and abs(before["seek"].left() - column.left()) <= 1.0
+    gap = float(_slot(display, "expandedOverlayNowPlaying").property("gap"))
+    assert abs(before["seek"].width() - (column.width() - gap)) <= 1.0
+    # ... keeping the gap the artwork side has on its far side (the block's border), whichever side that is.
+    assert abs(before["seek"].left() - (column.left() + (gap if right else 0.0))) <= 1.0
     assert column.adjusted(-1, -1, 1, 1).contains(group)
 
     toward = -40 if right else 40
