@@ -204,9 +204,15 @@ class _Fullscreen:
         layer = self.display.scene.custom_layout_overlay.item
         return frame.mapToItem(layer, QPointF(frame.width() * fx, frame.height() * fy))
 
+    def _report_mirror(self, frame, row: int, role: str) -> None:
+        """What the child layer's press reports before it begins a gesture: whether the target is drawn mirrored."""
+        target = frame.property("targetItem")
+        self.model.setChildMirrorX(row, role, bool(target is not None and target.property("customEditMirrorX")))
+
     def child_move(self, role: str, dx: int, dy: int) -> None:
         """One child move through the overlay model (the child layer's press, samples and release)."""
         frame, row = self.child_frame(role), self.row("now_playing")
+        self._report_mirror(frame, row, role)
         point = self._child_point(frame, 0.5, 0.5)
         assert self.model.beginChildMove(row, role, point.x(), point.y(), float(frame.property("normalizationWidth")),
                                          float(frame.property("normalizationHeight")), 0.0, 0.0)
@@ -219,6 +225,7 @@ class _Fullscreen:
         dx = 0 if handle in ("top", "bottom") else delta
         dy = 0 if handle in ("left", "right") else delta
         frame, row = self.child_frame(role), self.row("now_playing")
+        self._report_mirror(frame, row, role)
         fx = 0.0 if handle.endswith("left") else (1.0 if handle.endswith("right") else 0.5)
         fy = 0.0 if handle.startswith("top") else (1.0 if handle.startswith("bottom") else 0.5)
         point = self._child_point(frame, fx, fy)
@@ -857,7 +864,7 @@ def _media_rule_artwork(slot) -> tuple[float, float]:
     content = (box if box > 0.0 else value("artBase") + value("gap") + room) - value("gap")
     width = engine.evaluate(
         f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, {extra}, {content}, "
-        f"{room}, {value('artFloor')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
+        f"{room}, {value('artFloor')}, {value('blockHeight')}, 1.0), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
     return float(width), float(round(value("blockHeight")))
 
 
@@ -930,11 +937,12 @@ def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_pat
     assert text_block.width() < before_text
     assert title.property("truncated") or int(title.property("lineCount")) >= 1
     narrowed = (art_item.width(), art_item.height())
-    # Height given: the artwork grows taller (it is the block's height); its width is the width rule's.
+    # Height given: the artwork grows taller (it is the block's height) and widens toward the square that height asks
+    # for within the text's room (operator, 22 Nov: no narrow strip beside a wide empty text column).
     edit.side("now_playing", "bottom", 90)
     _run(display, 60)
     follows_the_rule("height given")
-    assert art_item.height() > narrowed[1] and art_item.width() == narrowed[0]
+    assert art_item.height() > narrowed[1] and narrowed[0] <= art_item.width() <= art_item.height()
     # Width given: the artwork widens (landscape allowed, up to 16:9).
     edit.side("now_playing", "right", 160)
     _run(display, 60)
@@ -1829,8 +1837,10 @@ def test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_hand
     assert before["artist"].width() < group.width() - 4.0
     assert (abs(before["artist"].right() - group.right()) <= 1.0) is right
     assert (abs(before["artist"].left() - group.left()) <= 1.0) is not right
-    # The Seek Bar spans the group.
-    assert abs(before["seek"].width() - group.width()) <= 1.0 and abs(before["seek"].left() - group.left()) <= 1.0
+    # The Seek Bar spans the text column (it widens with the box, operator 22 Nov), which holds the group.
+    column = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
+    assert abs(before["seek"].width() - column.width()) <= 1.0 and abs(before["seek"].left() - column.left()) <= 1.0
+    assert column.adjusted(-1, -1, 1, 1).contains(group)
 
     toward = -40 if right else 40
     edit.child_move("metadata", toward, -12 if bottom else 12)
@@ -1839,7 +1849,7 @@ def test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_hand
     assert abs(shift.x()) > 10 or abs(shift.y()) > 4
     for line in ("artist", "album", "group"):
         assert (moved[line].topLeft() - before[line].topLeft() - shift).manhattanLength() <= 1.0, line
-    assert abs(moved["seek"].left() - moved["group"].left()) <= 1.0              # it follows the group's place
+    assert block.adjusted(-1, -1, 1, 1).contains(moved["seek"])                  # it goes with the group, inside the block
 
     edit.child_resize("metadata", "bottom_right" if not right else "bottom_left", 24)
     scaled = drawn()
@@ -1847,7 +1857,7 @@ def test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_hand
     assert factor > 1.05
     for line in ("artist", "album", "group"):
         assert scaled[line].width() / moved[line].width() == pytest.approx(factor, rel=0.03), line
-    assert abs(scaled["seek"].width() - scaled["group"].width()) <= 1.0          # and its width
+    assert scaled["seek"].width() >= scaled["group"].width() - 1.0               # and spans at least its width
     assert set(edit.item("now_playing").current_size_payload["child_geometry"]) == {"metadata"}
     assert edit.owner.cancel()
 

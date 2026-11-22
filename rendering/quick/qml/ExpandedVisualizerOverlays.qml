@@ -413,7 +413,8 @@ Item {
             ? boxWidth - (setBaseWidth + artBase + gap) : 0.0
         readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
             ArtworkRule.provisionalWidth(artBase, artExtraWidth,
-                                         (boxWidth > 0.0 ? boxWidth : artBase + gap + artRoom) - gap, artRoom, artFloor),
+                                         (boxWidth > 0.0 ? boxWidth : artBase + gap + artRoom) - gap, artRoom, artFloor,
+                                         blockHeight, 1.0),
             blockHeight, artMaxAspect))
         readonly property real artHeight: Math.round(blockHeight)
         readonly property real naturalBlockWidth: artWidth + gap + naturalTextWidth
@@ -451,6 +452,16 @@ Item {
         function childWidthScale(roleId) { return Math.max(0.01, childNumber(roleId, "width_scale", 1.0)) }
         function childHeightScale(roleId) { return Math.max(0.01, childNumber(roleId, "height_scale", 1.0)) }
         function childOffsetX(roleId) { return childNumber(roleId, "x_offset", 0.0) * childNormalizationWidth }
+        // Every part's stored X offset (and a pinned corner's side) is in the frame of the block with its artwork on the
+        // LEFT. A block that lies on the right half of the display is that layout mirrored (operator, 22 Nov: a flip
+        // must not leave an edited part where it collides): a part's drawn rectangle is the mirror image of the one the
+        // offset gives on the left. Its authored rail is already the mirrored one, so the mirror of ``authoredX +
+        // offset`` (the part's left edge, its width growing to the right) is ``authoredX - offset`` less the width the
+        // part's own size factor added. The child editor knows the part is mirrored through ``customEditMirrorX`` and
+        // inverts the pointer's X sense for it, so an edit stores the same record on either side.
+        function placedX(authoredX, offset, authoredWidth, drawnWidth) {
+            return contentRightSide ? authoredX - offset - (drawnWidth - authoredWidth) : authoredX + offset
+        }
         function childOffsetY(roleId) { return childNumber(roleId, "y_offset", 0.0) * childNormalizationHeight }
         // In the content's coordinates (``body``): the block is the slot, so a part may use the card's padding too.
         function containX(x, extent) { return Math.max(-padding, Math.min(naturalWidth + padding - extent, x)) }
@@ -503,7 +514,9 @@ Item {
             readonly property real authoredY: (nowPlayingSlot.naturalHeight - nowPlayingSlot.artHeight) / 2.0
             width: Math.round(nowPlayingSlot.artWidth * nowPlayingSlot.childWidthScale("artwork"))
             height: Math.round(nowPlayingSlot.artHeight * nowPlayingSlot.childHeightScale("artwork"))
-            x: nowPlayingSlot.containX(authoredX + nowPlayingSlot.childOffsetX("artwork"), width)
+            readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
+            x: nowPlayingSlot.containX(nowPlayingSlot.placedX(authoredX, nowPlayingSlot.childOffsetX("artwork"),
+                                                              nowPlayingSlot.artWidth, width), width)
             y: nowPlayingSlot.containY(authoredY + nowPlayingSlot.childOffsetY("artwork"), height)
             // The Media card's artwork frame (MediaPresentation.qml's artworkFrame): its border colour, its stroke (a
             // painted stroke never below 1.5 px), Rounded Artwork's radius of an eighth of the short side, the image
@@ -672,8 +685,14 @@ Item {
                     readonly property real drawnHeight: textGroup.height * textGroup.partScale
                     // Where its offset alone puts it; a pinned group's difference is folded into the offset once when a
                     // move detaches it (the child editor's placement compensation), so it never jumps.
+                    readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
+                    // The pinned corner's horizontal side, in the same left-artwork frame as the offsets.
+                    readonly property bool pinnedHorizontally: customAnchor.endsWith("right") || customAnchor.endsWith("left")
+                    readonly property bool pinnedToRight: pinnedHorizontally
+                        && customAnchor.endsWith("right") !== nowPlayingSlot.contentRightSide
                     readonly property real offsetShiftX: nowPlayingSlot.containX(
-                        textGroup.originX + nowPlayingSlot.childOffsetX("metadata"), drawnWidth) - textGroup.originX
+                        nowPlayingSlot.placedX(textGroup.originX, nowPlayingSlot.childOffsetX("metadata"),
+                                               textGroup.width, drawnWidth), drawnWidth) - textGroup.originX
                     readonly property real offsetShiftY: nowPlayingSlot.containY(
                         nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("metadata"), drawnHeight)
                         - nowPlayingSlot.columnY
@@ -686,9 +705,11 @@ Item {
                         Translate {
                             id: groupShift
                             // Pinned: the containment's own corner (the block's frame, its card padding included).
-                            x: nowPlayingSlot.containX(textGroup.customAnchor.endsWith("right") ? Infinity
-                                                       : textGroup.customAnchor.endsWith("left") ? -Infinity
-                                                       : textGroup.originX + nowPlayingSlot.childOffsetX("metadata"),
+                            x: nowPlayingSlot.containX(textGroup.pinnedToRight ? Infinity
+                                                       : textGroup.pinnedHorizontally ? -Infinity
+                                                       : nowPlayingSlot.placedX(textGroup.originX,
+                                                                                nowPlayingSlot.childOffsetX("metadata"),
+                                                                                textGroup.width, textGroup.drawnWidth),
                                                        textGroup.drawnWidth)
                                - textGroup.originX
                             y: nowPlayingSlot.containY(textGroup.customAnchor.startsWith("bottom") ? Infinity
@@ -744,12 +765,15 @@ Item {
                         // A part inside the group (``artist``, the Media card's role): scaled whole and moved from its
                         // row, on top of the group's own transform; kept inside the block.
                         readonly property real partScale: nowPlayingSlot.childWidthScale("artist")
+                        readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
                         transform: [
                             Scale { id: artistScale; xScale: artistText.partScale; yScale: artistText.partScale },
                             Translate {
                                 id: artistShift
-                                x: textGroup.containLocalX(artistText.x + nowPlayingSlot.childOffsetX("artist"),
-                                                           artistText.width * artistText.partScale) - artistText.x
+                                x: textGroup.containLocalX(
+                                    nowPlayingSlot.placedX(artistText.x, nowPlayingSlot.childOffsetX("artist"),
+                                                           artistText.width, artistText.width * artistText.partScale),
+                                    artistText.width * artistText.partScale) - artistText.x
                                 y: textGroup.containLocalY(artistText.y + nowPlayingSlot.childOffsetY("artist"),
                                                            artistText.height * artistText.partScale) - artistText.y
                             }
@@ -804,14 +828,18 @@ Item {
                     objectName: "expandedOverlaySeekBar"
                     readonly property var model: overlays.mediaModel
                     visible: nowPlayingSlot.seekShown
-                    // It follows the text group's width and horizontal place (plan 1C.3: the group moved or scaled, the
-                    // bar spans it), on its own row under the metadata; its own record moves and sizes it on top.
-                    x: nowPlayingSlot.containX(textGroup.originX + groupShift.x
-                                               + nowPlayingSlot.childOffsetX("seek_bar"), width)
+                    // It spans the text column and follows the text group's displacement and scale (plan 1C.3: the group
+                    // moved or scaled, the bar goes with it), on its own row under the metadata; so it widens with the
+                    // box (operator, 22 Nov). Its own record moves and sizes it on top.
+                    readonly property real authoredWidth: Math.max(1.0, Math.round(textColumn.width * textGroup.partScale))
+                    readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
+                    x: nowPlayingSlot.containX(nowPlayingSlot.placedX(nowPlayingSlot.columnX + groupShift.x,
+                                                                      nowPlayingSlot.childOffsetX("seek_bar"),
+                                                                      authoredWidth, width), width)
                        - nowPlayingSlot.columnX
                     y: nowPlayingSlot.containY(nowPlayingSlot.columnY + textColumn.seekRowY
                                                + nowPlayingSlot.childOffsetY("seek_bar"), height) - nowPlayingSlot.columnY
-                    width: Math.max(1.0, Math.round(textGroup.drawnWidth * nowPlayingSlot.childWidthScale("seek_bar")))
+                    width: Math.max(1.0, Math.round(authoredWidth * nowPlayingSlot.childWidthScale("seek_bar")))
                     height: Math.max(1.0, Math.round(nowPlayingSlot.seekHeight * nowPlayingSlot.childHeightScale("seek_bar")))
                     fraction: !!model && isFinite(Number(model.progressFraction)) ? Number(model.progressFraction) : 0.0
                     seekEnabled: nowPlayingSlot.interactive && !!model && model.canSeek === true
@@ -849,7 +877,10 @@ Item {
                         ? textColumn.width - nowPlayingSlot.controlsWidth : 0.0
                     readonly property real authoredY: controlsSpacer.y + controlsSpacer.height + textColumn.spacing
                        
-                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + authoredX + nowPlayingSlot.childOffsetX("controls"),
+                    readonly property bool customEditMirrorX: nowPlayingSlot.contentRightSide
+                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + nowPlayingSlot.placedX(
+                                                   authoredX, nowPlayingSlot.childOffsetX("controls"),
+                                                   nowPlayingSlot.controlsWidth, width),
                                                width) - nowPlayingSlot.columnX
                     y: nowPlayingSlot.containY(nowPlayingSlot.columnY + authoredY + nowPlayingSlot.childOffsetY("controls"),
                                                height) - nowPlayingSlot.columnY

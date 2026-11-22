@@ -3041,6 +3041,16 @@ Item {
                             }
                         }
 
+                        // A family that draws a part as the mirror image of its stored record (Now Playing's block on the
+                        // right half of the display) says so on the target; the owner then inverts the pointer's X sense
+                        // for the gesture, so the stored record is the same on either side. Read at the press.
+                        function reportChildMirror(frame) {
+                            const target = frame && frame.targetItem ? frame.targetItem : null
+                            customLayoutOverlay.sessionModel.setChildMirrorX(
+                                editFrame.index, frame.roleId,
+                                target !== null && target.customEditMirrorX === true)
+                        }
+
                         function beginChildResizeGesture(frame, gesture, handle, point) {
                             clearChildGuides(frame)
                             gesture.pressX = point.x
@@ -3049,6 +3059,7 @@ Item {
                             gesture.startY = frame.y
                             gesture.startWidth = frame.width
                             gesture.startHeight = frame.height
+                            reportChildMirror(frame)
                             return customLayoutOverlay.sessionModel.beginChildResize(
                                 editFrame.index, frame.roleId, handle, point.x, point.y,
                                 frame.width, frame.height,
@@ -3579,6 +3590,7 @@ Item {
                                         childRoleFrame.movePassBiasX = 0.0
                                         childRoleFrame.movePassBiasY = 0.0
                                         childRoleFrame.moveHadMotion = false
+                                        childRoleLayer.reportChildMirror(childRoleFrame)
                                         if (!customLayoutOverlay.sessionModel.beginChildMove(
                                                     editFrame.index,
                                                     childRoleFrame.roleId,

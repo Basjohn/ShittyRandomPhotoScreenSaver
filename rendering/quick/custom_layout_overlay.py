@@ -704,6 +704,12 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         role = self._items[int(row)].child_role(role_id)
         return bool(role is not None and role.movable)
 
+    @Slot(int, str, bool)
+    def setChildMirrorX(self, row: int, role_id: str, mirrored: bool) -> None:
+        """Report, at a press, that the role's drawn X is the mirror image of its stored record."""
+        if 0 <= int(row) < len(self._items):
+            self._items[int(row)].child_mirror_x[str(role_id)] = bool(mirrored)
+
     @Slot(int, str, float, float, float, float, float, float, result=bool)
     def beginChildMove(
         self,

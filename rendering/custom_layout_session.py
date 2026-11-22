@@ -153,6 +153,10 @@ class CustomLayoutSessionItem:
     # declared fixed obstacles remain active.  This is Settings-owned state,
     # not CUSTOM geometry/persistence, and therefore never enters size_payload.
     child_collision_enabled: bool = False
+    # Roles whose drawn X is the mirror image of the stored record (a family that mirrors a part's layout by the side
+    # of the display it lies on reports it from the target at each press; never persisted, never part of a record).
+    # The child gestures read it to invert the pointer's X sense so the stored record is the same on either side.
+    child_mirror_x: dict[str, bool] = field(default_factory=dict)
     baseline_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     current_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     # Transient retained-family minimum implied by the currently resolved child
