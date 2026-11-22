@@ -79,13 +79,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Background track: N5.2e landed 22 Nov; agent abfa6e30ec8e2366d (Opus Medium, ABI 41 reserved): the Exploding Tiles
   stall (watch item below), then N5.2f to stop point 1 (its frame blocks take N5.2e's `native_one_block` helper).
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] Exploding Tiles' repeatable mid-run stall on native Vulkan (D1 session 22 Nov, 4K panel at ~185 fps, Usu
-    wallpaper and recorded music; `tools/baselines/preflip/d1_transitions_native_vulkan_20261122`): session gaps 49.5
-    (first frame) and 37.0 ms, per-row rerun 49.8 ms (not the first frame); every other row 0 over 33 ms, including
-    3D Block Spins and Beam, whose 60 Hz gaps did not repeat at the earlier mode (that watch item closes). Attribute
-    with the kept frame trace (`.artifacts/evidence/performance/preflip_pack/20261122_d1_transitions_native_vulkan_20261122_session_2160p_idle`;
-    suspect a pipeline first used mid-run: the sparks going live or the bloom chain) and prewarm it under the warm-up
-    rule; then the row again. With N5.2f's agent (same track).
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
     Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
