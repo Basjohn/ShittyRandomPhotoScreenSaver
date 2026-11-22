@@ -1808,18 +1808,14 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
-- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step, REOPENED 22 Nov):** agent
+- [ ] **Existing regular bubbles not consistently accelerated by music (N5.6's first step, REOPENED 22 Nov; the
+  "constantly pinned" clumps were R-250's short-path bead chains, fixed; still to show on screen that older bubbles
+  speed up with the music as newborns do, a music-response trace of on-screen speed by age):** agent
   ac5f7832a73527151 found every free living bubble moving at exactly the stream speed in WORLD space (Presets 9 and 1,
   ratio 1.000; test `tests/test_extruded_bubble_stream_transport.py` pins that) and changed nothing, but the operator
   still sees older bubbles not answering the music. Not measured: on-screen speed (projection, depth), sway and drift,
   and whether the music's boost visibly reaches bubbles already alive. Agent ac5f7832a73527151 measures what is on
   screen itself (no operator input), fixes it at the owner, before the port's references; the Preset 9 flicker too.
-- [ ] **Preset 9: "the strange emission starfish" / "a flickering fucking starfish of emission" (operator, 21-22 Nov,
-  said many times): seen on Preset 9 with music while ORBITING the camera** (operator screenshot
-  `C:/Users/Basjohn/AppData/Local/Temp/claude/4865eded7f8b3193/1f4e4ec5-9135-417d-8d4d-8d30d5e54d98/images/7.png`).
-  The emission source flickers as a star-shaped burst; the default camera hides it, which is why the first search (lead's
-  paraphrased brief, default camera) found nothing. Agent ac5f7832a73527151: fix at the owner so orbiting shows only
-  the emitted bubbles, proved by orbit captures on successive frames with a control, before the port's references.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
