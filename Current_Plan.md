@@ -67,17 +67,15 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: the Waveform port (N5.4), agent a6688ad0cd2ae360a, branch at a5a5a292b (core still ABI 38, 40 at
-  its merge). L (12/12 IDENTICAL), P (35,544 frames, rule (a) statistical bound fixed: mean 0.063, signed 0.062,
-  2-3 levels 0.52 %, past 3 0.6 %; all 5 controls caught), readback and C (2.0-3.6 ms whole surface) done. Open:
-  - [ ] Group Wave's saturated yellow/red squares: a mode defect (Python shows them on 13 P frames; native OpenGL
-    on 4,301 of 5,250 rule (b) frames; Vulkan never). Lead decision: root-cause by bisecting one failing frame
-    pass by pass on both APIs (first pass non-finite or divergent; suspect NaN/Inf or a read before write, spread
-    in blocks), check the OpenGL GL_INVALID_ENUM on the first 4x frame against it, fix at the source in the one
-    shared shader or resource (Python and native alike), re-cache variant b's references only.
-  - [ ] Rule (b) soft-glow failures (Frozen Past 44, Travelling Pulse 23, Whole Swell 12 frames, max 79; same
-    single-sampled): same bisect on one failing frame; a defect is fixed, never admitted by a wider bound.
-  - [ ] Then rule (b) and the affected P rerun (30 s of each take, section 7), T, stop point 2.
+- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); next port N5.6 Extruded Bubble (its first
+  step: EB's three defects), held at the weekly usage checkpoint. Waveform leftovers:
+  - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
+    54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
+    C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
+  - [ ] Watch: one GL_INVALID_ENUM on the route's first 4x frame on OpenGL (none single-sampled; a debug context caught no
+    message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
+  - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
+    after, margins against 0.05 ms) with Waveform now drawing natively.
 - [ ] Background track: N5.2e landed 22 Nov (agent a4f18f4449f3e8a5b retired); N5.2f next, held at the weekly
   usage checkpoint (82 %); its frame blocks take N5.2e's `native_one_block` helper.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
@@ -89,6 +87,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   - [ ] N5.2e's native Vulkan hitch session, taken with it (Membrane, Page Curl, Exploding Tiles, registered 22 Nov
     without it: a display that is off holds no phase): `preflip_pack.py --rows` for the three, `--backend native-vulkan`,
     `--app-arg=--graphics-backend=vulkan`; no gap over 33 ms inside a run.
+  - [ ] N5.4's T, taken with it (Waveform registered 22 Nov without it): `preflip_pack.py --name n54_native_vulkan
+    --rows "*waveform*" --backend native-vulkan --app-arg=--graphics-backend=vulkan` (CPU under 40 % first), then
+    `--compare-only` against `20261115_modes_python_gl.json`.
 - [ ] Beam leftover: cost per pass at 1440p and 4K on both backends (`transition_route_check.py --cost --variants
   crossfade beam beam_sparks`). Its Vulkan hitch row, taken again 21 Nov with the run-gap tooling (the first one's
   "0 % late" counted Visualizer frames, of which there were none): gaps median 5.3 ms, max 9.6, first frame 9.2, none
@@ -107,7 +108,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High (Opus High): the Waveform port (N5.4) on the landed ABI 33 core (agent a6688ad0cd2ae360a; ABI 35 reserved). Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] High: N5.6 Extruded Bubble after N5.4 (landed 22 Nov, ABI 40), held at the usage checkpoint. Defects between N steps: 1D.6 (design note first), then 1C.10.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -756,164 +757,6 @@ the feature (D3D11 is not stated).
     (generic modes only; Spectrum's own item is not played yet), `--judge-workers`. Evidence `fast_proof/20261120_*`.
   - [ ] Coverage selection built (b4cd47802): `tools/visualizer_replay/coverage_windows.py`, test
     `tests/test_coverage_windows.py`; evidence `fast_proof/20261121_coverage_bubble_<take>/`.
-- [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
-  rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
-  against the 11 Nov load session (item 7).
-  - Reading (reference; Sonnet agent af6ce7875bfd45d8f, 21 Nov, merged), as the Oscilloscope's: the record each frame carries
-    (what is per frame from the logical frame, what is per Settings or card change), each stream's size rule, every
-    pass with its targets and attachments (the five compute passes, the three rings, the planar reflection, the fog
-    volume, the floor and pulse-rim textures, bloom if any), how it turns (Waveform is a turned scene consumer: the
-    Oscilloscope's turned-card anchoring box serves it), and its clear. Then confirm in writing, against the ABI 28 core
-    (`native/core/src`, `Docs/Future_Work/Native_Core_P3_Decisions.md` D12-D17), what the port needs that the core
-    lacks: one C++ box each here, with what its proof must show. Cite file and line for every claim.
-    Reading (Sonnet, 21 Nov, no code touched). `waveform.py` is `rendering/quick/scene3d/waveform.py`; `parameters.py`
-    is `widgets/spotify_visualizer/waveform_ribbon_parameters.py`; `D15` etc. are in `Native_Core_P3_Decisions.md`.
-    - Per frame from the logical frame (`WaveformRibbonFrame`, `widgets/spotify_visualizer/render_state.py:835-854`,
-      built at `widgets/spotify_visualizer/waveform_ribbon_capture.py:62-67`): the knot packet (instances, vertices,
-      world and coordinate origin), time, travel, passage, zoom, the camera parameters, the event-spark births and
-      their origin, the strand cohorts and their origin, the pulse field (385 floats, `core/waveform_ribbon_dynamics.py:55`).
-      The Recipe is rebuilt every frame as well (`parameters.py:96-142`): material, fog density, displacement, height,
-      softness, light, variation and drift, floor reflectivity, brightness, wetness, streak and column, sparks,
-      strays, bloom and the published travel direction move with passage, sparkle and highlights. The world colour
-      grade is evaluated per frame from passage (`waveform.py:69-80,277`).
-    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box above): view, projection, eye
-      and lens (`rendering/quick/visualizer/implementations/waveform_ribbon.py:64-67`), the scroll `head_x - travel`
-      (`waveform.py:258-259`), the history mirror (`:263-267`), the mirrored view (`:431`), the continuation span
-      (`:269-276`) and the culled draw ranges of every ribbon draw (`rendering/quick/scene3d/ribbon.py:122-179,260-268`).
-    - Per Settings or card change only: which stages exist (fog `waveform.py:245-247`, sparks `:243`, strays `:242`, floor
-      give `:248-250`, Pulse Rim `:252-254`), the 4 samples (`:34`), the three floor maps (`:117-144`, loaded once), the
-      fog grids (camera: min(128, ceil(w/cell)) x min(72, ceil(h/cell)) x 96/128/160 slices by quality, `waveform.py:338`,
-      `parameters.py:79`; mirrored: cell 32, 96 slices, `core/waveform_ribbon_scene.py:46-47`), the reflection target
-      size (`min(.5, 360/h)` of the item, `waveform.py:83-87,432`, `core/waveform_ribbon_scene.py:79-80`) and the floor's
-      reduced pre-pass size (`waveform.py:528,534`; only past 1080 px tall, `core/waveform_ribbon_scene.py:81`).
-    - Streams and size rules (a slot holds 1 MiB, `core/visualizer_engine/frame_capacity.py:9`; the four fields total at
-      most 411,396 bytes): knot packet instances x 20,544 B (`core/ribbon_packet.py:11-16`; 4 ribbons,
-      `core/waveform_ribbon_authoring.py:10`, so 82,176 B; checked `render_state.py:860`); strand cohorts instances x
-      16,384 B or empty (`core/ribbon_strand_cohorts.py:8-9`, `render_state.py:873`); event sparks empty or exactly
-      4,096 x 16 x 4 = 262,144 B (`core/ribbon_bursts.py:9-10`, `render_state.py:866`), bound twice a frame; pulse 1,540 B
-      (`render_state.py:829`). The three rings are the three stream rings, each 3 slots of 4 binds: "ribbon knots"
-      (`ribbon.py:243`), "ribbon strand cohorts" (`ribbon.py:500`), "ribbon event sparks"
-      (`rendering/quick/scene3d/ribbon_bursts.py:52`). (If "three rings" meant ribbons: 4 here, 8 in the packet.)
-    - Passes of a frame in order, fog, Floor Give and Pulse Rim on (`waveform.py:228-307`): packet upload (`:231`);
-      compute: floor give sections and blur (`rendering/quick/scene3d/floor_give.py:80-88`), world field
-      (`rendering/quick/scene3d/waveform_field.py:55`), fog inject and integrate for the camera and again for the
-      mirrored camera (`waveform.py:298-300`, `rendering/quick/scene3d/fog_volume.py:155-167`): seven dispatches, five
-      programs (D16). Reflection target (`waveform.py:428-466`): cleared to 0 and depth 1
-      (`rendering/quick/scene3d/reflection.py:101-103`), reflected sky (`:441`), ribbon light (`:446`: its body draw
-      and two continuation extension draws, `ribbon.py:380-391`), strays (`:453`), event sparks (`:460`), then its mip
-      chain (`reflection.py:111`). Scene target (`waveform.py:379-425`: 4 samples, overlay, bloom, OIT, HDR at the
-      exposure, `:382-383`): sky (`:392-395`, depth test off), floor (`:396`, `:469-559`; past 1080 px tall a reduced
-      pre-pass into its own RGBA16F target first, `:528-557`), ribbon body in the transparency block (`:400-401`,
-      resolved per sample on leaving it, `rendering/quick/scene3d/target.py:768-812`), ribbon light additive
-      (`:402-407`), strays (`:413-419`), event sparks (`:420-423`), then the emission's bloom and the overlay composite
-      (`target.py:937-975`).
-    - Attachments and formats: the scene's colour is RGBA16F under HDR (`target.py:548-551`) beside the emission and a
-      depth; the body writes accumulation, coverage and emission at location 2 (`rendering/gl_programs/ribbon.py:765`);
-      light, floor and sky write colour and emission (`ribbon.py:800-801`, `rendering/gl_programs/waveform_ribbon.py:88-89`,
-      `rendering/gl_programs/waveform_atmosphere.py:180`); the reflection is RGBA16F with a full chain and a D24 depth,
-      alpha the weighted height, blend ONE, ONE (`reflection.py:59-74`, `waveform.py:435-438`); the fog volumes are 3D
-      RGBA16F (inject, integrated) and R16F (steady) (`fog_volume.py:94-101`); the world field is RGBA32F 1024 x 8
-      (`waveform_field.py:38`, `waveform_atmosphere.py:12`); floor give RGBA32F 1024 x 4 and 1024 x 3 (`floor_give.py:67`,
-      `waveform_floor_give.py:19`); the pulse field R32F 385 x 1 (`rendering/quick/scene3d/pulse_rim.py:54`); the floor
-      maps RGBA8 with mips and 8x anisotropy, the slope map RGBA16F with mips baked from the height map
-      (`waveform.py:96-144`). The floor fragment binds 8 samplers, reads the packet as storage and writes
-      `gl_FragDepth` (`rendering/gl_programs/waveform_ribbon.py:166,282-285`, `waveform_atmosphere.py:13-17,79,110`).
-    - Turning: the frame is oriented before anything draws (`waveform_ribbon.py:27,60`, `rendering/quick/scene3d/frame.py:38-66`),
-      the scene is drawn unturned at the oriented item size (the camera aspect comes from it, `waveform_ribbon.py:64-67`),
-      and only the composite and the bloom's first samples are oriented (`target.py:939-941,980-1000`, programs
-      `target.py:388-389`, `waveform_ribbon.py:39-40`). The core refuses a turned bloom or composite
-      (`native/core/src/mode_content.h:445-447`, ABI 28), so Waveform is the turned-card box's second consumer.
-    - Clear: `waveform.py:386-387` writes backdrop x .35, alpha 1, into colour 0 after the scope's own clear
-      (`target.py:918-926`). The backdrop is the Recipe's default Environment (`core/waveform_ribbon_scene.py:22`) and
-      Settings never set it (`parameters.py:37-40` builds the Recipe without one): a constant in production. With fog on
-      the sky overwrites the clear everywhere (`waveform_atmosphere.py:182`, depth test off `waveform.py:393`), so it
-      shows only with Mist off. A target's clear lives in its declaration, is written into the block arena once per build
-      (`native/core/src/mode_content.cpp:6722-6730`) and is compared by `sameLayout` (`native/core/src/scene_targets.cpp:188-190`):
-      a changed value rebuilds the target.
-    - Found while reading, shapes the port:
-      - Bloom is per frame and reaches 0: `bloom=pair(bloom, passage)` (`parameters.py:142`), range 0..1
-        (`core/settings/visualizer_mode_settings.py:2167`; default 0.14 to 0.14, `core/settings/default_settings.py:983`).
-        At exactly 0 Python draws the frame with no HDR, no emission and no bloom (`target.py:564-568`, `waveform.py:382-383`:
-        a plain overlay, no tone map). D17 choice E assumed no consumer's strength reaches 0 (`Native_Core_P3_Decisions.md:2263-2266`).
-      - The point-sprite sparks (`ribbon.py:408-444`, `gl_PointSize`) never draw in production: they run only without a
-        burst payload (`waveform.py:408`) and the renderer always gives one (`waveform_ribbon.py:69-70`, `:32` prepares
-        no spark program). The port draws the event sparks (instanced quads already, `ribbon_bursts.py:67-71`) and the strays.
-      - Counts against the core: 7 compute entries and about 15 draws are 22 passes (28 if the three continuation draws of
-        body, light and reflected light are separate passes) against `kMaxModePasses` 16 (`native/core/src/mode_content.h:187`,
-        checked `mode_content.cpp:2152`); 9 storage images with Floor Give on (field 1, give 2, two fog volumes 3 each; 7
-        off) against 8 (`compute_passes.h:55-57`, `mode_content.cpp:2241`); 4 scene targets (scene, transparency,
-        reflection, pre-pass) of 4 (`scene_targets.h:69`), no headroom; the floor's 8 samplers of 8 (`mode_content.h:262`).
-      - The continuation draws start at a vertex that varies per frame (`ribbon.py:380-391`) while `first_vertex` is a
-        number (`mode_content.h:348`) and batches are instance ranges (D15 point 6, `Native_Core_P3_Decisions.md:1590-1592`):
-        a vertex-shader offset or indirect commands from the record, decided at the port (shader work, no new C++).
-      - The pulse field is a per-frame R32F texture (`pulse_rim.py:50-62`) and the core uploads textures from the GUI
-        thread as RGBA8 only (`mode_content.h:35-37`): a storage stream and an in-shader linear read needs no C++, and
-        the Python shader changes with it (one shader file for both renderers, `mode_content.h:3-4`).
-      - Already in the plan: the quiet-GPU `stream_ring` recheck before a Waveform consumer (the N3.2 box "Awaiting
-        Validation before a Waveform consumer"; D15's watch, `Native_Core_P3_Decisions.md:225`).
-  - Core features landed (ABI 33, merged 21 Nov, proofs in the merge commit): exact-size drawable mipped targets,
-    shader anisotropic taps, RGBA16F item textures with GPU mips, 28 passes and 9 storage images, linear-filter facts.
-    Port decisions (lead, 21 Nov): the floor's anisotropy is the shared tap text (`rendering/gl_programs/anisotropic.py`)
-    in both renderers; every level chain a sampler reads is the core's box kernel (`mip_box.comp`, Python's
-    `rendering/gl_programs/mip_chain.py`), so Python's reflection and Waveform's own read item textures (the 1254 px maps)
-    move to it at the port, by an opt-in flag (existing mipped item textures keep their path); the look change is judged on the port's showcase. Next: the port itself (records, streams,
-    passes and the proof), Opus High.
-  - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
-    (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
-    (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
-    backdrop) and prove it against the Python renderer under the port rule.
-    - Needs (Sonnet's reading, the lead decides). A clear value filled by a setting: C++ and an ABI bump: `clear`
-      takes a setting name, the clear block is refilled when the setting changes (today once per build,
-      `mode_content.cpp:6722-6730`) and `sameLayout` stops comparing it (`scene_targets.cpp:188-190`) so a change
-      rebuilds nothing; proof: two backdrops against Python with no pipeline rebuild (control: the value changed in
-      the declaration, which rebuilds). A first pass: data only, no module build: a surface-sized pass, blend replace,
-      depth off, first in the list, colour 0 from a setting in its block and alpha 1; one of the pass budget and one
-      more full-target 4-sample write a frame under the target's own clearing draw; proof: frames equal to
-      Python's (control: the pass removed).
-    - Recommendation: neither yet. The backdrop is a constant in production (the reading's Clear line), so declare
-      `clear` once as backdrop x .35 when Python builds the program (a backdrop change is then a program change, the
-      rule for every stage, D17 E), with no C++ and no pass. If Settings ever expose the backdrop, take the first pass:
-      it is data and costs a pass of the budget, where the setting-filled clear costs C++ and an ABI bump for a
-      value no other consumer varies.
-    - Lead decision (21 Nov): the recommendation. `clear` is declared once as backdrop x .35 when Python builds the
-      program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
-  - [ ] The port's four layers (Opus High agent a6688ad0cd2ae360a, 21 Nov; `Docs/Guides/Native_Parity_And_Timing_Proof.md`
-    sections 3 "A port" and 5; at most 2 processes at once). Material: the three takes `ragdoll_quiet_intro_loud_end1`,
-    `human_heavy1`, `nightsolong_acousticsoft1` (60 s each, frozen settings from the spec, never presets), each of the
-    four reaction modes run separately (`waveform_ribbon_reaction_mode`: Travelling Pulse, Frozen Past, Whole Swell,
-    Group Wave). `<rm>` below is one reaction mode's run key in `tools/conventions_identity.mode_runs("waveform_ribbon")`.
-    - [ ] Warm-up: 0 frames of GPU history for every reaction mode. Every GPU resource is made again from the frame's
-      record each frame (the knot packet carries the ribbon history; the world field, floor give, both fog volumes'
-      inject and integrate, and the steady share are written whole every frame: `fog_volume.py:155-167`, the steady
-      share write-only at `:160`; the three stream rings are uploads, never read back). A window's drawing therefore
-      starts at its first input once the floor maps are resident (the content's own texture wait), plus 2 frames.
-    - [ ] L (every frame of every take and reaction mode; `native_record_identity.py` gains `--mode waveform_ribbon`):
-      `python tools/visualizer_replay/native_record_identity.py --mode waveform_ribbon --recording TAKE --seconds 60
-      --run <rm> --out .artifacts/evidence/native_core/n5_4/<date>_L_<take>_<rm> --deliveries <that folder>/deliveries`.
-    - [ ] Response, in parallel with L (CPU only), main before against the branch, per reaction mode:
-      `python tools/visualizer_replay/waveform_ribbon_breathing_probe.py record --clip <take>.jsonl --output chain.npy`
-      (the three takes back to back), `python -m tools.visualizer_replay.waveform_music_response music --clips
-      <the three takes> --out music.npy`, `... response --root <main checkout | worktree> --inputs chain.npy --mode
-      "<reaction mode>" --out <main|branch>_<rm>.npy`, `... report --music music.npy --response main=... --response
-      branch=... --out <dir>`; reported per mode: correlation, saturation and dead shares, early-vs-late spread.
-    - [ ] P (rule (a) OpenGL against the cached Python references, one full take per reaction mode plus coverage
-      windows from the other takes, late-song windows required): references once through the cache key after the
-      checklist-16 conversion, `python tools/visualizer_replay/owner_render_parity.py --native --mode waveform_ribbon
-      --runs <rm> --recording TAKE --seconds 60 --references --api opengl --placements display overscan --out ...`;
-      windows `python tools/visualizer_replay/coverage_windows.py --mode waveform_ribbon --recording TAKE --seconds 60
-      --deliveries <L's deliveries> --switch-input <L's switch_input> --out windows.json`, then the same parity run with
-      `--windows windows.json`; rule (b) Vulkan against native OpenGL `python tools/visualizer_replay/native_stream_player.py
-      --deliveries <L's deliveries> --apis opengl vulkan --switch-input <L's switch_input> --out ...`. Controls:
-      `--native-control shift` (rule (a) must fail), the stream player's `--control` record nudge (rule (b) must fail).
-    - [ ] C (once, without the validation layer; per pass, median and p90 over 240 frames, `nvidia-smi` and the display
-      state recorded): `python native/core/python/waveform_check.py --module-dir release/native_module --rounds cost`
-      at 2560 x 1440 and 3840 x 2160 on both APIs, against the Python renderer's own pass times.
-    - [ ] T (once at acceptance, the lead: registration in the main checkout uncommitted, playbook 18): `python
-      tools/visualizer_live_check.py --mode waveform_ribbon --seconds 90 --load none` on Display 1 with recorded music,
-      compared with `tools/preflip_pack.py --compare` against the pre-flip baseline, on both backends.
-    - [ ] Before the first Waveform consumer draws: the N3.2 box "Awaiting Validation before a Waveform consumer":
-      `python native/core/python/mesh_buffer_check.py --module-dir release/native_module --rounds stream_ring` with the
-      GPU state recorded before and after, its median margins against 0.05 ms and the D5.3 tail watch reviewed.
 - [ ] Waveform travel-speed reactivity (operator; after N5.4's acceptance, additive to its native record): the mesh's
   travel has no reactivity control for its speed. Add ONE range slider (two handles): its low end is the minimum
   speed at the least energy, its high end the maximum speed at the highest energy, and the speed between follows
