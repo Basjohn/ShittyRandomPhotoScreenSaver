@@ -67,11 +67,24 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] One agent at a time (operator, 22 Nov, weekly usage 94 %): N5.2g (Edge Bloom, Capillary Bloom), agent
-  ac3072f8bea57441b (Opus Medium, ABI 43 reserved), so transitions finish 28 of 28. N5.6 paused at its prepped
-  checkpoint (agent ac5f7832a73527151, branch merged at c0abd4c55, journal copy
-  `D:\Temp\Scratch\SRPSS\worktrees\agent-ac5f7832a73527151\JOURNAL.md`): limits, skip, readback, geometry PASS; the
-  probe needs the build of main's three core fixes (lead), then `eb_core_check.py ... --label n56_rebuilt` (all five).
+- [ ] Live agents and where their work is (keep current; if an agent is cut off, resume it with SendMessage to its id,
+  or start a successor with `python tools/agent_handover.py <worktree>` (its "successor's brief") after
+  `agent_handover.py --commit <worktree>` saves anything uncommitted; never bare-remove a worktree):
+  - N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium). Worktree `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-ac5f7832a73527151`, branch
+    `worktree-agent-ac5f7832a73527151` (pushed; last WIP 9d2c65fc0, built proofs merged 5ffabd288). Journal:
+    `.artifacts/handover/JOURNAL.md` in the worktree, copy `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/JOURNAL.md`. Evidence and
+    scratch (junctions to D:): `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/evidence/` (`native_core/n5_6/20261122_n56_rebuilt`,
+    `visualizers/extruded_bubble/n56_flicker`, `n56_wake_teleport`, `n56_living_acceleration`) and `.../scratch/n56/`
+    (probe scripts: `orbit_points.py`, `flicker_map.py`, `veil_probe.py`, `eb_probe.py`). Doing: the operator's two
+    defects (the emission starfish while orbiting Preset 9 with music, the Deep Light shaft convergence first; then
+    pinned / non-accelerating bubbles, per-bubble on-screen speed against age); then the port proper.
+  - N5.2g Edge Bloom and Capillary Bloom, agent ac3072f8bea57441b (Opus Medium, ABI 43). Worktree
+    `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-ac3072f8bea57441b`, branch `worktree-agent-ac3072f8bea57441b` (pushed; design merged 8451b34c4).
+    Journal `.artifacts/handover/JOURNAL.md` in the worktree (its `.artifacts` has no D: junctions: evidence it makes
+    stays in the worktree on F:, copy it out before retiring). Doing: the ABI 43 C++ (field recipes as item textures,
+    the shared recorder in job and in-frame forms, the core-owned deadline, `on_textures_ready`, R32F), WIP commits per
+    part; then the lead builds; then stop point 2 and the N5.2f hitch attribution (its box).
+  - Both are told not to stop for usage; the lead resumes after a cut. Push both branches after each report.
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
