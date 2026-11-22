@@ -804,9 +804,15 @@ the feature (D3D11 is not stated).
     - Cached Python references (`owner_render_parity.py --references-only`, the same run, masks, single sampling and cache
       key as `native_parity`; stored in `D:\Temp\Scratch\SRPSS\fast_proof\references\extruded_bubble_<key>`, the
       index with keys, folders and frame counts in `native_core/n5_6/20261122_refs_<take>_<length>/python_references.json`):
-      `""` over each full 60 s take (ragdoll, human, nightsolong: the full take and its late-song window), and `:b`, BEAM,
-      Sunlit, lighting BEAM and `""@overscan` over 30 s of each take. NOTE: the key holds the Python renderer's sources,
-      so the conversions box below draws them again once (the guide's section 3); drawing is unattended (6 s = 47 s).
+      drawn: `""` over the full 60 s of human_heavy1 and nightsolong_acousticsoft1 (the acceptance takes, with their
+      late-song windows; keys in `20261122_refs_human_60/` and `20261122_refs_night_60/`). Next (not started, wind-down
+      22 Nov): `""` over ragdoll's 60 s, then `:b`, BEAM, Sunlit, lighting BEAM and `""@overscan` over 30 s of each take
+      (`owner_render_parity.py --references-only --mode extruded_bubble --recording <take> --seconds 30 --runs
+      <mode+key ...> --placements display overscan`). NOTE: the key holds the Python renderer's sources,
+      so the conversions box below draws them again once (the guide's section 3); drawing is unattended (6 s = 47 s;
+      at most 2 processes at once). Open for the lead: the 30 s runs' late-song window. Python's drift restarts after a
+      128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
+      it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
   - [ ] C++ (found by the design check against the built ABI 42 core): storage buffers counted per compute entry, not
     per program. EB's drift declares 12 storage buffers (geometry, state and aux for each of chains, snow and specks;
     one output; the check's cases and results: `extruded_bubble_drift_solver.py:166-191,244-248,310-311`), and D3's
