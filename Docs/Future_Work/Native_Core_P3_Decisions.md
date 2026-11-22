@@ -7,7 +7,11 @@ lead's request, answering the operator's direction of 11 and 12 Nov). D12 and D1
 agent for N2.9 and N4.a, and D14 (15 Nov, scene targets) for N3.1 with the lead's answers. They bind until the lead or the operator supersedes one in writing here. D1 to D3 and the
 transport rule, the rest of D5 (N0.5), N0.3 and N0.4 (D5.5) were drafted as proposals and accepted by the lead on
 12 Nov; this file states each as decided, with the lead's answers folded in. What each decision built is under its
-"As built" or "As proved" record. The ordered work is `Current_Plan.md`, item 8b.
+"As built" or "As proved" record. The ordered work is `Current_Plan.md`, item 8b. **Operator supersession, 23 Nov 2026:** SMP does not immediately follow NF. After the flip, the active
+new-mode sequence is Melt Pool then Concrete Rain, followed by substantial QoL and explicit operator review.
+SMP's entire M0-M10 implementation plan is deferred to `Future_Work.md` §2.5 and plan 02; existing
+native/compositor/host-agnostic contracts remain. Any pre-SMP progress percentages or references in dated
+native-port records are evidence, not permission to start SMP.
 
 **This file is the current record only.** Superseded text, drafts, round-by-round evidence and the questions the
 lead answered are in `Native_Core_P3_Decisions_History.md` (history, not instructions); each section below names
