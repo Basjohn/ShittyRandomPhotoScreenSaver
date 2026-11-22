@@ -69,6 +69,7 @@ SCENE_BLURRED = "blurred"
 SCENE_MOTION_TILES = "motion_tiles"
 SCENE_MOTION_TABLE = "motion_table"
 SCENE_BLOOM = "scene_bloom"                 # N5.2e: the bloom step (its glow "scene_bloom.glow")
+SCENE_SOURCE_ENVIRONMENT = "environment_source"   # N5.2f: the old picture's environment step
 #: The frame trace's records of a run on the layer (``FrameTraceEvent.NATIVE_TRANSITION_TICK`` / ``_END``; a test holds
 #: them equal).
 _TRACE_TICK, _TRACE_END = 81, 82
@@ -142,6 +143,8 @@ def native_transition_renderer(transition_id: str) -> Any:
     if isinstance(renderer, NativeScenePasses):
         shipped = all(path.is_file() for p in renderer.native_scene_passes() if not p.core_triangle
                       for path in scene_pack_paths(transition_id, p.name))
+        shipped = shipped and all(path.is_file() for population in renderer.native_scene_populations()
+                                  for path in population_pack_paths(transition_id, population))
         shared = all(shared_pack_path(name.rsplit(".", 1)[0], "." + name.rsplit(".", 1)[1]).is_file()
                      for name in _motion_post_names())
         return renderer if shipped and shared else None
@@ -152,7 +155,7 @@ def native_transition_renderer(transition_id: str) -> Any:
 
 
 def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_size: tuple[int, int],
-                  pixels: tuple[int, int] | None = None) -> tuple:
+                  pixels: tuple[int, int] | None = None, source_size: tuple[int, int] | None = None) -> tuple:
     """N5.2c: the program of a run's scene (``NativeScene``): N4.j's photo environment of the new picture (when a pass
     reads it), each pass into the scene target (colour RGBA8 cleared to opaque black and D32F depth, the run's
     samples: the Python renderer's ``SceneTarget`` scope, or Quick's framebuffer, which a one-sample target copies
@@ -175,16 +178,24 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
 
     environment = f"{SCENE_ENVIRONMENT}.environment"
     textures = {"old": old, "new": new, "environment": environment, "motion": SCENE_MOTION_TABLE,
-                "ghosts": f"{SCENE_GHOSTS}.ghost"}
+                "ghosts": f"{SCENE_GHOSTS}.ghost", "source_environment": f"{SCENE_SOURCE_ENVIRONMENT}.environment"}
     nearest = {"motion", "ghosts"}            # texelFetch reads, never filtered (Python's GL_NEAREST)
+    mipped = {"environment", "source_environment"}
     motion = bool(getattr(scene, "motion", False))
     trails = bool(getattr(scene, "trails", False))
     passes: list = []
     if scene.environment:
         passes.append(EnvironmentStep(SCENE_ENVIRONMENT, new, environment_size(destination_size)))
+    if getattr(scene, "source_environment", False):
+        # N5.2f: the old picture's environment (Python's PhotoEnvironment role "source", of the source's own pixels).
+        passes.append(EnvironmentStep(SCENE_SOURCE_ENVIRONMENT, old,
+                                      environment_size(source_size if source_size is not None else destination_size)))
+    populations = {population.draw: population for population in getattr(scene, "populations", ())}
+    for population in populations.values():
+        passes.extend(population_compute(renderer, population))
     for p in scene.passes:
         samplers = tuple(PassSampler(name, textures[kind], "nearest" if kind in nearest else "linear", "clamp",
-                                     "linear" if kind == "environment" else "none") for name, kind in p.samplers)
+                                     "linear" if kind in mipped else "none") for name, kind in p.samplers)
         blend = p.blend if isinstance(p.blend, str) else BlendState(tuple(p.blend[0]), tuple(p.blend[1]))
         target = getattr(p, "target", "scene")
         # With motion blur every pass on the scene writes its colour; only a moving one writes the velocity.
@@ -199,8 +210,17 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
             continue
         vertex, fragment = (path.read_bytes() for path in scene_pack_paths(renderer.transition_id, p.name))
         mesh = BUILTIN_QUAD_MESH if p.mesh == QUAD_MESH else p.mesh
-        geometry = PassGeometry(vertex, topology=p.topology, vertices=p.vertices, instances=p.instances, mesh=mesh,
-                                instance_from=mesh if p.instances == "mesh" else None)
+        if p.name in populations:
+            # N5.2f (N4.c): the live members, from the command the scan wrote, each reading its id and state.
+            population = populations[p.name]
+            # The core admits a pass with its vertex count (the command's own, uVertices, is what draws).
+            geometry = PassGeometry(vertex, topology=p.topology, vertices=p.vertices,
+                                    indirect=population.resource("command"), draw_count=1,
+                                    storage=(("PopulationIds", population.resource("ids")),
+                                             ("PopulationStates", population.resource("states"))))
+        else:
+            geometry = PassGeometry(vertex, topology=p.topology, vertices=p.vertices, instances=p.instances, mesh=mesh,
+                                    instance_from=mesh if p.instances == "mesh" else None)
         if target == "ghosts":
             # One pass a ghost, each with its own values (<member>@<pass>): MAX-blended, no depth (trails.py).
             for age in range(SCENE3D_TRAIL_GHOSTS):
@@ -247,10 +267,51 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     return passes, tuple(targets), tuple(images)
 
 
-def _motion_post_names() -> tuple[str, ...]:
-    from rendering.quick.transitions.native_scene import motion_post_sources
+def population_pack_paths(transition_id: str, population: Any) -> tuple[Path, Path]:
+    """N5.2f: a population's count and scatter packs (``<transition>_<population>_count.comp.qsb`` / ``_scatter``),
+    baked from its hooks with the frame block merged (``NativeScenePopulation``)."""
+    folder = transition_pack_path(transition_id).parent
+    stem = f"{transition_id}_{population.name}"
+    return folder / f"{stem}_count.comp.qsb", folder / f"{stem}_scatter.comp.qsb"
 
-    return tuple(motion_post_sources())
+
+def population_compute(renderer: Any, population: Any) -> list:
+    """N5.2f (N4.c): a population's three compute entries (``population.py``'s count, scan and scatter), each triggered
+    by every record that draws (the one trigger a still admits), every one of its five storage buffers bound
+    read_write as N3.3's harness binds them (the packs declare all five), placed before the scene's passes: the hooks
+    read no draw, so no run of passes on the scene target is split."""
+    from rendering.native.mode import ComputeBinding, ComputePass
+    from rendering.quick.transitions.native_scene import POPULATION_BLOCKS, POPULATION_SCAN
+
+    bindings = tuple(ComputeBinding(block, population.resource(suffix), "buffer", "read_write")
+                     for block, suffix in POPULATION_BLOCKS)
+    count, scatter = (path.read_bytes() for path in population_pack_paths(renderer.transition_id, population))
+    groups = (population.resource("groups"), 1, 1)
+    return [ComputePass(population.resource("count"), count, bindings, groups=groups, trigger="draw"),
+            ComputePass(population.resource("scan"), shared_pack_path(POPULATION_SCAN, ".comp").read_bytes(), bindings,
+                        groups=(1, 1, 1), trigger="draw"),
+            ComputePass(population.resource("scatter"), scatter, bindings, groups=groups, trigger="draw")]
+
+
+def scene_storage(scene: Any) -> tuple:
+    """N5.2f: the storage buffers of a scene's populations (each its five, sized by its settings; the command read as
+    indirect commands), created zeroed by the core and released with the program that declares them."""
+    from rendering.native.mode import StorageBuffer
+
+    buffers: list = []
+    for population in getattr(scene, "populations", ()):
+        buffers += [StorageBuffer(population.resource("counts"), population.resource("group_bytes")),
+                    StorageBuffer(population.resource("offsets"), population.resource("group_bytes")),
+                    StorageBuffer(population.resource("command"), 16, indirect=True),
+                    StorageBuffer(population.resource("ids"), population.resource("id_bytes")),
+                    StorageBuffer(population.resource("states"), population.resource("state_bytes"))]
+    return tuple(buffers)
+
+
+def _motion_post_names() -> tuple[str, ...]:
+    from rendering.quick.transitions.native_scene import motion_post_sources, population_scan_sources
+
+    return tuple(motion_post_sources()) + tuple(population_scan_sources())
 
 
 def shared_pack_path(name: str, suffix: str) -> Path:
@@ -544,8 +605,9 @@ class NativeBackgroundLayer:
             settings = scene_settings(renderer, run, sample, logical, pixels, self._scene)
             if self._show != SHOW_EFFECT:
                 passes, targets, images = scene_program(renderer, self._scene, self._slot, _other_slot(self._slot),
-                                                        self._next_image.pixel_size, pixels)
-                mode.program(passes, settings, targets=targets, images=images)
+                                                        self._next_image.pixel_size, pixels,
+                                                        source_size=self._image.pixel_size)
+                mode.program(passes, settings, targets=targets, images=images, buffers=scene_storage(self._scene))
             else:
                 mode.settings(settings)
         elif show != self._show:

@@ -27,7 +27,23 @@ from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
+from ..native_scene import (QUAD_MESH, NativeScene, NativeScenePass, NativeScenePasses, NativeScenePopulation,
+                            eased_show, native_one_block, population_values)
 from ..render_contract import QuickTransitionRenderFrame
+
+# N5.2f: the native scene's passes (the intact picture with the frame block merged into its pass block, the grains'
+# draw as its text is: it reads no frame block) and its population (its count and scatter packs merge the frame block
+# into the dispatch block); the grains are blended premultiplied over, the alpha kept (``blend_scope``).
+_FRAME = DISINTEGRATE_FRAME_BLOCK.name
+_OVER = (("add", "one", "one_minus_src_alpha"), ("add", "zero", "one"))
+_SCENE_PASSES = (
+    NativeScenePass("intact", *native_one_block((DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE),
+                                                _FRAME),
+                    QUAD_MESH, "triangle_strip", 4, samplers=(("uOldTex", "old"), ("uNewTex", "new"))),
+    NativeScenePass("grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE, None,
+                    "triangle_strip", DISINTEGRATE_VERTICES, samplers=(("uOldTex", "old"),), blend=_OVER),
+)
+_POPULATION = NativeScenePopulation("grains", DISINTEGRATE_HOOKS, _FRAME, "grains")
 
 
 def disintegrate_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float]:
@@ -42,8 +58,47 @@ def disintegrate_parameters(parameters: Mapping[str, object]) -> tuple[int, int,
     return seed, grain, float(wind)
 
 
-class QuickDisintegrateRenderer:
+class QuickDisintegrateRenderer(NativeScenePasses):
     transition_id = "disintegrate"
+    scene_pixels = True                  # N5.2f: the grain grid is of the item's device pixels
+
+    # ------------------------------------------------------------------------------- N5.2f: the scene, one owner
+
+    @classmethod
+    def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
+        return _SCENE_PASSES
+
+    @classmethod
+    def native_scene_populations(cls) -> tuple[NativeScenePopulation, ...]:
+        return (_POPULATION,)
+
+    def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
+        parameters = run.request.parameter_dict()
+        disintegrate_parameters(parameters)
+        return NativeScene(_SCENE_PASSES, (), scene3d_request_samples(parameters), False, populations=(_POPULATION,))
+
+    def scene_show(self, run, sample) -> int:
+        return eased_show(max(0.0, min(1.0, float(sample.eased_progress))))
+
+    def scene_values(self, run, sample, logical_size: tuple[float, float],
+                     pixels: tuple[int, int] | None = None) -> dict[str, object]:
+        """The frame block's values (``_frame_values``, one owner with ``render``) and the population's
+        (``population_values``: the dispatch block and the storage sizes) over the item's device ``pixels``."""
+        if pixels is None:
+            pixels = (round(logical_size[0]), round(logical_size[1]))
+        progress = max(0.0, min(1.0, float(sample.eased_progress)))
+        seed, grain, wind = disintegrate_parameters(run.request.parameter_dict())
+        columns, rows, _size = disintegrate_grid(int(pixels[0]), int(pixels[1]), grain)
+        values = self._frame_values(progress, seed, wind, direction_vector(run.request.direction), columns, rows,
+                                    logical_size)
+        values.update(population_values(_POPULATION, columns * rows, DISINTEGRATE_VERTICES))
+        return values
+
+    @staticmethod
+    def _frame_values(progress: float, seed: int, wind: float, direction, columns: int, rows: int,
+                      logical_size) -> dict[str, object]:
+        return {"uGrid": (columns, rows), "uDirection": direction, "uFrameSize": tuple(logical_size),
+                "uProgress": progress, "uSeed": seed, "uWind": wind}
 
     # The photographs each program reads (bind_frame binds them); every other value is in a block.
     _INTACT_SAMPLERS = ("uOldTex", "uNewTex")
@@ -113,8 +168,7 @@ class QuickDisintegrateRenderer:
         self._grains.release()
 
     def _draw(self, frame, progress: float, seed: int, wind: float, direction, columns: int, rows: int) -> None:
-        values = {"uGrid": (columns, rows), "uDirection": direction, "uFrameSize": frame.logical_size,
-                  "uProgress": progress, "uSeed": seed, "uWind": wind}
+        values = self._frame_values(progress, seed, wind, direction, columns, rows, frame.logical_size)
         with self._frame_block.bound(values):
             self._draw_bound(frame, columns, rows)
 

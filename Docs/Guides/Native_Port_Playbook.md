@@ -283,7 +283,12 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 - Status: decided, not built; high potential, built without a consumer.
 - Contract: a 1:1 port on QRhi's `drawIndirect` over a compute-written command; "draw the maximum, cull in the vertex
   shader" only for a backend without `QRhi::DrawIndirect`; the port queries `DrawIndirect` and `DrawIndirectMulti` at
-  runtime and records the answer (Plan N4.c; D15 point 6; D16 point 2).
+  runtime and records the answer (Plan N4.c; D15 point 6; D16 point 2). ABI 41 (22 Nov) reads them in the storage
+  state's device facts (`draw_indirect`, `draw_indirect_multi`; one answer the admission, the facts and the
+  draw-parameters forms take) with the harness control `hide_draw_indirect`. Recorded on this machine (RTX 4090,
+  driver 621.01, Qt 6.12.0): OpenGL 4.6 and Vulkan both report both true; under the control both read false, the
+  indirect population is refused with the DrawIndirect reason and the direct one draws, and off again the two are
+  equal (`compute_pass_check.py --rounds indirect`; `native_core/n3_3/20261122_abi41_indirect`).
 - Traps: the compute-written commands are the mode's own trusted output, unchecked by the core (D16 "as built"); a
   `firstInstance` in a command is legal on Vulkan only with `drawIndirectFirstInstance` (D15 point 6); compact only
   when the pool is large (Lessons).

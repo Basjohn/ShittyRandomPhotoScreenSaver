@@ -29,6 +29,9 @@ Rounds:
   war        (each API) write-after-read: entry 1 reads X and writes Y, entry 2 writes X: Y holds the earlier X; the
              ping-pong form (audit 5 M4): entry 1 reads A and writes B, entry 2 reads B and writes A, each one past
              what it read.
+  indirect   (each API; opt-in, ABI 41) the device facts draw_indirect and draw_indirect_multi; under the control
+             hide_draw_indirect both read false, the indirect population is refused with the DrawIndirect reason and
+             draws nothing while the direct one draws; off again, the indirect population equals the direct one.
   copy       (each API) a created buffer and image read zero; a resized buffer keeps its prefix bit-exact and reads
              zero past it.
   rest       (each API) a minute at rest: no compute pass, no dispatch, no object; control: a record every frame.
@@ -332,6 +335,77 @@ def round_facts(core, engine, app, api: str, packs: dict) -> dict:
             checks["the_device_reports_compute"] = bool((facts["device"] or {}).get("compute"))
         finally:
             _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+# --------------------------------------------------------------------------------------------------- indirect
+
+def _scene_facts(core, engine, host, app, packs: dict) -> dict:
+    """The device's compute facts as a fresh content's storage edge notes them (the field scene)."""
+    scene = Scene(core, engine, host, spec_for("field", packs))
+    try:
+        scene.draw(2)
+        return dict((scene.mode.state().get("storage") or {}).get("device") or {})
+    finally:
+        _close(scene, host, app)
+
+
+def _population_frame(core, engine, host, app, packs: dict, name: str) -> tuple:
+    scene = Scene(core, engine, host, spec_for(name, packs))
+    try:
+        for frame in range(PARITY_RECORDS):
+            scene.draw(1, **_record_values(name, frame))
+        try:
+            pixels = scene.pixels(app)
+        except RuntimeError as exc:          # a failed content has no target to read back: refused, nothing drawn
+            return None, str(exc)
+        return pixels, str(scene.mode.state().get("last_reason") or "")
+    finally:
+        _close(scene, host, app)
+
+
+def _lit(pixels) -> int:
+    return 0 if pixels is None else int((pixels[..., :3].max(axis=2) > 8).sum())
+
+
+def round_indirect(core, engine, app, api: str, packs: dict) -> dict:
+    """ABI 41 (N5.2f with N4.c): QRhi's DrawIndirect / DrawIndirectMulti answers in the device facts, and the harness
+    control ``hide_draw_indirect``: under it both facts read false, the indirect population is refused with the
+    DrawIndirect reason and draws nothing, the direct population still draws; with it off again the indirect population
+    draws and equals the direct one (the control is off at the end, whatever happens)."""
+    checks, facts = {}, {}
+    host = mbc._host(core)
+    try:
+        before = _scene_facts(core, engine, host, app, packs)
+        facts["device"] = {k: before.get(k) for k in ("draw_indirect", "draw_indirect_multi", "compute")}
+        checks["the_facts_report_draw_indirect"] = before.get("draw_indirect") is True
+        checks["the_facts_carry_draw_indirect_multi"] = isinstance(before.get("draw_indirect_multi"), bool)
+        core.module.mesh_buffer_control(json.dumps({"hide_draw_indirect": True}))
+        try:
+            hidden = _scene_facts(core, engine, host, app, packs)
+            facts["device_hidden"] = {k: hidden.get(k) for k in ("draw_indirect", "draw_indirect_multi")}
+            checks["control_hidden_facts_read_false"] = (hidden.get("draw_indirect") is False
+                                                         and hidden.get("draw_indirect_multi") is False)
+            pixels, reason = _population_frame(core, engine, host, app, packs, "population")
+            lit = _lit(pixels)
+            facts["population_hidden"] = {"lit": lit, "last_reason": reason}
+            checks["control_hidden_the_indirect_population_is_refused"] = lit == 0 and "DrawIndirect" in reason
+            direct, direct_reason = _population_frame(core, engine, host, app, packs, "population_direct")
+            facts["population_direct_hidden"] = {"lit": _lit(direct),
+                                                 "last_reason": direct_reason}
+            checks["control_hidden_the_direct_population_still_draws"] = facts["population_direct_hidden"]["lit"] > 100
+        finally:
+            core.module.mesh_buffer_control(json.dumps({"hide_draw_indirect": False}))
+        after = _scene_facts(core, engine, host, app, packs)
+        checks["the_facts_return_with_the_control_off"] = after.get("draw_indirect") == before.get("draw_indirect")
+        indirect, reason = _population_frame(core, engine, host, app, packs, "population")
+        facts["population_after"] = {"lit": _lit(indirect), "last_reason": reason}
+        checks["the_indirect_population_draws_again_equal_to_the_direct"] = (
+            facts["population_after"]["lit"] > 100 and direct is not None
+            and _pixels_equal(indirect, direct)["exact"])
     finally:
         host.close()
         host_check._flush_deletes(app)
@@ -1223,6 +1297,7 @@ def child(args) -> dict:
                       "retire": lambda: round_retire(core, engine, app, args.api, packs),
                       "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
                       "pingpong": lambda: round_pingpong(core, engine, app, args.api, packs),
+                      "indirect": lambda: round_indirect(core, engine, app, args.api, packs),
                       "cost": lambda: round_cost(core, engine, app, args.api, packs)}
             for name in args.rounds:
                 if vulkan:
@@ -1274,7 +1349,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, "pingpong"))
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, "pingpong", "indirect"))
     parser.add_argument("--label", default="n33_compute")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")

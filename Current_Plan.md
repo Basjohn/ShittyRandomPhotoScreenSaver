@@ -67,8 +67,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
+- [ ] One agent at a time (operator, 22 Nov, weekly usage 93 %): N5.6's easiest, time-wasting parts first (the built
+  measurements, docs and the like), agent ac5f7832a73527151 at a0230959d; its journal holds the GPU proof plan
+  (`eb_core_check.py`, limits then skip, readback, geometry, probe).
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
-  merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Leftovers:
+  merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
     54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
     C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
@@ -76,9 +79,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
-- [ ] Background track: agent abfa6e30ec8e2366d (Opus Medium) on N5.2f's ABI 41 C++ (the `draw_indirect` device facts),
-  built in one batch with N5.6's ABI 42. Exploding Tiles' stall (the Steam refresh outside the transition gate) fixed
-  and passing on Display 1, 22 Nov.
+- [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
+  box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
@@ -1419,12 +1421,12 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     pairs, full canonical durations, both dprs; the cull form equal to the indirect one; N4.c's harness at one million
     sprites, indirect against cull, same pixels, cost; `--cost` at 1440p and 4K on both backends; one native Vulkan
     hitch session; registration last.
-  - [ ] ABI 41: the two facts and the hide-`DrawIndirect` control, with their test (stop and report before relying on
-    the build).
-  - [ ] The `native_scene` population helpers and the second environment, with GPU-free tests whose controls fail (two
-    blocks in a compute pack refused, a population pack missing from the bake refused).
-  - [ ] `NativeScenePasses` for the two, the packs baked, the N52F route-check variants, bounds measured, the cull form,
-    N4.c's harness, cost, the hitch session, registration last.
+  - [ ] The hitch session on Display 1 on a quiet machine (`preflip_pack.py --name n52f_native_vulkan --rows
+    "transition/disintegrate/*,transition/volumetric_dissolve/*" --per-row --backend native-vulkan
+    --app-arg=--graphics-backend=vulkan --keep-logs`), twice each, no gap over 33 ms; the first try (before
+    registration) recorded no native run; 22 Nov the operator's game held the machine (about 300 % CPU, GPU 40 %).
+  - [ ] The cull form (the draw without `DrawIndirect`, chosen from the ABI 41 fact) and N4.c's harness at one million
+    sprites, indirect against cull, same pixels, cost.
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
 - [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):
