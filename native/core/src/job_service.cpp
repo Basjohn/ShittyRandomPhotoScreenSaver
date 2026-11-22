@@ -108,7 +108,32 @@ UploadJob::UploadJob(const QByteArray &nameIn, quint64 generationIn, const QShar
 {
 }
 
+UploadJob::UploadJob(const QByteArray &nameIn, quint64 generationIn, const QSharedPointer<TextureImage> &pixelsIn,
+                     std::shared_ptr<const FieldRecipe> recipeIn, std::shared_ptr<JobNotifier> notifier)
+    : name(nameIn),
+      generation(generationIn),
+      size(pixelsIn ? pixelsIn->size : QSize()),
+      mips(false),
+      format(ModeTextureFormat::RGBA8),
+      recipe(std::move(recipeIn)),
+      m_pixels(pixelsIn),
+      m_notifier(std::move(notifier))
+{
+}
+
 UploadJob::~UploadJob() = default;
+
+int UploadJob::outputCount() const
+{
+    return recipe ? int(recipe->outputs.size()) : 1;
+}
+
+quint64 UploadJob::outputIdOf(int index) const
+{
+    if (!recipe)
+        return index == 0 ? outputId : 0;
+    return index >= 0 && index < outputCount() ? fieldOutputs[index].id : 0;
+}
 
 bool UploadJob::start()
 {
@@ -203,6 +228,12 @@ QJsonObject UploadJob::toJson() const
     o.insert(QStringLiteral("state"), jobStateName(state()));
     o.insert(QStringLiteral("output"), double(outputId));
     o.insert(QStringLiteral("output_bytes"), double(outputBytes));
+    if (recipe) {                             // ABI 43: a field job's outputs
+        QJsonArray ids;
+        for (int i = 0; i < outputCount(); ++i)
+            ids.append(double(fieldOutputs[i].id));
+        o.insert(QStringLiteral("field_outputs"), ids);
+    }
     if (!error.isEmpty())
         o.insert(QStringLiteral("error"), error);
     const auto ms = [](qint64 a, qint64 b) { return (a > 0 && b > 0) ? double(b - a) / 1e6 : -1.0; };
@@ -455,10 +486,17 @@ void JobService::runJob(const std::shared_ptr<UploadJob> &job)
         return;
     }
     quint64 id = 0;
+    const int outputs = job->outputCount();   // ABI 43: a field job's outputs take consecutive ids
     {
         QMutexLocker lock(&m_mutex);
-        id = ++m_nextId;
+        id = m_nextId + 1;
+        m_nextId += quint64(outputs);
     }
+    const auto bytesOf = [&job](int i) { return job->recipe ? job->fieldOutputs[i].bytes : job->outputBytes; };
+    const auto destroyAll = [this, id, outputs]() {
+        for (int i = 0; i < outputs; ++i)
+            m_backend->destroy(id + quint64(i));
+    };
     QString error;
     if (!m_backend->upload(*job, id, &error)) {
         if (m_backend->deviceLost()) {
@@ -481,35 +519,39 @@ void JobService::runJob(const std::shared_ptr<UploadJob> &job)
     job->completedNs = jobClockNs();
     if (m_abandon.loadAcquire()) {
         // D9 point 6: a job in flight at the service's stop is dropped unpublished.
-        m_backend->destroy(id);
+        destroyAll();
         m_backend->flush();
         job->abandon();
         {
             QMutexLocker lock(&m_mutex);
             ++m_abandoned;
-            ++m_destroyed;
+            m_destroyed += outputs;
         }
         logJob(*job);
         return;
     }
     {
         QMutexLocker lock(&m_mutex);
-        m_images.insert(id, job->outputBytes);
-        g_images.fetchAndAddRelaxed(1);
-        g_imageBytes.fetchAndAddRelaxed(job->outputBytes);
+        for (int i = 0; i < outputs; ++i) {
+            m_images.insert(id + quint64(i), bytesOf(i));
+            g_images.fetchAndAddRelaxed(1);
+            g_imageBytes.fetchAndAddRelaxed(bytesOf(i));
+        }
     }
     job->finishedNs = jobClockNs();
     if (!job->publish()) {
-        // Cancelled while it ran: Qt never saw its output, which goes now.
+        // Cancelled while it ran: Qt never saw its outputs, which go now.
         {
             QMutexLocker lock(&m_mutex);
-            m_images.remove(id);
-            g_images.fetchAndAddRelaxed(-1);
-            g_imageBytes.fetchAndAddRelaxed(-job->outputBytes);
+            for (int i = 0; i < outputs; ++i) {
+                m_images.remove(id + quint64(i));
+                g_images.fetchAndAddRelaxed(-1);
+                g_imageBytes.fetchAndAddRelaxed(-bytesOf(i));
+            }
             ++m_cancelled;
-            ++m_destroyed;
+            m_destroyed += outputs;
         }
-        m_backend->destroy(id);
+        destroyAll();
         m_backend->flush();
         logJob(*job);
         return;
@@ -751,6 +793,8 @@ public:
 
     bool upload(UploadJob &job, quint64 id, QString *error) override
     {
+        if (job.recipe)
+            return field(job, id, error);     // ABI 43
         QSharedPointer<TextureImage> pixels = job.pixels();
         if (!pixels) {
             *error = QStringLiteral("the job has no pixels");
@@ -815,6 +859,88 @@ public:
         return true;
     }
 
+    // ABI 43 (N5.2g): a field job. Its input photo (when the recipe samples one) uploaded from the job's pixels into a
+    // texture of this record, the recipe recorded by the shared recorder (field_recipe.h) in the same offscreen frame,
+    // then the fence (as an upload's: L1) and the outputs published under id .. id + outputs - 1.
+    bool field(UploadJob &job, quint64 id, QString *error)
+    {
+        const FieldRecipe &recipe = *job.recipe;
+        QSharedPointer<TextureImage> pixels = job.pixels();
+        RhiOwned<QRhiTexture> input;
+        if (!recipe.input.isEmpty()) {
+            if (!pixels) {
+                *error = QStringLiteral("the field job has no pixels for its input '%1'")
+                             .arg(QString::fromLatin1(recipe.input));
+                return false;
+            }
+            input.reset(m_rhi->newTexture(QRhiTexture::RGBA8, pixels->size, 1, QRhiTexture::Flags()));
+            input->setName(QByteArrayLiteral("srpss core field job input ") + job.name);
+            if (!input->create()) {
+                *error = QStringLiteral("the field job's input could not be created at %1 x %2")
+                             .arg(pixels->size.width()).arg(pixels->size.height());
+                return false;
+            }
+        }
+        QRhiCommandBuffer *cb = nullptr;
+        const QRhi::FrameOpResult begun = m_rhi->beginOffscreenFrame(&cb);
+        if (begun != QRhi::FrameOpSuccess || !cb) {
+            *error = QStringLiteral("beginOffscreenFrame failed on the job QRhi");
+            if (begun == QRhi::FrameOpDeviceLost || m_rhi->isDeviceLost())
+                noteDeviceLost(error);
+            return false;
+        }
+        QRhiResourceUpdateBatch *updates = m_rhi->nextResourceUpdateBatch();
+        if (input) {
+            const QRhiTextureSubresourceUploadDescription level(pixels->pixels); // implicitly shared, no copy
+            updates->uploadTexture(input.get(), QRhiTextureUploadDescription(QRhiTextureUploadEntry(0, 0, level)));
+        }
+        FieldOutputs outputs;
+        QString why;
+        const bool recorded = m_fields.record(m_rhi.get(), cb, recipe, input.get(), &updates, &outputs, &why);
+        if (updates)
+            cb->resourceUpdate(updates);      // not recorded: the batch is handed back (nothing reads it)
+        const QRhi::FrameOpResult ended = m_rhi->endOffscreenFrame();
+        if (!recorded || ended != QRhi::FrameOpSuccess) {
+            *error = recorded ? QStringLiteral("endOffscreenFrame failed on the job QRhi") : why;
+            if (ended == QRhi::FrameOpDeviceLost || m_rhi->isDeviceLost())
+                noteDeviceLost(error);
+            else
+                m_rhi->finish();
+            return false;                     // the outputs (if any) go with `outputs` (never published)
+        }
+        job.recordedNs = jobClockNs();
+        pixels.reset();
+        job.dropPixels();
+        const bool completed = waitQueue(error);
+        if (!completed || m_rhi->isDeviceLost()) {
+            if (error->isEmpty())
+                *error = QStringLiteral("the field job's completion failed");
+            if (m_rhi->isDeviceLost() && !deviceLost())
+                noteDeviceLost(error);
+            return false;
+        }
+        m_rhi->finish();                      // this QRhi's bookkeeping; the input and the scratch images go here
+        input.reset();
+        qint64 total = 0;
+        for (int i = 0; i < int(recipe.outputs.size()); ++i) {
+            const QRhiTexture::NativeTexture native = outputs.textures[i]->nativeTexture();
+            JobOutput &o = job.fieldOutputs[i];
+            o.id = id + quint64(i);
+            o.nativeImage = native.object;
+            o.nativeLayout = native.layout;
+            o.bytes = recipe.outputBytes(i);
+            total += o.bytes;
+            m_textures.insert(o.id, outputs.textures[i].release());
+        }
+        job.outputId = job.fieldOutputs[0].id;
+        job.nativeImage = job.fieldOutputs[0].nativeImage;
+        job.nativeLayout = job.fieldOutputs[0].nativeLayout;
+        job.outputBytes = total;
+        QMutexLocker lock(&m_factsMutex);
+        ++m_fieldJobs;
+        return true;
+    }
+
     void destroy(quint64 id) override
     {
         delete m_textures.take(id); // QRhi defers the native release; flush() runs it
@@ -831,6 +957,7 @@ public:
         for (auto it = m_textures.begin(); it != m_textures.end(); ++it)
             delete it.value();
         m_textures.clear();
+        m_fields.release();                   // ABI 43: its pipelines, before their QRhi
         QJsonObject cache;
         if (m_rhi) {
             m_rhi->finish();
@@ -868,6 +995,7 @@ public:
         o.insert(QStringLiteral("kind"), QStringLiteral("qrhi_vulkan"));
         o.insert(QStringLiteral("device_lost"), m_deviceLost.loadRelaxed() != 0);
         o.insert(QStringLiteral("uploads"), double(m_uploads));
+        o.insert(QStringLiteral("field_jobs"), double(m_fieldJobs)); // ABI 43
         o.insert(QStringLiteral("torn_down"), m_tornDown);
         return o;
     }
@@ -922,6 +1050,8 @@ private:
     mutable QMutex m_factsMutex;                 // guards the report below (read from the GUI thread)
     QJsonObject m_facts;
     qint64 m_uploads = 0;
+    qint64 m_fieldJobs = 0;                      // ABI 43
+    FieldRecorder m_fields;                      // ABI 43: job thread only, released before its QRhi
     bool m_tornDown = false;
 };
 
@@ -969,7 +1099,9 @@ public:
                 return false;
             }
         }
-        if (!job.pixels()) {
+        // ABI 43: a field job needs pixels only when its recipe samples an input.
+        const bool needsPixels = !job.recipe || !job.recipe->input.isEmpty();
+        if (needsPixels && !job.pixels()) {
             *error = QStringLiteral("the job has no pixels");
             return false;
         }
@@ -980,6 +1112,24 @@ public:
         m_changed.wakeAll();
         while (m_hold)
             m_changed.wait(&m_mutex); // the "GPU wait" the script holds
+        if (job.recipe) {
+            qint64 total = 0;
+            for (int i = 0; i < job.outputCount(); ++i) {
+                JobOutput &o = job.fieldOutputs[i];
+                o.id = id + quint64(i);
+                o.nativeImage = 0x2000 + o.id;
+                o.nativeLayout = 1;           // VK_IMAGE_LAYOUT_GENERAL, a load-store image's
+                o.bytes = job.recipe->outputBytes(i);
+                total += o.bytes;
+                m_outputs.insert(o.id, true);
+            }
+            job.outputId = id;
+            job.nativeImage = job.fieldOutputs[0].nativeImage;
+            job.nativeLayout = 1;
+            job.outputBytes = total;
+            ++m_fields;
+            return true;
+        }
         job.outputId = id;
         job.nativeImage = 0x1000 + id;
         job.nativeLayout = 7;
@@ -1038,6 +1188,7 @@ public:
         o.insert(QStringLiteral("kind"), QStringLiteral("scripted"));
         o.insert(QStringLiteral("set_ups"), m_setUps);
         o.insert(QStringLiteral("uploads"), m_uploads);
+        o.insert(QStringLiteral("fields"), m_fields);   // ABI 43
         o.insert(QStringLiteral("outputs"), int(m_outputs.size()));
         o.insert(QStringLiteral("destroyed"), m_destroyed);
         o.insert(QStringLiteral("destroyed_at_teardown"), m_destroyedAtTearDown);
@@ -1086,6 +1237,7 @@ private:
     int m_entered = 0;
     int m_setUps = 0;
     int m_uploads = 0;
+    int m_fields = 0;                            // ABI 43: field jobs run
     int m_destroyed = 0;
     int m_destroyedAtTearDown = 0;
     int m_flushes = 0;
@@ -1135,6 +1287,31 @@ QByteArray jobServiceSelfTestJson(const QByteArray &scriptJson)
                                                    image, notifier);
             jobs.insert(name, job);
             seen.insert(QStringLiteral("submitted"), service->submit(job));
+        } else if (op == QLatin1String("submit_field")) {
+            // ABI 43: a field job of `outputs` 2 x 2 rgba16f outputs, sampling an input (with `pixels`) or none.
+            auto recipe = std::make_shared<FieldRecipe>();
+            const int outputs = qBound(1, step.value(QStringLiteral("outputs")).toInt(1), kMaxFieldOutputs);
+            for (int i = 0; i < outputs; ++i) {
+                FieldImage image;
+                image.name = QByteArray("out") + QByteArray::number(i);
+                image.format = QRhiTexture::RGBA16F;
+                image.size = QSize(2, 2);
+                recipe->images.append(image);
+                FieldOutput output;
+                output.image = i;
+                output.texture = QByteArray("field") + QByteArray::number(i);
+                recipe->outputs.append(output);
+            }
+            if (step.value(QStringLiteral("input")).toBool())
+                recipe->input = QByteArrayLiteral("photo");
+            QSharedPointer<TextureImage> image;
+            if (step.value(QStringLiteral("pixels")).toBool(true) && !recipe->input.isEmpty())
+                image = QSharedPointer<TextureImage>::create(QByteArray(64, 0), QSize(4, 4), false);
+            auto job = std::make_shared<UploadJob>(name.toLatin1(), quint64(step.value(QStringLiteral("generation"))
+                                                                               .toInt(1)),
+                                                   image, std::shared_ptr<const FieldRecipe>(recipe), notifier);
+            jobs.insert(name, job);
+            seen.insert(QStringLiteral("submitted"), service->submit(job));
         } else if (op == QLatin1String("hold")) {
             backend->hold(true);
         } else if (op == QLatin1String("go")) {
@@ -1166,12 +1343,18 @@ QByteArray jobServiceSelfTestJson(const QByteArray &scriptJson)
                                                   : result == UploadJob::Cancelled::Published
                                                       ? QStringLiteral("published")
                                                       : QStringLiteral("over"));
-            if (job && result == UploadJob::Cancelled::Published && step.value(QStringLiteral("release")).toBool(true))
-                service->release(job->outputId); // the consumer's duty for an output it was handed
+            if (job && result == UploadJob::Cancelled::Published && step.value(QStringLiteral("release")).toBool(true)) {
+                for (int i = 0; i < job->outputCount(); ++i)
+                    service->release(job->outputIdOf(i)); // the consumer's duty for every output it was handed
+            }
         } else if (op == QLatin1String("release")) {
             const std::shared_ptr<UploadJob> job = jobs.value(name);
-            if (job)
-                service->release(job->outputId);
+            // ABI 43: "outputs" releases the first n of a field job's outputs (all by default).
+            const int count = job ? qMin(job->outputCount(), step.value(QStringLiteral("outputs"))
+                                                                  .toInt(job->outputCount()))
+                                  : 0;
+            for (int i = 0; i < count; ++i)
+                service->release(job->outputIdOf(i));
         } else if (op == QLatin1String("take_pixels")) {
             const std::shared_ptr<UploadJob> job = jobs.value(name);
             seen.insert(QStringLiteral("pixels"), job && !job->takePixels().isNull());

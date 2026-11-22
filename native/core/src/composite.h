@@ -48,6 +48,7 @@ class SpectrumSource;
 class ModeSource;
 class TexturesLostListener;
 struct CompositeStats;
+struct FieldRecipe; // ABI 43 (field_recipe.h)
 struct ModeCard;
 struct ModeProgram;
 struct PacketReaderConfig;
@@ -133,6 +134,10 @@ public:
     bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
                      bool inFrame = false, bool halfFloat = false, bool fullFloat = false);
     bool removeTextureMode(const QByteArray &name, QString *error);
+    // ABI 43 (N5.2g): a field's outputs (mode_content.h ModeSource::setField), made from its recipe; they are removed
+    // like any texture (removeTextureMode, by output name).
+    bool fieldMode(const std::shared_ptr<const FieldRecipe> &recipe, const QByteArray &pixels, const QSize &size,
+                   bool inFrame, int deadlineMs, QString *error);
     // N3.2 (D15 point 2): the item's meshes (mode_content.h): a mesh by name from its declaration and bytes, or its
     // removal.
     bool meshMode(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
@@ -140,6 +145,8 @@ public:
     bool removeMeshMode(const QByteArray &name, QString *error);
     // N3.8: the owner's listener of the lost edge (null: none), called on the GUI thread (item_notifier.h).
     bool texturesLostListener(const std::shared_ptr<TexturesLostListener> &listener, QString *error);
+    // ABI 43: the owner's listener of the ready edge (null: none), likewise.
+    bool texturesReadyListener(const std::shared_ptr<TexturesLostListener> &listener, QString *error);
     ModeSource *mode() const { return m_mode.get(); }
 
     // Any thread: composite items alive in the process.

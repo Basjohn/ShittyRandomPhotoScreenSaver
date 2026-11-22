@@ -187,9 +187,11 @@ def test_a_face_pass_and_the_prefilter_are_checked_at_the_parse():
 
 
 def test_the_abi_is_42_and_the_loader_speaks_it():
+    # ABI 42's entry stands; a later ABI (43, N5.2g) keeps it, and the loader speaks the defined one.
     from rendering.native import loader
-    assert "#define SRPSS_NATIVE_CORE_ABI 42" in _source("abi.h")
-    assert loader.EXPECTED_ABI == 42
+    assert "// 42 (N5.6, Extruded Bubble's core boxes" in _source("abi.h")
+    assert f"#define SRPSS_NATIVE_CORE_ABI {loader.EXPECTED_ABI}" in _source("abi.h")
+    assert loader.EXPECTED_ABI >= 42
     assert "src/cube_prefilter.cpp" in (ROOT / "native" / "core" / "CMakeLists.txt").read_text(encoding="utf-8")
 
 

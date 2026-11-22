@@ -594,6 +594,14 @@ bool CompositeItem::texturesLostListener(const std::shared_ptr<TexturesLostListe
     return true;
 }
 
+bool CompositeItem::texturesReadyListener(const std::shared_ptr<TexturesLostListener> &listener, QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    modeSource()->notifier()->setReadyListener(listener);
+    return true;
+}
+
 bool CompositeItem::modeRefused(QString *error) const
 {
     if (!m_spectrum)
@@ -689,6 +697,19 @@ bool CompositeItem::textureMode(const QByteArray &name, const QByteArray &pixels
         : halfFloat                            ? ModeTextureFormat::RGBA16F
                                                : ModeTextureFormat::RGBA8;
     if (!source->setTexture(name, pixels, size, mips, error, inFrame, format))
+        return false;
+    m_mode = source;
+    update();
+    return true;
+}
+
+bool CompositeItem::fieldMode(const std::shared_ptr<const FieldRecipe> &recipe, const QByteArray &pixels,
+                              const QSize &size, bool inFrame, int deadlineMs, QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    std::shared_ptr<ModeSource> source = currentOrNewMode();
+    if (!source->setField(recipe, pixels, size, inFrame, deadlineMs, error))
         return false;
     m_mode = source;
     update();

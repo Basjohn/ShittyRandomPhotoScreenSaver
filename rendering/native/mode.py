@@ -948,6 +948,24 @@ class NativeMode:
         self._textures_lost = callback
         self._listen()
 
+    def field(self, recipe: Mapping[str, Any], packs: Sequence[bytes], blocks: Sequence[bytes], *,
+              pixels: bytes | None = None, size: tuple[int, int] = (0, 0), in_frame: bool = False,
+              deadline_ms: int = 0) -> None:
+        """ABI 43 (N5.2g): the item's field outputs (each an item texture the recipe names) made from ``recipe``
+        (``native/core/src/field_recipe.h``: images, a flat list of compute dispatches over ``packs`` with ``blocks``,
+        outputs), by the device's job service where it has one (the recipe's input photo uploaded by the job from
+        ``pixels``, RGBA8 of ``size``) or in the frame over the input's front; past ``deadline_ms`` (0: none) the job
+        gives way to the in-frame form. The outputs commit with the item's other textures; remove them by name
+        (:meth:`remove_texture`). ValueError for a refused recipe."""
+        self._module.composite_mode_field(self._handle(), json.dumps(dict(recipe)), [bytes(p) for p in packs],
+                                          [bytes(b) for b in blocks], None if pixels is None else bytes(pixels),
+                                          (int(size[0]), int(size[1])), bool(in_frame), int(deadline_ms))
+
+    def on_textures_ready(self, callback: Callable[[list[str]], None] | None) -> None:
+        """ABI 43: the owner's ready edge: ``callback`` is called on the GUI thread with the textures a record committed
+        (their new images drawn from it on), once per committing record (a transition starts on it). None removes it."""
+        self._module.composite_mode_on_ready(self._handle(), callback)
+
     def on_state_lost(self, callback: Callable[[list[str]], None] | None) -> None:
         """N3.3 (D16 choice I): the owner's lost-state edge: ``callback`` is called on the GUI thread, once, with the
         storage buffers and images a content made again found gone (they are made zeroed and the compute entries

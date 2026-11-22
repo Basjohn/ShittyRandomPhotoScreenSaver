@@ -8,6 +8,9 @@
 // - texturesLost (the render thread): textures of the item's content were found lost (a node made again, a texture that
 //   could not be created): the owner's listener (NativeMode.on_textures_lost) is called on the GUI thread with the names.
 //   The edge, never a state read (N4.a's leftover).
+// - texturesReady (ABI 43, the render thread): a record committed textures of the item's content (their new images drawn
+//   from it on): the owner's ready listener (NativeMode.on_textures_ready) is called on the GUI thread with the names,
+//   once per committing record. A transition's run starts on it (D9 point 2: the start on the job's completion edge).
 #pragma once
 
 #include "job_service.h"
@@ -37,15 +40,20 @@ public:
     void attach(QQuickItem *item);
     void detach();                         // the item's destructor: no edge reaches it afterwards; the listener goes
     void setListener(const std::shared_ptr<TexturesLostListener> &listener);
+    // ABI 43: the ready edge's listener (the same interface: a callable of the names).
+    void setReadyListener(const std::shared_ptr<TexturesLostListener> &listener);
 
     // Any thread.
     void jobFinished() override;
     void requestFrame();
     void texturesLost(const QStringList &names);
+    void texturesReady(const QStringList &names); // ABI 43
 
     quint64 jobsFinished() const { return m_jobsFinished.loadAcquire(); }
     qint64 lostEdges() const { return m_lostEdges.loadRelaxed(); }
     qint64 lostDelivered() const { return m_lostDelivered.loadRelaxed(); }
+    qint64 readyEdges() const { return m_readyEdges.loadRelaxed(); }       // ABI 43
+    qint64 readyDelivered() const { return m_readyDelivered.loadRelaxed(); }
     qint64 frameRequests() const { return m_frameRequests.loadRelaxed(); }
     // Whether an owner's listener is set (audit N38 L4's proof: it goes with the owner's retire).
     bool hasListener() const
@@ -56,10 +64,15 @@ public:
 
 private:
     void deliverLost(const QStringList &names); // GUI thread
+    void deliverReady(const QStringList &names); // GUI thread (ABI 43)
+    void post(const QStringList &names, bool ready);
 
     mutable QMutex m_mutex;
     QQuickItem *m_item = nullptr;                       // valid while attached (the item detaches before it goes)
     std::shared_ptr<TexturesLostListener> m_listener;   // GUI thread only (set, called, released)
+    std::shared_ptr<TexturesLostListener> m_readyListener; // ABI 43, likewise
+    QAtomicInteger<qint64> m_readyEdges { 0 };
+    QAtomicInteger<qint64> m_readyDelivered { 0 };
     QAtomicInteger<quint64> m_jobsFinished { 0 };
     QAtomicInteger<qint64> m_lostEdges { 0 };
     QAtomicInteger<qint64> m_lostDelivered { 0 };

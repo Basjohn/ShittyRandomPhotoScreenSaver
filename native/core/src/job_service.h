@@ -29,6 +29,7 @@
 // (job_service.cpp RhiUploadBackend).
 #pragma once
 
+#include "field_recipe.h"
 #include "pipeline_cache.h"
 #include "thread_probe.h"
 
@@ -74,13 +75,28 @@ public:
     virtual void jobFinished() = 0;
 };
 
+// ABI 43 (N5.2g): one published output of a field job (its ids are consecutive from the first).
+struct JobOutput
+{
+    quint64 id = 0;
+    quint64 nativeImage = 0;   // VkImage
+    int nativeLayout = 0;      // VkImageLayout the job left it in
+    qint64 bytes = 0;
+};
+
 // One upload job: a photo's pixels into a new texture of the job's QRhi, with its mips when asked. The ticket the
 // consumer (render thread) and the job thread share.
+// ABI 43 (N5.2g, D9 point 2 consumer (a)): or a field job: a field recipe (field_recipe.h) recorded on the job queue by
+// the shared FieldRecorder, its input photo uploaded by the job from `pixels` (null: the recipe samples none), its outputs
+// (one to kMaxFieldOutputs) published together under consecutive ids. Everything else (the latch, cancellation, release,
+// teardown) is the upload's.
 class UploadJob
 {
 public:
     UploadJob(const QByteArray &name, quint64 generation, const QSharedPointer<TextureImage> &pixels,
               std::shared_ptr<JobNotifier> notifier);
+    UploadJob(const QByteArray &name, quint64 generation, const QSharedPointer<TextureImage> &pixels,
+              std::shared_ptr<const FieldRecipe> recipe, std::shared_ptr<JobNotifier> notifier);
     ~UploadJob();
     UploadJob(const UploadJob &) = delete;
     UploadJob &operator=(const UploadJob &) = delete;
@@ -90,6 +106,11 @@ public:
     const QSize size;
     const bool mips;
     const ModeTextureFormat format; // ABI 33: the image's (its output texture's format)
+    const std::shared_ptr<const FieldRecipe> recipe; // ABI 43: a field job's (null: an upload)
+
+    // ABI 43: the outputs it publishes (an upload one, a field job its recipe's), and output `index`'s id once published.
+    int outputCount() const;
+    quint64 outputIdOf(int index) const;
 
     JobState state() const { return JobState(m_state.loadAcquire()); }
 
@@ -114,7 +135,8 @@ public:
     quint64 outputId = 0;
     quint64 nativeImage = 0;   // VkImage
     int nativeLayout = 0;      // VkImageLayout the job left it in
-    qint64 outputBytes = 0;    // every level
+    qint64 outputBytes = 0;    // every level (a field job: every output)
+    JobOutput fieldOutputs[kMaxFieldOutputs]; // ABI 43: a field job's, in its recipe's output order (outputId the first)
     QString error;             // failed: why
 
     // Times (ns on one monotonic clock): submitted (consumer), started, recorded (submitted to the GPU), completed (the
@@ -149,6 +171,8 @@ public:
     // Records the upload (and mips), submits, drops the job's pixels (job.dropPixels()) and waits for its own GPU work.
     // True: the output exists under `id` (job.outputId, nativeImage, nativeLayout, outputBytes written). False with the
     // reason: nothing exists under `id` and the pixels are kept unless the upload was submitted.
+    // ABI 43: a field job (job.recipe) records its recipe instead; true: its outputs exist under `id` to `id` +
+    // outputCount() - 1 (job.fieldOutputs written, outputId the first); false: none of them exists.
     virtual bool upload(UploadJob &job, quint64 id, QString *error) = 0;
     // An output nobody will sample: destroyed (after flush(), its memory is free).
     virtual void destroy(quint64 id) = 0;

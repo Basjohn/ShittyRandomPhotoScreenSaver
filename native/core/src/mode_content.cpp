@@ -2422,6 +2422,8 @@ bool parseModeTextureFormat(const QString &text, ModeTextureFormat *out)
         *out = ModeTextureFormat::RGBA16F;
     else if (text == QLatin1String("rgba32f"))
         *out = ModeTextureFormat::RGBA32F;    // ABI 37
+    else if (text == QLatin1String("r32f"))
+        *out = ModeTextureFormat::R32F;       // ABI 43
     else
         return false;
     return true;
@@ -2434,6 +2436,8 @@ QString modeTextureFormatName(ModeTextureFormat format)
         return QStringLiteral("rgba16f");
     case ModeTextureFormat::RGBA32F:
         return QStringLiteral("rgba32f");     // ABI 37
+    case ModeTextureFormat::R32F:
+        return QStringLiteral("r32f");        // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -2447,6 +2451,8 @@ QRhiTexture::Format modeTextureRhiFormat(ModeTextureFormat format)
         return QRhiTexture::RGBA16F;
     case ModeTextureFormat::RGBA32F:
         return QRhiTexture::RGBA32F;          // ABI 37
+    case ModeTextureFormat::R32F:
+        return QRhiTexture::R32F;             // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -2460,6 +2466,8 @@ int modeTextureTexelBytes(ModeTextureFormat format)
         return 8;
     case ModeTextureFormat::RGBA32F:
         return 16;                            // ABI 37
+    case ModeTextureFormat::R32F:
+        return 4;                             // ABI 43
     case ModeTextureFormat::RGBA8:
         break;
     }
@@ -4358,6 +4366,11 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
         *error = QStringLiteral("texture '%1': an rgba32f texture has no mips").arg(QString::fromLatin1(name));
         return false;
     }
+    if (mips && format == ModeTextureFormat::R32F) {
+        // ABI 43: likewise a field's r32f output.
+        *error = QStringLiteral("texture '%1': an r32f texture has no mips").arg(QString::fromLatin1(name));
+        return false;
+    }
     QMutexLocker lock(&m_mutex);
     const QString fits = m_program.textureFits(name, mips);
     if (!fits.isEmpty()) {
@@ -4384,6 +4397,79 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
     slot->format = format;                    // ABI 33
     slot->inFrame = inFrame;
     slot->image = QSharedPointer<TextureImage>::create(pixels, size, mips, format); // the one it replaces (if not taken) goes
+    slot->field.reset();                      // ABI 43: pixels now, no longer a field's output
+    slot->fieldOutput = -1;
+    slot->fieldDeadlineMs = 0;
+    ++m_generation;
+    ++m_buildGeneration;
+    return true;
+}
+
+bool ModeSource::setField(const std::shared_ptr<const FieldRecipe> &recipe, const QByteArray &pixels, const QSize &size,
+                          bool inFrame, int deadlineMs, QString *error)
+{
+    if (!recipe || recipe->outputs.isEmpty() || recipe->dispatches.isEmpty()) {
+        *error = QStringLiteral("a field needs an admitted recipe with outputs");
+        return false;
+    }
+    if (deadlineMs < 0 || deadlineMs > kMaxFieldDeadlineMs) {
+        *error = QStringLiteral("a field's deadline is 0 to %1 ms").arg(kMaxFieldDeadlineMs);
+        return false;
+    }
+    QSharedPointer<TextureImage> image;
+    if (!pixels.isEmpty()) {
+        if (recipe->input.isEmpty()) {
+            *error = QStringLiteral("the field's recipe samples no input: it takes no pixels");
+            return false;
+        }
+        if (size.width() < 1 || size.height() < 1 || size.width() > kMaxTextureSide || size.height() > kMaxTextureSide
+            || qint64(pixels.size()) != qint64(size.width()) * qint64(size.height()) * 4) {
+            *error = QStringLiteral("the field's input pixels are not %1 x %2 RGBA8, rows top first and tight")
+                         .arg(size.width()).arg(size.height());
+            return false;
+        }
+        image = QSharedPointer<TextureImage>::create(pixels, size, false, ModeTextureFormat::RGBA8);
+    }
+    QMutexLocker lock(&m_mutex);
+    int added = 0;
+    for (const FieldOutput &output : recipe->outputs) {
+        const QString fits = m_program.textureFits(output.texture, false);
+        if (!fits.isEmpty()) {
+            *error = fits;
+            return false;
+        }
+        bool held = false;
+        for (const ModeTexture &texture : m_textures)
+            held = held || texture.name == output.texture;
+        added += held ? 0 : 1;
+    }
+    if (m_textures.size() + added > kMaxModeTextures) {
+        *error = QStringLiteral("an item holds at most %1 textures").arg(kMaxModeTextures);
+        return false;
+    }
+    const quint64 generation = g_textureGenerations.fetchAndAddRelaxed(1) + 1; // one for every output
+    for (int i = 0; i < int(recipe->outputs.size()); ++i) {
+        const QByteArray &name = recipe->outputs.at(i).texture;
+        ModeTexture *slot = nullptr;
+        for (ModeTexture &texture : m_textures) {
+            if (texture.name == name)
+                slot = &texture;
+        }
+        if (!slot) {
+            m_textures.append(ModeTexture());
+            slot = &m_textures.last();
+            slot->name = name;
+        }
+        slot->generation = generation;
+        slot->size = recipe->outputSize(i);
+        slot->mips = false;
+        slot->format = recipe->outputFormat(i);
+        slot->inFrame = inFrame;
+        slot->image = i == 0 ? image : QSharedPointer<TextureImage>();
+        slot->field = recipe;
+        slot->fieldOutput = i;
+        slot->fieldDeadlineMs = deadlineMs;
+    }
     ++m_generation;
     ++m_buildGeneration;
     return true;
@@ -4508,6 +4594,11 @@ QByteArray ModeSource::geometryArenaName() const
 void ModeSource::texturesLost(const QStringList &names)
 {
     m_notifier->texturesLost(names); // queued to the GUI thread (item_notifier.h)
+}
+
+void ModeSource::texturesReady(const QStringList &names)
+{
+    m_notifier->texturesReady(names); // ABI 43: queued to the GUI thread (item_notifier.h)
 }
 
 bool ModeSource::setTargetSize(const QByteArray &name, const QSize &size, QString *error)
@@ -4731,6 +4822,10 @@ bool ModeSource::sync()
         m_takenJobsFinished = finished;
         changed = true;
     }
+    // ABI 43: a field job with a deadline is in flight: each frame the item renders records, so the deadline is seen at
+    // the first frame past it (the owner asks a frame per tick while it waits; at rest nothing is in flight).
+    if (m_fieldsWaiting.loadRelaxed())
+        changed = true;
     if (syncStream())
         changed = true;
     return changed;
@@ -4758,6 +4853,12 @@ void ModeSource::stateInto(QJsonObject &o) const
         t.insert(QStringLiteral("format"), modeTextureFormatName(texture.format)); // ABI 33
         t.insert(QStringLiteral("in_frame"), texture.inFrame);
         t.insert(QStringLiteral("image_held"), !texture.image.isNull()); // not yet taken by the render thread
+        if (texture.field) {                  // ABI 43: a field's output
+            t.insert(QStringLiteral("field_output"), texture.fieldOutput);
+            t.insert(QStringLiteral("field_input"), QString::fromLatin1(texture.field->input));
+            t.insert(QStringLiteral("field_dispatches"), int(texture.field->dispatches.size()));
+            t.insert(QStringLiteral("field_deadline_ms"), texture.fieldDeadlineMs);
+        }
         textures.append(t);
     }
     o.insert(QStringLiteral("textures"), textures);
@@ -4789,6 +4890,15 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
     o.insert(QStringLiteral("waiting_kept"), double(r.waitingKept)); // black flicker: the held frame while waiting
+    QJsonObject fields;                       // ABI 43 (N5.2g)
+    fields.insert(QStringLiteral("submitted"), double(r.fieldsSubmitted));
+    fields.insert(QStringLiteral("committed"), double(r.fieldsCommitted));
+    fields.insert(QStringLiteral("in_frame"), double(r.fieldsInFrame));
+    fields.insert(QStringLiteral("past_deadline"), double(r.fieldsPastDeadline));
+    fields.insert(QStringLiteral("failures"), double(r.fieldFailures));
+    o.insert(QStringLiteral("fields"), fields);
+    o.insert(QStringLiteral("textures_ready_edges"), double(m_notifier->readyEdges()));
+    o.insert(QStringLiteral("textures_ready_delivered"), double(m_notifier->readyDelivered()));
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("storage"), m_storageState);                             // N3.3 (noted at an edge)
@@ -5008,6 +5118,11 @@ void ModeContent::release()
         texture.name.clear();
     }
     m_textureChains.release();                // ABI 35: the box kernel's pipelines (after the chains that bind them)
+    m_fieldRecorder.release();                // ABI 43: the in-frame form's pipelines, with the content
+    if (m_source)
+        m_source->setFieldsWaiting(false);
+    m_committed.clear();
+    m_fieldFailed.clear();
     m_texturesLost.clear();
     m_textureFailures.clear();
     m_lostNames.clear();
@@ -5093,14 +5208,19 @@ void ModeContent::dropCandidate(GpuTexture &texture)
 {
     if (texture.job) {
         // Superseded, removed or released before the commit (D9 as built point 5).
+        // ABI 43: a field job's outputs are released each by its own slot (a pending cancel drops them all).
         if (texture.job->cancel() == UploadJob::Cancelled::Published && texture.jobService)
-            texture.jobService->release(texture.job->outputId); // published first: never sampled, released at once
+            texture.jobService->release(texture.job->outputIdOf(qMax(0, texture.fieldOutput))); // never sampled
         ++m_report.jobsCancelled;
     }
     texture.job.reset();
     texture.jobService.reset();
     texture.pixels.reset();
     texture.candidate = 0;
+    texture.field.reset();
+    texture.fieldOutput = -1;
+    texture.fieldDeadlineNs = 0;
+    texture.fieldInFrame = false;
 }
 
 void ModeContent::clearSlotIfEmpty(GpuTexture &texture)
@@ -5141,7 +5261,8 @@ void ModeContent::retireTextures()
             }
             const bool drawnNow = s && s->texture && s->generation == d.generation;
             const bool coming = s && s->candidate == d.generation;
-            if (!drawnNow && !coming && !d.image) {
+            // ABI 43: a field's output is never lost: its recipe makes it again (in the frame, over its input).
+            if (!drawnNow && !coming && !d.image && !d.field) {
                 lost.append(QString::fromLatin1(name));
                 names.append(QString::fromLatin1(name));
             }
@@ -5247,6 +5368,21 @@ void ModeContent::recordTextureChains(QRhi *rhi, QRhiCommandBuffer *cb, QRhiReso
 
 RhiOwned<QRhiTexture> ModeContent::importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
 {
+    if (job.recipe) {
+        // ABI 43: a field job's output (its load-store image, in the layout the job left it), by the slot's index.
+        const int o = qBound(0, gpu.fieldOutput, job.outputCount() - 1);
+        const QSize size = job.recipe->outputSize(o);
+        RhiOwned<QRhiTexture> field(rhi->newTexture(modeTextureRhiFormat(job.recipe->outputFormat(o)), size, 1,
+                                                    QRhiTexture::UsedWithLoadStore));
+        field->setName(QByteArrayLiteral("srpss core field texture ") + gpu.name + QByteArrayLiteral(" (job output)"));
+        if (!field->createFrom({ job.fieldOutputs[o].nativeImage, job.fieldOutputs[o].nativeLayout })) {
+            m_textureFailures.append(QStringLiteral("%1 could not be imported from its field job at %2 x %3")
+                                         .arg(QString::fromLatin1(gpu.name)).arg(size.width()).arg(size.height()));
+            ++m_report.importFailures;
+            return nullptr;
+        }
+        return field;
+    }
     // ABI 35: the job uploads level 0 only; the chain is the box kernel's here, after the import (recordTextureChains).
     const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithLoadStore)
                                               : QRhiTexture::Flags();
@@ -5269,10 +5405,13 @@ void ModeContent::adoptImport(GpuTexture &gpu, RhiOwned<QRhiTexture> imported, c
     releaseFront(gpu);                        // the picture it replaces: to the window's retire list, or Qt's own
     gpu.texture = std::move(imported);
     gpu.frontService = gpu.jobService;
-    gpu.frontOutput = job.outputId;
+    const int o = job.recipe ? qBound(0, gpu.fieldOutput, job.outputCount() - 1) : 0; // ABI 43: its own output
+    gpu.frontOutput = job.outputIdOf(o);
     gpu.generation = job.generation;
     gpu.chainPending = job.mips;              // ABI 35: its levels by the box kernel in this record
-    gpu.bytes = job.outputBytes;
+    gpu.bytes = job.recipe ? job.fieldOutputs[o].bytes : job.outputBytes;
+    if (job.recipe)
+        ++m_report.fieldsCommitted;
     g_liveTextures.fetchAndAddRelaxed(1);
     g_textureBytes.fetchAndAddRelaxed(gpu.bytes);
     ++m_textureObjects;
@@ -5299,6 +5438,13 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
         }
         if (gpu && gpu->candidate == drawn.generation)
             continue;                         // in flight, or held for the commit
+        if (drawn.field) {
+            // ABI 43: a field's outputs, all of its recipe at once (one job, or the in-frame form at the commit); a
+            // generation the frame could not make is not tried again.
+            if (m_fieldFailed.value(drawn.name) != drawn.generation)
+                submitted = startField(service, drawn, bytes) || submitted;
+            continue;
+        }
         const QSharedPointer<TextureImage> image = m_source->takeTextureImage(drawn.name);
         if (!image)
             continue;                         // lost (retireTextures named it)
@@ -5330,7 +5476,13 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
         gpu->pixels = image;
     }
     // 2. The item's textures commit together (point 3): only once every candidate is ready (its job done or failed, or
-    //    its pixels held); until then the fronts it holds are drawn.
+    //    its pixels held); until then the fronts it holds are drawn. ABI 43: a field job past its deadline gives way to
+    //    the in-frame form first (D9 point 2: the transition's start does not wait longer).
+    fieldDeadlines();
+    bool fieldsWaiting = false;
+    for (const GpuTexture &gpu : m_textures)
+        fieldsWaiting = fieldsWaiting || (gpu.candidate && gpu.field && gpu.job && gpu.fieldDeadlineNs);
+    m_source->setFieldsWaiting(fieldsWaiting);
     int pending = 0;
     bool any = false;
     for (const GpuTexture &gpu : m_textures) {
@@ -5364,8 +5516,8 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
                 continue;
             imported[i].reset();              // a wrapper only (createFrom owns nothing): nothing native goes with it
             if (gpu.job && gpu.job->state() == JobState::Done) {
-                if (gpu.jobService)
-                    gpu.jobService->release(gpu.job->outputId); // never sampled
+                if (gpu.jobService)                             // never sampled (ABI 43: the slot's own output)
+                    gpu.jobService->release(gpu.job->outputIdOf(qMax(0, gpu.fieldOutput)));
             }
             const QString label = QString::fromLatin1(gpu.name);
             bool named = false;
@@ -5379,6 +5531,10 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
             gpu.jobService.reset();
             gpu.pixels.reset();
             gpu.candidate = 0;
+            gpu.field.reset();                // ABI 43
+            gpu.fieldOutput = -1;
+            gpu.fieldDeadlineNs = 0;
+            gpu.fieldInFrame = false;
             clearSlotIfEmpty(gpu);
         }
         m_report.jobsPending = 0;
@@ -5392,17 +5548,38 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
         if (!gpu.candidate)
             continue;
         const quint64 generation = gpu.candidate;
+        if (gpu.field) {
+            // ABI 43: a field's output: its job's, or the in-frame form, recorded after this (recordFieldsInFrame) over
+            // its input's front, which this commit has switched already.
+            if (gpu.job && gpu.job->state() == JobState::Done) {
+                adoptImport(gpu, std::move(imported[i]), *gpu.job);
+                committedJob = true;
+                m_committed.append(QString::fromLatin1(gpu.name));
+                gpu.candidate = 0;
+                gpu.field.reset();
+                gpu.fieldOutput = -1;
+                gpu.fieldDeadlineNs = 0;
+                gpu.fieldInFrame = false;
+            } else {
+                gpu.fieldInFrame = true;      // failed, abandoned, past its deadline, or never a job
+            }
+            gpu.job.reset();
+            gpu.jobService.reset();
+            continue;                         // an in-frame one keeps its candidate until it is recorded
+        }
         if (gpu.job) {
             const std::shared_ptr<UploadJob> job = gpu.job;
             if (job->state() == JobState::Done) {
                 adoptImport(gpu, std::move(imported[i]), *job);
                 committedJob = true;
+                m_committed.append(QString::fromLatin1(gpu.name)); // ABI 43: the ready edge's names
             } else {
                 // Failed (or abandoned): the in-frame form from the pixels the job kept (fail closed).
                 const QSharedPointer<TextureImage> pixels = job->takePixels();
                 if (pixels && uploadInFrame(rhi, updates, gpu, pixels, generation)) {
                     ++m_report.jobsFellBack;
                     committedInFrame = true;
+                    m_committed.append(QString::fromLatin1(gpu.name)); // ABI 43
                     *bytes += qint64(pixels->pixels.size());
                 } else if (!pixels) {
                     // L5: an abandoned job (its service stopped) has its own reason, never an empty one.
@@ -5416,7 +5593,10 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
             gpu.job.reset();
             gpu.jobService.reset();
         } else if (gpu.pixels) {
-            committedInFrame = uploadInFrame(rhi, updates, gpu, gpu.pixels, generation) || committedInFrame;
+            if (uploadInFrame(rhi, updates, gpu, gpu.pixels, generation)) {
+                committedInFrame = true;
+                m_committed.append(QString::fromLatin1(gpu.name)); // ABI 43
+            }
             gpu.pixels.reset();
         }
         gpu.candidate = 0;
@@ -5428,6 +5608,141 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
     if (committedInFrame)
         kind += kind.isEmpty() ? QStringLiteral("in_frame") : QStringLiteral("+in_frame");
     return kind;
+}
+
+bool ModeContent::startField(const std::shared_ptr<JobService> &service, const ModeTexture &first, qint64 *bytes)
+{
+    const std::shared_ptr<const FieldRecipe> recipe = first.field;
+    const quint64 generation = first.generation;
+    // The recipe's outputs as drawn (one generation), and its input's pixels (output 0's, when the item sent them).
+    QList<const ModeTexture *> outputs;
+    QSharedPointer<TextureImage> pixels;
+    for (const ModeTexture &d : m_source->drawnTextures()) {
+        if (d.field != recipe || d.generation != generation)
+            continue;
+        outputs.append(&d);
+    }
+    for (const ModeTexture *d : outputs) {
+        if (d->fieldOutput == 0)
+            pixels = m_source->takeTextureImage(d->name);
+    }
+    std::shared_ptr<UploadJob> job;
+    if (service && !first.inFrame && (recipe->input.isEmpty() || pixels)) {
+        job = std::make_shared<UploadJob>(recipe->outputs.first().texture, generation, pixels, recipe,
+                                          m_source->notifier());
+        if (service->submit(job)) {
+            ++m_report.jobsSubmitted;
+            ++m_report.fieldsSubmitted;
+        } else {
+            job.reset();                      // refused (the service failed or stopped): the in-frame form
+        }
+    }
+    if (pixels)
+        *bytes += qint64(pixels->pixels.size());
+    const qint64 now = jobClockNs();
+    for (const ModeTexture *d : outputs) {
+        GpuTexture *gpu = slot(d->name);
+        if (!gpu) {
+            gpu = freeSlot();
+            if (!gpu)
+                continue;                     // never: an item holds at most kMaxModeTextures, removed ones go first
+            gpu->name = d->name;
+        }
+        dropCandidate(*gpu);                  // superseded
+        const QString label = QString::fromLatin1(d->name);
+        for (int i = m_textureFailures.size() - 1; i >= 0; --i) {
+            if (m_textureFailures.at(i).startsWith(label + QLatin1Char(' ')))
+                m_textureFailures.removeAt(i); // a new recipe re-arms a failed one
+        }
+        gpu->candidate = generation;
+        gpu->field = recipe;
+        gpu->fieldOutput = d->fieldOutput;
+        gpu->job = job;                       // one job for every output of the recipe
+        gpu->jobService = job ? service : std::shared_ptr<JobService>();
+        gpu->fieldDeadlineNs = job && d->fieldDeadlineMs > 0 ? now + qint64(d->fieldDeadlineMs) * 1000000 : 0;
+        gpu->fieldInFrame = false;            // set by the commit only (the input it reads switches with it)
+    }
+    return bool(job);
+}
+
+void ModeContent::fieldDeadlines()
+{
+    const qint64 now = jobClockNs();
+    for (GpuTexture &gpu : m_textures) {
+        if (!gpu.candidate || !gpu.field || !gpu.job || !gpu.fieldDeadlineNs || now < gpu.fieldDeadlineNs
+            || jobTerminal(gpu.job->state()))
+            continue;
+        const std::shared_ptr<UploadJob> job = gpu.job;
+        // Published or failed meanwhile: committed as it stands. Pending: the job drops what it makes, and every output
+        // of its recipe is recorded in the frame at this commit.
+        if (job->cancel() != UploadJob::Cancelled::Pending)
+            continue;
+        ++m_report.fieldsPastDeadline;
+        ++m_report.jobsCancelled;
+        for (GpuTexture &sibling : m_textures) {
+            if (sibling.job != job)
+                continue;
+            sibling.job.reset();              // ready for the commit, which records it in the frame
+            sibling.jobService.reset();
+            sibling.fieldDeadlineNs = 0;
+        }
+    }
+}
+
+void ModeContent::recordFieldsInFrame(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch **updates)
+{
+    for (int i = 0; i < kMaxModeTextures; ++i) {
+        GpuTexture &first = m_textures[i];
+        if (!first.candidate || !first.field || !first.fieldInFrame || first.job)
+            continue;
+        const std::shared_ptr<const FieldRecipe> recipe = first.field;
+        const quint64 generation = first.candidate;
+        const GpuTexture *input = recipe->input.isEmpty() ? nullptr : front(recipe->input);
+        FieldOutputs outputs;
+        QString why;
+        bool ok = false;
+        if (!recipe->input.isEmpty() && (!input || !input->texture)) {
+            why = QStringLiteral("its input '%1' has no picture").arg(QString::fromLatin1(recipe->input));
+        } else {
+            ok = m_fieldRecorder.record(rhi, cb, *recipe, input ? input->texture.get() : nullptr, updates, &outputs,
+                                        &why);
+        }
+        if (ok)
+            ++m_report.fieldsInFrame;
+        else
+            ++m_report.fieldFailures;
+        for (GpuTexture &gpu : m_textures) {
+            if (gpu.field != recipe || gpu.candidate != generation || !gpu.fieldInFrame)
+                continue;
+            if (ok) {
+                const int o = qBound(0, gpu.fieldOutput, int(recipe->outputs.size()) - 1);
+                releaseFront(gpu);            // the field it replaces (the previous run's), at once or to the retire list
+                gpu.texture = std::move(outputs.textures[o]);
+                gpu.generation = generation;
+                gpu.bytes = recipe->outputBytes(o);
+                gpu.chainPending = false;
+                g_liveTextures.fetchAndAddRelaxed(1);
+                g_textureBytes.fetchAndAddRelaxed(gpu.bytes);
+                g_textureUploads.fetchAndAddRelaxed(1);
+                ++m_textureObjects;
+                ++m_report.uploads;
+                m_committed.append(QString::fromLatin1(gpu.name));
+            } else {
+                // Fail closed: the previous field is not drawn under the new run, the output is named lost with its
+                // reason, and this generation is not tried again (a new recipe is).
+                releaseFront(gpu);
+                m_textureFailures.append(QStringLiteral("%1 could not be made in the frame: %2")
+                                             .arg(QString::fromLatin1(gpu.name), why));
+                m_fieldFailed.insert(gpu.name, generation);
+            }
+            gpu.candidate = 0;
+            gpu.field.reset();
+            gpu.fieldOutput = -1;
+            gpu.fieldDeadlineNs = 0;
+            gpu.fieldInFrame = false;
+            clearSlotIfEmpty(gpu);
+        }
+    }
 }
 
 QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *triangle) const
@@ -7715,6 +8030,16 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     // N4.a, N3.8: each new image once, before the passes that sample it: handed to a job, or uploaded in the frame;
     // the item's textures commit together.
     const QString imageChange = advanceTextures(rhi, updates, &imageBytes);
+    // ABI 43 (N5.2g): the field outputs this commit makes in the frame, over their inputs' fronts just switched (the
+    // record's uploads go with their first compute pass, so a new batch takes the rest); then the owner's ready edge
+    // with every texture the commit switched (the transition's start, D9 point 2), once per committing record.
+    recordFieldsInFrame(rhi, cb, &updates);
+    if (!updates)
+        updates = rhi->nextResourceUpdateBatch();
+    if (!m_committed.isEmpty()) {
+        m_source->texturesReady(m_committed);
+        m_committed.clear();
+    }
     reportTextures();
     // N3.2 (D15 point 2): each new mesh once, before the passes that draw it; a mesh the item no longer holds goes.
     m_meshesLost.clear();

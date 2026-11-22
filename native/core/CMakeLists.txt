@@ -103,6 +103,7 @@ set(_sources
     src/cube_prefilter.cpp
     src/mesh_buffers.cpp
     src/compute_passes.cpp
+    src/field_recipe.cpp
     src/geometry_arena.cpp
     src/post_stages.cpp
     src/job_service.cpp

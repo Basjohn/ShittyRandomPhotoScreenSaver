@@ -15,12 +15,15 @@ void ItemNotifier::attach(QQuickItem *item)
 void ItemNotifier::detach()
 {
     std::shared_ptr<TexturesLostListener> listener;
+    std::shared_ptr<TexturesLostListener> ready;
     {
         QMutexLocker lock(&m_mutex);
         m_item = nullptr;
         listener.swap(m_listener);
+        ready.swap(m_readyListener);
     }
-    // `listener` is released here, on the GUI thread (a Python callable's reference goes with the GIL taken there).
+    // `listener` and `ready` are released here, on the GUI thread (a Python callable's reference goes with the GIL
+    // taken there).
 }
 
 void ItemNotifier::setListener(const std::shared_ptr<TexturesLostListener> &listener)
@@ -29,6 +32,16 @@ void ItemNotifier::setListener(const std::shared_ptr<TexturesLostListener> &list
     QMutexLocker lock(&m_mutex);
     previous = m_listener;
     m_listener = listener;
+    lock.unlock();
+    // `previous` goes here, on the GUI thread.
+}
+
+void ItemNotifier::setReadyListener(const std::shared_ptr<TexturesLostListener> &listener)
+{
+    std::shared_ptr<TexturesLostListener> previous;
+    QMutexLocker lock(&m_mutex);
+    previous = m_readyListener;
+    m_readyListener = listener;
     lock.unlock();
     // `previous` goes here, on the GUI thread.
 }
@@ -56,14 +69,31 @@ void ItemNotifier::texturesLost(const QStringList &names)
     if (names.isEmpty())
         return;
     m_lostEdges.fetchAndAddRelaxed(1);
+    post(names, false);
+}
+
+void ItemNotifier::texturesReady(const QStringList &names)
+{
+    if (names.isEmpty())
+        return;
+    m_readyEdges.fetchAndAddRelaxed(1);
+    post(names, true);
+}
+
+void ItemNotifier::post(const QStringList &names, bool ready)
+{
     QMutexLocker lock(&m_mutex);
     QQuickItem *item = m_item;
     if (!item)
         return;
     const std::weak_ptr<ItemNotifier> weak = weak_from_this();
-    QMetaObject::invokeMethod(item, [weak, names]() {
-        if (const std::shared_ptr<ItemNotifier> self = weak.lock())
-            self->deliverLost(names);
+    QMetaObject::invokeMethod(item, [weak, names, ready]() {
+        if (const std::shared_ptr<ItemNotifier> self = weak.lock()) {
+            if (ready)
+                self->deliverReady(names);
+            else
+                self->deliverLost(names);
+        }
     }, Qt::QueuedConnection);
 }
 
@@ -79,6 +109,20 @@ void ItemNotifier::deliverLost(const QStringList &names)
     m_lostDelivered.fetchAndAddRelaxed(1);
     if (listener)
         listener->texturesLost(names); // outside the lock: the owner may destroy the item from its callback
+}
+
+void ItemNotifier::deliverReady(const QStringList &names)
+{
+    std::shared_ptr<TexturesLostListener> listener;
+    {
+        QMutexLocker lock(&m_mutex);
+        if (!m_item)
+            return;
+        listener = m_readyListener;
+    }
+    m_readyDelivered.fetchAndAddRelaxed(1);
+    if (listener)
+        listener->texturesLost(names); // the listener's one call: here it means "committed" (outside the lock)
 }
 
 } // namespace srpss_core
