@@ -7,8 +7,9 @@ The ABI 42 keys the product's face does not speak yet (the port's) are sent as r
 face's own ``program_json``.
 
 Rounds (each with its control):
-  limits    a 48-pass, 6-target program admitted and drawn (its last pass's fill read back), nothing recorded at rest; 49
-            passes and 7 targets refused with their reasons; six surface-sized RGBA16F targets' bytes at 3840x2160.
+  limits    a 48-pass, 6-target program admitted and drawn (its last pass's fill read back), nothing recorded at
+            rest; 49 passes and 7 targets refused with their reasons; six surface-sized RGBA16F targets' bytes at
+            3840x2160.
   skip      a pass's "when" (a record u32): at 0 it draws nothing (the frame equals the program without it), at 1 it
             draws; mode_entries_skipped counts each skipped record. The defocus step and its near layer skipped at 0:
             the frame equals the program without the layer, stage_defocus_records flat. Control: the program-only form
@@ -17,6 +18,12 @@ Rounds (each with its control):
             report in the state ("check") exact as DriftSolver.check judges it, taken at a later record (records go on),
             flat over a steady run, the harness readback never used. Control: the kernel without its error terms is
             reported inexact.
+  geometry  D3 on a harness writer of geometry_arena.h's layout: one upload a key, the same revision under another
+            namespace drawing its own bytes, "@previous" at the swap, a capacity growth, an invalid bank failed once
+            with the old drawn, zero residencies after a mode switch and teardown.
+  probe     a cube drawn face by face (through v_uv and through uMatrix), its prefilter, every face and level read back
+            against a CPU twin of probe.py's chain, lookups at levels 0, 2 and 3 and across face edges. Controls:
+            swapped faces, a per-face box chain, a clamped (non-seamless) read.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/eb_core_check.py --module-dir release/native_module --require-validation
@@ -411,7 +418,7 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
                               unread_retry=("w",))
         try:
             plain = _targets(scene, publish={"w": 0})["scene.colour"]
-            checks["control_program_only_form_still_draws_at_0"] = bool((np.abs(plain.astype(np.int16) - both.astype(np.int16)) <= 1).all())
+            checks["control_program_only_form_still_draws_at_0"] = near(plain, both)
         finally:
             _close(scene, host, app)
         facts["defocus"] = _defocus_skip(core, engine, app, host, packs, checks)
@@ -434,7 +441,8 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
     gated = tuple(_with(p, when="w") if (isinstance(p, ModePass) and p.name == "near") or isinstance(p, DefocusStep)
                   else p for p in passes)
     # The reference: the same program without the near layer, its target and its defocus step.
-    plain_passes = tuple(p for p in passes if not ((isinstance(p, ModePass) and p.name == "near") or isinstance(p, DefocusStep)))
+    plain_passes = tuple(p for p in passes
+                         if not ((isinstance(p, ModePass) and p.name == "near") or isinstance(p, DefocusStep)))
     plain_targets = tuple(t for t in targets if t.name != "near")
     plain_settings = ps.values_for(plain_passes)
     entries = (("w", "u32", 1),)
@@ -889,7 +897,8 @@ def round_probe(core, engine, app, api: str, packs: dict) -> dict:
                 state = scene.mode.state()
                 live = _live(core)
                 facts[f"{label}_counts"] = {k: _delta(live, before, k) for k in
-                                            ("scene_cube_face_runs", "scene_cube_prefilters", "scene_cube_level_copies")}
+                                            ("scene_cube_face_runs", "scene_cube_prefilters",
+                                             "scene_cube_level_copies")}
                 facts[f"{label}_reason"] = state.get("last_reason")
                 facts[f"{label}_failing"] = state.get("content_failing")
             finally:
@@ -905,8 +914,8 @@ def round_probe(core, engine, app, api: str, packs: dict) -> dict:
     if OUT is not None:
         for label, images in got.items():
             stem = "probe" if label == "probe" else f"probe_{label}"
-            np.savez_compressed(OUT / f"{stem}_{api}.npz", **{k.replace(".", "_").replace("#", "_f").replace("@", "_l"): v
-                                                              for k, v in images.items()})
+            named = {k.replace(".", "_").replace("#", "_f").replace("@", "_l"): v for k, v in images.items()}
+            np.savez_compressed(OUT / f"{stem}_{api}.npz", **named)
     d = look["look.dir"][..., :3].astype(np.float64) * 2.0 - 1.0
     d /= np.linalg.norm(d, axis=-1, keepdims=True)
     errors = {}
@@ -950,8 +959,7 @@ def round_probe(core, engine, app, api: str, packs: dict) -> dict:
     swapped = got["swapped"]["look.l0"][..., :3].astype(np.float64)
     matrix_l0 = got["matrix"]["look.l0"][..., :3].astype(np.float64)
     facts["matrix_l0_max_error"] = float(np.abs(matrix_l0 - _cube_sample(cone[0], d)).max())
-    checks["faces_drawn_through_umatrix_match_the_twin"] = facts["matrix_l0_max_error"] <= tol[0] if False else (
-        facts["matrix_l0_max_error"] <= 0.01)
+    checks["faces_drawn_through_umatrix_match_the_twin"] = facts["matrix_l0_max_error"] <= 0.01
     facts["swapped_l0_max_error"] = float(np.abs(swapped - _cube_sample(cone[0], d)).max())
     tol = {0: 0.01, 2: 0.03, 3: 0.05}
     checks["drawn_with_no_failure"] = not facts["probe_failing"] and not facts["probe_reason"]
