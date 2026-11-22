@@ -1566,7 +1566,7 @@ PyObject *mesh_buffer_control(PyObject *, PyObject *args)
     const QJsonObject o = QJsonDocument::fromJson(QByteArray(json, qsizetype(length))).object();
     static const QStringList keys = { QStringLiteral("hide_draw_parameters"), QStringLiteral("direct_first_instance"),
                                       QStringLiteral("recreate_streams"), QStringLiteral("skip_mesh_release"),
-                                      QStringLiteral("instances_past_used") };
+                                      QStringLiteral("instances_past_used"), QStringLiteral("hide_draw_indirect") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             PyErr_Format(PyExc_ValueError, "unknown control '%s' (%s)", it.key().toUtf8().constData(),
@@ -1584,6 +1584,8 @@ PyObject *mesh_buffer_control(PyObject *, PyObject *args)
         srpss_core::setSkipMeshRelease(o.value(QStringLiteral("skip_mesh_release")).toBool());
     if (o.contains(QStringLiteral("instances_past_used")))
         srpss_core::setInstancesPastUsed(o.value(QStringLiteral("instances_past_used")).toBool());
+    if (o.contains(QStringLiteral("hide_draw_indirect")))                   // ABI 41
+        srpss_core::setHideDrawIndirect(o.value(QStringLiteral("hide_draw_indirect")).toBool());
     Py_RETURN_NONE;
 }
 
@@ -3121,7 +3123,8 @@ PyMethodDef methods[] = {
       "32-bit float formats)" },
     { "mesh_buffer_control", mesh_buffer_control, METH_VARARGS,
       "(controls_json) -> None: N3.2, harness: the proofs' negative controls (hide_draw_parameters, "
-      "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used), process-wide." },
+      "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used; ABI 41: hide_draw_indirect), "
+      "process-wide." },
     { "mesh_buffer_arena_layout", mesh_buffer_arena_layout, METH_VARARGS,
       "([block sizes], alignment) -> ([offsets], size): D15 point 3's block arena layout (GPU-free)." },
     { "vulkan_device_facts", vulkan_device_facts, METH_VARARGS,
