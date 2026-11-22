@@ -681,22 +681,14 @@ def _decoded(entry: tuple):
     import numpy as np
 
     fmt, size, _level, data = entry
-    name = str(fmt).lower()
-    dtype = _READ_DTYPES.get(name)
+    dtype = _READ_DTYPES.get(str(fmt).lower())
     if dtype is None:
         return None
+    values = np.frombuffer(data, dtype).astype(np.float64)
     width, height = int(size[0]), int(size[1])
     depth = int(size[2]) if len(size) > 2 else 1
-    channels = 4 if name.startswith("rgba") else 1
-    row = width * channels * np.dtype(dtype).itemsize
-    # OpenGL packs rows at 4 bytes: an r16f row of odd width carries two padding bytes (fog_steady's 27 columns read
-    # one garbage texel per row, drifting one column a row, while Vulkan's rows are tight). Read each row at its pitch.
-    pitch = len(data) // max(1, depth * height)
-    if pitch < row:
-        raise ValueError(f"a {name} readback of {width}x{height}x{depth} holds {len(data)} bytes")
-    rows = np.frombuffer(data[:pitch * height * depth], np.uint8).reshape(depth * height, pitch)[:, :row]
-    values = np.frombuffer(np.ascontiguousarray(rows).tobytes(), dtype).astype(np.float64)
-    return values.reshape(depth, height, width, channels)
+    channels = values.size // max(1, width * height * depth)
+    return values[:width * height * depth * channels].reshape(depth, height, width, channels)
 
 
 def compare_readback(a: dict, b: dict) -> dict:
@@ -724,8 +716,7 @@ def compare_readback(a: dict, b: dict) -> dict:
         mean = float(delta.mean())
         spread = float(np.abs(x - x.mean()).mean())          # content that does not vary cannot show an orientation
         oriented = all(flip is None or mean < flip or spread == 0.0 for flip in (row_flip, slice_flip))
-        # Exact by value: a padded OpenGL row and a tight Vulkan one hold the same texels in different bytes.
-        out[name] = {"format": a[name][0], "size": list(a[name][1]), "exact": bool(np.array_equal(x, y, equal_nan=True)),
+        out[name] = {"format": a[name][0], "size": list(a[name][1]), "exact": a[name][3] == b[name][3],
                      "max_abs": float(delta.max()), "mean_abs": mean, "row_reversed_mean_abs": row_flip,
                      "slice_reversed_mean_abs": slice_flip, "content_spread": spread, "pass": bool(oriented)}
     return {"pass": bool(out) and all(r["pass"] for r in out.values()), "resources": out}

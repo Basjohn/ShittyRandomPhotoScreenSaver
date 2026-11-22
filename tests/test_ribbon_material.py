@@ -322,9 +322,50 @@ def test_glint_cells_draw_bit_exactly_at_large_phase_cells(scene):
     assert np.mean(_cell_draws(scene, sin_glsl) != exact) > .5
 
 
+def _below_ground(scene, ground_glsl, heights):
+    """Per column, whether ``ground_glsl``'s atmosphereBelowGround calls the GPU-computed height ``heights[column]``
+    below ground (the heights reach the shader as an exact float table and are rebuilt there with rounding)."""
+    vertex = ('#version 460 core\nvoid main() { vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0; '
+              'gl_Position=vec4(p,0,1); }\n')
+    fragment = ('#version 460 core\nlayout(location=0) out vec4 FragColor;\nuniform float uHeights[' + str(W) + '];\n'
+                + ground_glsl + '''
+void main() {
+    float y=uHeights[int(gl_FragCoord.x)];
+    FragColor=vec4(atmosphereBelowGround(y)?1.0:0.0,0.0,0.0,1.0);
+}
+''')
+    scene.target.bind(clear=(0., 0., 0., 0.))
+    program = scene.resources.program('ground ' + str(hash(ground_glsl)), vertex, fragment)
+    gl.glUseProgram(program)
+    gl.glUniform1fv(gl.glGetUniformLocation(program, 'uHeights'), W, np.asarray(heights, np.float32))
+    gl.glDisable(gl.GL_DEPTH_TEST)
+    gl.glDisable(gl.GL_BLEND)
+    gl.glBindVertexArray(scene.target.vao)
+    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+    return scene.target.read_rgba()[H // 2, :, 0] > 127
+
+
+def test_the_fog_ground_plane_is_medium_whatever_the_rounding(scene):
+    # A mirror-volume cell row centred on the ground plane computes y a few ulps either side of 0 by each compiler's
+    # rounding; a strict y<0 cleared that row on OpenGL and kept it on Vulkan (N5.4 rule (b)). The plane is medium.
+    from rendering.gl_programs.waveform_atmosphere import ATMOSPHERE_GROUND_GLSL, MEDIUM_GLSL
+    assert MEDIUM_GLSL.count(ATMOSPHERE_GROUND_GLSL) == 1
+    heights = np.zeros(W, np.float32)
+    heights[:50] = np.float32(-1e-6) * np.arange(1, 51)       # rounding below the plane: medium
+    heights[50:100] = np.float32(1e-6) * np.arange(1, 51)     # rounding above it: medium
+    heights[100:] = -np.linspace(.01, 5., W - 100)            # clearly below: none
+    below = _below_ground(scene, ATMOSPHERE_GROUND_GLSL, heights)
+    assert not below[:100].any() and below[100:].all()
+    # Negative control: the strict test cuts the plane's rounding-below half.
+    strict = ATMOSPHERE_GROUND_GLSL.replace('y<-1e-3', 'y<0.0')
+    assert strict != ATMOSPHERE_GROUND_GLSL
+    assert _below_ground(scene, strict, heights)[:50].all()
+
+
 def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):
     # Group Wave stacked writes of thousands into one 4x half-float sample and OpenGL's resolve went infinite (the
-    # bloom's squares, N5.4): each write is scaled to at most RIBBON_LIGHT_CEILING, its hue kept.
+    # bloom's squares, N5.4): each write is scaled to at most RIBBON_LIGHT_CEILING, its hue kept. A reflection's alpha
+    # adds each write's luminance-weighted height and went infinite too (its mips NaN): one ceiling a write.
     import rendering.quick.scene3d.ribbon as ribbon_module
     from rendering.gl_programs import ribbon as programs
     from rendering.quick.scene3d.reflection import PlanarReflection
@@ -337,11 +378,11 @@ def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):
             gl.glDisablei(gl.GL_BLEND, 0)
             gl.glDisable(gl.GL_DEPTH_TEST)
             scene.primitive.draw(strip(0., -10., (.2, .6, 1., 1.), emission=emission), MVP, shading='light', view=VIEW,
-                                 material=material)
+                                 material=material, mist_frame=(0., 5., 0.))
             reflection.end()
             pixels = np.empty((H, W, 4), np.float32)
             gl.glGetTextureImage(reflection.texture, 0, gl.GL_RGBA, gl.GL_FLOAT, pixels.nbytes, pixels)
-            return pixels[..., :3].reshape(-1, 3).astype(float)
+            return pixels.reshape(-1, 4).astype(float)
         finally:
             with scene.target.current():
                 reflection.release()
@@ -350,9 +391,16 @@ def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):
     # would pass the ceiling wherever the quiet strip is past a 64th of it.
     material = RibbonMaterial(fill_light=100., lattice_light=0.)
     ceiling = programs.RIBBON_LIGHT_CEILING
-    quiet = light(1.)
+    quiet_pixels, hot_pixels = light(1.), light(64.)
+    quiet, hot = quiet_pixels[:, :3], hot_pixels[:, :3]
     assert 0. < quiet.max() < ceiling
-    hot = light(64.)
+    # The height weight (luminance x the strip's height, 5 +- its 0.3 half-width): under the ceiling unchanged, the hot
+    # strip's held to it.
+    luminance = quiet @ np.array((.2126, .7152, .0722))
+    shown = luminance > .01 * luminance.max()
+    heights = quiet_pixels[shown, 3] / luminance[shown]
+    assert 4.65 < heights.min() and heights.max() < 5.35
+    assert ceiling * .99 <= hot_pixels[:, 3].max() <= ceiling * 1.001
     assert ceiling * .99 <= hot.max() <= ceiling * 1.001
     lit = quiet.max(axis=1) > 1.1 * ceiling / 64.
     assert lit.sum() > 100 and (hot[lit].max(axis=1) >= ceiling * .99).all()
@@ -366,8 +414,9 @@ def test_a_light_write_keeps_to_the_ceiling_with_its_hue(scene, monkeypatch):
     with scene.target.current():
         scene.primitive.release()
         scene.resources.release_resources()
-    assert light(64.).max() > ceiling * 2
-    np.testing.assert_array_equal(light(1.), quiet)   # under the ceiling a write is exactly what it was
+    unclipped_pixels = light(64.)
+    assert unclipped_pixels[:, :3].max() > ceiling * 2 and unclipped_pixels[:, 3].max() > ceiling * 4
+    np.testing.assert_array_equal(light(1.), quiet_pixels)   # under the ceiling a write is exactly what it was
 
 
 def test_light_pass_alpha_carries_luminance_weighted_world_height(scene):

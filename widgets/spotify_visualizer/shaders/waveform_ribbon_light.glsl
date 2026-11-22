@@ -333,6 +333,13 @@ vec3 ribbonLightCeiling(vec3 light) {
     float largest=max(max(light.r,light.g),light.b);
     return largest>RIBBON_LIGHT_CEILING?light*(RIBBON_LIGHT_CEILING/largest):light;
 }
+// A reflection target adds every write's luminance-weighted height in its half-float alpha: Group Wave's stacked
+// light passed 65504 there (human input 252; OpenGL's blend went infinite, its mips NaN, the floor's reflection dark
+// where Vulkan's saturated). Kept to one ceiling a write, so 63 stacked writes stay finite; only light far past
+// white is weighted less (its contact hardening reads it a little lower, as Vulkan's saturated alpha did).
+float ribbonHeightWeight(float weighted) {
+    return clamp(weighted,-RIBBON_LIGHT_CEILING,RIBBON_LIGHT_CEILING);
+}
 
 void main() {
     srpssItemOnly(uViewport,u_target_px);
@@ -397,7 +404,7 @@ void main() {
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
     vec3 written=ribbonLightCeiling(light);
-    FragColor=vec4(written,dot(written,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
+    FragColor=vec4(written,ribbonHeightWeight(dot(written,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y)));
     // The lattice keeps its own (smaller) bloom share: a lit net must stay a net, not a white haze.
     vec3 glowing=ribbonLightCeiling((light-net*(1.0-uLatticeTone.y))*uGlow.x);
     Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)));

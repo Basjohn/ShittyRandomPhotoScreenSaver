@@ -149,7 +149,14 @@ vec3 atmosphereLight(vec3 local,vec3 ambient) {
 }
 '''
 
-MEDIUM_GLSL=WORLD_FIELD_GLSL+ATMOSPHERE_LIGHT_GLSL+'''
+# The ground plane itself is medium (its densest layer); only what lies clearly below is not. A row of the mirror
+# volume's cell centres can sit on the plane, and a strict y<0 then cut it by each compiler's rounding: OpenGL cleared
+# one row Vulkan filled (N5.4 rule (b), Frozen Past input 640). The tolerance is far above rounding.
+ATMOSPHERE_GROUND_GLSL='''
+bool atmosphereBelowGround(float y) { return y<-1e-3; }
+'''
+
+MEDIUM_GLSL=WORLD_FIELD_GLSL+ATMOSPHERE_LIGHT_GLSL+ATMOSPHERE_GROUND_GLSL+'''
 uniform vec4 uAtmosphere; // ground extinction, height e-fold, clearance transition, local light gain
 uniform vec4 uAtmosphereMotion; // time, drift speed, noise amount, world noise scale
 uniform vec3 uAtmosphereAmbient;
@@ -159,7 +166,7 @@ float atmosphereNoise(vec3 p) {
         +0.25*sin(p.z*1.41+p.x*0.39)*cos(p.x*0.57-p.y*0.68);
 }
 void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float steady) {
-    if(world.y<0.0){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
+    if(atmosphereBelowGround(world.y)){radiance=vec3(0);extinction=0.0;steady=0.0;return;}
     vec4 body=bodyField(world);
     vec3 moving=world*uAtmosphereMotion.w+uAtmosphereMotion.x*uAtmosphereMotion.y*vec3(0.07,-0.11,0.03);
     float variation=mix(1.0,0.6+0.8*atmosphereNoise(moving),uAtmosphereMotion.z);
