@@ -52,7 +52,7 @@ def test_the_artwork_widens_to_the_square_its_height_asks_for_and_the_seek_bar_w
     def room() -> float:
         return float(slot.property("blockWidth")) - float(slot.property("gap")) - float(slot.property("artRoom"))
 
-    edit.side("now_playing", "bottom", 90)                       # height given: a tall block
+    edit.side("now_playing", "top", -90)                        # height given (upward from the bottom corner): a tall block
     _run(display, 90)
     # Square where the text's room allows it (never the narrow strip beside a wide empty column).
     assert art.width() == pytest.approx(min(art.height(), room()), abs=1.5), (
