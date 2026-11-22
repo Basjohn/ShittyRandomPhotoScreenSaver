@@ -413,6 +413,7 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
+- [ ] **D6 / N6.7 mesh-shader readiness before the Vulkan flip (operator, 23 Nov; capability plumbing, not N6.7 admission):** in `native/core/src/vulkan_context.cpp`, probe `VK_EXT_mesh_shader` on the selected physical device, query `VkPhysicalDeviceMeshShaderFeaturesEXT` and `VkPhysicalDeviceMeshShaderPropertiesEXT`, and optionally enable the extension and supported `meshShader` / `taskShader` bits in the `vkCreateDevice` feature chain. The selected device must still start when the extension is absent. Report supported **and enabled** state, output vertex/primitive and workgroup limits, and why the path is unavailable in device facts; do not infer enablement from an advertised extension alone. Prove on the native harness with extension present and artificially absent (negative control), clean validation, both imported Qt Quick QRhi and raw-device identities unchanged, and device-loss/rebuild feature reprobe. No mesh-shader pipeline, work, or flip blocker is introduced here; N6.7 owns that later.
 - [ ] N0.3: run the three scenes on Metal when a Metal machine is available (Watchlist).
 - [ ] N0.7 remaining Qt 6.12 checks:
   - [ ] The handoff probe's inherited-state assertion was narrowed from Qt's whole sync to the item's
@@ -1581,20 +1582,46 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   sparkle), refraction through ice (on N4.d's rough receivers and the scene probe), and an ice-to-water edge on N6.1's
   dynamic surface field. Research first: which parts are new and which are compositions of N4.d, N4.j and N6.1. Then
   its harness proof like the other primitives, then the consumer.
-- [ ] N6.7 Dense geometry route (operator, 13 Nov: mesh shaders for fidelity on the high-end modes). It is a
-  measured candidate, admitted by evidence, not by a consumer. Mesh shaders (`VK_EXT_mesh_shader`) are recorded
-  as raw Vulkan on the core's own device (D6) inside Qt's frame, with a compute-cull plus indirect-draw twin
-  (Qt 6.12 `drawIndirect`) for OpenGL and any device without the extension: the fast path, never the only path.
-  - Admitted when N2.6's per-pass timers show a ported mode's geometry pass is primitive-bound, or when a
-    fidelity target needs more geometry than the current path can feed. Candidates: Extruded Bubble's beads and
-    bubbles as real meshes, Neon Lake's terrain level of detail and culling, Waveform's ribbons, N6.2's scene
-    geometry, N6.3's smoke.
-  - Proof: the same picture as the twin; GPU time against the twin on the candidate's pass, median and p90;
-    validation clean; the twin exact on OpenGL.
+- [ ] N6.7 Dense procedural geometry route (operator, 13 and 23 Nov: `VK_EXT_mesh_shader` for fidelity, not
+  merely speed). **Two distinct consumers, with different compatibility contracts:**
+  - **Existing Visualizers as they are ported:** preserve Python OpenGL -> native OpenGL -> native Vulkan
+    parity and current accepted appearance. If an existing mode later gains a mesh-shader acceleration, it is an
+    **optional enhancement**; its QRhi/indirect or compute-cull + indirect-draw twin keeps the same original output
+    available on OpenGL and Vulkan devices lacking the extension. The optional path cannot change accepted presets
+    or become a port/flip dependency. Candidates remain Extruded Bubble's beads/bubbles, Neon Lake terrain/culling,
+    Waveform ribbons, N6.2 scene geometry and N6.3 smoke. Proof: visual parity with the twin, N2.6 per-pass
+    GPU median and p90, validation clean, and the unmodified original path on OpenGL.
+  - **New modes authored only after the Vulkan-default flip:** may explicitly require Vulkan and
+    `VK_EXT_mesh_shader` when it enables their intended geometry and fidelity; **no OpenGL or non-mesh twin and no
+    pixel-parity obligation to an implementation that never existed.** Selectable OpenGL remains for existing modes,
+    not as a mandated renderer for new Vulkan-only modes. Modes requiring unavailable capabilities are visibly
+    unavailable with an accurate reason rather than silently substituted, degraded, or allowed to fail device creation.
+    Consumers in order: **Reactive Liquid / Audio Melt Pool first, Concrete Rain second** (their contracts are in
+    `Docs/Future_Work/`). Neither is obliged to use mesh shaders for every pass; admit where it helps the authored
+    target. Higher fidelity is a valid admission reason without proving that traditional rendering was too slow.
+  - **Optional early visual proof, only if N6.7 needs a real post-parity consumer before those modes:** opt-in
+    kelp stalks for *already ported and accepted* Extruded Bubble, with curved stalks and attached leaves moving
+    together, leaves independently lagging with the drift. Use a separate experimental switch, disabled by default,
+    no preset/default/accepted-look changes, no new OpenGL responsibility. A harness-only proof is preferable if
+    sufficient; kelp is neither a required EB feature nor a blocker to the flip.
+  - **Native seam:** use the core-owned Vulkan device (D6), enabled feature bits and reported limits; a reusable
+    raw-Vulkan graphics-pass service inside the frame driver's existing pass graph, with
+    `QRhiCommandBuffer::ExternalContent` and `beginExternal()/endExternal()`, retrieving the current native command
+    buffer *after* `beginExternal`. Own `VkPipeline`/`VkPipelineLayout`, descriptor bindings, render-pass
+    compatibility, state transitions, resource hazards, deferred destruction and loss recovery through the core;
+    create/warm pipelines outside visible `render` calls. Do not introduce a separate frame loop, window,
+    compositor, resource owner or per-mode renderer.
+  - **Shader admission:** add Vulkan-only `.mesh` and optional `.task` GLSL -> SPIR-V (`SPV_EXT_mesh_shader`)
+    compilation and validation, embedded with the native packs; keep existing `qsb` cross-backend
+    `.vert/.frag/.comp` checks intact. Never try to cross-compile mesh/task stages to GLSL 430, HLSL 5.0 or
+    MSL 1.2. Proof includes compilation failure controls, feature-disabled refusal, live validation and
+    synchronisation, bounds/workgroup/primitive limits, GPU timing, teardown, device loss, display changes and
+    operator visual acceptance against the authored mock. No raw pipeline is created on devices without support.
 
 ### Item 9. After the native core: SMP foundations, then modes
 
-Port-readiness rules bind all new GPU code now (the backend decision). Expanded Visualizer continues meanwhile
+Existing-mode ports still obey every cross-backend parity/readiness rule. New post-flip Vulkan-only modes use the
+N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenGL twin. Expanded Visualizer continues meanwhile
 (item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
 
 - [ ] Oscilloscope legibility (operator, 21 Nov; after the flip, with the other mode tweaks): a setting that slows
@@ -3163,6 +3190,12 @@ and hard gates H01-H14: `Docs/Future_Work/Melt_Pool.md` (mock in
 `references/Reactive_Liquid_Audio_Melt_Pool_Concept_and_Architecture.zip`). Uses S3D-3 (chamber), S3D-4 (surface
 field), S3D-5 (reflections), S3D-2 (droplets).
 
+**First new post-flip Vulkan-native Visualizer.** Its H01-H14 art, behaviour, camera, audio and acceptance contracts
+remain binding, but the implementation need not reproduce a nonexistent OpenGL mode. N6.7 mesh shaders may produce
+chamber, well, lip, floor or higher-fidelity dynamic geometry where useful, with shared native Vulkan/QRhi services;
+the liquid solver can remain bounded compute/heightfield where that best meets the mock. A mesh-shader requirement
+is explicitly capability-gated rather than automatically imposed on every part of the scene.
+
 - [ ] Stages with stop points:
   - [ ] Static chamber + framed camera.
   - [ ] Connected viscous surface.
@@ -3176,6 +3209,15 @@ Rain on a night street: music changes the pavement's water, never the street. Co
 `Docs/Future_Work/Concrete_Rain.md` (reference `references/Low and High Reactivity Concrete Rain Comparison.png`, left
 low / right high). Reuses S3D-3 (street), S3D-4 (ripples), S3D-5 (wet surface, reflections), S3D-2 (impacts, crowns,
 droplets).
+
+**Second new post-flip Vulkan-native Visualizer, after Melt Pool.** Target a small, coherent, procedurally authored
+wet street / crosswalk / intersection with real pavement slabs, curb and drainage geometry, asphalt relief and bounded
+mid-distance architecture; N6.7 mesh/task generation where worthwhile, normal/material/reflection and compute paths
+where they are better. The original comparison's camera and authored environment are identical between low/high
+reactivity captures, but separately prove modest orbit freedom (up to a believable 360-degree view of the bounded
+scene, not unrestricted street traversal), stable parallax and no missing geometry or reflections. Distant buildings
+may use controlled bokeh/impostor treatment where the orbit remains believable. No Blender asset requirement and
+no legacy OpenGL twin for Vulkan-only geometry; the existing visual/physics contracts still bind.
 
 - [ ] Stages:
   - [ ] Wet surface and reflection.
