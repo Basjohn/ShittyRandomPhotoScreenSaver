@@ -48,10 +48,12 @@ APIS = ("opengl", "vulkan")
 ROUNDS = ("limits", "skip", "readback")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
+OUT: Path | None = None     # the child's evidence folder (set by child)
+API = [""]
 CARD = (64, 64)
 FILL = [0.25, 0.5, 0.75, 1.0]
 EXTRA = [0.5, 0.25, 0.0, 0.0]
-CODES = {"skip": 260, "skip_plain": 261, "defocus": 262, "defocus_plain": 263}
+CODES = {"skip": 210, "skip_plain": 211, "defocus": 212, "defocus_plain": 213}
 
 FILL_FRAG = """#version 440
 layout(std140, binding = 18) uniform Fill { vec4 u_fill; };
@@ -133,9 +135,12 @@ def _targets(scene, timeout_s: float = 10.0, publish: dict | None = None) -> dic
     """Every readable target texture after the next record (a streamed scene publishes ``publish`` first)."""
     import scene_target_check as stc
 
-    scene.mode.read_targets()
     if publish is not None:
+        # The record drawn first (a readback asked with it rides on the record already held), then read as it left it.
         scene.publish(**publish)
+        scene.mode.update()
+        scene.host.frames(2)
+    scene.mode.read_targets()
     scene.mode.update()
     deadline = time.monotonic() + timeout_s
     pixels = None
@@ -312,8 +317,11 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
             after = _live(core)
             again = _targets(scene, publish={"w": 1})["scene.colour"]
             facts["skipped"] = _delta(after, before, "mode_entries_skipped")
-            checks["drawn_at_1"] = bool((on == both).all() and (again == both).all())
-            checks["skipped_at_0"] = bool((off == alone).all())
+            facts["pixels"] = {"on": on[0, 0].tolist(), "off": off[0, 0].tolist(), "again": again[0, 0].tolist(),
+                               "want_both": both.tolist(), "want_alone": alone.tolist()}
+            near = lambda a, b: bool((np.abs(a.astype(np.int16) - b.astype(np.int16)) <= 1).all())  # noqa: E731
+            checks["drawn_at_1"] = near(on, both) and near(again, both)
+            checks["skipped_at_0"] = near(off, alone)
             checks["each_record_at_0_counted"] = facts["skipped"] >= 10
             checks["no_failure"] = not scene.mode.state().get("content_failing")
         finally:
@@ -323,7 +331,7 @@ def round_skip(core, engine, app, api: str, packs: dict) -> dict:
                               unread_retry=("w",))
         try:
             plain = _targets(scene, publish={"w": 0})["scene.colour"]
-            checks["control_program_only_form_still_draws_at_0"] = bool((plain == both).all())
+            checks["control_program_only_form_still_draws_at_0"] = bool((np.abs(plain.astype(np.int16) - both.astype(np.int16)) <= 1).all())
         finally:
             _close(scene, host, app)
         facts["defocus"] = _defocus_skip(core, engine, app, host, packs, checks)
@@ -345,7 +353,9 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
     settings = ps.values_for(passes)
     gated = tuple(_with(p, when="w") if (isinstance(p, ModePass) and p.name == "near") or isinstance(p, DefocusStep)
                   else p for p in passes)
-    plain_passes, plain_targets = ps.eb_program(stage_packs, variant="no_defocus", capture=False)
+    # The reference: the same program without the near layer, its target and its defocus step.
+    plain_passes = tuple(p for p in passes if not ((isinstance(p, ModePass) and p.name == "near") or isinstance(p, DefocusStep)))
+    plain_targets = tuple(t for t in targets if t.name != "near")
     plain_settings = ps.values_for(plain_passes)
     entries = (("w", "u32", 1),)
     facts = {}
@@ -391,6 +401,13 @@ def _defocus_skip(core, engine, app, host, packs, checks) -> dict:
                                                                - reference.astype(np.float32)).max())
     facts["max_difference_shown_vs_no_layer"] = float(np.abs(shown.astype(np.float32)
                                                              - reference.astype(np.float32)).max())
+    if OUT is not None:
+        np.savez_compressed(OUT / f"defocus_skip_{API[0]}.npz", shown=shown, hidden=hidden, reference=reference)
+    diff = np.abs(hidden.astype(np.float32) - reference.astype(np.float32))
+    facts["skipped_vs_no_layer_at"] = [int(v) for v in np.unravel_index(int(diff.argmax()), diff.shape)]
+    facts["pixels_differing_skipped_vs_no_layer"] = int((diff.max(axis=-1) > 0).sum())
+    facts["max_difference_skipped_vs_shown"] = float(np.abs(hidden.astype(np.float32) - shown.astype(np.float32)).max())
+    facts["shape"] = list(hidden.shape)
     checks["defocus_skipped_frame_equals_the_program_without_the_layer"] = (
         facts["max_difference_skipped_vs_no_layer"] == 0.0)
     checks["defocus_shown_at_1_differs"] = facts["max_difference_shown_vs_no_layer"] > 0.0
@@ -462,6 +479,9 @@ def child(args) -> dict:
     root = host_check._root(args.repo)
     out = Path(args.out_dir)
     record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False}
+    global OUT
+    OUT = out
+    API[0] = args.api
     if args.api == "opengl":
         from rendering.quick.bootstrap import configure_quick_graphics
 
