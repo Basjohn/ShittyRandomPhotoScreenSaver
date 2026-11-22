@@ -55,6 +55,7 @@ class QuickCapillaryBloomRenderer(NativeFragmentPass):
     #: N5.2g: the native pack's text (the native define and the gradient's dFdy sign, capillary_native_fragment).
     fragment_source = capillary_native_fragment()
     native_samplers = (("uArrival", NATIVE_ARRIVAL, "linear"), ("uExtent", NATIVE_EXTENT, "nearest"))
+    native_settled = CAPILLARY_SETTLE[1]      # the eased progress from which the frame is the new picture
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in CAPILLARY_BLOOM_BLOCK
 

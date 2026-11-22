@@ -64,6 +64,7 @@ class QuickEdgeBloomRenderer(NativeFragmentPass):
     fragment_source = EDGE_BLOOM_FRAGMENT_SOURCE
     #: N5.2g: the fields' samplers on the native core (linear and clamped, as the fields' own textures).
     native_samplers = (("uNewField", NATIVE_NEW_FIELD, "linear"), ("uOldField", NATIVE_OLD_FIELD, "linear"))
+    native_settled = EDGE_BLOOM_SETTLED       # the eased progress from which the frame is the new picture
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # the fields' samplers are bound in the source; values in EDGE_BLOOM_BLOCK
 

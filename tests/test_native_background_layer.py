@@ -146,6 +146,13 @@ class _Mode:
     def on_meshes_lost(self, callback) -> None:
         self.meshes_lost = callback
 
+    def on_textures_ready(self, callback) -> None:          # N5.2g
+        self.ready = callback
+
+    def field(self, recipe, packs, blocks, *, pixels=None, size=(0, 0), in_frame=False, deadline_ms=0) -> None:
+        self.calls.append(("field", recipe, len(packs), len(blocks), None if pixels is None else len(pixels),
+                           tuple(size), deadline_ms))
+
     def texture(self, name, pixels, size, **_kwargs) -> None:
         self.calls.append(("texture", name, tuple(size), len(pixels)))
 
@@ -377,6 +384,55 @@ def test_a_run_writes_its_window_to_the_frame_trace_only_when_a_trace_is_admitte
     window.afterAnimating.slots[0]()
     made.transition(None)
     assert len(records) == 4 and made.runs == 2
+
+
+@pytest.mark.parametrize("transition_id", ["edge_bloom", "capillary_bloom"])
+def test_a_field_run_draws_its_effect_from_the_fields_commit_on_its_own_clock(clocked_layer, transition_id):
+    """N5.2g (D9 point 2): a run whose effect reads fields sends their recipes at its start (over the pictures' slots,
+    with the pictures' pixels and half its settled margin as the deadline), keeps the old picture until the ready edge
+    names every field, then draws its effect with the fields' samplers, its clock started at that edge; its end removes
+    the fields. Control: an edge naming only some of them starts nothing."""
+    from rendering.quick.render import native_background as nb
+
+    made, mode, calls, window, now = clocked_layer
+    source, destination = _image("a", value=40), _image("b", value=200)
+    made.present(source)
+    run = _run(transition_id, source, destination)
+    now["ns"] = run.start_ns
+    del calls[:]
+    made.transition(run)
+    fields = [c for c in calls if c[0] == "field"]
+    renderer = nb.native_transition_renderer(transition_id)
+    assert renderer is not None                                   # its packs, the fields' among them, are shipped
+    expected = renderer.native_fields(run, made._item_pixels())
+    assert len(fields) == len(expected) >= 1
+    deadline = nb.field_deadline_ms(run, renderer.native_settled)
+    names = []
+    for call, request in zip(fields, expected):
+        recipe = call[1]
+        assert recipe["input"] == {"old": nb.TEXTURE, "new": nb.NEXT_TEXTURE, None: None}[request.role]
+        assert call[4] == (None if request.role is None else 8 * 4 * 4) and call[6] == deadline >= 1
+        names += [o["texture"] for o in recipe["outputs"]]
+    assert not [c for c in calls if c[0] == "program"]            # the old picture stays (the background's program)
+    now["ns"] = run.start_ns + 50_000_000
+    window.afterAnimating.slots[0]()
+    assert not [c for c in calls if c[0] == "settings"]           # no effect values while it waits
+    assert len(names) >= 2
+    mode.ready([nb.NEXT_TEXTURE, names[0]])                       # control: not every field yet
+    assert not [c for c in calls if c[0] == "program"]
+    mode.ready(names)
+    (program,) = [c for c in calls if c[0] == "program"]
+    (one_pass,) = program[1]
+    assert one_pass.name == transition_id
+    assert [(s.name, s.texture) for s in one_pass.samplers][2:] == [(n, t) for n, t, _f in renderer.native_samplers]
+    assert program[2]["uProgress"] == pytest.approx(0.0, abs=1e-6)  # the effect's clock starts at the commit
+    now["ns"] += (run.end_ns - run.start_ns) // 4
+    window.afterAnimating.slots[0]()
+    late = [c for c in calls if c[0] == "settings"][-1][1]["uProgress"]
+    assert late == pytest.approx(run.sample(run.start_ns + (run.end_ns - run.start_ns) // 4).eased_progress)
+    del calls[:]
+    made.transition(None)
+    assert sorted(c[1] for c in calls if c[0] == "remove_texture" and c[1] in names) == sorted(names)
 
 
 def test_a_transition_without_a_pass_on_the_core_is_drawn_as_crossfade(clocked_layer, monkeypatch):

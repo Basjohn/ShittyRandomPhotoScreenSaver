@@ -151,6 +151,11 @@ def native_transition_renderer(transition_id: str) -> Any:
     if not transition_pack_path(transition_id).is_file() or not isinstance(renderer, NativeFragmentPass):
         return None
     shipped = all(path.is_file() for p in renderer.instanced_passes for path in instanced_pack_paths(p.name))
+    # N5.2g: and every compute pack its field recipes name (``native_field_sources``).
+    field_sources = getattr(renderer, "native_field_sources", None)
+    if field_sources is not None:
+        folder = transition_pack_path(transition_id).parent
+        shipped = shipped and all((folder / f"{name}.qsb").is_file() for name in field_sources())
     return renderer if shipped else None
 
 
@@ -359,17 +364,19 @@ def scene_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[flo
 
 
 def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None,
-                       instanced: tuple = ()) -> list:
+                       instanced: tuple = (), samplers: tuple = ()) -> list:
     """The transition's fragment pass over the whole target (replace): its two pictures bound to the item's textures
     ``old`` and ``new``, in the Python renderer's sampler state (linear, clamped, no mips); then each of ``instanced``
     (``NativeQuadInstances``, the run's ``native_instanced_passes``): the built-in quad drawn its instances from its own
-    vertex stage, blended over the picture as the Python renderer blends it."""
+    vertex stage, blended over the picture as the Python renderer blends it. N5.2g: ``samplers`` (the renderer's
+    ``native_samplers``: (shader name, item texture, filter)), its fields' outputs, clamped, no mips."""
     from rendering.native.mode import BUILTIN_QUAD_MESH, ModePass, PassGeometry, PassSampler
 
     data = transition_pack_path(transition_id).read_bytes() if pack is None else bytes(pack)
+    extra = tuple(PassSampler(name, texture, filter_, "clamp", "none") for name, texture, filter_ in samplers)
     passes = [ModePass(transition_id, data, "replace",
                        (PassSampler(OLD_SAMPLER, old, "linear", "clamp", "none"),
-                        PassSampler(NEW_SAMPLER, new, "linear", "clamp", "none")))]
+                        PassSampler(NEW_SAMPLER, new, "linear", "clamp", "none"), *extra))]
     for extra in instanced:
         vertex, fragment = (path.read_bytes() for path in instanced_pack_paths(extra.name))
         passes.append(ModePass(extra.name, fragment, extra.blend,
@@ -394,6 +401,23 @@ def _flat(value: Any) -> Any:
     if not isinstance(value, (tuple, list)) or not any(isinstance(item, (tuple, list)) for item in value):
         return value
     return [number for item in value for number in (_flat(item) if isinstance(item, (tuple, list)) else (item,))]
+
+
+def field_deadline_ms(run: Any, settled: float) -> int:
+    """N5.2g (D9 point 2): how long a run's field jobs may take before the core makes them in the frame: half the run's
+    settled margin (the duration past the linear time at which its eased progress reaches ``settled``, the frame from
+    which the Python renderer draws the new picture), so the run, its effect clock started at the fields' commit, still
+    reaches its settled frame before the controller ends it."""
+    duration_ns = max(1, int(run.end_ns) - int(run.start_ns))
+    low, high = 0.0, 1.0
+    for _ in range(40):
+        middle = 0.5 * (low + high)
+        if run.sample(int(run.start_ns) + int(middle * duration_ns)).eased_progress >= settled:
+            high = middle
+        else:
+            low = middle
+    margin_ms = (1.0 - high) * duration_ns / 1e6
+    return max(1, min(60000, int(0.5 * margin_ms)))
 
 
 def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[float, float]) -> dict:
@@ -446,6 +470,13 @@ class NativeBackgroundLayer:
         self._show: int | None = None
         self._meshes: list[str] = []
         self._run_textures: list[str] = []   # N5.2d: a scene run's own textures (Crumble's motion table)
+        # N5.2g: a fragment run's fields (field recipes, ABI 43): their outputs, those not yet committed (the effect
+        # waits for the ready edge naming them), the run's effect clock offset (its start moved to the commit) and its
+        # program once the fields are in.
+        self._field_textures: list[str] = []
+        self._fields_pending: set[str] = set()
+        self._clock_offset_ns = 0
+        self._field_program: Any = None
         self.runs = 0                    # runs the core drew
         self._waiting_kept_seen = 0      # the core's waiting_kept at the last traced run's end (--frame-trace only)
         self.ticks = 0                   # frames of a run given their progress
@@ -481,6 +512,7 @@ class NativeBackgroundLayer:
             mode.program(background_layer_program())
             mode.on_textures_lost(self._textures_lost)
             mode.on_meshes_lost(self._meshes_lost)                # N5.2c: a scene run's meshes after a remake
+            mode.on_textures_ready(self._textures_ready)          # N5.2g: a run's fields committed (its effect starts)
             self._mode = mode
         return self._mode
 
@@ -559,11 +591,20 @@ class NativeBackgroundLayer:
         mode.texture(other, destination.rgba8, destination.pixel_size)
         self.sent += 1
         self._run, self._renderer, self._next_image = run, renderer, destination
+        self._clock_offset_ns = 0
         if scene_run:
             self._start_scene(mode, run, renderer)
         else:
-            mode.program(transition_program(transition_id, self._slot, other, instanced=instanced),
-                         self._frame_settings())
+            samplers = tuple(getattr(renderer, "native_samplers", ()))
+            fields = renderer.native_fields(run, self._item_pixels()) if hasattr(renderer, "native_fields") else ()
+            if fields:
+                # N5.2g: the fields first (by their job, or in the frame past its deadline); the old picture stays
+                # drawn and the effect's clock starts at their commit (the ready edge, D9 point 2).
+                self._field_program = (transition_id, other, instanced, samplers)
+                self._start_fields(mode, run, renderer, fields, other)
+            else:
+                mode.program(transition_program(transition_id, self._slot, other, instanced=instanced,
+                                                samplers=samplers), self._frame_settings())
         self._settings = None                                     # the background's settings are given again at the end
         self.runs += 1
         self._trace_run(_TRACE_TICK, run)                         # the run's window opens before its first frame
@@ -572,6 +613,44 @@ class NativeBackgroundLayer:
 
     def _logical(self) -> tuple[float, float]:
         return float(self._item.width()), float(self._item.height())
+
+    def _start_fields(self, mode: Any, run: Any, renderer: Any, fields: tuple, other: str) -> None:
+        """N5.2g: each of the run's fields (``NativeFieldRequest``) sent as a field recipe over its picture's slot, the
+        picture's pixels for its job (the job owns its input, D9 as built point 2); its deadline half the run's settled
+        margin (``field_deadline_ms``)."""
+        folder = transition_pack_path(renderer.transition_id).parent
+        deadline = field_deadline_ms(run, float(getattr(renderer, "native_settled", 1.0)))
+        held = {"old": (self._slot, self._image), "new": (other, self._next_image)}
+        names: list[str] = []
+        for request in fields:
+            slot, image = held.get(request.role, (None, None))
+            recipe = request.recipe.with_input(slot)
+            mode.field(recipe.recipe, recipe.pack_bytes(folder), list(recipe.blocks),
+                       pixels=None if image is None else bytes(image.rgba8),
+                       size=(0, 0) if image is None else tuple(image.pixel_size), deadline_ms=deadline)
+            names += list(recipe.outputs)
+        self._field_textures = names
+        self._fields_pending = set(names)
+
+    def _textures_ready(self, names: list[str]) -> None:
+        """N5.2g: the core committed textures (the ready edge, GUI thread). Once every field of the run is in, the effect
+        starts: its program drawn, its clock started at this edge (the run sampled ``_clock_offset_ns`` late). Never
+        raises."""
+        if self.closed or self._run is None or not self._fields_pending or self._mode is None:
+            return
+        self._fields_pending.difference_update(names)
+        if self._fields_pending:
+            return
+        try:
+            self._clock_offset_ns = max(0, int(self._clock_ns()) - int(self._run.start_ns))
+            transition_id, other, instanced, samplers = self._field_program
+            self._mode.program(transition_program(transition_id, self._slot, other, instanced=instanced,
+                                                  samplers=samplers), self._frame_settings())
+            self._mode.update()
+        except Exception as exc:
+            logger.error("[BACKGROUND][NATIVE] The transition's effect could not start; it ends as a cut",
+                         exc_info=exc)
+            self._end_run()
 
     def _start_scene(self, mode: Any, run: Any, renderer: Any) -> None:
         """N5.2c: a scene run (``NativeScenePasses``): its meshes sent once, then its first frame. The layer draws the
@@ -628,7 +707,8 @@ class NativeBackgroundLayer:
         return max(1, round(width * ratio[0])), max(1, round(height * ratio[1]))
 
     def _frame_settings(self) -> dict:
-        sample = self._run.sample(self._clock_ns())
+        # N5.2g: a run whose fields committed late samples its effect from their commit (the clock offset; 0 else).
+        sample = self._run.sample(self._clock_ns() - self._clock_offset_ns)
         logical = (float(self._item.width()), float(self._item.height()))
         window = self._item.window()
         ratio = float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
@@ -642,8 +722,10 @@ class NativeBackgroundLayer:
         try:
             if self._scene is not None:
                 self._scene_frame()                               # N5.2c
-            else:
+            elif not self._fields_pending:
                 self._mode.settings(self._frame_settings())
+            # N5.2g: while the fields are pending the old picture stays; the frame asked below lets the core see their
+            # job's deadline.
             self._mode.update()
             self.ticks += 1
             self._trace_run(_TRACE_TICK, self._run)
@@ -693,6 +775,9 @@ class NativeBackgroundLayer:
         self._renderer = None
         meshes, self._meshes = self._meshes, []                   # N5.2c: a scene run's, removed once not drawn
         run_textures, self._run_textures = self._run_textures, []  # N5.2d: likewise
+        run_textures += self._field_textures                       # N5.2g: the run's fields, likewise
+        self._field_textures, self._fields_pending, self._field_program = [], set(), None
+        self._clock_offset_ns = 0
         self._scene = self._show = None
         if run is None or self._mode is None:
             self._next_image = None
@@ -894,6 +979,7 @@ class NativeBackgroundLayer:
         self._run = self._renderer = self._next_image = None
         self._scene = self._show = None                           # N5.2c: its meshes go with the mode
         self._meshes = []
+        self._field_textures, self._fields_pending, self._field_program = [], set(), None   # N5.2g
         for edge in self._edges.values():
             try:
                 edge.disarm()
