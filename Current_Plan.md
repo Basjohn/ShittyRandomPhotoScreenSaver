@@ -1723,12 +1723,12 @@ the lead rejects any still or showcase frame that shows one.
   still sees older bubbles not answering the music. Not measured: on-screen speed (projection, depth), sway and drift,
   and whether the music's boost visibly reaches bubbles already alive. Agent ac5f7832a73527151 measures what is on
   screen itself (no operator input), fixes it at the owner, before the port's references; the Preset 9 flicker too.
-- [ ] **Preset 9 (Deep Red Ocean): rapidly flickering bubble-star/circle at the default camera:** not reproduced (agent
-  ac5f7832a73527151, 22 Nov): wake veils end-on, the shaft shadow casters swapping, chains converging on a vanishing
-  point, the deep light and ray source, and Stream Lanes' short-track chains all ruled out; 5 s and 3 s at 60 fps and a
-  30 s 4K survey show no star (this preset's particle sparkle swamps automatic flicker detection). Needs a time, clip and
-  screen position (or footage) from the operator; probes in the agent's `.artifacts/scratch/n56/`. Wake teleport fixed
-  (R-249); living bubbles follow the stream exactly (test, no product change).
+- [ ] **Preset 9: "the strange emission starfish" / "a flickering fucking starfish of emission" (operator, 21-22 Nov,
+  said many times): seen on Preset 9 with music while ORBITING the camera** (operator screenshot
+  `C:/Users/Basjohn/AppData/Local/Temp/claude/4865eded7f8b3193/1f4e4ec5-9135-417d-8d4d-8d30d5e54d98/images/7.png`).
+  The emission source flickers as a star-shaped burst; the default camera hides it, which is why the first search (lead's
+  paraphrased brief, default camera) found nothing. Agent ac5f7832a73527151: fix at the owner so orbiting shows only
+  the emitted bubbles, proved by orbit captures on successive frames with a control, before the port's references.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
