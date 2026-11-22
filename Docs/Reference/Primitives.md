@@ -27,16 +27,32 @@ Rules (all from item 8b's "Standing rules of this item"):
    plan gives it; where it gives none the entry says "no class stated".
 3. **No new 3D primitive in the Python OpenGL renderer** unless an open defect needs it; new modes are built on the
    native core only (item 8b, standing rules).
-4. **A landed primitive gets one showcase WebP and a "what this makes possible" note** (item 8b, standing rules). The plan names
-   `Scene3D_Resources.md` as the place for the note; that file now points here, and the note goes into the entry of
-   this catalogue as well (see the open point in section 7).
+4. **The principal artistic delivery is an optional real visualizer integration, not a mandatory
+   standalone showcase WebP** (operator, 23 Nov). The primitive's own independent harness, median/p90 GPU
+   cost, validation, resource/dormancy and retirement evidence remain absolute. When an existing accepted
+   mode is suitable, integrate the primitive as a separately enabled and meaningfully MUSIC-REACTIVE
+   feature with full canonical Studio appearance and response controls, then author a **new mutable
+   demonstration preset** through the real Studio save path. All six approved concepts are specified
+   in `Current_Plan.md` N4/N6 demonstration box and mapped below. A standalone WebP is optional
+   *supplementary human-viewable* evidence; it proves neither music response nor production admission.
+   `Docs/Reference/Primitives.md` holds the "what this makes possible" note, with resource details
+   in `Docs/Reference/Scene3D_Resources.md`.
+   **NEVER TEST AGAINST A PRESET:** no shipped/operator-authored preset may be read, loaded, pinned,
+   hashed, compared, snapshot-tested or treated as a schema/parity/artistic oracle in automated tests.
+   Use entirely synthetic, test-owned configuration and ephemeral preset-shaped files for schema/IO
+   cases. Actual presets are demonstration art with no frozen values, slot numbers or test fixtures.
+   This applies equally to brand-new demonstration presets. Port and native Studio flip remain
+   independent of all six post-parity artistic integrations.
 5. **Dormancy at rest**: nothing allocates before a consumer warms it, nothing costs per frame at rest, everything is
    released at `park()` or retirement (Lessons line 207; `Scene3D_Resources.md` "Fixed-size scene and post-process
    allocations"). Diagnostic instrumentation is opt-in (memory: no recurring work at rest).
 6. **A port is done** only with single-sampled pixel parity against the Python renderer, the Vulkan result within a stated tolerance (D12's shared pixel tolerance), trace figures, GPU time per pass and a bounded rehearsal, and then the Python renderer is
    deleted in the same change (item 8b, standing rules, first bullet). Never two permanent renderers.
-7. **A native route beside QRhi is one of D5.3's services**, wins a measurement first and ships its OpenGL twin
-   (item 8b, standing rules; Decisions D5.3, line 206).
+7. **D5.3's mandatory OpenGL twin is for original existing-mode port parity** (item 8b,
+   D5.3's 23 Nov supersession). Additional optional Vulkan-only fidelity features
+   may sit on an already accepted mode without cloning the extra effect for OpenGL;
+   original mode appearance and its OpenGL fallback stay intact. No such optional
+   integration is a blocker for native N5.8 Studio migration or NF.
 8. **Ids**: the old `S3D-n` ids map to N-ids as in section 5's table (item 8b, standing rules).
 
 ## 2. When primitive work happens
@@ -506,6 +522,34 @@ query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; L
 | S3D-5 | N4.d | planar reflections, rough receivers, scene probe, wet-surface masks |
 | S3D-6 | N4.h | shared shadows |
 | S3D-7 | N4.f1, N4.f2 | reduced-resolution volumes; its smoke is N6.3, its lightning N6.6 |
+
+### Six approved real-mode demonstrations (23 Nov 2026, artistic use AFTER native/Studio flip)
+
+These six are an **approved eventual integration backlog**, not candidate-only or immediate
+pre-flip requirements. Original-mode ports, Studio N5.8 and NF finish first; independent
+high-potential primitive harnesses can proceed on the non-blocking track. Every integration
+adds an optional mode feature, comprehensive canonical Studio appearance AND music-response
+controls, and a **NEW freely mutable demonstration preset**. The preset is human-authorable
+evidence, NOT a test input or golden; tests are built exclusively from synthetic data.
+The complete rendered-fidelity, reactivity, control and rejection contract for each is in
+`Current_Plan.md` N4/N6 artistic integrations. No new mode renderer, camera, clock, audio
+analysis lane or backend parity gate.
+
+| Approved demonstration | Host mode | Primary shared primitives | What becomes possible |
+|---|---|---|---|
+| **Kelp Cathedral** | Extruded Bubble | N6.7 mesh shaders where useful; N6.2, N4.h | Rooted underwater curved stalks and attached independently lagging leaves with depth, lighting and phrase-responsive current/flutter. Optional Vulkan-only kelp is permitted; original EB remains OpenGL-capable. |
+| **Smoke Signals** | Waveform Ribbon | N6.3, N4.f2 | Real 3D smoke emitted by moving ribbons, advected and dissipated with musical phrases and transients, preserving source history. |
+| **Rainfall Echo** | Neon Lake (`shockwave_grid`) | N6.1, N4.d, optional N4.c | Music-driven local water impacts, interfering physical ripples and reflection-normal response without replacing the accepted basin. |
+| **Shadow Theatre** | Waveform Ribbon | N4.h | True shadow-casting ribbons and stable soft floor contact, driven principally by the existing reactive geometry. |
+| **Abyssal Lanterns** | Extruded Bubble | N4.m, optional N4.c | Travelling locally illuminating bioluminescent clusters, lighting real nearby bubbles rather than drawing fake glows. |
+| **Rain-Slick Floor** | Waveform Ribbon | N4.d | Anchored irregular wetness, differentiated roughness and moving ribbon reflections, with optional subtle music-driven water micro-disturbance. |
+
+**Art and reactivity acceptance:** no single Enable switch or generic intensity scalar suffices;
+each group exposes independently useful geometry/material/placement, motion, response ranges
+and temporal behaviour in the existing production Studio. Test the capability against
+synthetic fixtures, including off/on/quality extremes, visual change and temporal continuity;
+never test real presets even for schema or storage behaviour. Displaying a capture is not
+proof of reactivity. Operator signs off live music response and editable authored look.
 
 ### N6 (primitives track, native only; `Current_Plan.md` item 8b, the N6 boxes)
 
