@@ -72,7 +72,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   matrix members, the conventions `w` flag, the sampler W-wrap fix). Next: lead reserves ABI 38 (37 is N5.2d's), the
   agent renumbers, lead builds; rule (a) needs a measured Waveform bound (bloom rounding 13-29k px at 2-3 levels,
   edges 400-1,200 past 3) decided on the rerun after the W-wrap fix; then L, P, rule (b), C, T.
-- [ ] Background track: N5.2e next (Membrane, Page Curl, Exploding Tiles), after the watch items below; the black flicker
+- [ ] Background track: agent a4f18f4449f3e8a5b (Opus Medium), the watch items below then N5.2e (Membrane, Page Curl,
+  Exploding Tiles) to stop point 1, ABI 41 reserved (Waveform takes 40); the black flicker
   fixed and merged 22 Nov (ABI 39).
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
   - [ ] The route check's Warp variant still uses the old id `warp` (the registry's is `warp_dissolve`), so a default
