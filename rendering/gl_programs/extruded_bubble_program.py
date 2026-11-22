@@ -1444,7 +1444,12 @@ vec3 trailWater(int owner, float c) {
     int i = min(int(floor(f)), last - 1);
     float t = f - float(i);
     vec3 p1 = wakePoint(owner, i), p2 = wakePoint(owner, i + 1);
-    vec3 p0 = i > 0 ? wakePoint(owner, i - 1) : 2.0 * p1 - p2;
+    // Before the bubble's own segment the curve's neighbour is the bubble itself (p0 = p1), never a mirrored
+    // phantom: when the bubble lays its next point it lays it where it is, and that same water's segment then has
+    // the bubble as its neighbour, coincident with its newest point. A mirrored phantom (2 p1 - p2) bent that water
+    // differently from the curve it became, and every bead in it jumped (0.22 of its bubble's radius) at each new
+    // point: the idle wake teleport.
+    vec3 p0 = i > 0 ? wakePoint(owner, i - 1) : p1;
     vec3 p3 = i + 2 <= last ? wakePoint(owner, i + 2) : 2.0 * p2 - p1;
     return wakeSpline(p0, p1, p2, p3, t);
 }
@@ -1650,11 +1655,16 @@ void beadInstance() {
             along_ = st * reach;
             vec3 tangent = trailWater(owner, c + 0.2) - trailWater(owner, max(c - 0.2, 0.0));
             tangent = dot(tangent, tangent) > 1e-10 ? normalize(tangent) : vec3(0.0, -1.0, 0.0);
-            vec3 axis = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), smoothstep(0.75, 0.95, abs(tangent.z))));
-            vec3 side = normalize(cross(tangent, axis));
-            vec3 deep = cross(tangent, side);
+            // Its place across the veil: a stable random offset with the trail's own direction projected out, so it
+            // turns with the trail continuously whatever way the trail points. A side axis crossed with a fixed
+            // reference (z, blended to x) ran parallel to the tangent on a cone of directions and flipped every bead
+            // across the trail in one frame (the idle wake teleport, worse behind big bubbles). 0.863 keeps the
+            // spread's mean square of the old side/deep (1, 0.7) offsets.
+            vec3 scatter = vec3(g, sqrt(-2.0 * log(max(beadRandom(seed, 29u), 1e-6)))
+                                       * cos(6.2832 * beadRandom(seed, 30u)));
+            vec3 offset = (scatter - tangent * dot(scatter, tangent)) * 0.863;
             float body = wakeField(owner, WAKE_RADIUS);
-            p = trailWater(owner, c) + (side * g.x + deep * g.y * 0.7) * mix(body * 0.45, nominalRadius * 0.12, sqrt(st));
+            p = trailWater(owner, c) + offset * mix(body * 0.45, nominalRadius * 0.12, sqrt(st));
             // Born at the bubble, gone where the trail ends (or before the trail has reached it).
             // Born at the bubble; thinning with the sheet down the trail (gone before the trail has reached it).
             trailEnds = smoothstep(0.0, 0.4, c) * (1.0 - smoothstep(TRAIL_FADE * reachNow, reachNow, c));
