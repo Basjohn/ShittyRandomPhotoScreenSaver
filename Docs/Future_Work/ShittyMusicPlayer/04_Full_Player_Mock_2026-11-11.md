@@ -5,8 +5,9 @@ us"). It is a mock: one example of the layout, coloured by one theme. The lead m
 functionality, and adjust the plans with it. Nothing here is scheduled; the order of work is plan 02
 (`02_ShittyMusicPlayer_Implementation_Plan.md`), whose phase ladder and `--smp` gate still bind. Sections 7 to 9
 record the operator's clarification of the same evening: the product's shape, the contract route for SMP Edit
-and the long-term audio and library goals. SMP comes after the native core, the open defects and the
-fullscreen Visualizer.
+and the long-term audio and library goals. SMP is deferred until **after the native core/Vulkan flip, Melt Pool, Concrete Rain and substantial QoL work**, with
+explicit operator readmission (23 Nov 2026). All R1-R16, mock references and future host guarantees remain
+binding design references, not current implementation tasks.
 
 **Files (in `references/`, which git ignores, so this document carries their content in words):**
 
