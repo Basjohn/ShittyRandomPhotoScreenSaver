@@ -1,7 +1,7 @@
 # QoL Suggestions
 
 Non-critical improvements noticed during work, kept here so they are not forgotten. The operator marks each one;
-accepted entries move to `Current_Plan.md` as boxes when a slot is free. One line each, newest at the bottom.
+accepted entries move to `Current_Plan.md` as boxes when a slot is free. One line each, newest at the bottom. Add an optional comment box for each one. Space cleanly and with significance for easy human reading even when word wrapped.
 
 | # | Suggestion | Area | Accept | Reject |
 |---|---|---|---|---|
