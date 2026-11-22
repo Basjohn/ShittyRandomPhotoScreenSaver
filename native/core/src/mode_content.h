@@ -415,6 +415,7 @@ struct ModePass
     QList<ComputeBinding> computeBindings;
     quint32 localSize[3] = { 1, 1, 1 };              // reflected
     int computeMemberOffset = -1;                    // u_srpss_compute's offset in its block (-1: not declared)
+    QByteArray readback;                             // ABI 42: a "once" check entry's results buffer, read once
     // N3.4 (D17): a stage entry (post_stages.h). A resolve's `target` is the owner and `stageSource` the transparency
     // target; a bloom's `stageSource` and `stageAttachment` its source (`target` -1: it has its own); a defocus's
     // `target` the onto target and `stageSource` the layer; a composite is a surface pass with the core's fragment.
@@ -739,6 +740,10 @@ public:
     void setGeometryArena(const QByteArray &name);
     quint64 geometryArenaSerial() const { return m_geometryArenaSerial.loadAcquire(); }
     QByteArray geometryArenaName() const;
+    // ABI 42 (N5.6), render thread: a check entry's readback started (held here: the source outlives the content and
+    // QRhi's completion), and its report once taken (the state's "check").
+    void setCheckReadback(const std::shared_ptr<CheckReadback> &check);
+    void noteCheck(const QJsonObject &report);
     quint64 storageReadRequests() const { return m_storageReads.loadAcquire(); }
     void setStorageReadback(const std::shared_ptr<StorageReadback> &readback);
     bool takeStoragePixels(QList<StoragePixels> *out);
@@ -802,6 +807,8 @@ private:
     std::shared_ptr<StorageReadback> m_storageReadback; // N3.3, under m_textureReportMutex
     QAtomicInteger<quint64> m_storageReads { 0 };
     QByteArray m_geometryArenaName;             // ABI 42, under m_textureReportMutex
+    std::shared_ptr<CheckReadback> m_checkReadback; // ABI 42, under m_textureReportMutex
+    QJsonObject m_checkState;                   // ABI 42, under m_textureReportMutex
     QAtomicInteger<quint64> m_geometryArenaSerial { 0 };
 };
 
@@ -1022,6 +1029,11 @@ private:
     quint64 m_geometryArenaSerial = 0;       // the source's name this view was opened for
     QHash<QByteArray, GeometryKey> m_geometryKeys; // the record's keys, assigned in place (no allocation per record)
     bool m_geometryWaiting = false;          // a geometry buffer has no resident key: the frame is kept
+    // ABI 42 (N5.6): the check entry's readback in flight (taken at a later record, reported once), and whether a
+    // results buffer past kMaxCheckReadbackBytes was noted.
+    std::shared_ptr<CheckReadback> m_check;
+    bool m_checkRefusedNoted = false;
+    void reportCheck();
     ComputeTrack m_compute[kMaxModePasses];
     bool m_dispatch[kMaxModePasses] = {};
     quint64 m_computeProgram = 0;            // the program the tracks are of

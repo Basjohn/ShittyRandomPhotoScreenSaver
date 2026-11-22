@@ -4,6 +4,10 @@ Box 1, the scene probe (``scene_targets.h`` cube targets, ``cube_prefilter.h``):
 (``rendering/quick/scene3d/probe.py``) is the oracle for the faces' order and orientation, the prefilter's filter and
 its cone. Each test's negative control is a mutated form of the source, seen failing. The drawn proofs (every face and
 level read back against Python's capture on both backends, a lookup across a face edge) run on the built module.
+
+Box 2, geometry once per key (``geometry_arena.h``, ``ModeStorage::syncGeometry``): D3's rules as source predicates and
+a Python twin of the arena's layout. Box 3, the drift pair check's one-shot readback (``CheckReadback``). Box 4, the
+limits. Box 5, a pass entry skipped by a record u32 (``"skip"``).
 """
 from __future__ import annotations
 
@@ -385,3 +389,82 @@ def test_a_geometry_buffer_is_read_only_its_key_a_record_array_and_previous_bind
     assert all(f'QStringLiteral("geometry_{n}")' in module
                for n in ("resident", "uploads", "failed", "released", "waits", "arenas", "reads_found", "reads_torn"))
     assert "src/geometry_arena.cpp" in (ROOT / "native" / "core" / "CMakeLists.txt").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------------ box 3: the drift pair check's readback
+
+def _record_compute(mode_cpp: str) -> str:
+    return _function(mode_cpp, "    cb->dispatch(int(groups[0]), int(groups[1]), int(groups[2]));",
+                     "bool ModeContent::build(")
+
+
+def _report_check(mode_cpp: str) -> str:
+    return _function(mode_cpp, "void ModeContent::reportCheck()", "bool ModeContent::syncStorage(")
+
+
+def check_is_one_shot(mode_cpp: str) -> bool:
+    """A "once" entry dispatches only fresh (or changed by a new program); its results are read in the batch that ends
+    its compute pass, after its dispatch; the report is taken only once QRhi completed it (never waited on), once."""
+    decide = _function(mode_cpp, "void ModeContent::decideDispatches()", "quint64 ModeContent::entryFreshKey(")
+    after = _record_compute(mode_cpp)
+    report = _report_check(mode_cpp)
+    read = after.find("read->readBackBuffer(results->buffer.get(), 0, results->bytes, &check->result);")
+    return ("const bool due = drawn || (once ? (fresh || t.changed)\n" in decide
+            and 0 < read < after.find("cb->endComputePass(read);")
+            and "check->result.completed = [raw]() { raw->done.storeRelease(1); };" in after
+            and "m_source->setCheckReadback(check);" in after
+            and "if (!m_check || m_check->done.loadAcquire() == 0)\n        return;" in report
+            and "m_check.reset();" in report
+            and "finish()" not in report + after and "while" not in report)
+
+
+def test_the_check_is_read_once_after_its_dispatch_and_never_waited_on():
+    mode_cpp = _source("mode_content.cpp")
+    assert check_is_one_shot(mode_cpp)
+    assert "reportCheck();                            // ABI 42" in _function(
+        mode_cpp, "bool ModeContent::syncStorage(", "bool ModeContent::syncGeometry(")
+    # Negative controls: a check dispatched (and read) at every record; a report that waits for QRhi's completion; a
+    # report kept in flight (reported at every later record).
+    assert not check_is_one_shot(mode_cpp.replace("const bool due = drawn || (once ? (fresh || t.changed)\n",
+                                                  "const bool due = drawn || (once ? true\n"))
+    assert not check_is_one_shot(mode_cpp.replace(
+        "    if (!m_check || m_check->done.loadAcquire() == 0)\n        return;",
+        "    if (!m_check)\n        return;\n    while (m_check->done.loadAcquire() == 0)\n        rhi()->finish();"))
+    assert not check_is_one_shot(mode_cpp.replace("    countCheckReport();\n    m_check.reset();", "    countCheckReport();"))
+
+
+def storage_reads_are_named(sources: dict) -> bool:
+    """The product reads storage back in two places only: the harness's startReadback and the check (N3.3's L5 rule
+    with its one named exception)."""
+    found = {name: text.count("readBackBuffer(") for name, text in sources.items() if "readBackBuffer(" in text}
+    harness = _function(sources["compute_passes.cpp"], "std::shared_ptr<StorageReadback> ModeStorage::startReadback(",
+                        "ModeStorage::~ModeStorage()")
+    return (found == {"compute_passes.cpp": 1, "mode_content.cpp": 1} and "readBackBuffer(" in harness
+            and "readBackBuffer(" in _record_compute(sources["mode_content.cpp"]))
+
+
+def test_nothing_else_in_the_product_reads_storage_back():
+    sources = {p.name: p.read_text(encoding="utf-8") for p in SRC.glob("*.cpp")}
+    assert storage_reads_are_named(sources)
+    # Negative control: a second product readback (a mesh buffer read back) is found.
+    mutated = dict(sources)
+    mutated["mesh_buffers.cpp"] = sources["mesh_buffers.cpp"] + "\n// u->readBackBuffer(b, 0, n, &r);\n"
+    assert not storage_reads_are_named(mutated)
+
+
+def test_a_check_entry_is_once_writes_its_readback_and_is_one_a_program():
+    storage_cpp = _source("compute_passes.cpp")
+    mode_cpp = _source("mode_content.cpp")
+    header = _source("compute_passes.h")
+    assert "enum class Kind { Frame = 0, Field = 1, Draw = 2, Once = 3 };" in header
+    assert "constexpr quint32 kMaxCheckReadbackBytes = 4096;" in header
+    trigger = _function(storage_cpp, "bool parseComputeTrigger(", "// ----")
+    assert 'value.toString() == QLatin1String("once")' in trigger
+    entry = _function(mode_cpp, "bool parseComputeEntry(", "// A compute entry's pack against its declaration")
+    assert "pass.trigger.kind != ComputeTrigger::Kind::Once" in entry
+    assert "&& b.access != StorageAccess::Read);" in entry
+    assert "if (++checks > 1 || !results || results->geometry) {" in mode_cpp
+    assert "results->bytes <= kMaxCheckReadbackBytes" in _record_compute(mode_cpp)
+    module = _source("module.cpp")
+    assert all(f'QStringLiteral("check_{n}")' in module for n in ("readbacks", "readback_bytes", "reports"))
+    assert 'o.insert(QStringLiteral("check"), m_checkState);' in mode_cpp

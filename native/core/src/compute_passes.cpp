@@ -357,6 +357,8 @@ QJsonValue ComputeTrigger::toJson() const
         return QJsonObject { { QStringLiteral("field"), QString::fromLatin1(field) } };
     if (kind == Kind::Draw)
         return QStringLiteral("draw");        // ABI 37
+    if (kind == Kind::Once)
+        return QStringLiteral("once");        // ABI 42
     return QStringLiteral("frame");
 }
 
@@ -369,6 +371,11 @@ bool parseComputeTrigger(const QJsonValue &value, ComputeTrigger *out)
     }
     if (value.isString() && value.toString() == QLatin1String("draw")) {
         t.kind = ComputeTrigger::Kind::Draw;  // ABI 37 (N4.i): every record that draws the program's passes
+        *out = t;
+        return true;
+    }
+    if (value.isString() && value.toString() == QLatin1String("once")) {
+        t.kind = ComputeTrigger::Kind::Once;  // ABI 42 (N5.6): the entry's first record only (a check)
         *out = t;
         return true;
     }
@@ -390,6 +397,9 @@ QAtomicInteger<qint64> g_geometryUploads { 0 };
 QAtomicInteger<qint64> g_geometryFailed { 0 };
 QAtomicInteger<qint64> g_geometryReleased { 0 };
 QAtomicInteger<qint64> g_geometryWaits { 0 };
+QAtomicInteger<qint64> g_checkReadbacks { 0 };      // ABI 42 (N5.6)
+QAtomicInteger<qint64> g_checkReadbackBytes { 0 };
+QAtomicInteger<qint64> g_checkReports { 0 };
 } // namespace
 
 ComputeCounts computeCounts()
@@ -400,6 +410,9 @@ ComputeCounts computeCounts()
     c.geometryFailed = g_geometryFailed.loadRelaxed();
     c.geometryReleased = g_geometryReleased.loadRelaxed();
     c.geometryWaits = g_geometryWaits.loadRelaxed();
+    c.checkReadbacks = g_checkReadbacks.loadRelaxed();
+    c.checkReadbackBytes = g_checkReadbackBytes.loadRelaxed();
+    c.checkReports = g_checkReports.loadRelaxed();
     c.buffers = g_buffers.loadRelaxed();
     c.bufferBytes = g_bufferBytes.loadRelaxed();
     c.images = g_images.loadRelaxed();
@@ -420,6 +433,12 @@ void countDispatch() { g_dispatches.fetchAndAddRelaxed(1); }
 void countComputePass() { g_computePasses.fetchAndAddRelaxed(1); }
 void countSkipped() { g_skipped.fetchAndAddRelaxed(1); }
 void countStateLost() { g_statesLost.fetchAndAddRelaxed(1); }
+void countCheckReadback(quint32 bytes)
+{
+    g_checkReadbacks.fetchAndAddRelaxed(1);
+    g_checkReadbackBytes.fetchAndAddRelaxed(bytes);
+}
+void countCheckReport() { g_checkReports.fetchAndAddRelaxed(1); }
 
 void setComputeWriteAsRead(bool on) { g_writeAsRead.storeRelaxed(on ? 1 : 0); }
 bool computeWriteAsRead() { return g_writeAsRead.loadRelaxed() != 0; }

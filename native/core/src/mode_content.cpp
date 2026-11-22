@@ -1581,7 +1581,7 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
 {
     static const QStringList allowed = { QStringLiteral("name"), QStringLiteral("compute"), QStringLiteral("trigger"),
                                          QStringLiteral("groups"), QStringLiteral("bindings"),
-                                         QStringLiteral("samplers") };
+                                         QStringLiteral("samplers"), QStringLiteral("readback") }; // ABI 42
     const QString label = QString::fromLatin1(pass.name);
     bool known = true;
     for (auto it = o.begin(); it != o.end(); ++it)
@@ -1593,9 +1593,19 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
         return false;
     }
     if (o.contains(QStringLiteral("trigger")) && !parseComputeTrigger(o.value(QStringLiteral("trigger")), &pass.trigger)) {
-        *error = QStringLiteral("compute entry '%1': \"trigger\" is \"frame\", \"draw\" (ABI 37) or {\"field\": a record "
-                                "u32 scalar}").arg(label);
+        *error = QStringLiteral("compute entry '%1': \"trigger\" is \"frame\", \"draw\" (ABI 37), \"once\" (ABI 42) or "
+                                "{\"field\": a record u32 scalar}").arg(label);
         return false;
+    }
+    if (o.contains(QStringLiteral("readback"))) {
+        // ABI 42 (N5.6): the one named exception to "nothing in the product reads storage back": a "once" entry's
+        // results buffer, read once after its dispatch (the bindings' check below: the entry writes it).
+        pass.readback = o.value(QStringLiteral("readback")).toString().toLatin1();
+        if (!passName(pass.readback) || pass.trigger.kind != ComputeTrigger::Kind::Once) {
+            *error = QStringLiteral("compute entry '%1': \"readback\" names a storage buffer the entry writes, on an "
+                                    "entry triggered \"once\" (a check, read once)").arg(label);
+            return false;
+        }
     }
     const QJsonValue groups = o.value(QStringLiteral("groups"));
     if (groups.isObject()) {
@@ -1669,6 +1679,17 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
             }
         }
         pass.computeBindings.append(binding);
+    }
+    if (!pass.readback.isEmpty()) {
+        bool writes = false;
+        for (const ComputeBinding &b : pass.computeBindings)
+            writes = writes || (b.kind == ComputeResource::Buffer && b.resource == pass.readback
+                                && b.access != StorageAccess::Read);
+        if (!writes) {
+            *error = QStringLiteral("compute entry '%1': its readback '%2' is no buffer it writes")
+                         .arg(label, QString::fromLatin1(pass.readback));
+            return false;
+        }
     }
     return parseSamplers(o.value(QStringLiteral("samplers")), pass, error);
 }
@@ -2976,6 +2997,18 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     // captures the owner, or blooms from it, between the target's first pass and its resolve.
     if (!checkTransparencyOrder(program, error))
         return false;
+    // ABI 42 (N5.6): at most one check entry ("readback") a program, its buffer not a geometry buffer.
+    int checks = 0;
+    for (const ModePass &pass : program.passes) {
+        if (pass.readback.isEmpty())
+            continue;
+        const StorageBufferDeclaration *results = program.storageBuffer(pass.readback);
+        if (++checks > 1 || !results || results->geometry) {
+            *error = QStringLiteral("compute entry '%1': one check entry a program, its readback a declared storage "
+                                    "buffer (not a geometry buffer)").arg(QString::fromLatin1(pass.name));
+            return false;
+        }
+    }
     // ABI 42 (N5.6): a cube target's six faces are each drawn by a pass, and one prefilter step follows every pass that
     // draws it (its levels are made from what the faces hold), before any pass reads it.
     for (int t = 0; t < int(program.targets.size()); ++t) {
@@ -3258,6 +3291,8 @@ QJsonObject ModeProgram::toJson() const
             // N3.3 (D16): a compute entry.
             QJsonObject c;
             c.insert(QStringLiteral("trigger"), pass.trigger.toJson());
+            if (!pass.readback.isEmpty())
+                c.insert(QStringLiteral("readback"), QString::fromLatin1(pass.readback)); // ABI 42
             if (!pass.groupsOver.isEmpty()) {
                 c.insert(QStringLiteral("groups"), QJsonObject { { QStringLiteral("over"),
                                                                     QString::fromLatin1(pass.groupsOver) } });
@@ -4507,6 +4542,18 @@ bool ModeSource::takeStoragePixels(QList<StoragePixels> *out)
     return true;
 }
 
+void ModeSource::setCheckReadback(const std::shared_ptr<CheckReadback> &check)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_checkReadback = check;                  // the last one: an earlier one QRhi completed long since
+}
+
+void ModeSource::noteCheck(const QJsonObject &report)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_checkState = report;
+}
+
 void ModeSource::noteStorage(const QJsonObject &state)
 {
     QMutexLocker lock(&m_textureReportMutex);
@@ -4691,6 +4738,8 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("storage"), m_storageState);                             // N3.3 (noted at an edge)
+    if (!m_checkState.isEmpty())
+        o.insert(QStringLiteral("check"), m_checkState);                             // ABI 42 (N5.6), once
     o.insert(QStringLiteral("storage_reads_requested"), double(m_storageReads.loadAcquire()));
     o.insert(QStringLiteral("storage_readback_pending"), m_storageReadback && !m_storageReadback->done());
     o.insert(QStringLiteral("storage_held"), storageHeld());
@@ -6319,8 +6368,33 @@ quint32 ModeContent::computeGroups(QRhi *rhi, const ModePass &pass, int axis) co
     return limit > 0 && groups > quint32(limit) ? ~0u : groups; // ~0: past the device's limit (not dispatched)
 }
 
+void ModeContent::reportCheck()
+{
+    if (!m_check || m_check->done.loadAcquire() == 0)
+        return;                               // none in flight, or QRhi has not completed it: never waited on
+    const QByteArray &data = m_check->result.data;
+    QJsonArray floats;
+    for (qsizetype at = 0; at + 4 <= data.size(); at += 4) {
+        float v = 0.0f;
+        std::memcpy(&v, data.constData() + at, 4);
+        floats.append(double(v));
+    }
+    QJsonObject report;
+    report.insert(QStringLiteral("entry"), QString::fromLatin1(m_check->entry));
+    report.insert(QStringLiteral("buffer"), QString::fromLatin1(m_check->buffer));
+    report.insert(QStringLiteral("bytes"), int(data.size()));
+    report.insert(QStringLiteral("floats"), floats);
+    report.insert(QStringLiteral("hex"), QString::fromLatin1(data.toHex()));
+    m_source->noteCheck(report);
+    qInfo("srpss core: check '%s' read back %d bytes of '%s' (reported once, the content's state \"check\")",
+          m_check->entry.constData(), int(data.size()), m_check->buffer.constData());
+    countCheckReport();
+    m_check.reset();
+}
+
 bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error)
 {
+    reportCheck();                            // ABI 42 (N5.6): a check QRhi completed since, reported once
     const ModeProgram &program = m_source->drawnProgram();
     if (program.generation != m_computeProgram) {
         // A new program: each entry it declares again by name keeps its history (audit 5 M2; the storage itself is kept
@@ -6459,7 +6533,10 @@ void ModeContent::decideDispatches()
         // the same program sent again, restarts nothing).
         const quint64 freshKey = entryFreshKey(pass);
         const bool fresh = !t.dispatched || t.freshSeen != freshKey;
-        const bool due = drawn || fresh || t.changed || value != t.lastTrigger || everyRecord;
+        // ABI 42 (N5.6): a "once" entry (a check) only at its first record with its storage (fresh), never again.
+        const bool once = pass.trigger.kind == ComputeTrigger::Kind::Once;
+        const bool due = drawn || (once ? (fresh || t.changed)
+                                        : (fresh || t.changed || value != t.lastTrigger || everyRecord));
         if (!due) {
             countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
             continue;
@@ -6565,6 +6642,32 @@ void ModeContent::recordCompute(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
     }
     cb->dispatch(int(groups[0]), int(groups[1]), int(groups[2]));
     countDispatch();
+    if (!pass.readback.isEmpty()) {
+        // ABI 42 (N5.6): the check's results read once, in the batch that ends its compute pass (after the dispatch's
+        // write); QRhi completes it at a later frame and reportCheck takes it at a later record, never waiting.
+        const ModeStorage::Buffer *results = m_storage.buffer(pass.readback);
+        if (results && results->buffer && results->bytes <= kMaxCheckReadbackBytes) {
+            auto check = std::make_shared<CheckReadback>();
+            check->entry = pass.name;
+            check->buffer = pass.readback;
+            check->bytes = results->bytes;
+            CheckReadback *raw = check.get();
+            check->result.completed = [raw]() { raw->done.storeRelease(1); };
+            QRhiResourceUpdateBatch *read = rhi->nextResourceUpdateBatch();
+            read->readBackBuffer(results->buffer.get(), 0, results->bytes, &check->result);
+            cb->endComputePass(read);
+            *open = false;
+            m_source->setCheckReadback(check); // the source keeps it alive until QRhi completed it
+            m_check = std::move(check);
+            countCheckReadback(results->bytes);
+            return;
+        }
+        if (results && results->bytes > kMaxCheckReadbackBytes && !m_checkRefusedNoted) {
+            m_checkRefusedNoted = true;       // noted once: the check stays unread, the frame goes on
+            qWarning("srpss core: check '%s': its results '%s' are %u bytes, past the %u a check reads back",
+                     pass.name.constData(), pass.readback.constData(), results->bytes, kMaxCheckReadbackBytes);
+        }
+    }
     if (!computeSinglePass()) {
         cb->endComputePass();
         *open = false;

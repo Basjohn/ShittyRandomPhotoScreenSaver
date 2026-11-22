@@ -139,7 +139,8 @@ struct ComputeBinding
 // still's compute entry may take (a still has no record: "frame" and a field would never or always fire).
 struct ComputeTrigger
 {
-    enum class Kind { Frame = 0, Field = 1, Draw = 2 };
+    // ABI 42 (N5.6): "once", dispatched at the entry's first record (fresh storage) and never again (a check).
+    enum class Kind { Frame = 0, Field = 1, Draw = 2, Once = 3 };
     Kind kind = Kind::Frame;
     QByteArray field;
 
@@ -171,12 +172,18 @@ struct ComputeCounts
     qint64 geometryFailed = 0;
     qint64 geometryReleased = 0;
     qint64 geometryWaits = 0;
+    // ABI 42 (N5.6): a check entry's one-shot readbacks started, their bytes, and the results reported (each once).
+    qint64 checkReadbacks = 0;
+    qint64 checkReadbackBytes = 0;
+    qint64 checkReports = 0;
 };
 ComputeCounts computeCounts();
 void countDispatch();
 void countComputePass();
 void countSkipped();
 void countStateLost();
+void countCheckReadback(quint32 bytes);
+void countCheckReport();
 
 // Harness controls (each the negative control of one proof; process-wide, the harness's only):
 // - every written binding recorded as a read (QRhi then derives no barrier for the write: read-after-write's control);
@@ -221,6 +228,20 @@ struct StoragePixels
     QString format;           // "bytes" for a buffer
     int size[3] = { 0, 0, 0 };
     QByteArray data;
+};
+
+// ABI 42 (N5.6), the one named exception to "nothing in the product reads storage back": a check entry's results
+// ("readback" on a "once" entry, at most kMaxCheckReadbackBytes), read once after its dispatch. QRhi completes it
+// at a later frame; the content takes it at a later record (never waited on) and reports it once (state and log).
+// Held by the source too, so a content released first leaves QRhi's completion nothing dangling.
+constexpr quint32 kMaxCheckReadbackBytes = 4096;
+struct CheckReadback
+{
+    QByteArray entry;
+    QByteArray buffer;
+    quint32 bytes = 0;
+    QRhiReadbackResult result;
+    QAtomicInteger<int> done { 0 };
 };
 
 // Written by QRhi at a frame's end (each result's completion), read by the GUI thread once done. Allocated only when the

@@ -241,5 +241,9 @@
 // {"family", "key"}} form (read only; its key the record's u32 array of 8 words), composite_mode_geometry_arena(handle,
 // name) naming the activation's arena, "<name>@previous" bindable by a compute entry (the rebase record), and
 // composite_live's geometry_resident, _uploads, _failed, _released, _waits, _arenas, _reads_found and _reads_torn.
+// (3) The drift pair check's readback: a compute trigger "once" (the entry's first record with its storage) and an
+// entry's "readback": <a buffer it writes> (one a program, at most 4096 bytes), read once after its dispatch, taken
+// at a later record and reported once (the content's state "check": floats and hex; one log line); composite_live's
+// check_readbacks, check_readback_bytes and check_reports.
 // Backward compatible for every earlier program (none declares a cube or a geometry buffer).
 #define SRPSS_NATIVE_CORE_ABI 42

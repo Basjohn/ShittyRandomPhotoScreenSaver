@@ -819,6 +819,11 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("geometry_arenas"), srpss_core::GeometryArena::liveArenas());
     o.insert(QStringLiteral("geometry_reads_found"), double(srpss_core::GeometryArena::readsFound()));
     o.insert(QStringLiteral("geometry_reads_torn"), double(srpss_core::GeometryArena::readsTorn()));
+    // ABI 42 (N5.6): the check entry's one-shot readbacks (about 1 KB once per program build: flat over a steady
+    // minute), their bytes, and the reports taken (each once, never waited on).
+    o.insert(QStringLiteral("check_readbacks"), double(cc.checkReadbacks));
+    o.insert(QStringLiteral("check_readback_bytes"), double(cc.checkReadbackBytes));
+    o.insert(QStringLiteral("check_reports"), double(cc.checkReports));
     // N3.4 (D17): the stages' objects (bloom chains, defocus read levels, their textures, bytes and pipelines), every
     // object a stage made (flat at rest), the records of each stage, the generated mips, the transparency fallbacks
     // noted and what the skipped-release control left behind.
