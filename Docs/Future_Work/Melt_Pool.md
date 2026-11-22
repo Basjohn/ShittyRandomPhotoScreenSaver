@@ -200,3 +200,26 @@ For each key mock feature (tall molten peaks, surface tension folds, viscous rec
 ---
 
 **Bottom line:** This mode is justified only if it becomes **a sculpted heavy liquid material inside a complete real 3D concrete chamber** that moves under music with pressure, viscosity and recoil. The shared 3D framed camera and scene infrastructure must remain authoritative, and Neon Lake's authored terrain/water behaviour must remain distinct and untouched.
+
+
+## 8. Implementation routing addendum (operator, 23 Nov 2026; supersedes obsolete GL-era route only)
+
+The operator's original art and physics brief above, H01-H14 and stage-by-stage visual acceptance remain intact.
+Section 4.1's instruction to implement on the **existing OpenGL 4.6 renderer** was written before the new native
+core / Vulkan-default sequence. **Melt Pool is now the first newly authored post-flip Vulkan-native mode**,
+following SMP foundations in `Current_Plan.md`; it uses the one C++/QRhi native core, its existing 3D camera,
+material, lifetime, target and compute services, with optional raw Vulkan via N6.7. It does not acquire a
+mode-private renderer, camera, audio clock or GPU service. The old OpenGL substrate names are conceptual reuse
+instructions, not a mandate to create a legacy OpenGL build or match non-existent OpenGL pixels.
+
+Mesh shaders may be used for a genuinely improved **physical chamber** (floor slabs, retaining lip, wall
+recesses, fixtures) or dynamic surface geometry when the mock needs richer silhouettes. The bounded
+height/velocity or deformable-sheet simulation remains a valid and initially preferred model; mesh shaders do
+not justify restarting full SPH/SDF research. The scene is **eligible to be Vulkan-only**, and if mesh shaders
+are required for its accepted fidelity, declare the capability and refuse only that mode on unsupported
+devices. No duplicate OpenGL/non-mesh visual implementation is owed.
+
+Proof remains H01-H14 plus the Vulkan-native N6.7 tests: supported/enabled device features, SPIR-V mesh/task
+compilation, clean validation and barriers, target/camera/depth integration, dynamic geometry bounds,
+4K GPU times including p50/p90, device loss/wake/retirement and operator review against the original low/high
+mock. The fidelity goal is not a license to change Neon Lake or to skip the shared primitives.
