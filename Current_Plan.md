@@ -67,12 +67,10 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Paused for a system restart (22 Nov, weekly usage 92 %); both branches pushed, each worktree's
-  `.artifacts/handover/JOURNAL.md` holds its state. Resume ONE (operator), by SendMessage to its id (or a successor per
-  `agent_handover.py`'s brief): N5.6 agent ac5f7832a73527151 at a0230959d (GPU proofs not started; next: write
-  `eb_core_check.py`, `--rounds limits` then skip, readback, geometry, probe); N5.2f agent abfa6e30ec8e2366d at
-  8ebb6dcac (ABI 41 proofs pass ec314d93b; route check n52f_r4 passes on its proposed bounds, for the lead; cost done;
-  next: register both on Vulkan, merge main, copy the ABI 42 module, retake the hitch row on a quiet machine).
+- [ ] Resumed after the restart (operator, 22 Nov): N5.2f agent abfa6e30ec8e2366d only (bounds accepted by the lead:
+  N52F_EDGE_FLIPS_A/B, N52F_SAMPLER_RULE_B 4305), to registration and the D1 hitch rows. Then, once it merges, N5.6's
+  easiest, time-wasting parts first (the built measurements, docs and the like; operator): agent ac5f7832a73527151 at
+  a0230959d, its journal holds the GPU proof plan (`eb_core_check.py`, limits then skip, readback, geometry, probe).
 - [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
   merged and built at ABI 42 (6e9093f7a), their GPU proofs next; the Preset 9 flicker waits on the operator. Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
