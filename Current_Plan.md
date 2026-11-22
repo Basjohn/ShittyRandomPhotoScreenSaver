@@ -63,6 +63,12 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    this plan sets a global order.
 
 **Resume here (lead, 21 Nov ~16:30 UTC; main at ABI 33, built; weekly about 47 %):**
+- [ ] **NEXT SESSION STARTS HERE (operator, 22 Nov):** read the orchestration handbook first and work out why the lead
+  keeps failing to enforce its protections. 22 Nov failures to explain: briefs paraphrased the operator's defects (the
+  "emission starfish" became a default-camera search; R-250); "no defect" results accepted against what the operator
+  sees; the N5.2f hitch brief kept no per-run traces (per-row runs overwrite one session folder, Volumetric's 182 ms
+  trace lost), conflicted with the agents-never-run-load rule without saying the operator's own running load is not
+  agent-started load, and scoped the fix to "if it is N5.2f's", so the agent stopped at attribution.
 - [ ] Working rules (operator, 21 Nov; handbook 7a and section 3-4, proof guide section 3): critical path only; related
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
@@ -1433,13 +1439,14 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     pairs, full canonical durations, both dprs; the cull form equal to the indirect one; N4.c's harness at one million
     sprites, indirect against cull, same pixels, cost; `--cost` at 1440p and 4K on both backends; one native Vulkan
     hitch session; registration last.
-  - [ ] The hitch rows, taken 22 Nov under a game (Fortune's Eden ~250 % CPU, GPU ~32 %; `n52f_native_vulkan`,
-    `n52f_load_control`): Disintegrate passes at full rate (164 fps, max 18.9 ms) but shows ONE 46-73 ms gap in every run
-    where the saver sits at ~64 fps (3 of 3); Volumetric Dissolve one 182.6 ms gap at 161 fps, then a pass at 65 fps;
-    Crossfade (control) clean in both runs, both at full rate (never caught in the ~64 fps state, so not yet a matched
-    control). Attribute with a kept frame trace per run (per-row runs share one session folder: copy it out between
-    runs), Crossfade in the same ~64 fps state as the control; fix at the owner if it is N5.2f's (the population's
-    compute or buffer growth, a first-use pipeline), then twice each, no gap over 33 ms.
+  - [ ] The hitch rows under a game (22 Nov): attributed by agent ac3072f8bea57441b for Disintegrate (trace
+    `.artifacts/evidence/performance/preflip_pack/20261122_n52f_native_vulkan_session_2160p_idle`, probes
+    `.artifacts/evidence/native_core/n5_2f/20261122_hitch_attribution/`): the GUI thread stalls at the process's FIRST
+    run; `transition()` costs 47-58 ms then 9-13 ms in the first ticks (second run 24-27 + 4-5 ms): the lazy import of
+    the transition's renderer module and its shader text build, then another import at the first scene frame; under the
+    game's CPU load past 33 ms. Fix (not N5.2f-scoped): warm the next transition's module import and text build
+    gradually ahead of its run (warm-up rule; audit low L6, N3.6), then retake the rows under the same running load,
+    copying each per-row session folder out between runs. Volumetric Dissolve's 182.6 ms gap: trace lost, retake it.
   - No cull fallback (lead, 22 Nov): indirect draw is core Vulkan 1.0 and OpenGL 4.0, and Python's population already
     draws with `glDrawArraysIndirect`, so no supported card lacks it; the core refuses with its reason if one ever does
     (ABI 41's facts record the answer). N4.c's one-million-sprite cost check runs on the indirect form only.
