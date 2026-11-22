@@ -79,17 +79,19 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 - [ ] Background track: N5.2e landed 22 Nov (agent a4f18f4449f3e8a5b retired); N5.2f next, held at the weekly
   usage checkpoint (82 %); its frame blocks take N5.2e's `native_one_block` helper.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] Display 1 session gaps: the final flicker session had two runs over 33 ms (3D Block Spins 55, Beam 35; single
-    missed vsyncs at 60 Hz, also present with the diagnostic off), where the 21 Nov N5.2d session had none at ~185 fps.
-    Record the display mode and take one session again (22 Nov: deferred, only the 4K panel at 60 Hz attached as
-    primary; run `preflip_pack.py --rows` with the flicker session's eight, `--backend native-vulkan`, when Display 1
-    is back); unstable only if it repeats at the earlier mode.
-  - [ ] N5.2e's native Vulkan hitch session, taken with it (Membrane, Page Curl, Exploding Tiles, registered 22 Nov
-    without it: a display that is off holds no phase): `preflip_pack.py --rows` for the three, `--backend native-vulkan`,
-    `--app-arg=--graphics-backend=vulkan`; no gap over 33 ms inside a run.
-  - [ ] N5.4's T, taken with it (Waveform registered 22 Nov without it): `preflip_pack.py --name n54_native_vulkan
-    --rows "*waveform*" --backend native-vulkan --app-arg=--graphics-backend=vulkan` (CPU under 40 % first), then
-    `--compare-only` against `20261115_modes_python_gl.json`.
+  - [ ] Exploding Tiles' repeatable mid-run stall on native Vulkan (D1 session 22 Nov, 4K panel at ~185 fps, Usu
+    wallpaper and recorded music; `tools/baselines/preflip/d1_transitions_native_vulkan_20261122`): session gaps 49.5
+    (first frame) and 37.0 ms, per-row rerun 49.8 ms (not the first frame); every other row 0 over 33 ms, including
+    3D Block Spins and Beam, whose 60 Hz gaps did not repeat at the earlier mode (that watch item closes). Attribute
+    with the kept frame trace (`.artifacts/evidence/performance/preflip_pack/20261122_d1_transitions_native_vulkan_20261122_session_2160p_idle`;
+    suspect a pipeline first used mid-run: the sparks going live or the bloom chain) and prewarm it under the warm-up
+    rule; then the row again. With N5.2f's agent (same track).
+  - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
+    (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
+    Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
+    only (its Waveform receipt gate was the same defect, fixed 22 Nov: Python-renderer runs only). Give native
+    Visualizer rows the run-gap figures the transition rows have, then retake the row; check its CPU (137.6 % of a
+    core, with an agent's process busy beside it) and RSS / private (1,013 / 1,710 MB) against a native Bubble row.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against

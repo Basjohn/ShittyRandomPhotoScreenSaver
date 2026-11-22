@@ -1164,12 +1164,18 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     if roundtrips is not None:
         summary["settings_roundtrip"] = {k: v for k, v in roundtrips.items() if k != "gc_policy_lines"}
     phases_path = out / "phases.json"
-    if args.mode=='waveform_ribbon' and not phases_path.exists():
+    # Waveform's receipts (renderer stages, admitted configuration, PCM) are the Python renderer's; on Vulkan the core
+    # draws it (N5.4, 22 Nov) and the run is judged on the frame figures like every native mode.
+    from core.diagnostics.experiment_flags import parse_experiment_flags
+
+    python_waveform = (args.mode == 'waveform_ribbon'
+                       and parse_experiment_flags(list(args.app_arg)).graphics_backend != 'vulkan')
+    if python_waveform and not phases_path.exists():
         raise RuntimeError('Waveform run has no phase/admission receipt')
     if phases_path.exists():
         phases = json.loads(phases_path.read_text(encoding="utf-8"))
         actual=phases.get('waveform_configuration')
-        if args.mode=='waveform_ribbon':
+        if python_waveform:
             if not phases.get('waveform_render'):raise RuntimeError('Waveform run has no steady renderer measurements')
             if not actual:raise RuntimeError('Waveform run did not admit a configured logical scene')
             mismatch={key:(value,actual.get(key)) for key,value in overrides.items()
