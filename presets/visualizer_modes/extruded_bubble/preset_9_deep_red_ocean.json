@@ -127,9 +127,9 @@
         ],
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_camera_position": [
-          -1.005532,
-          -2.806417,
-          -3.394838
+          -0.377836,
+          -3.476284,
+          -3.176352
         ],
         "extruded_bubble_camera_fov": 45,
         "extruded_bubble_auto_rotate": false,
@@ -196,8 +196,8 @@
     "extruded_bubble_turn": 0.07888888888888279,
     "extruded_bubble_tilt": -0.4888888888888884,
     "extruded_bubble_scene_scale": 0.2,
-    "extruded_bubble_scene_pan_x": -0.0040502475747777045,
-    "extruded_bubble_scene_pan_y": -0.17013888888888887
+    "extruded_bubble_scene_pan_x": 0.09438725242522229,
+    "extruded_bubble_scene_pan_y": -0.04374999999999998
   },
   "description": "Saved from current Settings state."
 }
