@@ -127,6 +127,17 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
     since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
     not; fold it there too, with a control.
+- [ ] Widget geometry defects (operator, 22 Nov; not critical, after native work; screenshots in
+  `.artifacts/evidence/widgets/media/20261122_operator_geometry/`; the operator's `--geo` logs and the evidence chest
+  hold more runs):
+  - [ ] Now Playing: the square artwork does not widen with the card, leaving a lot of empty text space; the card
+    needs excess width before the artwork can grow.
+  - [ ] Now Playing side flip: flipping the artwork to the other side is a move, not a mirrored layout, so after a
+    CUSTOM edit the artwork overlaps the title, artist, progress and controls; the flip must mirror the resolved
+    layout (artwork and text column swap sides, keeping each child's custom offsets relative to its column).
+  - [ ] Achievement Pulse: resizing the card or its children sometimes cuts children (the shelves) out of the widget
+    entirely; children must stay inside the card's content rect at every size.
+  Root-cause each at the layout owner with the `--geo` evidence; a resize test per case with a control.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
