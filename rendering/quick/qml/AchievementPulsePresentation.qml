@@ -101,11 +101,15 @@ OverlayWidget {
     // widget). Offsets are stored against the authored canvas and the card can be made smaller than where an offset put
     // a child, so the projection keeps the drawn rectangle inside the visible canvas: the far edge first, then the near
     // one (a child wider than the card sits on its near edge). The visible canvas starts at the trimmed leading gutter.
+    // The card's own padding is kept on every side (the authored insets the canonical layout already uses: 18 px
+    // sides, 14 px top, 16 px bottom), so a child sits inside the content rectangle, never on the border.
+    readonly property real contentInsetBottom: 16.0
     function containCanvasX(x, extent) {
-        return Math.max(0.0, Math.min(leadingTrim + authoredWidth - extent, x))
+        return Math.max(leadingTrim + headerSafeInsetX,
+                        Math.min(leadingTrim + authoredWidth - headerSafeInsetX - extent, x))
     }
     function containCanvasY(y, extent) {
-        return Math.max(0.0, Math.min(authoredHeight - extent, y))
+        return Math.max(headerSafeInsetY, Math.min(authoredHeight - contentInsetBottom - extent, y))
     }
     function semanticRailX(baseX, baseWidth, onAuthoredRail) {
         return headerFlipped && onAuthoredRail
@@ -1320,7 +1324,15 @@ OverlayWidget {
                 property real customEditPlacementCompensationY:
                     achievementRoot.fieldGroupParentReflowY
                 visible: fieldRepeater.count > 0
-                x: achievementRoot.containCanvasX(achievementRoot.semanticRailX(
+                // A grown progress circle pushes the authored group right (its x below); the group gives up the
+                // same width, so its far edge stays where it was instead of leaving the card (operator, 22 Nov).
+                readonly property real placedWidth: Math.max(1.0, canonicalWidth
+                    * achievementRoot.achievementModel.customFieldGroupWidthScale
+                    - (achievementRoot.fieldGroupOnAuthoredRail
+                            && achievementRoot.progressOnAuthoredRail
+                            && !achievementRoot.headerFlipped
+                        ? achievementRoot.progressLayoutWidthDelta : 0.0))
+                readonly property real placedX: achievementRoot.containCanvasX(achievementRoot.semanticRailX(
                         canonicalX, canonicalWidth,
                         achievementRoot.fieldGroupOnAuthoredRail)
                     + (achievementRoot.fieldGroupOnAuthoredRail
@@ -1328,19 +1340,27 @@ OverlayWidget {
                             && !achievementRoot.headerFlipped
                         ? achievementRoot.progressLayoutWidthDelta : 0.0)
                     + achievementRoot.achievementModel.customFieldGroupXOffset
-                        * achievementRoot.baseAuthoredWidth, width)
-                y: achievementRoot.containCanvasY(canonicalY
+                        * achievementRoot.baseAuthoredWidth, placedWidth)
+                readonly property real placedY: achievementRoot.containCanvasY(canonicalY
                     + achievementRoot.fieldGroupParentReflowY
                     + achievementRoot.achievementModel.customFieldGroupYOffset
                         * achievementRoot.baseAuthoredHeight, height)
-                // A grown progress circle pushes the authored group right (its x above); the group gives up the
-                // same width, so its far edge stays where it was instead of leaving the card (operator, 22 Nov).
-                width: Math.max(1.0, canonicalWidth
-                    * achievementRoot.achievementModel.customFieldGroupWidthScale
-                    - (achievementRoot.fieldGroupOnAuthoredRail
-                            && achievementRoot.progressOnAuthoredRail
-                            && !achievementRoot.headerFlipped
-                        ? achievementRoot.progressLayoutWidthDelta : 0.0))
+                // No child overlaps another's text: where the progress circle shares the group's band the group
+                // keeps clear of it, on the side the circle is not (shrinking rather than covering it).
+                readonly property real clearGap: 12.0
+                readonly property bool circleBeside: progressPulse.visible
+                    && placedY < progressPulse.y + progressPulse.visualSize
+                    && progressPulse.y < placedY + height
+                readonly property bool circleLeft:
+                    progressPulse.x + progressPulse.visualSize / 2.0 <= placedX + placedWidth / 2.0
+                x: circleBeside && circleLeft
+                    ? Math.max(placedX, progressPulse.x + progressPulse.visualSize + clearGap) : placedX
+                y: placedY
+                width: Math.max(1.0, Math.min(placedWidth,
+                    (circleBeside && !circleLeft
+                        ? progressPulse.x - clearGap
+                        : achievementRoot.leadingTrim + achievementRoot.authoredWidth
+                            - achievementRoot.headerSafeInsetX) - x))
                 height: canonicalHeight
                     * achievementRoot.achievementModel.customFieldGroupHeightScale
 

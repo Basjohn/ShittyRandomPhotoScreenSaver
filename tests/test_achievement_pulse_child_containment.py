@@ -22,8 +22,22 @@ def _inside(item, name: str, width: float, height: float):
     assert node is not None, name
     scale = float(node.scale())
     right, bottom = node.x() + node.width() * scale, node.y() + node.height() * scale
-    return node.x() >= -0.5 and node.y() >= -0.5 and right <= width + 0.5 and bottom <= height + 0.5, (
-        name, node.x(), node.y(), right, bottom, width, height)
+    # Inside the content rectangle with the card's padding (the card publishes its insets; none is pinned here).
+    side, top, below = (float(item.property(key)) for key in ("headerSafeInsetX", "headerSafeInsetY",
+                                                              "contentInsetBottom"))
+    return (node.x() >= side - 0.5 and node.y() >= top - 0.5 and right <= width - side + 0.5
+            and bottom <= height - below + 0.5), (name, node.x(), node.y(), right, bottom, width, height)
+
+
+def _no_overlap(item, first: str, second: str):
+    a, b = (_find_visual_item(item, name) for name in (first, second))
+    if a is None or b is None or not (a.isVisible() and b.isVisible()):
+        return True, None
+    sa, sb = float(a.scale()), float(b.scale())
+    ra = (a.x(), a.y(), a.x() + a.width() * sa, a.y() + a.height() * sa)
+    rb = (b.x(), b.y(), b.x() + b.width() * sb, b.y() + b.height() * sb)
+    apart = ra[2] <= rb[0] + 0.5 or rb[2] <= ra[0] + 0.5 or ra[3] <= rb[1] + 0.5 or rb[3] <= ra[1] + 0.5
+    return apart, (first, ra, second, rb)
 
 
 @pytest.mark.qt
@@ -50,6 +64,8 @@ def test_children_placed_in_a_larger_card_stay_inside_it_when_the_card_is_made_s
                     continue
                 ok, detail = _inside(item, name, float(model.authoredWidth), float(model.authoredHeight))
                 assert ok, (shelf, grow_x, grow_y, detail)
+            apart, detail = _no_overlap(item, "achievementFieldGroup", "achievementProgressPulse")
+            assert apart, (shelf, grow_x, grow_y, detail)
     finally:
         item.deleteLater()
         component.deleteLater()
@@ -71,6 +87,10 @@ def test_a_grown_progress_circle_does_not_push_the_shelves_out_of_the_card(qt_ap
             qt_app.processEvents()
             ok, detail = _inside(item, "achievementFieldGroup", float(model.authoredWidth), float(model.authoredHeight))
             assert ok, (shelf, scale, detail)
+            ok, detail = _inside(item, "achievementProgressPulse", float(model.authoredWidth), float(model.authoredHeight))
+            assert ok, (shelf, scale, detail)
+            apart, detail = _no_overlap(item, "achievementFieldGroup", "achievementProgressPulse")
+            assert apart, (shelf, scale, detail)
     finally:
         item.deleteLater()
         component.deleteLater()
