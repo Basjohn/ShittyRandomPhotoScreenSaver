@@ -182,6 +182,7 @@
 
 #include "compute_passes.h"
 #include "cube_prefilter.h"
+#include "field_recipe.h"
 #include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
@@ -598,6 +599,13 @@ struct ModeTexture
     ModeTextureFormat format = ModeTextureFormat::RGBA8; // ABI 33
     bool inFrame = false;                // N3.8, a harness control: the in-frame form where a job service exists
     QSharedPointer<TextureImage> image;  // the core's copy, until the render thread takes it for its upload
+    // ABI 43 (N5.2g): a field's output, made from its recipe (field_recipe.h), never from pixels: the recipe (shared by
+    // its outputs, which carry one generation), which output this is, and the deadline (ms after its job's submit, 0:
+    // none) past which the in-frame form replaces its job. Output 0's `image` holds the pixels of the recipe's input
+    // for the job form (null: the in-frame form samples the input's front).
+    std::shared_ptr<const FieldRecipe> field;
+    int fieldOutput = -1;
+    int fieldDeadlineMs = 0;
 };
 
 // The content's texture report (render thread writes, any thread reads; N4.a, N3.8).
@@ -618,6 +626,14 @@ struct TextureReport
     qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
     qint64 stillKept = 0;        // N5.7a: a still's records that kept the target (what it draws had not changed)
     qint64 waitingKept = 0;      // records that kept the target's frame while the content waited for textures or meshes
+    // ABI 43 (N5.2g): field recipes handed to jobs, their outputs committed from a job, recipes recorded in the frame
+    // (OpenGL, no service, a failed job, the deadline), jobs given way to the in-frame form at their deadline, and
+    // recipes the frame could not record (each named lost with its reason).
+    qint64 fieldsSubmitted = 0;
+    qint64 fieldsCommitted = 0;
+    qint64 fieldsInFrame = 0;
+    qint64 fieldsPastDeadline = 0;
+    qint64 fieldFailures = 0;
 };
 
 // One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":
@@ -671,6 +687,14 @@ public:
     bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
                     bool inFrame = false, ModeTextureFormat format = ModeTextureFormat::RGBA8);
     bool removeTexture(const QByteArray &name, QString *error);
+    // ABI 43 (N5.2g), GUI thread: a field's outputs (each an item texture named by the recipe, replacing one of that
+    // name; one generation for all), made by its recipe: by a job (on a device with a job service, unless `inFrame`),
+    // from `pixels` (RGBA8 of `size`, rows top first, tight: the recipe's input photo; empty: none, or the in-frame form
+    // only), or in the frame from the input's front. `deadlineMs` (0 to kMaxFieldDeadlineMs; 0: none): past it the job
+    // gives way to the in-frame form at the next record. Refused for a bad recipe, deadline or byte count, more than
+    // kMaxModeTextures, or an output the current program samples with mips.
+    bool setField(const std::shared_ptr<const FieldRecipe> &recipe, const QByteArray &pixels, const QSize &size,
+                  bool inFrame, int deadlineMs, QString *error);
     // N3.2 (D15 point 2), GUI thread: a mesh (makeModeMesh's declaration and bytes), replacing the one of that name;
     // refused for a bad name, declaration or byte count, or more than kMaxModeMeshes. removeMesh: false when there is
     // none of that name.
@@ -712,6 +736,11 @@ public:
     void noteImageChange(const ImageChangeRecord &record);
     // N3.8: textures newly found lost: the owner's edge (queued to the GUI thread).
     void texturesLost(const QStringList &names);
+    // ABI 43 (N5.2g): textures committed by a record (their new images drawn from it on): the owner's ready edge
+    // (queued to the GUI thread; NativeMode.on_textures_ready), once per committing record.
+    void texturesReady(const QStringList &names);
+    // ABI 43, render thread: a field job with a deadline is in flight (sync then records at every frame, until it is not).
+    void setFieldsWaiting(bool waiting) { m_fieldsWaiting.storeRelaxed(waiting ? 1 : 0); }
     static constexpr int kImageChangeRecords = 64;
 
     // N3.1, GUI thread: an explicit-size target's size (Bubble's ambient target follows its card) with no new program:
@@ -802,6 +831,7 @@ private:
     QList<StorageImageDeclaration> m_drawnImages; // N3.3
     quint64 m_takenJobsFinished = 0;            // N3.8: the notifier's count at the last sync
     QAtomicInteger<int> m_storageHeld { 0 };    // N3.3
+    QAtomicInteger<int> m_fieldsWaiting { 0 };  // ABI 43
 
     const std::shared_ptr<ItemNotifier> m_notifier;
 
@@ -855,6 +885,13 @@ private:
         // made (the record that committed it makes them, before any pass).
         MipChain chain;
         bool chainPending = false;
+        // ABI 43 (N5.2g): the candidate is a field's output (its recipe and output index; its job shared with the
+        // recipe's other outputs), the clock (jobClockNs) past which its job gives way to the in-frame form (0: none),
+        // and whether the in-frame form records it at the commit.
+        std::shared_ptr<const FieldRecipe> field;
+        int fieldOutput = -1;
+        qint64 fieldDeadlineNs = 0;
+        bool fieldInFrame = false;
     };
 
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
@@ -937,6 +974,16 @@ private:
     QString advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates, qint64 *bytes);
     bool uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, GpuTexture &gpu,
                        const QSharedPointer<TextureImage> &image, quint64 generation);
+    // ABI 43 (N5.2g): every output of `first`'s recipe gets its candidate: one job for them all (a job service, not
+    // in-frame, and the input's pixels when the recipe samples one), or the in-frame form at the commit. True when a
+    // job was submitted.
+    bool startField(const std::shared_ptr<JobService> &service, const ModeTexture &first, qint64 *bytes);
+    // ABI 43: at the commit's record, after advanceTextures: each recipe whose outputs commit in the frame recorded by
+    // the shared recorder over its input's front (`*updates`, the record's uploads, taken by its first pass: then null),
+    // its outputs made the fronts; a recipe that cannot be recorded names its outputs lost with the reason.
+    void recordFieldsInFrame(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch **updates);
+    // ABI 43: a job whose field outputs are past their deadline (its candidates in flight) gives way to the in-frame form.
+    void fieldDeadlines();
     // A published job output imported into Qt's QRhi (null on failure, recorded), then made the front (audit N38 L5:
     // the item's commit imports every output before any front switches).
     RhiOwned<QRhiTexture> importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
@@ -974,6 +1021,9 @@ private:
     ContentLatch m_latch;
     GpuTexture m_textures[kMaxModeTextures];
     MipChainKernel m_textureChains;          // ABI 35: the item textures' box kernel (mip_chain.h)
+    FieldRecorder m_fieldRecorder;           // ABI 43: the in-frame form of the item's field recipes (field_recipe.h)
+    QStringList m_committed;                 // ABI 43: the textures this record committed (the ready edge's names)
+    QHash<QByteArray, quint64> m_fieldFailed; // ABI 43: a field output's generation the frame could not make
     CubePrefilter m_cubePrefilter;           // ABI 42: a cube target's levels (cube_prefilter.h)
     quint64 m_textureObjects = 0;           // a texture object created or released: the bindings are rebuilt
     QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
