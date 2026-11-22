@@ -483,6 +483,7 @@ struct ModeProgram
     bool declares(const QByteArray &member) const;
     // N3.2: whether a draw names `name` (a count or a selector a record field or a setting fills), or a stream reads it.
     bool drawNames(const QByteArray &name) const;
+    bool coreReads(const QByteArray &field) const;   // ABI 42: "when", geometry keys
     bool streamReads(const QByteArray &field) const;
     // N3.2: the meshes the passes draw (each once; never the built-in quad). N3.3: and the meshes compute reads.
     QList<QByteArray> drawnMeshes() const;
