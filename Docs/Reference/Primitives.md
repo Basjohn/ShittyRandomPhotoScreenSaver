@@ -5,7 +5,7 @@ document `Docs/Future_Work/Native_Core_P3_Decisions.md` ("Decisions"), `Docs/Ref
 ("Resources"), `Docs/Reference/Transitions.md` ("Lessons" = its section "3D foundation lessons", line 149) and the
 code. Anything not checked against code or a document is marked **unverified**. This file is the catalogue and the
 "what is it for, who uses it, what must you know" view; `Scene3D_Resources.md` keeps the resource-level detail
-(allocation sizes, state restoration, measured figures) and is not repeated here. Presets are authored content and are never named here. The rules a native port obeys, and the traps and proof of each native primitive, are in `Docs/Guides/Native_Port_Playbook.md`; this file stays the catalogue.
+(allocation sizes, state restoration, measured figures) and is not repeated here. Existing operator-authored preset identities/values are not catalogued here; the six planned **new demonstration names** below are unpinned artistic intents, not file names, slot contracts or test inputs. The rules a native port obeys, and the traps and proof of each native primitive, are in `Docs/Guides/Native_Port_Playbook.md`; this file stays the catalogue.
 
 ## 1. What counts as a primitive, and the rules that bind them
 
