@@ -165,6 +165,8 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   depth resolve gives wrong values on both backends, so never `setDepthResolveTexture` (D14 point 10); a fast clear
   through the load op (D14 point 12, rejected: NaN after a capture on Vulkan); a one-sample multisampled object
   (Lessons).
+- ABI 42 (N5.6): at most 6 targets and 48 passes a program (the missing-mesh mask one bit a pass); a cube target
+  (`"cube": true`, explicit square, one RGBA16F, exact) is E14's. Every colour prime takes every layer.
 - Proof: standard; `scene_target_check.py` (analytic nearest depth within 8.7e-8 against the sample-0 control, the
   clamp, the drag across bucket edges against the no-hysteresis control, `--rounds prime_control` on Vulkan alone,
   `python_cost` and `cost_parts` at 4K; multisampled output judged repeat-relative, D14 point 8).
@@ -184,6 +186,10 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   `trigger_every_record` control integrates twice; two controls: `write_as_read` reports read-after-write, the
   single-pass pair write-after-read, each in its own Vulkan child; the pair-check kernel with its `precise`-dropping
   control; OpenGL judged by GPU time because barrier calls cannot be counted).
+- ABI 42 (N5.6): geometry once per key (D3 as built: a geometry buffer from the activation's arena, uploaded once a
+  key, `"<name>@previous"` for a rebase entry); the check readback (a `"once"` entry's `"readback"`, reported
+  in the state's `"check"`). Trap: a field only the core reads (a key, a `"when"`) is the program's read, never
+  `unread`. Proof: `eb_core_check.py --rounds geometry readback` (both backends, each with its control).
 
 <a id="pb-e8"></a>
 ### E8 Stream ring (D15 point 7; catalogue: [E8](../Reference/Primitives.md#e8))
@@ -217,6 +223,10 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   section 8); post effects work only from emitted light (Lessons); masks are per draw-buffer index (`Primitives.md` E19).
 - Proof: standard; the harness proves the inverted coverage equal to the textbook revealage form on a known stack of
   layers (Plan N3.4); bloom cost per pass on the GPU timer.
+- ABI 42 (N5.6): a pass's `"when"` (a record u32) skips a draw or a defocus step at 0 (never a bloom or an
+  environment step: what they make is read later); the program puts it on every entry of the absent work. Proof:
+  `eb_core_check.py --rounds skip` (the frame equals the program without the layer; control: the program-only
+  form still draws).
 
 <a id="pb-e21"></a>
 ### E21 Shadows (N4.h, N4.l; catalogue: [E21](../Reference/Primitives.md#e21))
@@ -232,15 +242,21 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 
 <a id="pb-e13"></a>
 ### E13 and E14 Planar reflection and the scene probe (N4.d; catalogue: [E13](../Reference/Primitives.md#e13), [E14](../Reference/Primitives.md#e14))
-- Status: decided, not built.
+- Status: the scene probe built (N5.6 box 1, ABI 42); the planar reflection decided, not built.
 - Contract: a cube is six passes, one render target per face (`setLayer`); rough-receiver prefiltering is the core's
   own shader, never `generateMips`; the reflection lookup takes its uv from the main camera's clip position (Plan
-  N4.d; Research section 15).
+  N4.d; Research section 15). As built: a cube target (`"cube": true`), a pass's `"face"`, one prefilter step
+  (`{"name", "prefilter": <cube>}`: probe.py's 32-tap cone per level and face into a stage cube, copied into the
+  cube's level), a `samplerCube` with mips. A face holds OpenGL's cube-map rows on both backends: drawn through
+  `uMatrix` from item pixels, or with `v_uv` (y down: OpenGL's NDC y is 1 - 2 v_uv.y).
 - Traps: face orientation may be mirrored between OpenGL and Vulkan (read every face back on both first); a mirrored
   view reverses winding (set the cull face); `gl_FragCoord / resolution` has a different origin per backend;
   looking up a reflection by screen position instead of the reflected ray (Lessons).
 - Proof: standard; the per-face colour readback on both backends; the planar clipping, resize and failure-path boxes
-  that `Primitives.md` E13 lists as open.
+  that `Primitives.md` E13 lists as open. The probe's: `eb_core_check.py --rounds probe` (every face and level
+  against a CPU twin of probe.py's chain; lookups at levels 0, 2 and 3 and across face edges; controls: swapped
+  faces, a per-face box chain, a clamped read). Traps found there: a cube's layers left out of a layout prime
+  (Vulkan VUID-vkCmdDraw-None-09600), a cube's mipped sampler refused as a defocus layer's.
 
 <a id="pb-e24"></a>
 ### E24 Heightfields (N4.e; catalogue: [E24](../Reference/Primitives.md#e24))
