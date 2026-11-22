@@ -143,8 +143,9 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
 - [ ] Circle selector for direction controls (operator, 22 Nov; much later, with the Studio work): Bubble's gradient
-  direction and the other direction controls use the circle selector built earlier (find it in `ui/` before
-  building anything), adapted for Qt Quick where the Studios need it. It allows custom positions, and where the
+  direction and the other direction controls use the circular visual control, `DirectionMapper` /
+  `DirectionChoiceMapper` in `ui/widgets/visual_controls.py` (NOT Bubble's old gradient control, which it replaces),
+  adapted for Qt Quick where the Studios need it. It allows custom positions, and where the
   element makes sense a two-node "pie" range: e.g. specular with two pie points creates speculars anywhere between
   them. Defaults stay exactly as now (presets untouched); Settings spec system owns the values.
 - [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
