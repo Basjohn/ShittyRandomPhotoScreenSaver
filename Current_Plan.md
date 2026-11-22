@@ -805,7 +805,7 @@ the feature (D3D11 is not stated).
       key as `native_parity`; stored in `D:\Temp\Scratch\SRPSS\fast_proof\references\extruded_bubble_<key>`, the
       index with keys, folders and frame counts in `native_core/n5_6/20261122_refs_<take>_<length>/python_references.json`):
       drawn: `""` over the full 60 s of human_heavy1 and nightsolong_acousticsoft1 (the acceptance takes, with their
-      late-song windows; keys in `20261122_refs_human_60/` and `20261122_refs_night_60/`). Next (not started, wind-down
+      late-song windows; 5,503 frames each, about 685 s each: `extruded_bubble_e5058278e42c21ced601d264` (human) and `extruded_bubble_444caacbf472c9d88561b4bc` (nightsolong), indexes in `20261122_refs_human_60/` and `_night_60/`). Next (not started, wind-down
       22 Nov): `""` over ragdoll's 60 s, then `:b`, BEAM, Sunlit, lighting BEAM and `""@overscan` over 30 s of each take
       (`owner_render_parity.py --references-only --mode extruded_bubble --recording <take> --seconds 30 --runs
       <mode+key ...> --placements display overscan`). NOTE: the key holds the Python renderer's sources,
