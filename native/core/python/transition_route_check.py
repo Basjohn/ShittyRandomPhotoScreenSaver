@@ -839,12 +839,15 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.present(photos[0][0])
                 scene.settle()
                 clock.at(run, 0.1)
+                host.set_gpu_timer(True)                         # N5.2g: the fields' frames timed too (OpenGL's
+                host.gpu_samples()                               # in-frame form records them at the commit)
+                started = time.perf_counter()
                 scene.layer.transition(run)
                 scene.settle()
-                _await_fields(scene)                             # N5.2g: a run's fields committed
+                fields_in = _await_fields(scene)                 # N5.2g: a run's fields committed
+                ready_ms = (time.perf_counter() - started) * 1000.0
                 scene.frames(4)
-                host.set_gpu_timer(True)
-                host.gpu_samples()
+                start_records = [s.nanoseconds / 1e6 for s in host.gpu_samples() if s.kind == 2]
                 walls = []
                 for frame in range(COST_FRAMES):
                     clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
@@ -860,7 +863,13 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
                                                "qrhi_frame_gpu": blc._ms_stats(frame_gpu),
                                                "gui_tick_and_frame_wall": blc._ms_stats(walls),
-                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0)}
+                                               "samples": int(run.request.parameter_dict().get("samples", 0) or 0),
+                                               # N5.2g: the run's start to its fields' commit (the job's build and
+                                               # upload, wall; 0 fields: the settle alone), and the core's field count.
+                                               "fields_ready_wall_ms": round(ready_ms, 3),
+                                               "start_record_gpu_max_ms": round(max(start_records, default=0.0), 4),
+                                               "fields": (scene.layer.state().get("mode") or {}).get("fields")}
+                checks[f"{label}_{variant}_fields_in"] = fields_in
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
