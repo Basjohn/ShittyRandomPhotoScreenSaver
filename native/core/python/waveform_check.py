@@ -86,6 +86,13 @@ MODE_ID = "waveform_ribbon"
 VULKAN_RULE_B = pt.Tolerance("waveform ribbon, Vulkan against OpenGL (rule b, statistical)", masked_level=1,
                              scatter_pixels=10 ** 9, tie_pixels=10 ** 9, flip_pixels=10 ** 9,
                              statistics=pt.FrameStatistics(0.16, 0.10, 0.030, 0.006))
+#: Rule (b)'s known exceptions (lead, 22 Nov): rasterisation ties, not defects, and never a wider bound. Ragdoll take,
+#: Frozen Past, inputs 1076 and 4823 (1.31 % and 1.22 % of pixels past 3 levels, max 19 and 10): every compute and
+#: storage resource agrees; at 1076 one reflection texel (row 3, column 289) is covered by the mirrored ribbon light on
+#: Vulkan only (31.75 against 0.06), a fill tie under the flipped rows, which the floor blurs. Evidence:
+#: .artifacts/evidence/native_core/n5_4/20261122_b_fp_1076_raster (per pass), 20261122_b4_ragdoll_fp (the run). The plan's
+#: one row-order convention re-baselines rule (b) native-only and removes the flipped rows behind them.
+RULE_B_KNOWN_EXCEPTIONS = {("ragdoll_quiet_intro_loud_end1", "waveform_ribbon"): (1076, 4823)}
 CONTROLS = {
     "mvp_nudged": {"rounds": ["pixels"], "breaks": "every record's ribbon camera matrix (its first element) x 1.05"},
     "bloom_dropped": {"rounds": ["pixels"], "breaks": "every record's bloom strength set to 0"},
