@@ -320,6 +320,39 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   band-limited (Lessons).
 - Proof: standard; judged against the Python renderer's own quad conversion (checklist 16).
 
+<a id="pb-e16"></a>
+### E16 and E17 Per-run fields: the edge field and the propagation field (N4.g, N5.2g; catalogue: [E16](../Reference/Primitives.md#e16), [E17](../Reference/Primitives.md#e17))
+- Status: built 22 Nov at ABI 43 (N5.2g; consumers Edge Bloom and Capillary Bloom). D9's consumer class (a): a
+  transition's preparation run as an async job.
+- Contract: a field is an item texture the core makes from a recipe (`mode.field(recipe, packs, blocks, pixels=,
+  size=, deadline_ms=)`): a flat list of compute dispatches over named recipe images (r16f, r32f, rgba16f, rgba32f),
+  in the Python owner's order exactly, each dispatch a baked compute pack and an std140 block Python packs
+  (`rendering/quick/scene3d/native_fields.py` holds the builders: `edge_field_recipe`, `propagation_recipe`). The core
+  admits a recipe by the packs' reflection (compute stage, set 0, at most one uniform block, a block's bytes the
+  reflected size up to its 16-byte rounding, an image bound by name with its format and an access its qualifiers
+  allow, samplers only on the input, unknown or unbound names refused) and refuses past its limits (8 packs, 64
+  blocks of 4 KiB, 8 images, 512 dispatches, 4 outputs, 8192 texels a side, 256 MB); outputs are rgba16f, rgba32f or
+  r32f, distinct and never the input (`field_recipe_check` is the admission alone).
+- One recorder, two forms: on Vulkan the job service records the recipe on its own QRhi (the job uploads its input
+  photo from `pixels`, so it never waits on the frame's upload) and publishes the outputs together; OpenGL, a failed
+  job service, or a job past its deadline records the same dispatches in the frame at the input's commit. The
+  deadline is the core's (`deadline_ms`; the layer passes half the run's settled margin, `field_deadline_ms`); while a
+  deadline job is in flight the source records every frame. A generation that fails is not retried.
+- The ready edge: `NativeMode.on_textures_ready(callback)` (GUI thread) names the textures each commit made ready. The
+  layer keeps the old picture until every field of the run is in, then starts the effect's clock at that edge
+  (`_clock_offset_ns`), and removes the fields at the run's end. R32F is an item-texture format (no mips) from ABI 43.
+- Traps: the core's rows run top first, so a fragment that differentiates a field with `dFdy` takes the measured sign
+  under `SRPSS_NATIVE_CORE` (Capillary: +1; -1 put up to 140 levels on its front); the two APIs' compute round r16f
+  stages apart by a hair, which a threshold or hysteresis turns into a few texels (Edge Bloom's contours at fine
+  detail), so judge such a fragment's rule (b) with a guarded class, never by retuning the field; QRhi has no RG
+  formats (the flood is rgba32f, N1.7); a run's first effect frame on a cold driver cache creates its graphics
+  pipeline on the render thread (31 ms at 4K, once per install and driver: N3.6's warm-up policy owns it).
+- Proof: standard; `native/core/python/field_check.py` (the job form equal to the in-frame form on Vulkan, OpenGL
+  in-frame, the deadline's fallback at 1 ms, the ready edge once and nothing recorded at rest, retirement to zero,
+  synchronisation validation with shader accesses clean; `native_core/n5_2g/20261122_fields`), then the route check's
+  N52G variants (`transition_route_check.py`) with the fields committed before each round, and `--cost`, which also
+  times a run's start frames and its fields' ready time.
+
 <a id="pb-e28"></a>
 ### E28 and E29 Backdrop pyramid and the background layer (D7, D13, N5.7; catalogue: [E28](../Reference/Primitives.md#e28), [E29](../Reference/Primitives.md#e29))
 - Contract: the pyramid is built from the core's background layer texture only when changed and only while demand is
