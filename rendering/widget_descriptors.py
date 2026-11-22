@@ -2223,8 +2223,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 minimum_scale=(0.65, 0.65),
                 maximum_scale=(1.75, 2.00),
                 movable=True,
-                alignment_flip=True,
-                authored_alignment="right",
+                # BACKLOG is a header badge with centred text (operator, 22 Nov): no alignment to flip.
             ),
             CustomChildRoleDescriptor(
                 "game_name",

@@ -402,7 +402,8 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'text: "↔"' in qml
     assert "customGameNameAlignment" in abandonment_qml
     assert "customFlavourAlignment" in abandonment_qml
-    assert "customBacklogAlignment" in abandonment_qml
+    # BACKLOG is a centred header badge (operator, 22 Nov, 8cf77689d): its text is centred, its role has no flip.
+    assert "customBacklogAlignment" not in abandonment_qml
     assert "customLastVisitAlignment" in abandonment_qml
     assert "customShelfGroupAlignment" in abandonment_qml
     assert '"roleId": "header"' in abandonment_qml
@@ -675,10 +676,9 @@ def test_abandonment_dense_child_editor_reuses_shared_roles_without_new_cadence(
     assert "fontSizeMode: Text.Fit" in qml
     assert "elide: Text.ElideNone" in qml
 
-    # Freeform artwork must not churn decorative delegates at pointer cadence.
-    assert "readonly property int stripeCount" in qml
-    assert "model: artworkFrame.stripeCount" in qml
-    assert "index * artworkFrame.stripeStep" in qml
+    # Freeform artwork draws no decorative stripe delegates at all (Achievement Pulse's frame, 8cf77689d), so nothing
+    # churns at pointer cadence.
+    assert "stripeCount" not in qml
     assert "model: Math.ceil((artworkFrame.width + artworkFrame.height)" not in qml
 
     combined = child + descriptors + model + qml

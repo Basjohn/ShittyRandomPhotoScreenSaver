@@ -474,7 +474,6 @@ class AbandonmentIssuesPresentationModel(QObject):
         self._custom_header_anchor = ""
         self._custom_artwork_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
         self._custom_backlog_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
-        self._custom_backlog_alignment = "right"
         self._custom_game_name_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
         self._custom_game_name_alignment = "left"
         self._custom_flavour_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
@@ -721,7 +720,6 @@ class AbandonmentIssuesPresentationModel(QObject):
             str(header.anchor or ""),
             (artwork.width_scale, artwork.height_scale, artwork.x_offset, artwork.y_offset),
             (backlog.width_scale, backlog.height_scale, backlog.x_offset, backlog.y_offset),
-            backlog.alignment or self._custom_child_roles["backlog_block"].authored_alignment,
             (game_name.width_scale, game_name.height_scale, game_name.x_offset, game_name.y_offset),
             game_name.alignment or self._custom_child_roles["game_name"].authored_alignment,
             (flavour.width_scale, flavour.height_scale, flavour.x_offset, flavour.y_offset),
@@ -737,7 +735,6 @@ class AbandonmentIssuesPresentationModel(QObject):
             self._custom_header_anchor,
             self._custom_artwork_geometry,
             self._custom_backlog_geometry,
-            self._custom_backlog_alignment,
             self._custom_game_name_geometry,
             self._custom_game_name_alignment,
             self._custom_flavour_geometry,
@@ -755,7 +752,6 @@ class AbandonmentIssuesPresentationModel(QObject):
             self._custom_header_anchor,
             self._custom_artwork_geometry,
             self._custom_backlog_geometry,
-            self._custom_backlog_alignment,
             self._custom_game_name_geometry,
             self._custom_game_name_alignment,
             self._custom_flavour_geometry,
@@ -947,10 +943,6 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(float, notify=customGeometryChanged)
     def customBacklogYOffset(self) -> float:
         return float(self._custom_backlog_geometry[3])
-
-    @Property(str, notify=customGeometryChanged)
-    def customBacklogAlignment(self) -> str:
-        return str(self._custom_backlog_alignment)
 
     @Property(float, notify=customGeometryChanged)
     def customGameNameWidthScale(self) -> float:
