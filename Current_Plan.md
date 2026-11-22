@@ -67,8 +67,8 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); next port N5.6 Extruded Bubble (its first
-  step: EB's three defects), held at the weekly usage checkpoint. Waveform leftovers:
+- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium) on its first
+  step (EB's three defects, operator go 22 Nov). Waveform leftovers:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
     54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
     C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
