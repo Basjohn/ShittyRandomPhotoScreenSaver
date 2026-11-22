@@ -1801,12 +1801,22 @@ the lead rejects any still or showcase frame that shows one.
 
 ### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
 
-- [~] **Existing regular bubbles not consistently accelerated by music** (operator; "they don't actually accelerate
-  (or are constantly pinned)"): the pinned-looking clumps were R-250's short-path bead chains (fixed, operator confirmed
-  the starfish gone). On-screen trace 22 Nov (`tools/visualizer_replay/extruded_bubble_music_response.py`, Presets 9
-  and 1, 60 s of two takes, evidence `music_response/20261122_onscreen/`): every age band tracks the stream with the
-  music (correlation 0.79-1.00, same modulation depth, no lag). Held open on the operator's live judgement: if older
-  bubbles still visibly lag, it is reopened with what is seen and measured again on screen.
+- [ ] **Extruded Bubble stream speed does not reach its authored range (operator, 22 Nov): "The Stream speed isn't
+  working ... We get that even though for example P9 is set minimum 0.13 and maximum 0.89. We're supposed to get that
+  full range (with fast attack slow decay as always) that is set."** (This is the "older bubbles don't accelerate"
+  report: the 22 Nov trace's 0.79-1.00 is age bands' correlation with the stream, never the range the stream reaches.)
+  Fix before N5.6's references: measure the achieved stream speed against the authored minimum and maximum over whole
+  songs (`tools/visualizer_replay/extruded_bubble_music_response.py`, the song's PCM envelope above it); the speed must
+  be wired to energy, sweep the full authored range (quiet near the minimum, loud near the maximum), never pin, attack
+  faster than it decays, decay gentle (the same rule as Waveform's travel-speed slider). Find what compresses it
+  (normalisation, smoothing, a clamp, an adaptive floor), fix at the owner, prove on Presets 9 and 1 with a control.
+  The N5.6 references stored 22 Nov (human_heavy1, nightsolong) are redrawn after the fix.
+- [ ] Extruded Bubble Studio, with the Studio work (operator, 22 Nov):
+  - [ ] Stream Speed becomes one range slider (minimum = speed at least energy, maximum = speed at most energy), replacing
+    the quiet/peak pair, which is harder to use; presets keep their values through the spec owner (repair fill, never
+    pinned); the circular control and range work in the Studio box apply where they fit.
+  - [ ] A MOTION section holding Stream Speed, Drift and possibly Path (decide by what Path controls; operator: "*maybe*
+    PATH"), in the spec owner (`core/settings/visualizer_mode_settings.py`), Settings and Studio alike.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
