@@ -1534,15 +1534,15 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 **N4 / N6 approved primitive demonstration integrations (operator, 23 Nov; POST-FLIP ARTISTIC WORK)**
 
 **Ordering is non-negotiable:** finish required original-mode primitives, port parity, **N5.8's native Studio
-preview/host/capture migration, then NF's Vulkan-default flip** without waiting for any of the six additional
+preview/host/capture migration, then NF's Vulkan-default flip** without waiting for any of the additional
 artistic integrations. Unconsumed high-potential primitives continue on their independent, non-blocking
 primitives track; an approved optional integration is scheduled only **after its host mode's native parity
 and native Studio have been accepted**, when its underlying native service is ready. An earlier core harness
-may be used to prove the primitive itself, but the six new Studio integrations and new presets are NEVER
+may be used to prove the primitive itself, but the new Studio integrations and new presets are NEVER
 new NF, Studio-flip, Waveform/EB/Neon Lake parity or existing preset migration gates. Work may proceed in
 parallel after those prerequisites if resources allow, without displacing Melt Pool then Concrete Rain's
-post-flip order or generating a second renderer. These six are **approved/scheduled**, not speculative
-ideas; each must eventually receive the independently reviewed Studio integration and authored preset.
+post-flip order or generating a second renderer. Each **approved integration** requires independent
+review of its Studio implementation and an authored demonstration preset.
 
 **Common engineering, fidelity, Studio and reactivity admission contract (every integration):**
 - Feature must be independently enabled/disabled, using canonical per-mode typed settings and the
@@ -1718,7 +1718,13 @@ ideas; each must eventually receive the independently reviewed Studio integratio
   puddles, uniform polished mirror and postprocessing pretending
   to be surface physics.
 
-**Do not convert the above six checkboxes into mere request fulfilment screenshots.** Their art targets
+- [ ] **7. Bubble: Ice Chunks.** Add a primitive with varied chunk shapes and slight
+  translucency. Give the chunks an optional subtle chill glow and let them break
+  into visible fragments that shed particles. Integrate these controls into Bubble
+  Studio and prove the effect in the native renderer with a genuinely ice-like Bubble
+  preset that shows the shape variation, translucency, fragmentation, glow and particles.
+
+**Do not convert the above checkboxes into mere request fulfilment screenshots.** Their art targets
 are concrete quality bars for the live, editable, reactive Studio/production-renderer behaviour; the
 recorded demonstration preset is only one freely mutable example of what the canonical controls can do.
 For new, genuinely post-flip Vulkan-exclusive modes Melt Pool then Concrete Rain, N6.7's distinct
