@@ -244,6 +244,10 @@ with median swap gaps of 20.41/12.18/19.23 ms. On Vulkan, about 90 GUI present r
 Qt frame starts per second. The recorded worker supplied about 90 publications per second on all three routes.
 Stack conditions and raw trace locations are in
 `.artifacts/evidence/visualizers/shared/native_viz_timing/20261123_draw_swap_receipt/waveform_vulkan_opengl_vulkan.json`.
+The median interval from Qt's after-render callback to the correlated swap was about 0.6 ms on Waveform Vulkan.
+The median interval from that swap to the next Qt frame start was 14.6/13.4 ms, compared with 8.9 ms on Bubble Vulkan.
+About three quarters of Waveform Vulkan's frame cycles contained multiple GUI present requests. See
+`qt_cycle_phase_breakdown.json` in the same receipt directory.
 
 **Pre-flip reference, transitions (lead, 15 Nov).** The load set chosen by measured cost (operator: parity and
 regressions are proved per port, so five transitions suffice for the load comparison): the four heaviest by the 14 Nov

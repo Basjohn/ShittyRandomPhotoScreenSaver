@@ -109,6 +109,11 @@ then resume the native sequence below. The reported EB response delay is in the 
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
+  - [ ] Attribute Waveform's Vulkan frame admission gap before any mode optimization. The 23 Nov Display 1 comparison
+    measured 50.0 / 77.2 / 51.4 draws per second across Vulkan/OpenGL/Vulkan with the same settings and recording.
+    Vulkan began about 51 Qt cycles per second from about 90 GUI requests. The median swap-to-next-frame interval was
+    13.4–14.6 ms on Waveform Vulkan and 8.9 ms on Normal Bubble Vulkan. Follow the active request to the Qt frame timer
+    and prove which owner adds the wait. Use `Docs/Reference/Benchmarks.md` for the recorded conditions and traces.
 - [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
   box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
@@ -2933,14 +2938,6 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
   EB target and shell radii, and swaps before considering a change. Receipts are under
   `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/` and
   `.artifacts/evidence/visualizers/extruded_bubble/response_pixel_radius/20261123_live_d1_cold_124/REPORT.md`.
-
-**Waveform Ribbon Vulkan cadence (23 Nov, 4K Display 1)**
-
-- [ ] Repeat in a quieter window if the slower cadence persists in use. With the same copied profile, preset and
-  recording, a Vulkan/OpenGL/Vulkan sequence measured 50.0 / 77.2 / 51.4 draws per second. Both Vulkan runs issued
-  about 90 GUI present requests per second and began about 51 Qt frames per second. The worker produced about
-  90 publications per second in all three runs. Start from request-to-Qt-frame admission. A concurrent game was active
-  throughout. The benchmark and raw receipt locations are in `Docs/Reference/Benchmarks.md`.
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
