@@ -51,9 +51,8 @@ method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixel
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
 **Operator priority (23 Nov):** finish the Dashboard release checks already running on GitHub. Take the Qt 6.12.1
-patch when its four matching Python wheels are published. While those are pending, repair the native Visualizer timing
-receipt needed for Bubble and Waveform proof, then resume the native sequence below. The reported EB response delay is
-in the Watchlist.
+patch when its four matching Python wheels are published. Use the repaired timing receipts for the Waveform and
+Bubble follow-ups, then resume the native sequence below. The reported EB response delay is in the Watchlist.
 
 - [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
   source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
@@ -113,12 +112,10 @@ in the Watchlist.
 - [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
   box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
 - [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
-    (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
-    Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
-    only (its Waveform receipt gate was the same defect, fixed 22 Nov: Python-renderer runs only).
-    - [ ] After the fast long-clip proof's layer T tooling is repaired, retake the Waveform row and compare its CPU (137.6 % of a core, with an agent busy beside it) and RSS / private
-      (1,013 / 1,710 MB) against a native Bubble row.
+  - [ ] Retake the N5.4 Waveform timing row on Display 1 with the repaired native cadence receipt. Keep the raw traces
+    and record CPU, RSS and private bytes alongside a native Bubble row under otherwise comparable conditions.
+    The 22 Nov `tools/baselines/preflip/n54_native_vulkan.json` run measured render time but lacked valid FPS and swap
+    gaps. Use a quiet local window for the cost comparison.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
@@ -824,11 +821,6 @@ the feature (D3D11 is not stated).
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` section 7):
   - [ ] Layer L built (e0275205c): `tools/visualizer_replay/native_record_identity.py`, test
     `tests/test_native_record_identity.py`; evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
-  - [ ] Layer T on native paths: give Visualizer live-check rows actual frame counts and within-run gaps from native
-    draws and correlated swaps (`frames_per_s` is 0 on Vulkan today). Prove that idle frames do not count, an active
-    timing receipt with no correlated Visualizer frames fails, and Python and transition rows retain their figures.
-    Compare the swap-gap figures on an OpenGL control;
-    keep per-pass GPU time on `--gpu-pass-timing`.
   - [ ] Layer P built (ddb3dc8b2, ec0bf3feb, 12a688e57, d0b2e8095, 29fc590c0): cached references
     (`tools/visualizer_replay/python_references.py`), native-only `--against`, `native_stream_player.py` for Vulkan
     (generic modes only; Spectrum's own item is not played yet), `--judge-workers`. Evidence `fast_proof/20261120_*`.
