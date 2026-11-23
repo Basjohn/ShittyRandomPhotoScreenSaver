@@ -1,4 +1,4 @@
-"""N5.6's built proofs of Extruded Bubble's core boxes (ABI 42; ``Current_Plan.md`` N5.6), through ``rendering.native``,
+"""N5.6's built proofs of Extruded Bubble's core boxes (``Current_Plan.md`` N5.6), through ``rendering.native``,
 on harness scenes of their own: the module (``release/native_module``, built on GitHub) loaded the product's way in one
 child process per graphics API (OpenGL, then Vulkan on the module's own instance and device under validation). No window
 is ever visible (hidden hosts only).
@@ -10,6 +10,9 @@ Rounds (each with its control):
   limits    a 48-pass, 6-target program admitted and drawn (its last pass's fill read back), nothing recorded at
             rest; 49 passes and 7 targets refused with their reasons; six surface-sized RGBA16F targets' bytes at
             3840x2160.
+  compute_bindings  the product's drift shaders admitted together with the 12-buffer graph; a program with 16 buffers
+            and 8 bindings in one entry drawn and resized, every clear and prefix copy recorded, nothing at rest;
+            17 declarations and 9 bindings refused with their reasons.
   skip      a pass's "when" (a record u32): at 0 it draws nothing (the frame equals the program without it), at 1 it
             draws; mode_entries_skipped counts each skipped record. The defocus step and its near layer skipped at 0:
             the frame equals the program without the layer, stage_defocus_records flat. Control: the program-only form
@@ -29,7 +32,7 @@ Usage (repository venv, from the checkout holding the built module):
   python native/core/python/eb_core_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted [--rounds limits skip readback]
 Evidence: .artifacts/evidence/native_core/n5_6/<date>_<label>/summary.json. The verdict is the last printed line
-("N56 VERDICT PASS" or "N56 VERDICT FAIL: ...").
+("N56 VERDICT PASS" or "N56 VERDICT FAIL: ..."). The command exits nonzero on failure.
 """
 from __future__ import annotations
 
@@ -52,7 +55,7 @@ import vk_validation  # noqa: E402
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("limits", "skip", "readback", "geometry", "probe")
+ROUNDS = ("limits", "skip", "readback", "geometry", "probe", "compute_bindings")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
 OUT: Path | None = None     # the child's evidence folder (set by child)
@@ -191,6 +194,7 @@ def bake_packs(out: Path) -> None:
     source, broken = cp.pair_check_sources()
     packs["pair_check.comp"] = probe_rings.bake(source, "pair_check.comp", src)
     packs["pair_check_broken.comp"] = probe_rings.bake(broken, "pair_check_broken.comp", src)
+    packs.update({name: probe_rings.bake(text, name, src) for name, text in compute_binding_shaders().items()})
     packs.update({f"post_{k}": v for k, v in ps.bake_all(src).items()})
     for name, data in packs.items():
         (folder / f"{name}.qsb").write_bytes(data)
@@ -366,6 +370,134 @@ def round_limits(core, engine, app, api: str, packs: dict) -> dict:
     finally:
         host.close()
         host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+# ----------------------------------------------------------------------------------------- compute bindings
+
+def compute_binding_shaders() -> dict[str, str]:
+    from rendering.native.mode import MAX_COMPUTE_BINDINGS
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS
+
+    shaders = {f"{name}.comp": source for name, source in PROGRAMS}
+    for count in (MAX_COMPUTE_BINDINGS, MAX_COMPUTE_BINDINGS + 1):
+        blocks = [f"layout(std430, binding = {i}) buffer Row{i} {{ uint row{i}[]; }};" for i in range(count)]
+        stores = [f"row{i}[0] += 1u;" for i in range(count)]
+        shaders[f"bindings_{count}.comp"] = "\n".join(
+            ["#version 440", "layout(local_size_x = 1) in;", *blocks, "void main() {", *stores, "}"])
+    return shaders
+
+
+def drift_compute_program(packs: dict):
+    """The three drift families bind the product's own packs, including each previous geometry key."""
+    from compute_passes import pair_check_record
+    from rendering.native.mode import ComputeBinding, ComputePass, ModeStream, StorageBuffer
+
+    passes = []
+    buffers = []
+    for family_id, family in enumerate(("chains", "snow", "specks")):
+        geometry, state, aux = (f"{family}_{role}" for role in ("geometry", "state", "aux"))
+        buffers.extend((Raw({"name": geometry, "geometry": {"family": family_id, "key": f"{family}_key"}}),
+                        StorageBuffer(state, f"{family}_state_bytes"), StorageBuffer(aux, f"{family}_aux_bytes")))
+        block_names = ("Knots", "Paths") if family == "chains" else ("Motes", "Bases")
+        bindings = (
+            ComputeBinding("DriftSteps", "drift_steps", "stream"),
+            ComputeBinding("Geometry", geometry),
+            ComputeBinding("OldGeometry", f"{geometry}@previous"),
+            ComputeBinding(block_names[0], state, access="read_write"),
+            ComputeBinding(block_names[1], aux, access="read_write"),
+            ComputeBinding("Out", "drift_out", access="write"),
+        )
+        shader = "drift_chains.comp" if family == "chains" else "drift_clouds.comp"
+        passes.append(ComputePass(f"drift_{family}", packs[shader], groups=(f"{family}_groups", 1, 1),
+                                  bindings=bindings))
+    case_bytes = len(pair_check_record()["case_rows"])
+    buffers.extend((StorageBuffer("drift_out", "drift_out_bytes"), StorageBuffer("check_cases", case_bytes),
+                    StorageBuffer("check_results", case_bytes // 2)))
+    check = ComputePass("drift_pair_check", packs["drift_pair_check.comp"], groups=(1, 1, 1),
+                        bindings=(ComputeBinding("CheckCases", "check_cases"),
+                                  ComputeBinding("CheckResults", "check_results", access="write")))
+    passes.append(_with(check, trigger="once", readback="check_results"))
+    return passes, buffers, (ModeStream("drift_steps", "drift_step_words", used="drift_word_count"),)
+
+
+def binding_limit_pass(packs: dict, count: int):
+    from rendering.native.mode import ComputeBinding, ComputePass, MAX_COMPUTE_BINDINGS
+
+    bindings = tuple(ComputeBinding(f"Row{i}", f"row_{i}", access="read_write") for i in range(count))
+    pack = packs[f"bindings_{count}.comp"]
+    entry = ComputePass("binding_limit", pack, groups=(1, 1, 1), bindings=bindings[:MAX_COMPUTE_BINDINGS],
+                        trigger="draw")
+    # Use the raw form for the ninth binding so the test reaches native admission.
+    if count > MAX_COMPUTE_BINDINGS:
+        return Raw(dict(entry.declaration(), bindings=[binding.declaration() for binding in bindings]), pack)
+    return entry
+
+
+def round_compute_bindings(core, engine, app, api: str, packs: dict) -> dict:
+    from rendering.native.mode import MAX_COMPUTE_BINDINGS, MAX_STORAGE_BUFFERS, ModePass, StorageBuffer, program_json
+
+    checks, facts = {}, {}
+    passes, resources, streams = drift_compute_program(packs)
+    declared, shaders = program_json(passes, streams=streams, buffers=resources)
+    drift = json.loads(core.module.mode_program_layout(declared, shaders))
+    facts["drift_buffers"] = [b["name"] for b in drift["buffers"]]
+    facts["drift_bindings"] = {p["name"]: len(p["compute"]["bindings"]) for p in drift["passes"]}
+    checks["the_product_drift_graph_is_admitted"] = (
+        len(facts["drift_buffers"]) == 12 and list(facts["drift_bindings"].values()) == [6, 6, 6, 2])
+
+    host = _host(core, CARD)
+    fill = ModePass("fill", packs["fill.frag"], "replace")
+    settings = {"u_fill": FILL, "row_bytes": 16}
+    counters = ("compute_clears", "compute_copies", "compute_dispatches", "compute_objects_created")
+    buffers = tuple(StorageBuffer(f"row_{i}", "row_bytes") for i in range(MAX_STORAGE_BUFFERS))
+    try:
+        scene = _still(core, engine, host, CARD, packs, (fill,), (), {"u_fill": FILL})
+        try:
+            passes = (binding_limit_pass(packs, MAX_COMPUTE_BINDINGS), fill)
+            before = _live(core)
+            scene.mode.program(passes, settings, buffers=buffers)
+            scene.mode.update()
+            host.frames(3)
+            after = _live(core)
+            facts["cold"] = {k: _delta(after, before, k) for k in (*counters, "compute_buffers")}
+            checks["the_boundary_program_allocates_all_buffers_and_dispatches"] = (
+                facts["cold"]["compute_buffers"] == facts["cold"]["compute_clears"] == MAX_STORAGE_BUFFERS
+                and facts["cold"]["compute_dispatches"] == 1)
+
+            scene.mode.settings(dict(settings, row_bytes=32))
+            host.frames(3)
+            resized = _live(core)
+            facts["resize"] = {k: _delta(resized, after, k) for k in counters}
+            checks["the_resize_records_every_clear_and_copy"] = (
+                facts["resize"]["compute_clears"] == facts["resize"]["compute_copies"] == MAX_STORAGE_BUFFERS)
+            records = scene.mode.state().get("records")
+            host.frames(8)
+            rest = _live(core)
+            facts["rest"] = {k: _delta(rest, resized, k) for k in counters}
+            checks["nothing_records_or_allocates_at_rest"] = (
+                bool(records) and scene.mode.state().get("records") == records
+                and all(v == 0 for v in facts["rest"].values()))
+
+            nine = binding_limit_pass(packs, MAX_COMPUTE_BINDINGS + 1)
+            facts["one_binding_past"] = _refusal(
+                lambda: scene.mode.program((nine, fill), buffers=buffers))
+            facts["one_buffer_past"] = _refusal(lambda: scene.mode.program(
+                passes, buffers=(*buffers, StorageBuffer("overflow", 16))))
+            checks["one_binding_past_refused_with_its_reason"] = (
+                f"compute entry 'binding_limit': at most {MAX_COMPUTE_BINDINGS} storage bindings per entry "
+                f"(got {MAX_COMPUTE_BINDINGS + 1})" in facts["one_binding_past"])
+            checks["one_buffer_past_refused_with_its_reason"] = (
+                f"at most {MAX_STORAGE_BUFFERS} storage buffers" in facts["one_buffer_past"])
+            state = scene.mode.state()
+            checks["the_drawn_program_is_kept"] = (
+                len(state["program"]["buffers"]) == MAX_STORAGE_BUFFERS and not state.get("content_failing"))
+        finally:
+            _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    checks["the_boundary_buffers_are_released"] = _live(core).get("compute_buffers") == before.get("compute_buffers")
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -1011,7 +1143,7 @@ def child(args) -> dict:
     engine = QQmlEngine()
     packs = load_packs(out)
     rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry,
-              "probe": round_probe}
+              "probe": round_probe, "compute_bindings": round_compute_bindings}
     try:
         for name in args.rounds:
             if vulkan:
@@ -1100,7 +1232,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{api}: {'PASS' if ok else 'FAIL'}" + ("" if ok else " (" + "; ".join(reasons)[:2000] + ")"))
     print(f"evidence: {out / 'summary.json'}")
     print("N56 VERDICT " + ("PASS" if not failed else "FAIL: " + "; ".join(failed)[:4000]))
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

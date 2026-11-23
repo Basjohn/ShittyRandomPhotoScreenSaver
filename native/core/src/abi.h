@@ -262,4 +262,6 @@
 // field_counts; the content state's "fields" and textures_ready_edges / _delivered; the job self-test's submit_field.
 // Backward compatible for every earlier program and caller (no texture is a field's output unless sent so; the ready
 // edge only calls a listener that is set).
-#define SRPSS_NATIVE_CORE_ABI 43
+// 44 (N5.6, Extruded Bubble drift): the program can declare up to 16 storage buffers, including geometry buffers.
+// The existing limit of 8 storage bindings per compute entry still applies. Earlier programs remain valid.
+#define SRPSS_NATIVE_CORE_ABI 44

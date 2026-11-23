@@ -1627,13 +1627,19 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
         }
     }
     const QJsonValue bindings = o.value(QStringLiteral("bindings"));
-    if (!bindings.isArray() || bindings.toArray().size() > kMaxComputeBindings) {
-        *error = QStringLiteral("compute entry '%1': \"bindings\" is at most %2 {\"name\", \"buffer\" | \"image\" | "
-                                "\"stream\" | \"mesh\", \"access\"}").arg(label).arg(kMaxComputeBindings);
+    if (!bindings.isArray()) {
+        *error = QStringLiteral("compute entry '%1': \"bindings\" is a list of {\"name\", \"buffer\" | \"image\" | "
+                                "\"stream\" | \"mesh\", \"access\"}").arg(label);
+        return false;
+    }
+    const QJsonArray storageBindings = bindings.toArray();
+    if (storageBindings.size() > kMaxComputeBindings) {
+        *error = QStringLiteral("compute entry '%1': at most %2 storage bindings per entry (got %3)")
+                     .arg(label).arg(kMaxComputeBindings).arg(storageBindings.size());
         return false;
     }
     static const char *const kinds[] = { "buffer", "image", "stream", "mesh" };
-    for (const QJsonValue &entry : bindings.toArray()) {
+    for (const QJsonValue &entry : storageBindings) {
         const QJsonObject b = entry.toObject();
         ComputeBinding binding;
         binding.name = b.value(QStringLiteral("name")).toString().toLatin1();
