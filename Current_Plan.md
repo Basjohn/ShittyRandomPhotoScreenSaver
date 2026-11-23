@@ -50,21 +50,14 @@ Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port
 method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
-**Operator priority (23 Nov):** finish the Dashboard naming migration, then isolate and fix the perceived response
-delay before Extruded Bubble measurements or port work. Resume the native sequence below after those gates.
+**Operator priority (23 Nov):** finish the Dashboard release checks already running on GitHub. Take the Qt 6.12.1
+patch when its four matching Python wheels are published. While those are pending, repair the native Visualizer timing
+receipt needed for Bubble and Waveform proof, then resume the native sequence below. The reported EB response delay is
+in the Watchlist.
 
 - [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
   source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
   Verify an upgrade from a legacy profile using a disposable copy.
-- [~] **Awaiting Logs: perceived EB response delay during sustained playback.** The supplied
-  `logs/evidence_chest/logs077d6cc043.zip` records frame delivery but lacks an independent audio-output clock.
-  Matched PCM, actual hidden D1 render snapshots, native-size shell pixels and the Realtek loopback crossover
-  did not reproduce a persistent fullscreen-start shift. Keep the playback ramp and R-219 optics.
-  Next use the failing take to align independently timestamped output PCM with callback blocks, EB target
-  and native shell radii, and swaps on both startup routes. Compare against a latency-good take under the
-  same profile. Land a fix and a regression guard only once that comparison fails on current source.
-  Replay probes and controls are under `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/`
-  and `response_pixel_radius/20261123_live_d1_cold_124/REPORT.md` in the main checkout.
 
 **Order (lead and operator, 17 Nov):**
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
@@ -123,9 +116,11 @@ delay before Extruded Bubble measurements or port work. Resume the native sequen
   - [ ] N5.4's T, half taken (22 Nov, D1 4K panel, `tools/baselines/preflip/n54_native_vulkan`): render 2.2 / 2.8 ms
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
     Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
-    only (its Waveform receipt gate was the same defect, fixed 22 Nov: Python-renderer runs only). Give native
-    Visualizer rows the run-gap figures the transition rows have, then retake the row; check its CPU (137.6 % of a
-    core, with an agent's process busy beside it) and RSS / private (1,013 / 1,710 MB) against a native Bubble row.
+    only (its Waveform receipt gate was the same defect, fixed 22 Nov: Python-renderer runs only).
+    - [ ] Give native Visualizer rows actual frame counts and within-run gap figures from native draws and correlated
+      swaps. Check the idle / no-draw negative and preserve the Python rows and transition rows with focused tests.
+    - [ ] Retake the Waveform row and compare its CPU (137.6 % of a core, with an agent busy beside it) and RSS / private
+      (1,013 / 1,710 MB) against a native Bubble row.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
@@ -140,7 +135,7 @@ delay before Extruded Bubble measurements or port work. Resume the native sequen
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High: resume N5.6 Extruded Bubble after the Dashboard and response-delay gates at the top of this section.
+- [ ] High: resume N5.6 Extruded Bubble from its port checklist in the modes track.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -452,9 +447,10 @@ automatic successor to NF, item 9 or the first new Visualizer.
   (`createOffscreenRenderPass` without an external dependency, only with non-preserving targets), D (Qt Quick's
   `grabWindow` on Vulkan, grab phases only). C (`toVkAccess(TexColorOutput)` write-only) is avoided by priming targets
   at creation and after every readback and is never excused. Owed:
-  - [ ] **Qt 6.12.1 bump (lead; operator, 20 Nov: bump without asking).** Checked 20 Nov: PyPI still has PySide6
-    6.12.0 only, and Qt's release plan moved 6.12.1 from 12 Nov to 23 Nov (wiki.qt.io/Qt_6.12_Release). When PySide6,
-    PySide6_Addons, PySide6_Essentials and shiboken6 6.12.1 are on PyPI:
+  - [ ] **Qt 6.12.1 bump (lead; operator, 20 Nov: bump without asking).** Checked 23 Nov: Qt published the 6.12.1
+    SDK and Windows MSVC 2022 repository metadata. PyPI version endpoints for PySide6, PySide6_Addons,
+    PySide6_Essentials and shiboken6 still return 404 for 6.12.1. Keep runtime and SDK on 6.12.0 until all four
+    matching Python wheels are on PyPI, then:
     - [ ] Pick a stage boundary (decision D11): no agent mid-build on `native/core`; agents merged or checkpointed.
     - [ ] Change the four pins in `requirements.txt`, then `pip install -r requirements.txt` with no venv process
       running (locked PySide6 DLLs make pip fail; restore a mixed set at once if it does).
@@ -2930,6 +2926,17 @@ changes. Details: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
 Live checklist: every box is an observation or a fix owed on evidence; delete an item when its evidence closes it.
+
+**Extruded Bubble response during sustained playback (operator, 23 Nov)**
+
+- [ ] Reopen if a failing take reproduces a persistent relative delay against a good take with the same profile.
+  The supplied `logs/evidence_chest/logs077d6cc043.zip` has frame delivery but no independent audio-output clock.
+  Matched recorded PCM, actual D1 worker snapshots, 4K shell pixels and the Realtek loopback comparison found no
+  sustained fullscreen-start phase shift. The controls detected deliberate late PCM and late shell motion with fresh
+  frame stamps. Keep the playback ramp and R-219 optics. Align independently timestamped audio output with callbacks,
+  EB target and shell radii, and swaps before considering a change. Receipts are under
+  `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/` and
+  `.artifacts/evidence/visualizers/extruded_bubble/response_pixel_radius/20261123_live_d1_cold_124/REPORT.md`.
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 
