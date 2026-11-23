@@ -231,6 +231,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   environment step: what they make is read later); the program puts it on every entry of the absent work. Proof:
   `eb_core_check.py --rounds skip` (the frame equals the program without the layer; control: the program-only
   form still draws).
+- Extruded Bubble uses depthless near shell and cluster fragments with the original hit and discard rules. The
+  depth-backed variants still write fragment depth. The [near-layer proof](../../.artifacts/evidence/visualizers/extruded_bubble/capture/20261123_raster_near_comparison_display/report.md)
+  records the QSB interface check and byte-identical display and overscan comparisons.
 
 <a id="pb-e21"></a>
 ### E21 Shadows (N4.h, N4.l; catalogue: [E21](../Reference/Primitives.md#e21))

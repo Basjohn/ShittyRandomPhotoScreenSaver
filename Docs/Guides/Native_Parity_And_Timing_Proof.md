@@ -47,6 +47,10 @@ L, response tools, timing parity) applies to it.
   checklist-16 conversion (a port's decided change to the Python renderer): its references redraw once through the
   cache key, with stills before and after and the port's showcase WebP. Each native run renders
   only the native path against the cache.
+- **Rendering defects found during a port:** reproduce the failure and fix it at the rendering boundary. Record
+  the expected visual change and a control that distinguishes the correction from the defect. Use the corrected
+  output as the reference and check unaffected paths for drift. After the Vulkan-default flip (NF), Vulkan is the
+  primary acceptance target. Document OpenGL fallback limitations without carrying them into Vulkan output.
 - **Coverage:** per reaction mode, one full 60 s take, plus coverage-selected windows from the other takes. L's
   records choose the windows: the extremes of each record field, the cold start, mode switches and fades, the loudest
   and quietest seconds, and reaction-mode changes. **Late-song windows are required:** every take contributes at

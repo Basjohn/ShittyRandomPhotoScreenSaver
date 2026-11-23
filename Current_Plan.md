@@ -818,10 +818,8 @@ the feature (D3D11 is not stated).
     per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
     limits against current source. Use Extruded Bubble's own references.
   - [ ] **Prepare the Python shaders** ([playbook checklist 16](Docs/Guides/Native_Port_Playbook.md)).
-    Keep before/after stills and a comparison WebP for each changed path. The native route uses the same sources.
-    - [ ] Exclude `gl_FragDepth` from the near shell and cluster variants, which draw without a depth attachment.
-      Keep writes on the depth-backed variants and preserve existing hit and discard rules. Verify both compiled
-      interfaces and replay both near passes.
+    Keep before/after stills and a comparison WebP for each changed path. Use the
+    [port proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run) for verified rendering fixes.
     - [ ] Address shafts and blur in target pixels. Clamp the two blur directions and the screen's final shaft
       sample to content texel centres before normalizing by allocation size. Test odd content with poisoned
       padding and distinct top and bottom rows, then compare recorded display and overscan frames.

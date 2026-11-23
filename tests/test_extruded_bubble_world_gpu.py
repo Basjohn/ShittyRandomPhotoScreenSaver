@@ -7,6 +7,33 @@ from rendering.quick.render.gl_resources import delete_program
 from rendering.gl_programs.extruded_bubble_program import EB_LENS_FADE
 
 
+def test_baked_near_passes_have_no_depth_output(tmp_path):
+    import subprocess
+    import sys
+
+    from rendering.gl_programs import extruded_bubble_program as shaders
+    from rendering.gl_programs.conventions import NATIVE_CORE_DEFINE
+    from rendering.gl_programs.portable import portable_program
+    from tools.regen_qrc import _bake_quick_shader, quick_shader_baker, quick_shader_targets
+
+    qsb = quick_shader_baker(sys.executable)
+    targets = (*quick_shader_targets(), "-D", NATIVE_CORE_DEFINE)
+    for family, vertex, ordinary, near in (
+        ("shell", shaders.BUBBLE_VERTEX, shaders.BUBBLE_FRAGMENT, shaders.NEAR_FRAGMENT),
+        ("cluster", shaders.CLUSTER_VERTEX, shaders.CLUSTER_FRAGMENT, shaders.NEAR_CLUSTER_FRAGMENT),
+    ):
+        # Temporary packing for the native bake. The product's traced-glass block conversion is a separate slice.
+        _, converted, _ = portable_program(vertex, (ordinary, near), block="DepthCheck", samplers=shaders.EB_SAMPLERS)
+        for has_depth, source in zip((True, False), converted, strict=True):
+            fragment = tmp_path / f"{family}_{has_depth}.frag"
+            pack = fragment.with_suffix(".qsb")
+            glsl = fragment.with_suffix(".glsl")
+            fragment.write_text(source, encoding="utf-8")
+            _bake_quick_shader(qsb, fragment, pack, targets, subprocess.run)
+            subprocess.run([str(qsb), "-x", "glsl,460", "-o", str(glsl), str(pack)], check=True, capture_output=True)
+            assert ("gl_FragDepth" in glsl.read_text(encoding="utf-8")) is has_depth, fragment.name
+
+
 @pytest.fixture
 def sphere_pixels(qt_app, request):
     from OpenGL import GL as gl
