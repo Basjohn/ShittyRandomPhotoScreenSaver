@@ -34,14 +34,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SettingsProfile:
-    """The product identity Settings is opened in. ``mc``: the Dashboard build."""
+    """The product identity Settings is opened in. ``dashboard``: the Dashboard build."""
 
-    mc: bool = False
+    dashboard: bool = False
 
     @classmethod
     def current(cls) -> "SettingsProfile":
-        from core import dashboard as mc
-        return cls(mc=bool(mc.is_dashboard_build()))
+        from core import dashboard
+        return cls(dashboard=bool(dashboard.is_dashboard_build()))
 
 
 def _no_pill(_view_state: Mapping[str, Any]) -> str:

@@ -236,7 +236,7 @@ def test_onefile_like_runtime_bootstraps_shared_programdata_from_bundled(tmp_pat
 def test_is_frozen_build_treats_srpss_executable_name_as_frozen(monkeypatch):
     monkeypatch.setattr(vp.sys, "frozen", False, raising=False)
     monkeypatch.setattr("builtins.__compiled__", False, raising=False)
-    monkeypatch.setattr(vp.sys, "executable", str(Path(r"C:\Program Files\SRPSS\SRPSS.scr")))
+    monkeypatch.setattr(vp.sys, "executable", str(Path(r"C:\Program Files\SRPSS\SRPSS_Screensaver.scr")))
 
     assert vp._is_frozen_build() is True
 

@@ -15,7 +15,7 @@ def _make_helper_inputs(root: Path, mode: str) -> None:
         root / "helpers" / "reddit_helper_worker.py",
         root / "core" / "constants" / "timing.py",
         root / "core" / "logging" / "logger.py",
-        root / "core" / "mc.py",
+        root / "core" / "dashboard.py",
         root / "core" / "windows" / "browser_window_routing.py",
         root / "core" / "windows" / "reddit_helper_runtime.py",
         root / "build_deps" / "requirements_helper.txt",

@@ -98,7 +98,7 @@ def test_schedule_runtime_reddit_helper_session_skips_script_mode(monkeypatch):
 
     assert main._schedule_runtime_reddit_helper_session(_FakeEngine()) is False
     assert breadcrumb_calls == [
-        "session helper skipped script=1 mc=0 argv0=main.py exe=python.exe"
+        "session helper skipped script=1 dashboard=0 argv0=main.py exe=python.exe"
     ]
 
 
@@ -124,8 +124,8 @@ def test_schedule_runtime_reddit_helper_session_skips_diagnostic_build(monkeypat
         "core.windows.reddit_helper_runtime.ensure_helper_runtime",
         lambda **_kwargs: helper_calls.append("ensure"),
     )
-    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "/s"])
-    monkeypatch.setattr(main.sys, "executable", r"C:\Apps\SRPSS_Diagnostic.scr")
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Screensaver_Diagnostic.scr", "/s"])
+    monkeypatch.setattr(main.sys, "executable", r"C:\Apps\SRPSS_Screensaver_Diagnostic.scr")
 
     class _FakeEngine:
         _reddit_helper_session_timer = None

@@ -213,7 +213,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         target_pid = int(proc.pid)
         target = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target is None:
-            raise RuntimeError(f"Failed to locate MC window for pid={target_pid}")
+            raise RuntimeError(f"Failed to locate Dashboard window for pid={target_pid}")
 
         log_file = _wait_for_log_file(log_dir, timeout_s=12.0)
         if log_file is None:
@@ -226,7 +226,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         if args.scenario == "manual_focus":
             _beep(800, 200)
             _banner("MANUAL FOCUS PHASE")
-            print("Click / focus the SRPSS MC window now.")
+            print("Click / focus the SRPSS Dashboard window now.")
             sys.stdout.flush()
             _countdown(args.manual_focus_seconds, "Focus window")
             prep = {"scenario": args.scenario, "focus_ok": True}
@@ -260,7 +260,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
 
             _beep(800, 200)
             _banner("PHASE 2 / 3 -- MANUAL CLICK / FOCUS SRPSS")
-            print("NOW: Click inside the SRPSS MC window with YOUR MOUSE.")
+            print("NOW: Click inside the SRPSS Dashboard window with YOUR MOUSE.")
             print("This simulates the real user repro path.")
             print(f"You have {args.manual_focus_seconds:.1f}s to click it...\n")
             sys.stdout.flush()
@@ -301,7 +301,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
             _banner("SINGLE PHASE CAPTURE")
             if not focus_ok:
                 _banner("WARNING: SRPSS IS NOT FOCUSED")
-                print("Results may not reflect focused-MC behavior.")
+                print("Results may not reflect focused-Dashboard behavior.")
             else:
                 print("SRPSS is focused.")
             print("Press your real media keys now (Volume Up/Down, Play/Pause).")

@@ -3,7 +3,7 @@
 Why: the driver's own shader cache is per executable path, and a onefile build extracts to a new folder per build, so
 every new build linked every program cold; Neon Lake's basin is one ~6 s ``glLinkProgram`` on the render thread that
 holds every display (R-180). This store lives in the per-user local data root (``<local>/SRPSS/gl_program_cache``), so
-it survives builds, and it is shared by Standard and Media Center: the key carries everything that decides validity.
+it survives builds, and it is shared by Screensaver and Dashboard: the key carries everything that decides validity.
 
 * **Key:** SHA-256 over this store's schema, the GL vendor, renderer and version strings, the driver's supported
   binary formats, and every stage's type and source. A shader edit or a driver update is a clean miss.

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from enum import Enum
 
-# One compile publishes SRPSS.scr and SRPSS_Diagnostic.scr; the published file's name selects the
+# One compile publishes SRPSS_Screensaver.scr and SRPSS_Screensaver_Diagnostic.scr; the published file's name selects the
 # diagnostic flavour before anything else is imported (core/build_profile.py).
 from core.build_profile import activate_flavour_for_artifact
 
@@ -333,7 +333,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
 
     # Default mode depends on environment:
     #  - Script runs (python main.py) default to RUN for convenience.
-    #  - Frozen builds (SRPSS.exe/SRPSS.scr) default to CONFIG to avoid
+    #  - Frozen builds (SRPSS.exe/SRPSS_Screensaver.scr) default to CONFIG to avoid
     #    surprising full-screen runs when selected in the Windows dialog
     #    or double-clicked.
     if len(args) == 1:
@@ -456,11 +456,11 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
         from core.windows import reddit_helper_runtime
 
         script_mode = bool(is_script_mode())
-        mc_mode = bool(is_dashboard_build())
-        if script_mode or mc_mode:
+        dashboard_mode = bool(is_dashboard_build())
+        if script_mode or dashboard_mode:
             _log_helper_event(
                 "session helper skipped "
-                f"script={int(script_mode)} mc={int(mc_mode)} "
+                f"script={int(script_mode)} dashboard={int(dashboard_mode)} "
                 f"argv0={Path(str(getattr(sys, 'argv', [''])[0] or '')).name} "
                 f"exe={Path(str(getattr(sys, 'executable', '') or '')).name}"
             )

@@ -61,7 +61,7 @@ class DisplayTab(QWidget):
         
         self._settings = settings
         self.settings_manager = settings  # Also expose as property for tests
-        self._is_mc_profile = interaction_mode_forced()
+        self._is_dashboard_profile = interaction_mode_forced()
         self._loading: bool = False
         self._widget_glow_color_override: Optional[List[int]] = None
         self._setup_ui()
@@ -373,7 +373,7 @@ class DisplayTab(QWidget):
         self.interaction_mode_check.setChecked(
             bool(self._canonical_default("input.interaction_mode"))
         )
-        if self._is_mc_profile:
+        if self._is_dashboard_profile:
             self.interaction_mode_check.setEnabled(False)
             self.interaction_mode_check.setToolTip(
                 "Dashboard builds keep Interaction Mode always enabled."

@@ -4,7 +4,7 @@
 profile with the diagnostic flavour: bounded per-user logging and fatal traceback
 capture are activated before ``main`` is imported. Compiled builds have no
 separate diagnostic compile: the Standard build publishes the same binary a
-second time as ``SRPSS_Diagnostic.scr`` and ``main`` selects the flavour from
+second time as ``SRPSS_Screensaver_Diagnostic.scr`` and ``main`` selects the flavour from
 that name (``core/build_profile.py``). A direct launch runs the screensaver, and
 ``--debug`` opens a terminal.
 """

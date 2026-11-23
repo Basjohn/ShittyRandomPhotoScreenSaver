@@ -144,7 +144,7 @@ TAG_SPOTIFY_VIS = "[SPOTIFY_VIS]"
 TAG_SPOTIFY_VOL = "[SPOTIFY_VOL]"
 """Spotify volume control - routed to screensaver_spotify_vol.log"""
 
-TAG_MC = "[MC]"
+TAG_DASHBOARD = "[DASHBOARD]"
 """Dashboard mode operations."""
 
 TAG_SHADOW = "[SHADOW]"
@@ -214,7 +214,7 @@ __all__ = [
     # Module-specific
     "TAG_SPOTIFY_VIS",
     "TAG_SPOTIFY_VOL",
-    "TAG_MC",
+    "TAG_DASHBOARD",
     "TAG_SHADOW",
     "TAG_SHADOW_ASYNC",
     # GL-specific

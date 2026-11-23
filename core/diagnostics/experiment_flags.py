@@ -10,7 +10,7 @@ capabilities.
 Admissions:
 
 * ``--viz-switch-telemetry`` — admit boundary-only render-host switch/resource
-  ownership telemetry. Without it, Standard/MC runtime allocates no lifecycle
+  ownership telemetry. Without it, Standard/Dashboard runtime allocates no lifecycle
   telemetry object, takes no new lock, keeps no new bookkeeping, and adds no new
   logging/timer/sampler/GL query.
 * ``--abc-drive=A|B|C`` — admit the opt-in in-app A/B/C stress/causal harness.
@@ -102,7 +102,7 @@ class ExperimentFlags:
         """True when the boundary render-host telemetry must be allocated.
 
         ``--abc-drive`` implicitly admits the same telemetry it scores, so either
-        flag turns it on; neither leaves it off (Standard/MC runtime).
+        flag turns it on; neither leaves it off (Standard/Dashboard runtime).
         """
         return self.viz_switch_telemetry or self.abc_drive is not None
 

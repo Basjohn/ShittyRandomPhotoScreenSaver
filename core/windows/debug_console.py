@@ -2,7 +2,7 @@
 
 Builds compile without a console (``--windows-console-mode=disable``): a console that always opens disturbs
 winlogon, breaks soaks, and even appeared when installing the screensaver from Explorer's right-click menu
-(operator, 2026-10-10). ``SRPSS_Diagnostic.scr --debug`` reuses the terminal it was started from, or opens its
+(operator, 2026-10-10). ``SRPSS_Screensaver_Diagnostic.scr --debug`` reuses the terminal it was started from, or opens its
 own, and points ``sys.stdout``/``sys.stderr`` at it before logging starts, so the console log handler writes there.
 """
 from __future__ import annotations

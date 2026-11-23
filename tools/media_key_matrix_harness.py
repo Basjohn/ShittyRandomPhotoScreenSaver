@@ -1,12 +1,12 @@
-"""Media/input matrix harness for MC/normal runtime key-routing investigations.
+"""Media/input matrix harness for Dashboard/normal runtime key-routing investigations.
 
 This harness is designed for the U-05 bug family:
-- focused MC window loses media/normal key behavior after click,
+- focused Dashboard window loses media/normal key behavior after click,
 - context-menu or external focus changes behavior,
 - runtime variants diverge.
 
 It automates:
-1) optional isolated-profile launch (MC/normal),
+1) optional isolated-profile launch (Dashboard/normal),
 2) deterministic focus-state transitions,
 3) safe key probes (volume step + transition key),
 4) evidence collection (foreground snapshots, volume deltas, log deltas),
@@ -1071,8 +1071,8 @@ def _evaluate_runtime_contract(launch: str, target_window: WindowInfo, log_file:
             missing.append(name)
 
     if launch == "dashboard":
-        _must("target class indicates Qt Tool/Splash MC window", "Tool" in target_window.klass or "Splash" in target_window.klass)
-        _must("log has MC window flag mode", "[DISPLAY_WIDGET] MC window flag mode=" in log_text)
+        _must("target class indicates Qt Tool/Splash Dashboard window", "Tool" in target_window.klass or "Splash" in target_window.klass)
+        _must("log has Dashboard window flag mode", "[DISPLAY_WIDGET] MC window flag mode=" in log_text)
         _must("log has display widget creation", "DisplayWidget created for screen" in log_text)
         _must("log has GL compositor creation", "[GL COMPOSITOR] Created shared compositor" in log_text)
         _must("log has show_on_screen", "Showing on screen " in log_text)
