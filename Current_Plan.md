@@ -838,6 +838,10 @@ the feature (D3D11 is not stated).
       Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
       adaptive state enabled, single sampling and masks. Budget 30 s per alternate and take; apply the late-window
       rule below before drawing. Run at most two reference processes at once.
+  - [ ] **Core prerequisite (ABI 45).** The hidden ABI 44 shader run rejects EB's `uViewToWorld` as an
+    unfillable `mat3`. Extend the existing block packer for column-major 3×3 floats from settings and from
+    f64 record fields. Prove reflected std140 column offsets, arrays and adjacent members, invalid counts and
+    conversions, and Vulkan/OpenGL shader readback. Build the core through GitHub Build Runner before route admission.
   - [ ] **Native record and route.** Add `core/visualizer_engine/extruded_bubble_native_schema.py`, the route
     program, and the mode's `native_record_identity.MODES` entry with passes, read spans, streams and positional
     members. Stage worker owners from the source reading. Map 64-bit family revisions to a small per-family
