@@ -10,6 +10,8 @@ import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from core.visualizer_engine.native_schema import NativeSchemaError
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
     FAMILIES, KNOT_DECISION_BYTES, STEP_FLOATS, STEP_INDEX, DriftFamily, knot_starts, unpack_steps,
@@ -38,10 +40,24 @@ DRIFT_RECORD_ENTRIES = (
 
 
 def _step_serial(value: float | int) -> int:
-    serial = int(value)
-    if serial != value or not 0 < serial <= _U32_MAX:
+    if not 0 < value <= _U32_MAX or int(value) != value:
         raise NativeSchemaError(f"Extruded Bubble's drift step {value} is outside the native record's u32 serials")
-    return serial
+    return int(value)
+
+
+def _step_bounds(steps: bytes) -> tuple[int, int]:
+    try:
+        serials = unpack_steps(steps)[:, _SERIAL]
+    except ValueError as exc:
+        raise NativeSchemaError(str(exc)) from exc
+    if not len(serials):
+        raise NativeSchemaError("Extruded Bubble's live drift families need at least one drift step")
+    valid = (serials >= 1) & (serials <= _U32_MAX) & (serials == np.trunc(serials))
+    if not valid.all():
+        raise NativeSchemaError("Extruded Bubble's drift step serials must be positive u32 integers")
+    if not (serials[1:] > serials[:-1]).all():
+        raise NativeSchemaError("Extruded Bubble's drift step serials must be strictly increasing")
+    return int(serials[0]), int(serials[-1])
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,8 +127,7 @@ class DriftRecordProjector:
             raise NativeSchemaError("Extruded Bubble's drift frame has an unknown or repeated family")
         window = DriftSteps()
         if descriptors:
-            records = unpack_steps(frame.drift_steps)
-            first, last = _step_serial(records[0, _SERIAL]), _step_serial(records[-1, _SERIAL])
+            first, last = _step_bounds(frame.drift_steps)
             if last < self._last_serial:
                 raise NativeSchemaError("Extruded Bubble's drift serial went backwards within an activation")
             window = DriftSteps(frame.drift_steps, frame.drift_knots, first, last)

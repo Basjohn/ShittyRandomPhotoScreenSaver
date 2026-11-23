@@ -105,3 +105,20 @@ def test_failed_projection_does_not_advance_any_familys_epoch_or_step():
     assert fields["chains_epoch"] == 2 and fields["chains_rebase_from_epoch"] == 1
     with pytest.raises(NativeSchemaError, match="went backwards"):
         projector.project(_frame([1], first))
+
+
+@pytest.mark.parametrize("serials", ([1, 3, 2, 4], [1, 2, 2, 4], [1, 2.5, 4], [1, 0, 4], [1, 1 << 32, 4]))
+def test_invalid_interior_serial_leaves_the_cursor_and_epoch_untouched(serials):
+    projector = DriftRecordProjector(7, 2, 3)
+    first = _family(2, 1)
+    projector.project(_frame([1], first))
+    invalid = _family(3, 2, rebase_from=2)
+    with pytest.raises(NativeSchemaError, match="drift step"):
+        projector.project(_frame(serials, invalid))
+
+    edited = _family(4, 2, rebase_from=2)
+    fields, window = projector.project(_frame([1, 3], edited))
+    assert fields["chains_epoch"] == 2 and fields["chains_rebase_from_epoch"] == 1
+    assert fields["drift_last_step"] == 3
+    pending, restart = window.after(1)
+    assert restart and pending.first_serial == pending.last_serial == 3
