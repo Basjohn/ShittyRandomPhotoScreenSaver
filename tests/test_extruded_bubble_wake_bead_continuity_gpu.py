@@ -39,10 +39,13 @@ def _records():
 
 
 def test_trailed_beads_never_jump_as_points_are_laid_and_the_trail_turns(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program, delete_program
     from tools.labs.render_target import OffscreenRenderTarget
+    from tools.pass_block_gl import PassBlockGL
+
+    gl = PassBlockGL(GL)
     prefix = BEAD_VERTEX.split('void main() {\n    vOpacity = 1.0;\n')[0]
     vertex = prefix + '''
 layout(std430, binding = 5) buffer FizzResults { vec4 fizzResults[]; };
@@ -59,6 +62,7 @@ void main() {
     try:
         program = compile_program(vertex, '#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',
                                   label='wake bead continuity')
+        gl.register(program, GLASS_BLOCK)
         gl.glUseProgram(program)
         names = np.empty(2, dtype='u4'); gl.glCreateBuffers(2, names); buffers = list(map(int, names))
         result, wakes = buffers
@@ -93,6 +97,7 @@ void main() {
             previous = rows
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         if buffers:
             gl.glDeleteBuffers(len(buffers), buffers)

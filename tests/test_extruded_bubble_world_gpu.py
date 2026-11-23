@@ -13,18 +13,15 @@ def test_baked_near_passes_have_no_depth_output(tmp_path):
 
     from rendering.gl_programs import extruded_bubble_program as shaders
     from rendering.gl_programs.conventions import NATIVE_CORE_DEFINE
-    from rendering.gl_programs.portable import portable_program
     from tools.regen_qrc import _bake_quick_shader, quick_shader_baker, quick_shader_targets
 
     qsb = quick_shader_baker(sys.executable)
     targets = (*quick_shader_targets(), "-D", NATIVE_CORE_DEFINE)
-    for family, vertex, ordinary, near in (
-        ("shell", shaders.BUBBLE_VERTEX, shaders.BUBBLE_FRAGMENT, shaders.NEAR_FRAGMENT),
-        ("cluster", shaders.CLUSTER_VERTEX, shaders.CLUSTER_FRAGMENT, shaders.NEAR_CLUSTER_FRAGMENT),
+    for family, ordinary, near in (
+        ("shell", shaders.BUBBLE_FRAGMENT, shaders.NEAR_FRAGMENT),
+        ("cluster", shaders.CLUSTER_FRAGMENT, shaders.NEAR_CLUSTER_FRAGMENT),
     ):
-        # Temporary packing for the native bake. The product's traced-glass block conversion is a separate slice.
-        _, converted, _ = portable_program(vertex, (ordinary, near), block="DepthCheck", samplers=shaders.EB_SAMPLERS)
-        for has_depth, source in zip((True, False), converted, strict=True):
+        for has_depth, source in zip((True, False), (ordinary, near), strict=True):
             fragment = tmp_path / f"{family}_{has_depth}.frag"
             pack = fragment.with_suffix(".qsb")
             glsl = fragment.with_suffix(".glsl")
@@ -36,16 +33,18 @@ def test_baked_near_passes_have_no_depth_output(tmp_path):
 
 @pytest.fixture
 def sphere_pixels(qt_app, request):
-    from OpenGL import GL as gl
+    from OpenGL import GL
     from rendering.gl_programs.extruded_bubble_program import (
-        BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT,
+        BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT, EB_SAMPLERS, GLASS_BLOCK,
         NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT,
     )
     from rendering.gl_programs.extruded_bubble_scene import camera
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)
     width,height=getattr(request,'param',(480,320))
     target=TransitionCapture(width,height)
     programs={}; texture=vao=cube=circle_texture=0
@@ -61,7 +60,8 @@ def sphere_pixels(qt_app, request):
         gl.glBindTexture(gl.GL_TEXTURE_2D,target.textures[0])
         gl.glTexSubImage2D(gl.GL_TEXTURE_2D,0,0,0,width,height,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,
                           np.full((height,width,4),128,dtype='u1'))
-        cube=int(gl.glGenTextures(1));gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], target.textures[0])
+        cube=int(gl.glGenTextures(1));gl.glActiveTexture(gl.GL_TEXTURE0 + EB_SAMPLERS["uProbe"])
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP,cube)
         for face in range(6):
             gl.glTexImage2D(gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,0,gl.GL_RGBA8,4,4,0,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,
@@ -73,6 +73,7 @@ def sphere_pixels(qt_app, request):
         for kind,vertex,fragment in (('ordinary',BUBBLE_VERTEX,BUBBLE_FRAGMENT),('cluster',CLUSTER_VERTEX,CLUSTER_FRAGMENT),
                                      ('near',BUBBLE_VERTEX,NEAR_FRAGMENT),('near_cluster',CLUSTER_VERTEX,NEAR_CLUSTER_FRAGMENT)):
             programs[kind]=compile_program(vertex,fragment,label='physical geometry '+kind)
+            gl.register(programs[kind], GLASS_BLOCK)
         tan=camera(0,0,width/height)[2];projection=camera(0,0,width/height)[3]
         gl.glViewport(0,0,width,height)
         for option in (gl.GL_BLEND,gl.GL_DEPTH_TEST,gl.GL_CULL_FACE):gl.glDisable(option)
@@ -104,7 +105,6 @@ def sphere_pixels(qt_app, request):
                 else:
                     gl.glUniform1f(loc(name),value)
             gl.glUniform1i(loc('uDiag'),diag)
-            gl.glUniform1i(loc('uProbe'),2);gl.glUniform1i(loc('uBackground'),0)
             gl.glUniform3f(loc('uIors'),1.15,2.,1.)
             gl.glUniform2f(loc('uFrameSize'),width,height);gl.glUniform2f(loc('uTargetSize'),width,height)
             gl.glUniform2f(loc('uTan'),*span)
@@ -147,6 +147,7 @@ def sphere_pixels(qt_app, request):
         draw.near_budget=_near_spread(height)
         yield draw
     finally:
+        gl.release()
         for program in programs.values():delete_program(program)
         if vao:gl.glDeleteVertexArrays(1,[vao])
         if texture:gl.glDeleteTextures([texture])

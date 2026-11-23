@@ -242,6 +242,10 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
 
     def forbidden(*_args, **_kwargs):
         pytest.fail("a prepared frame compiled or allocated")
+
+    def loose_uniform(*_args, **_kwargs):
+        pytest.fail("a prepared frame queried or wrote a loose uniform")
+
     for module in (resources, defocus, probe, gl_resources):
         if hasattr(module, "compile_program"):
             monkeypatch.setattr(module, "compile_program", forbidden)
@@ -249,6 +253,9 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
                  "glCreateVertexArrays", "glCreateFramebuffers", "glCreateRenderbuffers", "glTextureStorage2D",
                  "glTexStorage2D", "glTextureStorage2DMultisample", "glNamedBufferStorage"):
         monkeypatch.setattr(gl, name, forbidden)
+    for name in ("glGetUniformLocation", "glProgramUniform1i", "glProgramUniform1f", "glProgramUniform2f",
+                 "glProgramUniform3f", "glProgramUniform4f", "glProgramUniformMatrix3fv", "glProgramUniformMatrix4fv"):
+        monkeypatch.setattr(gl, name, loose_uniform)
     turned = _snapshot(extruded_bubble_turn=0.4, extruded_bubble_tilt=0.2, extruded_bubble_scene_scale=1.7)
     pictures = [capture.render(host, frame_) for frame_ in (snapshot, turned, snapshot)]
     assert renderer._target._names == names and renderer._target.allocation == allocation
@@ -492,7 +499,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
     so specks resolve) once drew each as a shaded dot; with no size there is no quad at all."""
     from OpenGL import GL
 
-    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, PARTICLE_BLOCK, PARTICLE_VERTEX
+    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, GLASS_BLOCK, PARTICLE_BLOCK, PARTICLE_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
@@ -506,9 +513,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         program = compile_program(BUBBLE_VERTEX if stage == "bubble" else PARTICLE_VERTEX,
                                   "#version 460 core\nout vec4 colour;\nvoid main() { colour = vec4(1.0); }\n",
                                   label="no-size test")
-        block = {"particle": PARTICLE_BLOCK}.get(stage)
-        if block is not None:
-            gl.register(program, block)
+        gl.register(program, GLASS_BLOCK if stage == "bubble" else PARTICLE_BLOCK)
         gl.glUseProgram(program)
         for name, value in (("uFocus", 10.0), ("uAperture", 0.0), ("uCrisp", 0.0), ("uNearLayer", 0.0),
                             ("uPixel", 2.0 * tan[1] / height), ("uSpecks", 1.0), ("uParticleRadiusShare", 1.0)):

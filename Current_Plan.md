@@ -818,13 +818,6 @@ the feature (D3D11 is not stated).
     The original source reading is in `git show 644c18cb3:Current_Plan.md` under N5.6 → Reading. It inventories
     per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
     limits against current source. Use Extruded Bubble's own references.
-  - [ ] **Prepare the Python shaders** ([playbook checklist 16](Docs/Guides/Native_Port_Playbook.md)).
-    Keep before/after stills and a comparison WebP for each changed path. Use the
-    [port proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run) for verified rendering fixes.
-    - [ ] Convert the traced-glass loose uniforms to a block. Record the previously measured compiler rounding
-      difference (one 8-bit level on 1–2 pixels in 14–26 of 549 frames). Move the beads' probe sampler away from
-      binding 6, which is also occupied by `EbMaterialDrift` in Vulkan's shared namespace. Keep the probe geometry
-      shader on the ratchet for its layered `gl_Layer` write, which has no HLSL variant.
   - [ ] **Redraw the Python references** once the shader conversions and **1B.10a stream-speed range** work are
     complete. Use a fresh explicit `--references` root for this redraw and the matching native runs. The
   reference-only path's cache key covers drawing sources and skips the logical-digest comparison.

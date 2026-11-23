@@ -23,14 +23,14 @@ from __future__ import annotations
 import ctypes
 import math
 import struct
-from contextlib import nullcontext
 
 import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    FULLSCREEN_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    EB_SAMPLERS, FULLSCREEN_BLOCK, GLASS_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK,
+    NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
     PROBE_BACKDROP_FRAGMENT, SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
 from rendering.gl_programs.scene3d import _STD140
@@ -80,6 +80,8 @@ _PROGRAMS = (
 # The programs whose values are a pass block (N1.6), by key: each family's one layout.
 _BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "probe_backdrop": FULLSCREEN_BLOCK,
            "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
+           "shells": GLASS_BLOCK, "clusters": GLASS_BLOCK, "beads": GLASS_BLOCK,
+           "near": GLASS_BLOCK, "near_clusters": GLASS_BLOCK,
            "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK, "trails": TRAIL_BLOCK}
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
@@ -90,7 +92,7 @@ _BLOOM = 0.55
 _NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a giant over (pixels)
 _SHELL_CAPACITY = MAX_BUBBLES   # the simulation's bubbles
 _CLUSTER_CAPACITY = MAX_BUBBLES // 2
-_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
+_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = (EB_SAMPLERS[name] for name in ("uShafts", "uBackground", "uProbe"))
 # Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
 # scaled by the tier's particle share). Beads climb by the stream's travel only, with integrated energy response.
 _CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = CHAINS_PER_STEP, 160, SNOW_FULL
@@ -223,25 +225,18 @@ class _Instances:
 
 
 class _Uniforms:
-    """Each program's values by name, each applied only when it changed. Values: int/bool, float, 2/3/4-float tuples,
-    9 (mat3) or 16 (mat4) floats, column-major.
+    """Each program's pass block, with changed values packed at their std140 offsets.
 
-    A program registered with its family's pass block (N1.6, ``register``) keeps its values packed in that block as
-    they change: a changed value is written at its member's std140 offset, a name the block does not hold is
-    dropped, and its draws bind ``packed(program)``. No GL call, no lookup. Any other program takes its values as
-    loose uniforms (``glProgramUniform*``: no program bind), its locations resolved in preparation (``resolve``)."""
+    Shared scene values can include names that are used only by another block."""
 
     def __init__(self) -> None:
-        self._locations: dict[tuple[int, str], int] = {}
         self._values: dict[tuple[int, str], object] = {}
-        self._resolved: set[int] = set()       # programs whose every active uniform location is known
         self._blocks: dict[int, tuple[bytearray, dict[str, tuple[str, int]]]] = {}
 
     def register(self, program: int, layout, initial: bytes) -> None:
         """``program`` draws with ``layout``'s pass block, starting from the packed ``initial`` values."""
         members = _members(layout)
         self._blocks[program] = (bytearray(initial), members)
-        self._resolved.add(program)
 
     def registered(self, program: int) -> bool:
         return program in self._blocks
@@ -250,74 +245,19 @@ class _Uniforms:
         """The program's pass block as its values stand (a copy: a draw already submitted keeps its own)."""
         return bytes(self._blocks[program][0])
 
-    def resolve(self, program: int) -> None:
-        """Every active uniform location of ``program`` at once: a preparation unit (1C.2). Without it the first
-        visible frame asked GL for each name it sets (864 queries over 11 programs, 480 of them inactive names;
-        with a second render thread holding the GIL that frame took 120 ms on the 4K display). A name the program
-        does not report is then known inactive with no query; an array is found by its base name too."""
-        count = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORMS))
-        longest = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORM_MAX_LENGTH))
-        for index in range(count):
-            raw, _size, _type = gl.glGetActiveUniform(program, index, longest)
-            name = raw.decode("ascii") if isinstance(raw, bytes) else str(raw)
-            location = int(gl.glGetUniformLocation(program, name))
-            self._locations.setdefault((program, name), location)
-            if name.endswith("[0]"):
-                self._locations.setdefault((program, name[:-3]), location)
-        self._resolved.add(program)
-
-    def resolved(self, program: int) -> bool:
-        return program in self._resolved
-
     def set(self, program: int, values: dict[str, object]) -> None:
-        block = self._blocks.get(program)
-        if block is not None:
-            data, members = block
-            for name, value in values.items():
-                key = (program, name)
-                if self._values.get(key, _UNSET) == value:
-                    continue
-                member = members.get(name)
-                if member is not None:            # the block holds it (else no stage of the family reads it)
-                    fmt, offset = member
-                    struct.pack_into(fmt, data, offset, *(value if isinstance(value, (tuple, list)) else (value,)))
-                self._values[key] = value
-            return
+        data, members = self._blocks[program]
         for name, value in values.items():
             key = (program, name)
-            if self._values.get(key, _UNSET) == value:
+            member = members.get(name)
+            if member is None or self._values.get(key, _UNSET) == value:
                 continue
-            location = self._locations.get(key)
-            if location is None:
-                if program in self._resolved and "[" not in name:
-                    location = self._locations[key] = -1          # not an active uniform of this program
-                else:
-                    location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
-            if location < 0:
-                self._values[key] = value
-                continue                      # not read by this program (the driver dropped it)
-            if isinstance(value, (bool, int)):
-                gl.glProgramUniform1i(program, location, int(value))
-            elif isinstance(value, float):
-                gl.glProgramUniform1f(program, location, value)
-            elif len(value) == 2:
-                gl.glProgramUniform2f(program, location, *value)
-            elif len(value) == 3:
-                gl.glProgramUniform3f(program, location, *value)
-            elif len(value) == 4:
-                gl.glProgramUniform4f(program, location, *value)
-            elif len(value) == 9:   # as a C array: PyOpenGL converts a tuple element by element
-                gl.glProgramUniformMatrix3fv(program, location, 1, gl.GL_FALSE, (ctypes.c_float * 9)(*value))
-            elif len(value) == 16:
-                gl.glProgramUniformMatrix4fv(program, location, 1, gl.GL_FALSE, (ctypes.c_float * 16)(*value))
-            else:
-                raise ValueError(f"uniform {name}: unsupported value {value!r}")
-            self._values[key] = value  # Cache only values actually accepted by the uploader.
+            fmt, offset = member
+            struct.pack_into(fmt, data, offset, *(value if isinstance(value, (tuple, list)) else (value,)))
+            self._values[key] = value
 
     def clear(self) -> None:
-        self._locations.clear()
         self._values.clear()
-        self._resolved.clear()
         self._blocks.clear()
 
 
@@ -388,7 +328,6 @@ def _glass(knobs, near: bool) -> dict[str, object]:
         "uNearCoc": 22.0, "uNearGain": 1.0,
         "uFocus": float(knobs.get("focus", 4.2)), "uAperture": float(knobs.get("aperture", 3.0)),
         "uNearLayer": 1.0 if near else 0.0,
-        "uBackground": _UNIT_BACKGROUND, "uProbe": _UNIT_PROBE,
     }
 
 
@@ -436,24 +375,6 @@ class QuickExtrudedBubbleRenderer:
                 *((r, *program) for program in scene_target_programs(samples, True, False, overlay=True,
                                                                        background=True, oit=True, hdr=True, rotation=rotation))]
 
-    def _resolve_uniforms_step(self) -> bool:
-        """One unit: the uniform locations of the next drawing program not yet resolved; True once all are. A
-        program with a pass block (N1.6) is registered with it instead, which asks GL for nothing (no unit)."""
-        r = self._resources
-        for key, _program in _PROGRAM_ROWS:
-            if not r.has_program(key):
-                continue                              # failed (logged once by its owner): nothing to resolve
-            linked = r.program(*_program)
-            if self._uniforms.resolved(linked):
-                continue
-            layout = _BLOCKS.get(key)
-            if layout is not None:
-                self._uniforms.register(linked, layout, block_defaults(layout))
-                continue
-            self._uniforms.resolve(linked)
-            return False
-        return True
-
     def _register_blocks(self, programs: dict[str, int]) -> None:
         """Every drawn program with a pass block registered with it (pure: a frame drawn without preparation)."""
         for key, layout in _BLOCKS.items():
@@ -461,25 +382,17 @@ class QuickExtrudedBubbleRenderer:
                 self._uniforms.register(programs[key], layout, block_defaults(layout))
 
     def _bound(self, program: int):
-        """The scope a draw of ``program`` runs in: its pass block bound (N1.6), or nothing for a loose program."""
-        if self._uniforms.registered(program):
-            return self._resources.pass_blocks.bound(self._uniforms.packed(program))
-        return nullcontext()
+        return self._resources.pass_blocks.bound(self._uniforms.packed(program))
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
-        """One unit of what a first visible frame would otherwise compile, query or allocate (a program with the
-        previous program's uniform locations, the drift solver's pair check, the instance buffers, the shaft
+        """One unit of what a first visible frame would otherwise compile or allocate (a program, the drift solver's
+        pair check, the instance buffers, the shaft
         targets, the probe, the near layer, the scene target), on a hidden reveal frame; True once nothing is
         left."""
         frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples = _scene_samples(parameters)
-        # A compiled program's uniform locations ride along with the next unit (about 1 ms each), so the locations
-        # add no unit and the preparation keeps its length.
-        self._resolve_uniforms_step()
         if not warm_programs(self._programs(samples, frame.scene_output_rotation)):
-            return False
-        if not self._resolve_uniforms_step():
             return False
         if not self._resources.pass_blocks.warm():      # the pass blocks' ring (N1.6)
             return False
@@ -646,7 +559,6 @@ class QuickExtrudedBubbleRenderer:
                      "uTrailTime": float(state.motion_phase)}
         for key in ("trails", "beads"):
             self._uniforms.set(programs[key], wake_path)
-        self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(state.emission)
         # Optional glow lift never adds another source follower: the same musical
         # rays/flash state already advances once on the simulation clock.
