@@ -2044,19 +2044,42 @@ follow-ups with their evidence folders).
     as fail-closed on noninteractive/unknown desktops; desktop identity and
     Settings-request authority are separate axes and need real Windows proof.
     Existing Std/MC runtime behaviour remains as-is until its specific gate passes.
-  - [ ] **Real QWidget Studio integration:** retain current Settings UI and theme/Studio system.
-    Replace the `QDialog.exec()` dependent lifecycle with an explicitly owned asynchronous
-    Settings session; update the existing Studio-over-Settings native hide/reveal/WM_PAINT,
-    application modality, focus and safe wrapper-liveness guarantees. The Session owns real
-    Preview/Apply/Cancel, not a fake rollback via 30-step SettingsUndo. No QML Settings rewrite.
+  - [ ] **Settings conceal/restore for BOTH Studios (mandatory, not optional polish):**
+    keep the existing QWidget Settings alive in the same SettingsSession but
+    **visible only until the Studio presents its FIRST authoritative frame**;
+    then fully CONCEAL Settings for the complete Visualizer Studio or
+    Theme Studio session, with no interactive Settings controls, popups,
+    taskbar minimization, duplicate Settings window or focus rivalry.
+    Restore the SAME Settings QWidget afterward, preserving page/pill,
+    scroll, selected mode/preset, Custom, undo and Settings session.
+    Keep the proven beneath-Studio, non-activating reveal and Win32
+    expose/WM_PAINT workaround; activate Settings only after the Studio
+    disappears. No Settings flash between consecutive Studios/mode switch;
+    handle early presentation failure, scene loss, close, Esc, Alt+F4,
+    Save/Cancel, application shutdown and invalid wrappers. Replace the
+    `QDialog.exec()`-dependent lifecycle with an explicitly owned async
+    session; **nonmodal does NOT mean leaving Settings visible next to
+    Studio**. The session owns real Preview/Apply/Cancel, not a fake
+    rollback via the 30-step SettingsUndo. No QML Settings rewrite.
   - [ ] **Proof/acceptance:** impact-map every existing settings key/side effect; no-change identity
     preservation, repeated Settings+Edit+Studio+source/mode/capability/monitor cycles, healthy
     graphics backend and first visible frame, performance p50/p90/p99, CPU/GPU/VRAM, native heap,
     Python/QObject/QML wrappers, subscriptions/timers/threads/COM, same-profile no-run controls,
     correct remote/mixed-DPI and secure-desktop negative controls. Existing failure probes R-49,
     R-53/56/59, R-175, R-22/U-09 and R-80 are essential. Use **synthetic test-owned settings**;
-    never test against mutable operator-authored presets. **Operator acceptance** before replacing
-    the normal policy. Do not delete existing R-175 memory-attribution work just because
+    never test against mutable operator-authored presets. **AUTOMATED GATES FIRST:**
+    implement the detailed document's A1-A8 executable tests, covering
+    no-change identity, real Studio conceal/restore/first-paint/focus order,
+    precise resource retirement, dormancy, no leaks, first-authoritative
+    frames, minimal fade and profile/desktop negative controls. Publish
+    machine-readable evidence; a mock or screenshot without a real GUI
+    execution is not a pass. **No routine operator checks or sign-offs**
+    for measurable behaviour. Reserve human judgement for inherently
+    subjective visuals or physical protected-desktop interactions that
+    cannot safely be automated; leave that route unchanged if unproven
+    while independently green interactive profiles proceed. Existing
+    permission for agent-started heavy game load remains binding.
+    Do not delete existing R-175 memory-attribution work just because
     unnecessary teardown is later reduced.
   - [ ] **SMP handoff stays deferred:** when SMP is separately admitted its M8 adds player-specific
     output-device, decoder/queue/library/SMTC live-setting transactions on this shared base;
