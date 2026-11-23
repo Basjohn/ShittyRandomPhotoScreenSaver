@@ -827,9 +827,9 @@ the feature (D3D11 is not stated).
     - [ ] Redraw the remaining alternates with frozen adaptive settings, single sampling and masks. Use
       `conventions_identity.mode_runs('extruded_bubble', offers=True)`. Budget 30 s per run and take, apply the
       late-window rule below, and run at most two reference processes at once.
-      - [ ] Display alternate SCENE (`:b`), Sunlit Surface (`extruded_bubble_light_type=0`), and lighting BEAM
-        (`extruded_bubble_lighting_coverage=0`) on each take.
-      - [ ] Display BEAM emission (`extruded_bubble_emission_geometry=0`) on ragdoll and nightsolong.
+      - [ ] Display alternate SCENE (`:b`) and lighting BEAM (`extruded_bubble_lighting_coverage=0`) on each take.
+      - [ ] Display Sunlit Surface (`extruded_bubble_light_type=0`) on human and ragdoll.
+      - [ ] Display BEAM emission (`extruded_bubble_emission_geometry=0`) on nightsolong.
       - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on ragdoll and nightsolong.
   - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
     and the source reading for field and resource ownership.
