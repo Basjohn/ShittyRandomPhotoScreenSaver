@@ -339,6 +339,17 @@ Reddit, System Stats) keep their own cadence, and a content change still renders
 configured minute) and the `--usage` sampler continue. Measured cost while off (same run): ~4% of a core median, GPU
 ~0-1%, ~0.6 swaps/s, 0 publishes/s.
 
+**Future Settings pause policy, not active until accepted (23 Nov):**
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`
+reuses the proven display-power park/re-entry machinery as a capability-level
+primitive, but **must not reuse the display-power boolean as a new Settings
+authority**. Settings, display-off, visibility, covered-fullscreen and user
+pause reasons compose so clearing one cannot unpark another. A parked
+Visualizer has zero active tick/capture/GPU work; a disabled feature must
+instead be fully retired. This live Settings QoL milestone follows M4 and
+Theme Studio and the post-Concrete-Rain phase; no existing native-core flip
+or display-power gate waits for it.
+
 **On resumes:** the engine reference and capture return, `arm_reentry_fresh_frame_fence` keeps a retained pre-off
 audio frame from being the first reactive result, `rebase_logical_clocks_after_park` resets every logical last-step
 clock (tick state plus each mode state's `rebase_clock()`) so the first resumed step integrates no parked gap while all
