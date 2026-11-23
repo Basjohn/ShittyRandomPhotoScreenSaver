@@ -416,7 +416,7 @@ public:
     void release();
 
     // Render thread, after the record's passes: a readback of every readable texture (harness only).
-    std::shared_ptr<SceneReadback> startReadback(QRhiResourceUpdateBatch *updates);
+    std::shared_ptr<SceneReadback> startReadback(QRhiCommandBuffer *cb);
 
     // The targets' state as values (render thread; the caller hands it to the source's report), and whether it changed
     // since the last call that returned true (audit 2, M5: the report is written only then, never per record).

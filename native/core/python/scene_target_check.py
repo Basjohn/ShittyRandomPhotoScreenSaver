@@ -114,7 +114,8 @@ APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "scissor", "cost")
 # Run on its own (its skipped phase is expected to show hazards): --apis vulkan --rounds prime_control
 CONTROL_ROUNDS = ("prime_control", "cost_parts", "placement_control", "resize_control",
-                  "partial_retire_control", "invalidation_control", "scissor_control", "readback_metadata")
+                  "partial_retire_control", "invalidation_control", "scissor_control", "readback_metadata",
+                  "r16f_readback")
 # The Python renderer's cost on the same load (the reference child, OpenGL): --rounds python_cost
 PYTHON_ROUNDS = ("python_cost",)
 CHILD_TIMEOUT_S = 1500
@@ -475,6 +476,42 @@ def round_readback_metadata(core, engine, app, packs: dict, folder: Path) -> dic
     finally:
         host.close()
         host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_r16f_readback(core, engine, app, folder: Path) -> dict:
+    """Odd half-float rows must reach the reader without OpenGL's default four-byte row padding."""
+    import numpy as np
+    import probe_rings
+    from rendering.native.mode import ModePass, ModeTarget, TargetAttachment
+
+    pack = probe_rings.bake("""#version 440
+layout(location = 0) out vec4 colour;
+void main() {
+    vec2 pixel = floor(gl_FragCoord.xy);
+    colour = vec4(1.0 + pixel.x + 32.0 * pixel.y);
+}
+""", "readback_r16f.frag", folder)
+    checks, facts = {}, {}
+    for width in (5, 6):
+        card = (width, 3)
+        passes = (ModePass("pattern", pack, "replace", target="pattern"),)
+        targets = (ModeTarget("pattern", (TargetAttachment("colour", "r16f"),),
+                              size=card, allocation="exact"),)
+        host = core.hidden_host(*_host_size([card]))
+        scene = None
+        try:
+            scene = Scene(core, engine, host, card, 1.0, {}, passes=passes, targets=targets, settings={})
+            texture = scene.targets(app)["pattern.colour"]
+            expected = 1.0 + np.arange(width) + 32.0 * np.arange(card[1])[:, None]
+            checks[f"width_{width}_tight_rows"] = bool(np.array_equal(texture["array"], expected))
+            facts[str(width)] = {"size": texture["size"], "pixels": texture["array"].tolist(),
+                                 "expected": expected.tolist()}
+        finally:
+            if scene is not None:
+                scene.close(app)
+            host.close()
+            host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -2385,6 +2422,8 @@ def child(args) -> dict:
                             record[name] = round_retire(core, engine, app, packs, folder)
                         elif name == "readback_metadata":
                             record[name] = round_readback_metadata(core, engine, app, packs, folder)
+                        elif name == "r16f_readback":
+                            record[name] = round_r16f_readback(core, engine, app, folder)
                         elif name in ("scissor", "scissor_control"):
                             record[name] = round_scissor(core, engine, app, args.api, folder, out,
                                                          skip_control=name == "scissor_control")

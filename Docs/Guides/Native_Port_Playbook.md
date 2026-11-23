@@ -152,6 +152,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   Vulkan's dynamic-descriptor limit unchecked by QRhi (D15 point 3, `vulkan_device_facts`).
 - Proof: standard; `mesh_buffer_check.py --rounds forms` (sixteen draws at sixteen offsets equal sixteen passes bit
   for bit); the Python packer is the oracle (`tools/conventions_identity.py`).
+- ABI 45 packs column-major `mat3` and `mat3[]` from settings and f64 records. The
+  [matrix proof](../../.artifacts/evidence/native_core/n5_6/20261123_abi45_matrix_and_targets/report.md)
+  checks reflected column stride, invalid-input refusal and shader readback on both APIs.
 
 <a id="pb-e3"></a>
 ### E3 Scene targets (D14, N3.1; catalogue: [E3](../Reference/Primitives.md#e3))
@@ -170,6 +173,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 - Proof: standard; `scene_target_check.py` (analytic nearest depth within 8.7e-8 against the sample-0 control, the
   clamp, the drag across bucket edges against the no-hysteresis control, `--rounds prime_control` on Vulkan alone,
   `python_cost` and `cost_parts` at 4K; multisampled output judged repeat-relative, D14 point 8).
+- Native OpenGL's odd-width `r16f` harness readback temporarily sets tight pixel packing while Qt executes
+  the reads and restores the context's previous alignment. `scene_target_check.py --rounds r16f_readback`
+  checks every pixel on odd and aligned widths.
 
 <a id="pb-e10"></a>
 ### E10 Compute passes and storage (D16, N3.3; catalogue: [E10](../Reference/Primitives.md#e10), [E5](../Reference/Primitives.md#e5), [E11](../Reference/Primitives.md#e11))

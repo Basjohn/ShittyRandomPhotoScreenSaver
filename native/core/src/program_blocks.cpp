@@ -61,6 +61,15 @@ void writeScalar(char *at, int type, double value)
     }
 }
 
+QString mat3LayoutError(const BlockMember &member)
+{
+    if (member.matrixIsRowMajor)
+        return QStringLiteral("'%1' requires a column-major mat3").arg(QString::fromLatin1(member.name));
+    if (member.matrixStride < 16 || member.matrixStride % 16 != 0)
+        return QStringLiteral("'%1' has an invalid std140 matrix stride").arg(QString::fromLatin1(member.name));
+    return QString();
+}
+
 } // namespace
 
 int BlockMember::components() const
@@ -88,6 +97,8 @@ int BlockMember::components() const
     case QShaderDescription::Uint4:
     case QShaderDescription::Bool4:
         return 4;
+    case QShaderDescription::Mat3:
+        return 9;
     case QShaderDescription::Mat4:
         return 16;
     default:
@@ -112,15 +123,23 @@ BlockLayout BlockLayout::reflect(const QShader &shader, const QByteArray &blockN
             member.name = variable.name;
             member.type = int(variable.type);
             member.offset = variable.offset;
+            member.size = variable.size;
             member.count = variable.arrayDims.isEmpty() ? 1 : variable.arrayDims.first();
             member.dimensions = variable.arrayDims.isEmpty() ? 0 : int(variable.arrayDims.size());
             member.stride = variable.arrayStride;
+            member.matrixStride = variable.matrixStride;
+            member.matrixIsRowMajor = variable.matrixIsRowMajor;
             if (member.count > 1 && member.stride <= 0) {
-                // The baked shader reflects a scalar array's stride as 0 (N2.5 build round 1); std140 rounds every
-                // array element up to a vec4.
-                const int bytes = 4 * (member.components() > 0 ? member.components() : 1);
-                member.stride = ((bytes + 15) / 16) * 16;
-                member.strideInferred = true;
+                if (variable.type == QShaderDescription::Mat3) {
+                    // qsb can omit arrayStride even when it reports the full array size and matrix stride.
+                    if (member.size > 0 && member.size % member.count == 0)
+                        member.stride = member.size / member.count;
+                } else {
+                    // N2.5 build round 1: std140 rounds a scalar or vector array element up to a vec4.
+                    const int bytes = 4 * qMax(1, member.components());
+                    member.stride = ((bytes + 15) / 16) * 16;
+                }
+                member.strideInferred = member.stride > 0;
             }
             layout.m_members.append(member);
         }
@@ -172,12 +191,20 @@ bool BlockValues::set(const QByteArray &name, const double *values, int count, Q
                          .arg(QString::fromLatin1(name), QString::fromLatin1(m_layout.name()));
             return false;
         }
-        const int whole = components * member.count;
+        const qint64 whole = qint64(components) * member.count;
         const bool array = member.count > 1;
         if (count <= 0 || count > whole || (!array && count != whole) || count % components != 0) {
             *error = QStringLiteral("'%1' takes %2 number(s), not %3")
                          .arg(QString::fromLatin1(name)).arg(whole).arg(count);
             return false;
+        }
+        const bool mat3 = member.type == QShaderDescription::Mat3;
+        if (mat3) {
+            const QString invalid = mat3LayoutError(member);
+            if (!invalid.isEmpty()) {
+                *error = invalid;
+                return false;
+            }
         }
         // Everything checked before any byte is written (audit 14 Nov, L2): a value without a defined conversion, or a
         // write past the block, refuses the whole call and fills nothing.
@@ -188,19 +215,27 @@ bool BlockValues::set(const QByteArray &name, const double *values, int count, Q
                 return false;
             }
         }
-        const qint64 last = qint64(member.offset) + qint64((count - 1) / components) * (array ? member.stride : 0)
-            + qint64((count - 1) % components) * 4 + 4;
-        if (member.offset < 0 || (array && member.stride < 4 * components) || last > qint64(m_bytes.size())) {
+        const int elements = count / components;
+        const int elementStride = array ? member.stride : 0;
+        const int columns = mat3 ? 3 : 1;
+        const int rows = mat3 ? 3 : components;
+        const int columnStride = mat3 ? member.matrixStride : 0;
+        const qint64 elementBytes = qint64(columns - 1) * columnStride + 4 * rows;
+        const qint64 span = qint64(elements - 1) * elementStride + elementBytes;
+        if (member.offset < 0 || (array && elementStride < elementBytes)
+            || (mat3 && (span > member.size || elementStride % 16 != 0))
+            || qint64(member.offset) + span > qint64(m_bytes.size())) {
             *error = QStringLiteral("'%1' does not fit the %2-byte block at its reflected offset and stride")
                          .arg(QString::fromLatin1(name)).arg(m_bytes.size());
             return false;
         }
-        char *data = m_bytes.data();
-        for (int i = 0; i < count; ++i) {
-            const int element = i / components;
-            const int component = i % components;
-            const int at = member.offset + element * (array ? member.stride : 0) + component * 4;
-            writeScalar(data + at, member.type, values[i]);
+        char *data = m_bytes.data() + member.offset;
+        for (int element = 0; element < elements; ++element) {
+            for (int column = 0; column < columns; ++column) {
+                char *start = data + qint64(element) * elementStride + qint64(column) * columnStride;
+                for (int row = 0; row < rows; ++row)
+                    writeScalar(start + row * 4, member.type, *values++);
+            }
         }
         m_filled[index] = true;
         return true;
@@ -314,12 +349,18 @@ QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field
         break;
     case frame_abi::FieldKind::F64:
         // ABI 40 (N5.4): an f64 sequence fills any float member, its numbers the member's components times its
-        // elements in order (a matrix's columns first, as std140 lays them): a scene's cameras (mat4), eyes and axes
-        // (vec3) and spans (vec2) are per-frame record values. Before ABI 40 an f64 filled a float alone.
+        // elements in order (a matrix's columns first): cameras (mat4 and, from ABI 45, mat3), eyes and axes (vec3)
+        // and spans (vec2) are per-frame record values. Before ABI 40 an f64 filled a float alone.
         typeFits = type == QShaderDescription::Float || type == QShaderDescription::Vec2
-            || type == QShaderDescription::Vec3 || type == QShaderDescription::Vec4 || type == QShaderDescription::Mat4;
+            || type == QShaderDescription::Vec3 || type == QShaderDescription::Vec4
+            || type == QShaderDescription::Mat3 || type == QShaderDescription::Mat4;
         if (typeFits) {
-            const quint32 numbers = quint32(qMax(0, member.count * member.components()));
+            if (type == QShaderDescription::Mat3) {
+                const QString invalid = mat3LayoutError(member);
+                if (!invalid.isEmpty())
+                    return invalid;
+            }
+            const qint64 numbers = qint64(qMax(0, member.count)) * member.components();
             if (numbers > 0 && field.count == numbers)
                 return QString();
             return QStringLiteral("'%1': the record holds %2 f64 number(s), the block's member takes %3")

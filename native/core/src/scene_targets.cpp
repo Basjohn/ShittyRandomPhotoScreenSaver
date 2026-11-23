@@ -3,7 +3,10 @@
 #include "rhi_owned.h"
 
 #include <QtCore/QJsonValue>
+#include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 
+#include <algorithm>
 #include <cmath>
 
 namespace srpss_core {
@@ -1461,7 +1464,7 @@ void SceneTargets::release()
     ++m_objectGeneration;
 }
 
-std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBatch *updates)
+std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiCommandBuffer *cb)
 {
     pruneReadbacks();
     auto set = std::make_shared<SceneReadback>();
@@ -1520,6 +1523,29 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     }
     if (raw->count == 0)
         return set;
+    // Qt 6.12's QRhiGles2 reads R16F straight into a tightly sized buffer without changing GL_PACK_ALIGNMENT.
+    // Odd-width rows must be tight before the read runs; repacking afterward would read past Qt's buffer.
+    const bool tightPack = m_rhi->backend() == QRhi::OpenGLES2
+        && std::any_of(raw->pixels.cbegin(), raw->pixels.cend(), [](const SceneTargetPixels &p) {
+               return p.format == QStringLiteral("r16f") && p.size.width() % 2 != 0;
+           });
+    QOpenGLContext *readContext = nullptr;
+    GLint previousAlignment = 1;
+    if (tightPack) {
+        cb->beginExternal();
+        readContext = QOpenGLContext::currentContext();
+        if (readContext) {
+            QOpenGLFunctions *gl = readContext->functions();
+            gl->glGetIntegerv(GL_PACK_ALIGNMENT, &previousAlignment);
+            gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        }
+        cb->endExternal();
+        if (!readContext) {
+            qWarning("Cannot read odd-width R16F scene targets without the current OpenGL context");
+            return {};
+        }
+    }
+    QRhiResourceUpdateBatch *updates = m_rhi->nextResourceUpdateBatch();
     // All accepted attachments and mip levels. Callback result addresses stay stable for the entire shared lifetime.
     raw->results = std::make_unique<QRhiReadbackResult[]>(raw->count);
     raw->pending.storeRelease(raw->count);
@@ -1560,8 +1586,18 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
             ++r;
         }
     }
-    QMutexLocker lock(&readbackMutex());
-    readbacksInFlight().append(set);
+    {
+        QMutexLocker lock(&readbackMutex());
+        readbacksInFlight().append(set);
+    }
+    cb->resourceUpdate(updates);
+    if (readContext) {
+        // On OpenGL this boundary executes the queued readbacks before restoring the context's pixel-store state.
+        cb->beginExternal();
+        if (QOpenGLContext::currentContext() == readContext)
+            readContext->functions()->glPixelStorei(GL_PACK_ALIGNMENT, previousAlignment);
+        cb->endExternal();
+    }
     return set;
 }
 

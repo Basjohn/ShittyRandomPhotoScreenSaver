@@ -87,10 +87,6 @@ Continue the native sequence below with the repaired timing receipts. The report
   (`.claude/worktrees/agent-ac5f7832a73527151/.artifacts/handover/JOURNAL.md`) for the earlier core and drift
   evidence. Its scratch and evidence are under `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/`.
 - [ ] Waveform follow-ups:
-  - [ ] Fix native OpenGL's odd-width `r16f` scene-target readback with the next core build. Qt reads into
-    tightly sized storage without setting `GL_PACK_ALIGNMENT`, so the error is upstream of the Python decoder.
-    Reproduced in Waveform's `fog_steady` and the Extruded Bubble shaft proof. Prove odd and aligned widths on
-    both APIs, and scope the alignment change to the queued harness readback.
   - [ ] Watch: one GL_INVALID_ENUM on the route's first 4x frame on OpenGL (none single-sampled; a debug context caught no
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
@@ -818,12 +814,11 @@ the feature (D3D11 is not stated).
     The original source reading is in `git show 644c18cb3:Current_Plan.md` under N5.6 → Reading. It inventories
     per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
     limits against current source. Use Extruded Bubble's own references.
-  - [ ] **Redraw the Python references.** Use a fresh explicit `--references` root for this redraw and the matching native runs. The
-  reference-only path's cache key covers drawing sources and skips the logical-digest comparison.
-  Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
-    and `owner_render_parity.py --references-only`. The cache key includes Python shader sources. Existing
-    60 s human and nightsolong base runs are indexed in `native_core/n5_6/20261122_refs_<take>_60/python_references.json`
-    and the [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
+  - [ ] **Redraw the Python references.** Use `--references D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251`
+    for the redraw and matching native runs. Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
+    and `owner_render_parity.py --references-only`. Keep the reference producer at the verified rendering and
+    logical revision until the queue finishes. Earlier references are indexed in the
+    [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
     - [ ] Base SCENE run (`""`), 60 s each of `human_heavy1`, `nightsolong_acousticsoft1`, and `ragdoll_quiet_intro_loud_end1`.
       Existing human and nightsolong receipts contain 5,503 frames each. Ragdoll is still undrawn.
     - [ ] Run alternate SCENE (`:b`), BEAM emission (`extruded_bubble_emission_geometry=0`), Sunlit Surface
@@ -831,10 +826,6 @@ the feature (D3D11 is not stated).
       Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
       adaptive state enabled, single sampling and masks. Budget 30 s per alternate and take; apply the late-window
       rule below before drawing. Run at most two reference processes at once.
-  - [ ] **Core prerequisite (ABI 45).** The hidden ABI 44 shader run rejects EB's `uViewToWorld` as an
-    unfillable `mat3`. Extend the existing block packer for column-major 3×3 floats from settings and from
-    f64 record fields. Prove reflected std140 column offsets, arrays and adjacent members, invalid counts and
-    conversions, and Vulkan/OpenGL shader readback. Build the core through GitHub Build Runner before route admission.
   - [ ] **Native record and route.** Add `core/visualizer_engine/extruded_bubble_native_schema.py`, the route
     program, and the mode's `native_record_identity.MODES` entry with passes, read spans, streams and positional
     members. Stage worker owners from the source reading. Map 64-bit family revisions to a small per-family
@@ -848,10 +839,10 @@ the feature (D3D11 is not stated).
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
-    - [ ] Verify the shaft writer's jitter and content sampling on native Vulkan and OpenGL with nonzero lens
-      shift and odd, padded targets. Place the backdrop vertex through the core's scene-item matrix when its
-      scene target is bucketed, so both placements derive rays from the card's content pixels. The [reference proof](Docs/Guides/Native_Port_Playbook.md#pb-e15) exercises
-      the sampling with simulated row placement and stores timings for the cost comparison.
+    - [ ] Verify shaft and backdrop placement through the complete route at nonzero lens shift and odd,
+      padded targets. The [ABI 45 component proof](.artifacts/evidence/native_core/n5_6/20261123_abi45_matrix_and_targets/report.md)
+      validates the writer, blur and sampling. Reuse the core's scene-item matrix for the backdrop vertex under
+      the bucketed scene, and compare the final composed frame.
     - [ ] Check the largest framed aperture against `defocusReadLevelCap`, the turned-card composite and bloom,
       and the display-move drift-history contract in N3.9.
     - [ ] Decide whether to omit the scene depth and resolve in both renderers with equal-frame proof. The scene
