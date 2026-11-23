@@ -50,13 +50,8 @@ Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port
 method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
-**Operator priority (23 Nov):** finish the Dashboard release checks already running on GitHub. Take the Qt 6.12.1
-patch when its four matching Python wheels are published. Use the repaired receipts for the native timing follow-ups,
-then resume the native sequence below. The reported EB response delay is in the Watchlist.
-
-- [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
-  source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
-  Verify an upgrade from a legacy profile using a disposable copy.
+**Operator priority (23 Nov):** take the Qt 6.12.1 patch when its four matching Python wheels are published.
+Continue the native sequence below with the repaired timing receipts. The reported EB response delay is in the Watchlist.
 
 **Order (lead and operator, 17 Nov):**
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
