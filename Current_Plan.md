@@ -246,6 +246,10 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   `glxinfo -B`, cutting off the renderer and sometimes the middle of a line. Both Xvfb builds on 23 Nov passed;
   their logs show implausible virtual VRAM figures (4294848057 MB and 914948 MB). Report the renderer and GL version
   directly, with the full probe retained on failure. Keep the render and settings admission checks.
+- [ ] Make live-check monitor rejection actionable. In the 23 Nov Spectrum smoke `20261123_native_draw_swap_smoke_custom`,
+  `[VIS_ROUTING]` prints `requested_screen=0` with participating screen 0 but rejects the physical binding as
+  unavailable; the report then stops at missing worker publications. Include the resolved binding and its rejection
+  reason in the receipt so a routing failure can be distinguished from an admitted Visualizer that stopped drawing.
 - [ ] Reconcile the raw-thread policy check with the existing PacketMailbox wake thread and its lifecycle
   owner. `tests/unit/test_policy_compliance.py` flags `core/visualizer_engine/packet_mailbox.py:472`.
 
@@ -821,8 +825,9 @@ the feature (D3D11 is not stated).
   - [ ] Layer L built (e0275205c): `tools/visualizer_replay/native_record_identity.py`, test
     `tests/test_native_record_identity.py`; evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer T on native paths: give Visualizer live-check rows actual frame counts and within-run gaps from native
-    draws and correlated swaps (`frames_per_s` is 0 on Vulkan today). Prove that idle frames do not count and that
-    Python Visualizer and transition rows retain their figures. Compare the swap-gap figures on an OpenGL control;
+    draws and correlated swaps (`frames_per_s` is 0 on Vulkan today). Prove that idle frames do not count, an active
+    timing receipt with no correlated Visualizer frames fails, and Python and transition rows retain their figures.
+    Compare the swap-gap figures on an OpenGL control;
     keep per-pass GPU time on `--gpu-pass-timing`.
   - [ ] Layer P built (ddb3dc8b2, ec0bf3feb, 12a688e57, d0b2e8095, 29fc590c0): cached references
     (`tools/visualizer_replay/python_references.py`), native-only `--against`, `native_stream_player.py` for Vulkan
