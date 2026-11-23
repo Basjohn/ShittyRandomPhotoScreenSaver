@@ -55,10 +55,11 @@
 
 namespace srpss_core {
 
-constexpr int kMaxStorageBuffers = 8;
+// ABI 44 (N5.6): the program's collection, including geometry buffers. Each entry binds only its own resources.
+constexpr int kMaxStorageBuffers = 16;
 // ABI 33 (N5.4): Waveform with Floor Give on holds 9 (the world field 1, floor give 2, two fog volumes 3 each).
 constexpr int kMaxStorageImages = 9;
-constexpr int kMaxComputeBindings = 8;
+constexpr int kMaxComputeBindings = 8; // storage buffers, images, streams and meshes in one compute entry
 constexpr qint64 kMaxStorageBufferBytes = qint64(256) << 20;
 constexpr int kMaxStorageImageSide2D = 16384;
 constexpr int kMaxStorageImageSide3D = 2048;
@@ -67,7 +68,7 @@ constexpr qint64 kMaxStorageImageBytes = qint64(256) << 20; // audit 5 L4: as a 
 constexpr quint32 kStorageKernelGroup = 256;
 // Their block (StorageKernel: the destination's and source's first words, the words, a value, the stride; std140).
 constexpr quint32 kKernelBlockBytes = 32;
-// At most this many kernel operations (clears and copies) in one record: two per buffer.
+// At most this many kernel operations (clears and copies) in one record: two per declared buffer (geometry needs none).
 constexpr int kMaxStorageEdgeOps = 2 * kMaxStorageBuffers;
 extern const char kComputeMember[]; // "u_srpss_compute": a uvec4 (trigger, last trigger, fresh, dispatches)
 

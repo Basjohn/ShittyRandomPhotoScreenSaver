@@ -532,9 +532,9 @@ STORAGE_ACCESS = ("read", "write", "read_write")
 COMPUTE_TRIGGERS = ("frame", "draw")
 COMPUTE_RESOURCES = ("buffer", "image", "stream", "mesh")
 STORAGE_IMAGE_FORMATS = ("rgba8", "rgba16f", "rgba32f", "r16f", "r32f")
-MAX_STORAGE_BUFFERS = 8
+MAX_STORAGE_BUFFERS = 16              # ABI 44 (N5.6): declarations across the program
 MAX_STORAGE_IMAGES = 9                 # ABI 33 (N5.4): Waveform with Floor Give on
-MAX_COMPUTE_BINDINGS = 8
+MAX_COMPUTE_BINDINGS = 8              # storage bindings in one compute entry
 #: The lost edge's prefix for storage a content made again found gone (``mode_content.h``).
 _STATE_LOST = "state:"
 #: N5.2c: and "mesh:<name>" for a mesh it has nothing to upload from.
@@ -632,7 +632,7 @@ class ComputePass:
         if self.groups is not None and len(self.groups) != 3:
             raise ValueError("a compute entry's groups are three counts")
         if len(self.bindings) > MAX_COMPUTE_BINDINGS:
-            raise ValueError(f"a compute entry binds at most {MAX_COMPUTE_BINDINGS} resources")
+            raise ValueError(f"a compute entry binds at most {MAX_COMPUTE_BINDINGS} storage resources")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "compute": True,

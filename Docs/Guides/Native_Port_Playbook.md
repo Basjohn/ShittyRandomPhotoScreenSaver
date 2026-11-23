@@ -190,6 +190,10 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   key, `"<name>@previous"` for a rebase entry); the check readback (a `"once"` entry's `"readback"`, reported
   in the state's `"check"`). Trap: a field only the core reads (a key, a `"when"`) is the program's read, never
   `unread`. Proof: `eb_core_check.py --rounds geometry readback` (both backends, each with its control).
+- ABI 44 (N5.6): buffer declarations are program-wide, including geometry buffers. Each compute entry binds only
+  its own storage buffers, images, streams and meshes. The caps are in `compute_passes.h`. Proof:
+  `eb_core_check.py --rounds compute_bindings` admits the Extruded Bubble drift graph, exercises the limits and
+  counts clears and prefix copies during a resize.
 
 <a id="pb-e8"></a>
 ### E8 Stream ring (D15 point 7; catalogue: [E8](../Reference/Primitives.md#e8))
