@@ -779,7 +779,8 @@ the feature (D3D11 is not stated).
       a focused test. Measure the writes that still fall outside a publication on current source and whether they
       lead the remaining long gaps. The 23 Nov D1 Bubble smoke recorded five such writes in ten (`d1_checks.json`).
       - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
-        back to back, conditions and GPU clock recorded.
+        back to back, conditions and GPU clock recorded. Use a harness-only switch to suppress only HUD text writes;
+        keep PERF sampling, the recorded take, and display settings common to both sides.
     - [ ] If the proof identifies an owner, correct only the path that still adds delay. Measure Bubble's per-frame
       GUI sync before considering changes there.
     - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
@@ -856,7 +857,7 @@ the feature (D3D11 is not stated).
       at most 2 processes at once). Open for the lead: the 30 s runs' late-song window. Python's drift restarts after a
       128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
       it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
-  - [ ] C++ (found by the design check against the built ABI 42 core): storage buffers counted per compute entry, not
+  - [ ] C++ (ABI 44 reserved for this slice; design check against ABI 42): storage buffers counted per compute entry, not
     per program. EB's drift declares 12 storage buffers (geometry, state and aux for each of chains, snow and specks;
     one output; the check's cases and results: `extruded_bubble_drift_solver.py:166-191,244-248,310-311`), and D3's
     geometry buffers count among them (`compute_passes.h:87-92`), but the program's list is refused past
