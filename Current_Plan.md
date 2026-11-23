@@ -848,8 +848,11 @@ the feature (D3D11 is not stated).
   - [ ] Python reference conversions (playbook checklist 16). Preserve the current appearance and retain before/after
     stills and a comparison WebP for each changed rendering path. The core will use these sources. The probe
     backdrop proof is indexed in the [port playbook](Docs/Guides/Native_Port_Playbook.md#pb-e13).
-    - [ ] Convert the near passes' `gl_FragDepth` to fragment variants and the shaft and blur reads to target-pixel
-      coordinates clamped inside the content.
+    - [ ] Exclude `gl_FragDepth` from the two near-layer fragment variants. Keep the depth writes for the
+      depth-backed shell and cluster passes. Check the baked shader interfaces and replay both near passes.
+    - [ ] Address shaft and blur reads in target pixels. Keep bilinear samples inside the content even when the
+      allocation is larger. Check both blur directions and the final backdrop read against padded targets, then
+      compare recorded display and overscan frames.
     - [ ] Convert the traced glass's loose uniforms to a block. Resolve the beads' binding-6 note in section 1D.11 and
       record the comparison, including the previously measured one-level rounding differences.
     - [ ] Redraw the Python references once the conversions are complete, using the frozen run keys above.
