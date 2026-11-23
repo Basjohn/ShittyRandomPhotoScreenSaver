@@ -8249,9 +8249,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.
         m_targetReadsDone = m_source->targetReadRequests();
-        QRhiResourceUpdateBatch *readbacks = rhi->nextResourceUpdateBatch();
-        m_source->setTargetReadback(m_targets.startReadback(readbacks));
-        cb->resourceUpdate(readbacks);
+        m_source->setTargetReadback(m_targets.startReadback(cb));
     }
     if (m_source->storageReadRequests() != m_storageReadsDone) {
         // N3.3, harness only (D16 point 8): every storage buffer and image as this record left it.
