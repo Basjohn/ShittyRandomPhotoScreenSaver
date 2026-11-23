@@ -104,6 +104,19 @@ Prove at every milestone (`test_smp_cross_product_dormancy.py`) and record in th
 - SMP-only build: image-saver workers, wallpaper transitions, screen capture, monitor stagger, Reddit/Gmail/Steam
   families are never imported (payload reachability report at M9).
 
+**Later operator supersession, 23 Nov 2026 (entry order only):** Cross-profile
+transactional Live Settings is now approved as independent current-product
+post-M4/Theme Studio/post-Concrete-Rain QoL work, **before SMP admission**:
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`.
+Earlier assumptions below that Standard/MC must always perform full Settings
+teardown and SMP alone introduces the live Settings window are **historical
+baseline statements**, superseded for the eventual accepted product policy.
+**Do not erase SMP M8:** it still owns live-safe playback, output-device,
+library, queue, SMTC and rollback semantics plus the binding SMP
+Visualizer-park/Media-audible requirement. Prior to completion, original
+Standard/MC full teardown remains implemented. This note does not admit
+any SMP source work.
+
 ### 0A.6 Lifecycle contracts
 
 - Service lifetime (P2): created on the first lease, retired at terminal `cleanup`; display generations lease and
@@ -539,6 +552,17 @@ Exact packaging, migration, permissions and proof: `Docs/Future_Work/ShittyMusic
 - [ ] Track/playback notifications from player events, not media polling. Only SMP desktop product admits them; SRPSS/MC inherit no new toast window.
 - [ ] For exact *active display* placement, use one bounded monitor-aware non-activating application overlay with native Windows work-area/foreground resolution. OS toasts are not guaranteed display-selectable. Fallback/quiet-mode if foreground monitor unavailable. No permanent overlays over games, no focus theft, no more than one bounded toast generation.
 - [ ] Theme/media semantics, event-driven show/hide, deduped events, click-through when hidden; suppress duplicate Windows SMTC notifications or immersive HUD when applicable.
+
+**Future shared-platform prerequisite (23 Nov):** The cross-profile Live Settings
+QoL milestone in `Current_Plan.md` 1B.8 and
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`
+supersedes the old assertion that only SMP can have live Settings. Apply the
+existing §9 checklist to **SMP-specific operations on the already accepted
+shared SettingsSession** when SMP is admitted; preserve all M8 test gates and
+player-specific Settings layout. The immediately following "Do not rewrite"
+warning is still valid: the current SRPSS handler MUST NOT be relaxed
+ad hoc; the shared new controller must be proven and promoted first.
+The secure desktop restriction remains binding on every product profile.
 
 ## 9. Player-oriented Settings: preserve SRPSS dormancy, add safe live policy
 
