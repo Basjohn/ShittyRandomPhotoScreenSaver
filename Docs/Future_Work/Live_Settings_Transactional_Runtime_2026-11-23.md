@@ -79,7 +79,7 @@ The new live Settings architecture must **preserve the current saver input, Sett
 request and secure-desktop behaviour exactly**; it must never hijack, block, delay
 or visibly disturb Windows login/lock/credential presentation. **Do not
 invent a new restriction saying all secure-desktop Settings requests are
-forbidden:** first inspect the real old §/s§, §/c§, preview and keyboard
+forbidden:** first inspect the real old `/s`, `/c`, preview and keyboard
 routes, because a previously supported, explicitly admitted Settings
 interaction must not be silently removed. Equally, a healthy retained
 renderer is **not** permission to create any *additional* interactive
@@ -87,9 +87,9 @@ Settings/Studio HWND or perform an action that the original secure route
 did not permit. If the old route uses stop/exit and an interactive-user
 handoff, retain it there until a safe replacement is independently proven.
 
-- Distinguish Standard §/s§ saver, §/c§ configuration, §/p§ preview, MC, diagnostic and
-  future SMP **AND** the actual desktop separately. §core/windows/desktop_context.py::
-  is_interactive_user_desktop§ answers whether **account/browser/credential-only**
+- Distinguish Standard `/s` saver, `/c` configuration, `/p` preview, MC, diagnostic and
+  future SMP **AND** the actual desktop separately. `core/windows/desktop_context.py::
+  is_interactive_user_desktop` answers whether **account/browser/credential-only**
   operations are permitted on interactive Default; Winlogon and unknown remain
   denied for those operations. **Do not misuse this account permission predicate
   as an invented blanket denial of the existing Settings request.** Audit the
@@ -118,7 +118,7 @@ handoff, retain it there until a safe replacement is independently proven.
 
 **L5 | Standard secure, CONFIG, MC and Diagnostic profiles.** Admit the
 same transactional controller across all applicable profiles, retaining
-existing saver/Winlogon Settings input semantics and the proven §/s§ exit
+existing saver/Winlogon Settings input semantics and the proven `/s` exit
 or handoff where used; **forbid new unproved secure-desktop interactions**
 rather than blanket-denying old requests. Prove Studio-over-Settings, guided setup / no-sources, Settings window native materials, multi-DPI, secure URL restrictions, start/exit, PowerToys/media key requests, remote/lock and focus behavior with actual hardware and compiled builds where needed. Add future SMP as a planned consumer without starting it: M8 expands setting-specific playback, output device, library and SMTC admission, not a second controller.
 
