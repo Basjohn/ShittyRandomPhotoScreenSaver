@@ -60,8 +60,9 @@ class FullDynamicAudioOwnership(unittest.TestCase):
     def test_bass_and_vocal_changes_drive_different_bubble_sizes_with_constant_scalar(self):
         for _ in range(240):
             base = self.step(0, 0, 0)
+        base_large, _ = self.lanes(base)
         bass_peak = [self.lanes(self.step(0.95, 0.08, 0.08)) for _ in range(18)]
-        self.assertGreater(bass_peak[-1][0], self.lanes(base)[0] + 0.09)
+        self.assertGreater(bass_peak[-1][0], base_large + 0.09)
         for _ in range(260):
             self.step(0.1, 0.1, 0.1)
         vocal_peak = [self.lanes(self.step(0.15, 0.95, 0.7)) for _ in range(18)]

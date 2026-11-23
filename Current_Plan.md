@@ -818,8 +818,7 @@ the feature (D3D11 is not stated).
     The original source reading is in `git show 644c18cb3:Current_Plan.md` under N5.6 → Reading. It inventories
     per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
     limits against current source. Use Extruded Bubble's own references.
-  - [ ] **Redraw the Python references** once the shader conversions and **1B.10a stream-speed range** work are
-    complete. Use a fresh explicit `--references` root for this redraw and the matching native runs. The
+  - [ ] **Redraw the Python references.** Use a fresh explicit `--references` root for this redraw and the matching native runs. The
   reference-only path's cache key covers drawing sources and skips the logical-digest comparison.
   Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
     and `owner_render_parity.py --references-only`. The cache key includes Python shader sources. Existing
@@ -1990,20 +1989,8 @@ the lead rejects any still or showcase frame that shows one.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
 
-### 1B.10a Extruded Bubble idle wake continuity (deferred, before SMP)
+### 1B.10a Extruded Bubble Studio controls
 
-- [ ] **Extruded Bubble stream speed does not reach its authored range (operator, 22 Nov): "The Stream speed isn't
-  working ... We get that even though for example P9 is set minimum 0.13 and maximum 0.89. We're supposed to get that
-  full range (with fast attack slow decay as always) that is set."** (This is the "older bubbles don't accelerate"
-  report: the 22 Nov trace's 0.79-1.00 is age bands' correlation with the stream, never the range the stream reaches.)
-  - The [recorded and fixed-input reproductions](.artifacts/evidence/visualizers/extruded_bubble/stream_speed_range/)
-    show the stream below its lower endpoint during quiet playback and below its upper endpoint at settled full
-    energy. The stream applies an activity multiplier after interpolation and a soft ceiling to its music drive.
-  - [ ] Fix the stream's own energy-to-speed mapping and attack/release. Preserve the play ramp, pause motion,
-    age-independent forward transport and authored controls. Use the existing body-energy feed.
-  - [ ] Prove the endpoints and asymmetric response with held and stepped inputs, then compare the recorded
-    human, nightsolong and ragdoll runs against baseline. Show that the stream sweeps its range without pinning
-    during active passages. Finish these checks before drawing the N5.6 references.
 - [ ] Extruded Bubble Studio, with the Studio work (operator, 22 Nov):
   - [ ] Stream Speed becomes one range slider (minimum = speed at least energy, maximum = speed at most energy), replacing
     the quiet/peak pair, which is harder to use; presets keep their values through the spec owner (repair fill, never

@@ -366,6 +366,45 @@ def test_stream_speed_rises_quickly_decays_slowly_and_never_jumps_or_stops():
     assert max(steps) < 0.08 * span
 
 
+def test_active_stream_speed_endpoints_are_literal_without_an_inner_plateau():
+    from core.constants.extruded_bubble_world import WORLD_UNIT
+
+    controls = ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),
+                                      stream_speed=(0.035, 0.21))
+    low, high = (value * WORLD_UNIT for value in controls.stream_speed)
+    # A cold join at each held level seeds the follower without carrying another level's history.
+    speeds = [
+        ExtrudedBubbleSimulation(6).advance(_music(STEP, True, level), controls).stream_speed
+        for level in (0.0, 0.05, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 1.0)
+    ]
+    assert speeds[0] == pytest.approx(low)
+    assert speeds[-1] == pytest.approx(high)
+    assert all(a < b for a, b in zip(speeds, speeds[1:]))
+
+
+def test_active_stream_accelerates_faster_than_it_releases():
+    from core.constants.extruded_bubble_world import WORLD_UNIT
+
+    controls = ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),
+                                      stream_speed=(0.035, 0.21))
+    simulation = ExtrudedBubbleSimulation(6)
+    soft_passage = _music(STEP, True, 0.25)
+    loud_passage = _music(STEP, True, 0.95)
+    loud_simulation = ExtrudedBubbleSimulation(6)
+    for _ in range(360):
+        quiet = simulation.advance(soft_passage, controls).stream_speed
+        loud = loud_simulation.advance(loud_passage, controls).stream_speed
+    high = controls.stream_speed[1] * WORLD_UNIT
+    midpoint = quiet + 0.5 * (loud - quiet)
+    rising = [simulation.advance(loud_passage, controls).stream_speed for _ in range(120)]
+    falling = [simulation.advance(soft_passage, controls).stream_speed for _ in range(360)]
+    assert max(rising + falling) <= high
+    assert rising[30] > midpoint
+    assert next(i for i, speed in enumerate(falling) if speed < midpoint) > 2 * next(
+        i for i, speed in enumerate(rising) if speed > midpoint
+    )
+
+
 def test_travel_is_the_distance_the_stream_carried_the_water_so_procedural_layers_never_jump():
     """The bead chains and snow move by ``travel`` (the integral of stream speed on the logical clock), not by time x
     the current speed: a change of speed changes how fast it grows, never where it is."""
