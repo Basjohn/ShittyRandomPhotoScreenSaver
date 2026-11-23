@@ -299,3 +299,16 @@ decision, recorded with its reason.
   native-only hash runs and coverage windows, each for what the split above gives it. The slow full-path replay
   stays only to draw references. The tools are kept long term as the optimisation parity aid and the control in section 6, and
   are never retired as "temporary".
+
+### Compact fast-proof and mode evidence (23 Nov 2026)
+
+The portable archive compresses 442 MB of receipts to 131 MB. It retains the fast-proof method and controls, Waveform
+logic and parity results with raw timing traces, and Spectrum and Spline long-take comparisons. It includes per-frame
+hashes, verdicts, selected failure crops, applied settings and available resource samples. Original paths distinguish the
+historical and native Waveform runs. The Extruded Bubble entries are reference-preparation receipts.
+[Proof archive](../../.artifacts/evidence/native_core/fast_proof_compact/20261123_method_and_mode_proofs/fast-proof-method-and-modes.zip)
+
+The verified manifest hashes all 1,218 source files plus the README and omission index. `omissions.json` records exact
+paths and sizes for the large frame buffers, cached frame and mask files, and full copied profiles that remain in place.
+The cache keys and `reference.json` indexes are in the archive. The cache data stays under `D:/Temp/Scratch/SRPSS/fast_proof/references/`.
+[Archive SHA-256](../../.artifacts/evidence/native_core/fast_proof_compact/20261123_method_and_mode_proofs/fast-proof-method-and-modes.zip.sha256)
