@@ -14,8 +14,9 @@ The description below documents the existing `QDialog.exec()` and
 The future SettingsSession must redesign the `exec()`-dependent conceal,
 native WM_PAINT/exposure, same-window reveal and application-modality seam
 without creating a second logical Visualizer or a new renderer. Preserve
-the operator's Studio previews, undo and editable presets; Winlogon/
-unknown desktop cannot admit interactive Settings/Studio. All existing
+the operator's Studio previews, undo and editable presets; secure/
+unknown desktop Settings keeps its current admission/exit route and
+cannot acquire an additional unproved live Studio window. All existing
 Studio focus, stop, frame and error tests continue to bind until replaced
 by stronger shared-controller proofs.
 
