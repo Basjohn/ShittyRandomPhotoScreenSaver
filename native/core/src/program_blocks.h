@@ -4,22 +4,23 @@
 // --shaders`` bakes (loaded at run time from bytes Python hands over: no module rebuild for a shader change), and
 // fills its std140 block by NAME:
 // - values that come from Settings or the card are resolved in Python (the spec system) and handed over as
-//   name -> number or list of numbers (setJson): packed at the reflected offset, type and array stride;
+//   name -> number or list of numbers (setJson): packed at the reflected offset, type and strides;
 // - only per-frame and simulation arithmetic is hand-written C++, and it sets its members through the same set().
 // An unknown name, or a value of the wrong size, is refused with a reason; unfilled() names every reflected member
 // nobody set (a harness error: a member the shader reads that no side fills).
 //
 // std140: scalars and vectors at their offset, 4 bytes a component (ints as int32, floats as float32 rounded to
-// nearest, as Python's struct.pack('<f')); arrays at the reflected stride, or 16 when the reflection reports 0 for a
-// scalar array (build round 1 of N2.5); mat4 as 16 floats, column-major.
+// nearest, as Python's struct.pack('<f')); column-major mat3 as 9 floats in reflected columns; mat4 as 16 floats,
+// column-major. Arrays use the reflected stride. When qsb omits it, mat3 arrays derive it from the reflected size
+// and count; scalar and vector arrays use the std140 element alignment.
 //
 // N2.9, the frame block by name: a generic mode's per-frame values come from its frame record, packed into its frame
 // block the same way (packRecordField): the block member named as the record's field takes the field's numbers (a u32
 // or an f64 one number an element, an f64x4 four), at the member's reflected offset, type and stride. A field fits a
-// member only exactly (recordFieldFits): an f64 a float, an f64x4 a vec4, a u32 a uint or bool, or an int or float
-// under a range rule that keeps it exact (at_most within int32 or 2^24, or boolean: audit N29 L7), an array the same
-// length; a u32 sequence of 2/3/4 fills one matching uvec2/3/4, including a length-one array, never a multi-element
-// or multidimensional array of vectors. Nothing is truncated or padded.
+// member only exactly (recordFieldFits): f64 numbers fill the float member's components in order (matrices by
+// column), an f64x4 fills a vec4, a u32 fills a uint or bool, or an int or float under a range rule that keeps it
+// exact (at_most within int32 or 2^24, or boolean: audit N29 L7). A u32 sequence of 2/3/4 fills one matching
+// uvec2/3/4, including a length-one array. The record must supply every logical component.
 #pragma once
 
 #include "frame_abi_generated.h"
@@ -38,12 +39,14 @@ struct BlockMember
     QByteArray name;
     int type = 0;            // QShaderDescription::VariableType
     int offset = 0;
+    int size = 0;            // reflected member size in bytes, including its array if present
     int count = 1;           // array elements (1 when not an array)
     int stride = 0;          // array stride in bytes
     bool strideInferred = false;
     int dimensions = 0;      // array dimensions (0: not an array)
-    // Per element; 0 when the member is not packed (mat2, mat3, a double, a struct, a multi-dimensional array): set()
-    // refuses it and unfilled() always lists it, so a shader member nobody can fill never draws as silent zeros.
+    int matrixStride = 0;
+    bool matrixIsRowMajor = false;
+    // Logical components per element; 0 for unsupported types and multidimensional arrays.
     int components() const;
 };
 

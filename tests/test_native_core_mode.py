@@ -12,9 +12,9 @@ is ``native/core/python/generic_mode_check.py`` (its ``blocks`` round holds the 
 - N4.a: the seven fullscreen transitions' own packs admitted with uOldTex and uNewTex bound (vUv, one pass block), each
   refused unbound; an unknown, doubly bound, conventions-binding or block-binding sampler and an unknown mip filter
   refused.
-- ``program_block_pack`` (L2): a mat3 and a multi-dimensional array are never packed and always listed unfilled (setting
-  one is refused); an int beyond int32 or a negative uint is refused, not wrapped; a uint above int32's range is stored
-  exactly; booleans inside a list read as 0 and 1; a scalar array's elements land at their stride.
+- ``program_block_pack`` (L2, N5.6): column-major mat3 and mat3 arrays use padded columns. Row-major mat3 and
+  multidimensional arrays are refused and listed unfilled. Out-of-range int and uint inputs are refused; a uint
+  above int32's range is stored exactly; booleans inside a list read as 0 and 1; scalar arrays use their stride.
 """
 from __future__ import annotations
 
@@ -45,13 +45,18 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 1) uniform Probe {
     mat4 m;
     mat3 n;
+    mat3 matrices[2];
+    layout(row_major) mat3 row_matrix;
     float grid[2][3];
     int i;
     uint u;
     float f[4];
     vec4 v;
 };
-void main() { fragColor = vec4(m[0][0] + n[0][0] + grid[1][2] + float(i) + float(u) + f[3], v.yzw); }
+void main() {
+    float x = m[0][0] + n[0][0] + matrices[1][2][1] + row_matrix[2][1] + grid[1][2] + float(i) + float(u) + f[3];
+    fragColor = vec4(x, v.yzw);
+}
 """
 
 
@@ -74,20 +79,33 @@ def _members(facts: dict) -> dict:
 
 
 @pytest.mark.qt
-def test_unpackable_members_are_always_unfilled_and_refused(core, probe_pack, qt_app):
-    values = {"m": [float(k) for k in range(16)], "i": -3, "u": 4_000_000_000, "f": [1.0, 2.0, 3.0, 4.0],
+def test_matrix_packing_and_unpackable_members(core, probe_pack, qt_app):
+    values = {"m": list(range(16)), "n": list(range(1, 10)), "matrices": list(range(11, 29)),
+              "i": -3, "u": 4_000_000_000, "f": [1.0, 2.0, 3.0, 4.0],
               "v": [0.1, 0.2, 0.3, 0.4]}
     data, facts = core.program_block_pack(probe_pack, "Probe", values)
-    assert sorted(facts["unfilled"]) == ["grid", "n"]
+    assert sorted(facts["unfilled"]) == ["grid", "row_matrix"]
     rows = _members(facts)
+    assert struct.unpack_from("<16f", data, rows["m"][2]) == tuple(values["m"])
+    assert rows["matrices"][3:5] == [2, 48]
+    for name in ("n", "matrices"):
+        for column in range(len(values[name]) // 3):
+            expected = (*values[name][column * 3:column * 3 + 3], 0)
+            assert struct.unpack_from("<4f", data, rows[name][2] + column * 16) == expected
+    partial, _ = core.program_block_pack(probe_pack, "Probe", {"matrices": values["matrices"][:9]})
+    offset = rows["matrices"][2]
+    assert partial[offset:offset + 96] == data[offset:offset + 48] + bytes(48)
     assert struct.unpack_from("<i", data, rows["i"][2])[0] == -3
     assert struct.unpack_from("<I", data, rows["u"][2])[0] == 4_000_000_000
     stride = rows["f"][4]
     assert stride >= 16 and [struct.unpack_from("<f", data, rows["f"][2] + k * stride)[0] for k in range(4)] == [
         1.0, 2.0, 3.0, 4.0]
-    for name in ("n", "grid"):
-        with pytest.raises(ValueError, match=name):
-            core.program_block_pack(probe_pack, "Probe", {name: [0.0] * 6})
+    with pytest.raises(ValueError, match="row_matrix.*column-major"):
+        core.program_block_pack(probe_pack, "Probe", {"row_matrix": [0.0] * 9})
+    with pytest.raises(ValueError, match="grid.*not a packable member"):
+        core.program_block_pack(probe_pack, "Probe", {"grid": [0.0] * 6})
+    with pytest.raises(ValueError, match="matrices.*takes 18 number"):
+        core.program_block_pack(probe_pack, "Probe", {"matrices": [0.0] * 10})
 
 
 @pytest.mark.qt

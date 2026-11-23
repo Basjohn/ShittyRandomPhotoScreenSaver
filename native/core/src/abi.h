@@ -264,4 +264,6 @@
 // edge only calls a listener that is set).
 // 44 (N5.6, Extruded Bubble drift): the program can declare up to 16 storage buffers, including geometry buffers.
 // The existing limit of 8 storage bindings per compute entry still applies. Earlier programs remain valid.
-#define SRPSS_NATIVE_CORE_ABI 44
+// 45 (N5.6): reflected column-major mat3 members, including arrays, take nine numbers per matrix in settings and
+// f64 record fields. Columns use the qsb matrix stride.
+#define SRPSS_NATIVE_CORE_ABI 45

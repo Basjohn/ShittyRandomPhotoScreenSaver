@@ -36,13 +36,15 @@ build selection; current host and composite proof lives here.
     sync on the render thread; `pause_in_copy` is D1's "close during copy" hook (a harness's only).
   - `program_blocks.*` (N2.5 round 4, **the standing port rule for every mode**): a runtime shader's uniform block,
     reflected by name (`BlockLayout::reflect`) and packed generically (`BlockValues`): `set(name, numbers)` from any
-    name -> value source (a Python settings dict through `setJson` now; a record's named fields later, N2.9), at the
-    member's reflected offset, type and array stride (std140: a scalar array's stride is 16 when the reflection says 0),
-    ints as int32 (uints and bools as uint32), floats as float32 rounded to nearest. An unknown name, a wrong size, a
-    value without a defined conversion (not finite, beyond its int type) or a write past the block is refused with a
-    reason and writes nothing; `unfilled()` names every member nobody set, and always a member it cannot pack (mat2,
-    mat3, a struct, a multi-dimensional array: audit 14 Nov, L2). `packRecordField` packs a frame record's field into
-    the member of the same name (N2.9). A port therefore writes:
+    name -> value source (a Python settings dict through `setJson` or a record field through `packRecordField`)
+    at the member's reflected offset, type and strides. Column-major `mat3` takes nine floats in column order from
+    settings or an f64 record field. Its columns use the reflected matrix stride. When qsb omits the array stride,
+    the packer derives it from the reflected member size and element count for `mat3`, or the std140 element
+    alignment for scalar and vector arrays.
+    Integers use int32 (uint and bool use uint32) and floats use float32 rounded to nearest. An unknown name, a wrong
+    count, a value without a defined conversion, or a write past the block refuses the whole update with a reason.
+    `unfilled()` lists members with no value, including unsupported members such as row-major `mat3`, `mat2`,
+    structs and multidimensional arrays. A port therefore writes:
     (A new mode skips the port entirely: "How a new mode is built" below.)
     1. its fragment shader once, in `widgets/spotify_visualizer/shaders/` (the Python renderer and the core draw the same
        file), baked by `tools/regen_qrc.py --shaders` into `<file>.qsb` beside it (the conventions splice included; the

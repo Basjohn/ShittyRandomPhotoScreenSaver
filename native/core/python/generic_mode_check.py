@@ -42,6 +42,9 @@ Rounds:
   attached (each API) the Visualizer item with its native route attached and prepared (``attach_native_route``), no
           activation: zero syncs, draws, records and surface GPU samples over steady frames and the item's own
           updates. Controls: an update of the native item is a sync the counters see; a drawn surface is timed.
+  mat3    (each API) reflected column and array strides, neighbouring floats and zero padding in packed bytes.
+          A hidden readback checks every column from settings and the record. Named refusals cover wrong counts
+          and nonfinite input, and a refused frame keeps the previously drawn matrices.
 Then Vulkan's frames against OpenGL's (VULKAN_RULE_B, exact; both native).
 
 Usage (repository venv, from the checkout holding the built module):
@@ -78,7 +81,7 @@ import host_check  # noqa: E402
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv", "attached")
+ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv", "attached", "mat3")
 CHILD_TIMEOUT_S = 900
 MARGIN = 8
 CARD = (480, 270)                # the item's logical size
@@ -175,10 +178,10 @@ def core_values(card: dict, target: tuple[int, int]) -> dict:
             "u_target_px": [float(target[0]), float(target[1])]}
 
 
-def expected_block(members: list, values: dict, size: int, ints=INT_MEMBERS) -> bytes:
+def expected_block(members: list, values: dict, size: int, ints=INT_MEMBERS, *, mat3=()) -> bytes:
     """``values`` (name -> number or numbers) packed at the reflected members' offsets and strides (rows ``[name,
     type, offset, count, stride, inferred]``): float32, or int32 for ``ints``; zero elsewhere. The core's own packing
-    is never read to make it."""
+    is never read to make it. ``mat3`` names the members that use the standard padded columns."""
     out = bytearray(size)
     for name, _type, offset, count, stride, _inferred in members:
         value = values[name]
@@ -186,7 +189,10 @@ def expected_block(members: list, values: dict, size: int, ints=INT_MEMBERS) -> 
         components = len(numbers) // max(1, int(count))
         for index, number in enumerate(numbers):
             element, component = divmod(index, components)
-            at = int(offset) + element * (int(stride) if int(count) > 1 else 0) + 4 * component
+            # std140 mat3 consists of three 16-byte column slots, each holding three floats.
+            component_offset = 16 * (component // 3) + 4 * (component % 3) if name in mat3 else 4 * component
+            element_stride = (48 if name in mat3 else int(stride)) if int(count) > 1 else 0
+            at = int(offset) + element * element_stride + component_offset
             if name in ints:
                 struct.pack_into("<i", out, at, int(number))
             else:
@@ -380,13 +386,15 @@ def _bubble_without_samplers(folder: Path):
 class Stream:
     """The mode's frame stream the harness writes (the engine worker's side)."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, schema: dict | None = None) -> None:
         from core.visualizer_engine.packet_abi import FramePacketWriter, create_frame_mapping
 
         pr = _mode()
+        self.mode_code = pr.MODE_CODE if schema is None else schema["mode_code"]
+        self.schema_id = pr.SCHEMA.schema_id if schema is None else schema["schema_id"]
         self.memory = create_frame_mapping(generation=IDENTITY["runtime_generation"], slot_bytes=SLOT_BYTES,
                                            engine_generation=IDENTITY["engine_generation"],
-                                           activation_id=IDENTITY["activation_id"], mode_code=pr.MODE_CODE,
+                                           activation_id=IDENTITY["activation_id"], mode_code=self.mode_code,
                                            token=uuid.uuid4().hex[:12])
         self.writer = FramePacketWriter(self.memory.buf)
         self.closed = False
@@ -397,15 +405,14 @@ class Stream:
 
     @property
     def expect(self) -> dict:
-        return {**IDENTITY, "mode_code": _mode().MODE_CODE}
+        return {**IDENTITY, "mode_code": self.mode_code}
 
     def publish(self, payload: bytes, timestamp: float, *, present: bool = True) -> int:
         """``present`` False: a slot that is not a present frame (the admission rejects it, the Python node's rule)."""
         from core.visualizer_engine.packet_abi import FLAG_PRESENT_FRAME
 
-        pr = _mode()
-        return self.writer.publish(payload, payload_schema=pr.SCHEMA.schema_id, logical_timestamp=timestamp,
-                                   flags=FLAG_PRESENT_FRAME if present else 0, mode_code=pr.MODE_CODE, **IDENTITY)
+        return self.writer.publish(payload, payload_schema=self.schema_id, logical_timestamp=timestamp,
+                                   flags=FLAG_PRESENT_FRAME if present else 0, mode_code=self.mode_code, **IDENTITY)
 
     def close(self) -> None:
         if self.closed:
@@ -507,6 +514,110 @@ class Scene:
         self.mode.composite.destroy()
         self.host.set_content(None)
         host_check._drop_item(app, self.root)
+
+
+MAT3_PROBE_FRAG = """#version 440
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
+layout(std140, binding = 18) uniform Mat3Probe {
+    float before_matrix;
+    mat3 setting_matrix;
+    float between_matrices;
+    mat3 record_matrices[2];
+    float after_matrices;
+};
+void main() {
+    int stripe = clamp(int(v_uv.x * 10.0), 0, 9);
+    vec3 column;
+    if (stripe < 3)
+        column = setting_matrix[stripe];
+    else if (stripe < 9)
+        column = record_matrices[(stripe - 3) / 3][(stripe - 3) % 3];
+    else
+        column = vec3(before_matrix, between_matrices, after_matrices);
+    fragColor = vec4(column / 255.0, 1.0);
+}
+"""
+
+
+def round_mat3(core, engine, app, host, folder: Path) -> dict:
+    from compute_passes import reflection
+    from core.visualizer_engine.native_schema import NativeLayout
+    from rendering.native.mode import ModePass
+
+    pack = _mode().bake(MAT3_PROBE_FRAG, "mat3_probe.frag", folder)
+    passes = [ModePass("mat3_probe", pack, "replace")]
+    entries = (("record_matrices", "f64", 18),)
+    schema = _schema_with(entries)
+    record_layout = NativeLayout.build(entries)
+    columns = list(range(64, 82))
+    field_values = {"record_matrices": columns}
+    record = record_layout.pack(schema["schema_id"], field_values)
+    sentinels = (97, 113, 129)
+    settings = {"setting_matrix": list(range(7, 16)),
+                **dict(zip(("before_matrix", "between_matrices", "after_matrices"), sentinels))}
+    card = _mode().harness_card(CARD, 1.0)
+    data, info = core.mode_blocks(schema, passes, settings, record, card, CARD)
+    block = info["program"]["passes"][0]["block"]
+    qsb_block, = reflection(folder / "mat3_probe.frag.qsb")["uniformBlocks"]
+    qsb_members = {m["name"]: m for m in qsb_block["members"]}
+    members = {m[0]: m for m in block["members"]}
+    mats = ("setting_matrix", "record_matrices")
+    bad_count_schema = _schema_with((("record_matrices", "f64", 17),))
+    broken = bytearray(record)
+    struct.pack_into("<d", broken, record_layout.field("record_matrices").offset + 17 * 8, math.nan)
+    reasons = {
+        "settings_wrong_count": _refused(lambda: core.mode_blocks(
+            schema, passes, dict(settings, setting_matrix=[0] * 8), record, card, CARD)),
+        "settings_outside_float_range": _refused(lambda: core.mode_blocks(
+            schema, passes, dict(settings, setting_matrix=[0] * 8 + [1e39]), record, card, CARD)),
+        "record_wrong_count": _refused(lambda: core.mode_blocks(
+            bad_count_schema, passes, settings, bytes(bad_count_schema["record_bytes"]), card, CARD)),
+        "record_nonfinite": _refused(lambda: core.mode_blocks(schema, passes, settings, broken, card, CARD)),
+    }
+    checks = {
+        "reflection": (block["size"] == qsb_block["size"]
+                       and all(members[name][2] == m["offset"] for name, m in qsb_members.items())
+                       and all(qsb_members[name]["matrixStride"] == 16 for name in mats)
+                       and qsb_members["record_matrices"]["arrayDims"] == [2]
+                       and members["record_matrices"][3:5] == [2, 48]),
+        "packed_bytes": data == [expected_block(block["members"], {**settings, **field_values},
+                                                block["size"], mat3=mats)],
+        "settings_count_refuses_by_name": "'setting_matrix' takes 9 number(s), not 8" in reasons["settings_wrong_count"],
+        "settings_overflow_refuses_by_name": "'setting_matrix' element 8" in reasons["settings_outside_float_range"],
+        "record_count_refuses_by_name": ("'record_matrices'" in reasons["record_wrong_count"]
+                                         and "17 f64 number(s), the block's member takes 18"
+                                         in reasons["record_wrong_count"]),
+        "record_nonfinite_refuses_by_name": "'record_matrices' element 17" in reasons["record_nonfinite"],
+    }
+    scene = Scene(core, engine, host, 1.0)
+    stream = Stream(schema=schema)
+    try:
+        scene.mode.program(passes, settings)
+        scene.mode.bind(stream.name, schema, expect=stream.expect)
+        stripe_centres = [(2 * i + 1) * CARD[0] // 20 for i in range(10)]
+
+        def draw(payload: bytes, timestamp: float) -> list[int]:
+            stream.publish(payload, timestamp)
+            scene.mode.update()
+            return scene.read()[CARD[1] // 2, stripe_centres, :3].ravel().tolist()
+
+        expected = settings["setting_matrix"] + columns + list(sentinels)
+        actual = draw(record, 1.0)
+        before = scene.mode.state().get("refused_frames", 0)
+        kept = draw(bytes(broken), 2.0)
+        state = scene.mode.state()
+        checks["readback"] = all(abs(a - b) <= 1 for a, b in zip(actual, expected, strict=True))
+        checks["refused_frame_preserves_readback"] = (kept == actual and state.get("refused_frames", 0) == before + 1
+                                                       and "record_matrices" in str(state.get("last_refusal")))
+        scene.mode.unbind()
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks,
+            "facts": {"layout": block, "reasons": reasons, "expected_rgb": expected, "actual_rgb": actual}}
 
 
 def ring_runs(pixels, threshold: int = 24) -> list[tuple[float, int]]:
@@ -1412,7 +1523,11 @@ def child(args) -> dict:
                     else:
                         if host is None:
                             host = core.hidden_host(*_host_size())
-                        record[name] = round_draw(core, engine, app, host, args.api, folder, out)
+                        if name == "mat3":
+                            host.set_device_pixel_ratio(1.0)
+                            record[name] = round_mat3(core, engine, app, host, folder / "mat3")
+                        else:
+                            record[name] = round_draw(core, engine, app, host, args.api, folder, out)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:
