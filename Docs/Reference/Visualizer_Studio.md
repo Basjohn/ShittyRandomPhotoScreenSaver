@@ -11,10 +11,22 @@ source now; open acceptance work (mock parity, hardware window checks, further a
 specifies the post-M4/Theme Studio/post-Concrete-Rain cross-profile change.
 The description below documents the existing `QDialog.exec()` and
 `WindowPresence` behaviour, which is STILL AUTHORITATIVE until migration.
-The future SettingsSession must redesign the `exec()`-dependent conceal,
-native WM_PAINT/exposure, same-window reveal and application-modality seam
-without creating a second logical Visualizer or a new renderer. Preserve
-the operator's Studio previews, undo and editable presets; secure/
+The future SettingsSession MUST PRESERVE the current **Settings-concealed-while-Studio-open**
+experience, not display two editor windows simultaneously. Settings
+remains visible until the Studio's FIRST presented frame, then is fully
+concealed/non-interactive for the entire Studio lifetime; mode-to-mode
+Studio changes must not briefly reveal it. On exit restore the SAME
+Settings QWidget with page, scroll, preset and undo unchanged, using the
+existing one-transition under-Studio non-activating reveal, layered
+HWND repaint/exposure and foreground activation only after Studio
+destruction. Never replace concealment with ordinary OS minimization,
+a taskbar button or a second Settings window. Adapt the `exec()`-dependent
+modal/WindowPresence lifecycle to asynchronous Settings, keeping existing
+resource fences and the one logical Visualizer. **Automated real Qt GUI
+tests** must verify visibility, focus/Z-order, HWND identity, first
+present, each exit/failure path, lack of double flicker and absence of
+a frozen-but-clickable Settings window; no routine operator check.
+Preserve the operator's Studio previews, undo and editable presets; secure/
 unknown desktop Settings keeps its current admission/exit route and
 cannot acquire an additional unproved live Studio window. All existing
 Studio focus, stop, frame and error tests continue to bind until replaced
