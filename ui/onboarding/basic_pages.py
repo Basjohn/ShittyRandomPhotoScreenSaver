@@ -439,13 +439,12 @@ BORDERLESS_STILLS = (
 class InteractionPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
-        self.body.addWidget(text_label("Look, or interact?", heading=True))
-        self.body.addWidget(text_label("Use widgets to open stories and control media. On the screensaver, external links use SRPSS's secure handoff and may close the saver. Hold Ctrl for temporary interaction when it is off."))
+        self.body.addWidget(text_label("Interaction", heading=True))
         self.dashboard = is_dashboard_profile(settings)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         for enabled, title, detail in (
-            (False, "Let it be a screensaver", "Hold Ctrl when you want to interact."),
+            (False, "Typical Screensaver", "Hold Ctrl when you want to interact."),
             (True, "Keep interaction on", "Use widgets without holding Ctrl."),
         ):
             choice = checkbox(f"{title}\n{detail}")
@@ -461,7 +460,6 @@ class InteractionPage(Page):
             self.group.button(1).setToolTip(MC_INTERACTION_TOOLTIP)
         self.body.addSpacing(8)
         self.body.addWidget(text_label("Borders Or None?", heading=True))
-        self.body.addWidget(text_label("Borderless lets your widgets sit lightly on the picture."))
         self.borderless_group = QButtonGroup(self)
         self.borderless_group.setExclusive(True)
         self.stills = {}
@@ -471,6 +469,8 @@ class InteractionPage(Page):
             column = QVBoxLayout()
             column.setSpacing(10)
             still = BorderlessStill(resource)
+            # Fit both proportional previews in the default Settings viewport.
+            still.setFixedSize(460, still.heightForWidth(460))
             still.setToolTip(tip)
             choice = checkbox(title)
             choice.setToolTip(tip)
@@ -478,7 +478,7 @@ class InteractionPage(Page):
             still.clicked.connect(choice.click)
             self.borderless_group.addButton(choice, int(borderless))
             self.stills[borderless] = still
-            column.addWidget(still)
+            column.addWidget(still, 0, Qt.AlignmentFlag.AlignHCenter)
             column.addWidget(choice)
             row.addLayout(column, 1)
         self.body.addLayout(row)
