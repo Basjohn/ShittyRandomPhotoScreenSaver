@@ -821,9 +821,9 @@ the feature (D3D11 is not stated).
     and `owner_render_parity.py --references-only`. Keep the reference producer at the verified rendering and
     logical revision until the queue finishes. Earlier references are indexed in the
     [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
-    - [ ] Base SCENE (`""`), 60 s of `nightsolong_acousticsoft1` at display placement. The
-      [compact reference indexes](.artifacts/evidence/native_core/n5_6/20261123_r251_reference_indexes.zip)
-      identify completed keys and keep the per-frame receipts. The full arrays stay in the reference root.
+    The [compact reference indexes](.artifacts/evidence/native_core/n5_6/20261123_r251_reference_indexes.zip)
+    retain the frame receipts for all three 60 s base runs and completed alternates. The full arrays stay
+    in the reference root.
     - [ ] Redraw the remaining alternates with frozen adaptive settings, single sampling and masks. Use
       `conventions_identity.mode_runs('extruded_bubble', offers=True)`. Budget 30 s per run and take, apply the
       late-window rule below, and run at most two reference processes at once.
