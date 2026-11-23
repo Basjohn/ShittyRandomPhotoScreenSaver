@@ -588,6 +588,37 @@ def test_ember_grain_breaks_the_dust_into_grit_and_is_dormant_without_dust(targe
 
 
 @pytest.mark.qt
+def test_probe_ember_grain_uses_cube_face_pixels(target, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations import extruded_bubble as implementation
+
+    capture, host = target
+    renderer = implementation.QuickExtrudedBubbleRenderer()
+    host._implementations["extruded_bubble"] = renderer
+    set_uniforms = renderer._uniforms.set
+
+    def zero_probe_size(program, values):
+        if values.get("uProbeMode") == 1.0:
+            values = {**values, "uFrameSize": (0.0, 0.0)}
+        return set_uniforms(program, values)
+
+    def probe_face(grain):
+        capture.render(host, _snapshot(extruded_bubble_dust=1.0, extruded_bubble_ember_grain=grain))
+        previous = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_CUBE_MAP))
+        try:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, renderer._probe.texture)
+            return bytes(gl.glGetTexImage(gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, gl.GL_RGB, gl.GL_FLOAT))
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, previous)
+
+    grain, smooth = probe_face(1.0), probe_face(0.0)
+    with monkeypatch.context() as control:
+        control.setattr(renderer._uniforms, "set", zero_probe_size)
+        assert probe_face(0.0) == smooth
+        assert probe_face(1.0) != grain
+
+
+@pytest.mark.qt
 def test_the_near_field_reference_height_is_resolved_on_its_edges_never_per_frame_at_rest(target, monkeypatch):
     """The optical height (the lens over the card's projected aperture) changed nothing per frame but cost ~26 Python
     calls and a function-level import every frame (overhead baseline, 11 Nov): it is resolved once and again only when

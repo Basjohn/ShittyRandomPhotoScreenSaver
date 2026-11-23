@@ -727,6 +727,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniformMatrix3fv(gl.glGetUniformLocation(probe_backdrop, "uViewToWorld"), 1, gl.GL_FALSE, world_to_face)
         gl.glUniform2f(gl.glGetUniformLocation(probe_backdrop, "uTan"), 1.0, 1.0)
         gl.glUniform1f(gl.glGetUniformLocation(probe_backdrop, "uProbeMode"), 1.0)
+        gl.glUniform2f(gl.glGetUniformLocation(probe_backdrop, "uFrameSize"), PROBE.size, PROBE.size)
         gl.glDisable(gl.GL_BLEND)
         gl.glBindVertexArray(capture.vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)

@@ -184,7 +184,8 @@ vec2 waterSpecks(vec3 ray, vec2 framePx) {
     return vec2(warm, cool) * (0.6 + 0.6 * clouds);
 }
 """
-_BACKDROP_BODY = SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
+_BACKDROP_BODY = ("uniform vec2 uFrameSize;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
+                  + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
@@ -361,10 +362,10 @@ void main() {
     Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
 #endif
 }
-"""
+""")
 _BACKDROP_HEADER = "#version 460 core\nlayout(location=0) out vec4 FragColor;\nin vec2 vNdc;\n"
 BACKDROP_FRAGMENT = (_BACKDROP_HEADER + "layout(location=1) out vec4 Emission;\n"
-                     "uniform sampler2D uShafts;\nuniform vec2 uFrameSize;\n" + _BACKDROP_BODY)
+                     "uniform sampler2D uShafts;\n" + _BACKDROP_BODY)
 PROBE_BACKDROP_FRAGMENT = _BACKDROP_HEADER + "#define EB_PROBE_BACKDROP\n" + _BACKDROP_BODY
 
 # Volumetric shafts at half resolution, jittered, then blurred: smooth beams without per-pixel grain.

@@ -794,7 +794,9 @@ class QuickExtrudedBubbleRenderer:
     def _capture_probe(self, probe: SceneProbe, programs, proxy_count: int, quad_vao: int) -> None:
         """The water and light all round the eye, each bubble's glint added as a bright point."""
         backdrop, proxies = programs["probe_backdrop"], programs["proxies"]
-        self._uniforms.set(backdrop, {"uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0), "uProbeMode": 1.0})
+        face_size = float(probe.size)
+        self._uniforms.set(backdrop, {"uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0), "uProbeMode": 1.0,
+                                      "uFrameSize": (face_size, face_size)})
 
         def draw(face, world_to_face, projection):
             self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face)})
