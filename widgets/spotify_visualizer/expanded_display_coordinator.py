@@ -55,6 +55,7 @@ from core.expanded_visualizer_takeover import (
     EnterFailed,
     EnterPrepared,
     ExitCommitted,
+    ExitFailed,
     ExitReason,
     ForwardModeRequest,
     GenerationReady,
@@ -109,8 +110,7 @@ class ExpandedDisplayServices:
     cover_widgets: Callable[[Any, bool, float], None] = lambda _unit, _covered, _fade_s: None
     #: End a Fullscreen Edit session whose expanded view cannot stay (its draft is not saved).
     end_fullscreen_edit: Callable[[], None] = lambda: None
-    #: Move the collapsed Visualizer onto the display a takeover event names (plan 1B.12): the CUSTOM display hop and
-    #: its Save, with no Edit chrome. True once committed; False (or a raise) leaves the source exactly as it was.
+    #: Move the retained presentation while preserving the ordinary layout. False leaves the source admitted.
     move_to_display: Callable[[str], bool] = lambda _display: False
     #: The live display unit a takeover event's display key names (None: none), for the move's target runtime.
     display_unit: Callable[[str], Any] = lambda _display: None
@@ -158,6 +158,7 @@ class ExpandedDisplayCoordinator:
         self._cover_unit: Any = None
         self._fade_half_s = 0.0
         self._transfer_done = False
+        self._moving_display = False
         self._retired = False
 
     # ---------------------------------------------------------------------------------------------- facts
@@ -195,7 +196,15 @@ class ExpandedDisplayCoordinator:
     def transfer_in_flight(self) -> bool:
         """The takeover's own display transfer is running (its move reaches the host binding while layout waits)."""
 
-        return self._state.phase is Phase.TRANSFER_PENDING and not self._transfer_done
+        return self._moving_display
+
+    @property
+    def display_move_pending(self) -> bool:
+        """Either direction of a cross-display handoff still owns the presentation edge."""
+        state = self._state
+        return state.phase is Phase.TRANSFER_PENDING or (
+            state.phase is Phase.EXITING and state.ordinary_display not in (None, state.display)
+        )
 
     @property
     def blocks_ordinary_layout(self) -> bool:
@@ -422,6 +431,9 @@ class ExpandedDisplayCoordinator:
             if owner is not None and (owner.expanded_display or owner.expanded_display_transition_active):
                 owner.set_expanded_display(False, animate=False)
         elif isinstance(action, BeginExit):
+            if action.return_display is not None:
+                self._run_display_move(generation, action, action.return_display)
+                return
             # Edit never shows an expanded state: its collapse is immediate, before the session draws.
             animate = bool(action.animate) and action.reason is not ExitReason.EDIT
             # D2.2 before D2.4: the widgets fade back in while the display-wide card fades out.
@@ -464,7 +476,7 @@ class ExpandedDisplayCoordinator:
                 self._events.append(TransferCommitted(generation, action.txn) if not action.expanded
                                     else TransferFailed(generation, action.txn))
             else:
-                self._run_display_move(generation, action)
+                self._run_display_move(generation, action, action.target_display)
         elif isinstance(action, (RollbackTransfer, RejectTransfer)):
             pass
         elif isinstance(action, RetireTakeover):
@@ -480,65 +492,74 @@ class ExpandedDisplayCoordinator:
             raise TypeError(f"unknown takeover action: {action!r}")
 
     def _move(self, target_display: str) -> bool:
+        self._moving_display = True
         try:
-            return bool(self._services.move_to_display(str(target_display)))
+            return bool(self._services.move_to_display(target_display))
         except Exception:
             logger.exception("[EXPANDED_VIS] Visualizer display move failed")
             return False
+        finally:
+            self._moving_display = False
 
-    def _run_display_move(self, generation: int | None, action: BeginTransfer) -> None:
-        """One display move as one fade-through across the two displays (Current_Plan 1C.2; supersedes the 1B.12
-        "collapse, move, expand" form, which drew the ordinary card on both displays and popped it across).
+    def _run_display_move(
+        self, generation: int | None, action: BeginTransfer | BeginExit, target_display: str,
+    ) -> None:
+        """Fade out on the current display, retarget the retained admission at zero, then fade in.
 
-        The owner prepares the target while the view still draws, fades the view out where it is (the source's
-        covered widgets fade back in with it), moves it at zero opacity through the CUSTOM hop and Save (``hop``),
-        and fades it in on the target in the route it ends in (``action.end_expanded``; the target's widgets fade
-        out with a display-wide arrival). A refused move fades the view back in where it was, so the reducer's
-        rollback finds it exactly as it was. A stale completion (another generation or transaction) does nothing."""
-
+        A fullscreen hop lands expanded. A collapse off the ordinary display lands at the ordinary card.
+        A refusal fades the source back in and leaves the ordinary placement and the intent intact.
+        """
+        returning = isinstance(action, BeginExit)
+        source_expanded = True if returning else action.expanded
+        end_expanded = False if returning else action.end_expanded
+        phase = Phase.EXITING if returning else Phase.TRANSFER_PENDING
         owner = self._services.admitted_owner()
-        target = self._services.display_unit(action.target_display)
+        target = self._services.display_unit(target_display)
+
+        def current() -> bool:
+            state = self._state
+            return (not self._retired and state.generation == generation
+                    and state.txn == action.txn and state.phase is phase)
 
         def hop() -> bool:
-            if self._stale_transfer(generation, action.txn):
-                return False
-            return self._move(action.target_display)
+            return current() and self._move(target_display)
 
         def faded_out() -> None:
-            if not self._stale_transfer(generation, action.txn) and action.expanded:
+            if current() and source_expanded:
                 self._cover_widgets(False, animate=True)
 
         def fading_in(moved: bool) -> None:
-            if self._stale_transfer(generation, action.txn):
-                return
-            if action.end_expanded if moved else action.expanded:
-                self._cover_widgets(True, animate=True)      # the display the view arrives on display-wide
+            if current() and (end_expanded if moved else source_expanded):
+                self._cover_widgets(True, animate=True)
 
         def done(moved: bool) -> None:
-            if not self._stale_transfer(generation, action.txn):
-                self._complete(TransferCommitted(generation, action.txn) if moved
-                               else TransferFailed(generation, action.txn))
+            if not current():
+                return
+            if returning:
+                event = ExitCommitted(generation, action.txn, target_display) if moved else ExitFailed(generation, action.txn)
+            else:
+                event = TransferCommitted(generation, action.txn) if moved else TransferFailed(generation, action.txn)
+            self._complete(event)
 
         runtime = getattr(target, "runtime", None)
-        started = owner is not None and runtime is not None and bool(owner.move_display(
-            runtime, end_expanded=bool(action.end_expanded), hop=hop, on_fade_out=faded_out, on_fade_in=fading_in,
-            on_complete=done))
-        if started:
+        if runtime is None:
+            logger.warning("[EXPANDED_VIS] Visualizer display move refused; display %s is no longer live", target_display)
+            done(False)
             return
-        # No running owner to draw a fade (or the target is gone): the move happens at once, unseen.
-        self._cover_widgets(False, animate=True)
-        moved = target is not None and self._move(action.target_display)
-        live = self._services.admitted_owner()
-        if live is not None and (action.end_expanded if moved else action.expanded):
-            live.set_expanded_display(True, animate=False)
-            self._cover_widgets(True, animate=False)
-        self._events.append(TransferCommitted(generation, action.txn) if moved
-                            else TransferFailed(generation, action.txn))
-
-    def _stale_transfer(self, generation: int | None, txn: int) -> bool:
-        state = self._state
-        return (self._retired or state.generation != generation or state.txn != txn
-                or state.phase is not Phase.TRANSFER_PENDING)
+        animate = not returning or (action.animate and action.reason is not ExitReason.EDIT)
+        if animate and owner is not None and owner.move_display(
+            runtime, end_expanded=end_expanded, hop=hop, on_fade_out=faded_out, on_fade_in=fading_in, on_complete=done,
+        ):
+            return
+        # Before the owner can draw a fade, or when ordinary Edit requires a synchronous route swap.
+        moved = hop()
+        if moved:
+            self._cover_widgets(False, animate=False)
+            live = self._services.admitted_owner()
+            if live is not None:
+                live.set_expanded_display(end_expanded, animate=False)
+            self._cover_widgets(end_expanded, animate=False)
+        done(moved)
 
     def _preflight(self, owner: Any) -> bool:
         """D1 steps 1-5: a live, started owner on a live display, no Edit session, a positive display rect."""

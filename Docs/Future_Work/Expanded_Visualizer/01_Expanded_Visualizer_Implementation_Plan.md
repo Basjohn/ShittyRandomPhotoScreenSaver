@@ -1301,6 +1301,15 @@ can most geometry normally."
     `QuickSceneController.begin_visualizer_prewarm` (the target card at 0.002 opacity, content at zero, the render
     host's own preparation units); `VisualizerRenderCarryover` and `DriftSolver.export` / `adopt`. Tests
     `tests/test_visualizer_display_move_retarget.py`, `tests/test_visualizer_display_move_gpu.py`; R-194.
+  - **Fullscreen display moves preserve the ordinary placement (1D.6, 23 Nov):** an expansion on another display
+    and subsequent fullscreen hops retarget the retained presentation and its retirement authority. The ordinary
+    display, authored or committed CUSTOM rect and mode-specific layout remain the return placement. V and the down
+    glyph collapse there. When the presentation is away, the same fade-through warms the ordinary display, fades the
+    expanded view and its overlays out on the current display, moves the admission at zero opacity and fades the
+    ordinary card in on its own display. Cover follows the presentation. A refused return restores the source
+    expanded and leaves the intent set. The fullscreen intent is still the only Settings write for an excursion.
+    Generation replacement resolves that intent at startup on the display selected by ordinary placement. Edit
+    and ordinary display moves still commit at the CUSTOM owner.
   - **The other paths that move or re-admit the Visualizer (1C.2 box 6, audited 12 Nov):**
     - *Edit's display hop* (the arrows and a drag across the seam): retargets. Same owner, controller, session and
       render identity (Edit's hop + Save requested nothing even before 1C.2), and the scene transfer now carries

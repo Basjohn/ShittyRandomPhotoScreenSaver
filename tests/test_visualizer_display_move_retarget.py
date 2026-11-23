@@ -560,19 +560,25 @@ def test_a_drag_nearing_the_seam_prepares_the_neighbour_and_turning_back_release
 
 
 def _coordinator(rig: _Rig, covers: list, writes: list) -> ExpandedDisplayCoordinator:
-    requested = {"value": False}
+    intent_path = "widgets.spotify_visualizer.expanded_display_requested"
 
     def persist(value: bool) -> None:
-        requested["value"] = bool(value)
+        rig.settings.set(intent_path, value)
+        rig.settings.save()
         writes.append(bool(value))
+
+    def cover(unit, covered, fade_s):
+        covers.append((display_key(unit), bool(covered)))
+        unit.runtime.scene_controller.set_ordinary_widgets_covered(covered, fade_s=fade_s)
 
     coordinator = ExpandedDisplayCoordinator(ExpandedDisplayServices(
         admitted_owner=lambda: rig.owner, admitted_unit=lambda: rig.current["unit"],
-        requested=lambda: requested["value"], persist_requested=persist,
+        requested=lambda: rig.settings.get(intent_path, False), persist_requested=persist,
         mode_capable=lambda _mode: True, edit_active=lambda: rig.layout.is_active,
-        publish_glyph=lambda _unit, _available, _expanded: None,
-        cover_widgets=lambda unit, covered, fade_s: covers.append((display_key(unit), bool(covered))),
-        move_to_display=lambda key: rig.layout.move_visualizer_to_display(
+        publish_glyph=lambda unit, available, expanded: unit.runtime.scene_controller.set_visualizer_expand_glyph(
+            available, expanded),
+        cover_widgets=cover,
+        move_to_display=lambda key: rig.layout.transfer_visualizer_presentation_to(
             next(unit for unit in rig.units if display_key(unit) == key)),
         display_unit=lambda key: next((unit for unit in rig.units if display_key(unit) == key), None)))
     coordinator.generation_ready()
@@ -640,5 +646,96 @@ def test_a_diagonal_is_one_fade_through_that_ends_expanded_on_the_target(qt_app,
         assert all(wide for fade, wide in on_target if fade > 0.0)
         # Widgets: the source's come back (if they were covered) and the target's leave with the arrival.
         assert covers[-1] == (display_key(target), True)
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("collapse_with", ["glyph", "key"])
+@pytest.mark.parametrize("route", ["while-away", "after-return-hop", "restored-at-startup"])
+def test_fullscreen_excursion_returns_to_the_ordinary_card(qt_app, quiet_ticks, collapse_with, route):
+    """Use the retained move, then collapse from either physical display through the two production input routes."""
+    from core.expanded_visualizer_takeover import Phase
+    from engine.display_manager import DisplayManager
+    from tests._display_manager_doubles import bare_display_manager
+
+    rig = _Rig(qt_app, QRect(1280, 60, 900, 580))
+    try:
+        assert rig.publish(2.0)
+        assert rig.owner.set_authored_outer_origin(793., 363.)
+        source, target = rig.units
+        source_scene = source.runtime.scene_controller
+        before = source_scene.visualizer_item.presentation.outer_rect
+        if route == "restored-at-startup":
+            rig.settings.set("widgets.spotify_visualizer.expanded_display_requested", True)
+        placement = rig.settings.get_widgets_map()
+        placement["spotify_visualizer"]["expanded_display_requested"] = False
+        identity = rig.identity()
+        covers, writes = [], []
+        coordinator = _coordinator(rig, covers, writes)
+
+        def finish():
+            for _ in range(600):
+                rig.publish()
+                if coordinator.phase in (Phase.ORDINARY, Phase.EXPANDED):
+                    return
+            pytest.fail(f"takeover did not settle: {coordinator.phase}")
+
+        if route == "after-return-hop":
+            assert coordinator.glyph_pressed(source, True)
+            finish()
+        if route == "restored-at-startup":
+            assert coordinator.phase is Phase.EXPANDED and writes == []
+
+        assert coordinator.expand_on_display(source, target)
+        finish()
+        assert rig.current["unit"] is target and coordinator.phase is Phase.EXPANDED
+        assert target.runtime.scene_controller.visualizer_expanded_overlays_drawn
+        assert target.runtime.scene_controller.ordinary_widgets_covered
+        if route == "after-return-hop":
+            assert coordinator.expand_on_display(target, source)
+            finish()
+
+        live_unit = rig.current["unit"]
+        manager = bare_display_manager(_retired=False, _quick_visualizer_unit=live_unit,
+                                       _expanded_display_coordinator=coordinator)
+        manager._route_quick_visualizer_expand_glyph = DisplayManager._route_quick_visualizer_expand_glyph.__get__(manager)
+
+        def collapse():
+            if collapse_with == "key":
+                assert DisplayManager._toggle_quick_visualizer_expansion_from_key(manager, live_unit)
+            else:
+                assert manager._route_quick_visualizer_expand_glyph(live_unit, False)
+            finish()
+
+        if route in {"while-away", "restored-at-startup"}:
+            # A retained host refusal must fade back to expanded; a missing ordinary display is rejected before
+            # warming a target. Neither failure can commit the false intent or consume the ordinary placement.
+            rig.refuse_transfer = True
+            collapse()
+            assert coordinator.phase is Phase.EXPANDED and rig.current["unit"] is target
+            assert target.runtime.scene_controller.visualizer_expanded_overlays_drawn
+            assert target.runtime.scene_controller.ordinary_widgets_covered
+            rig.refuse_transfer = False
+            units = rig.units
+            rig.units = (target,)
+            collapse()
+            assert coordinator.phase is Phase.EXPANDED and rig.current["unit"] is target
+            assert rig.settings.get("widgets.spotify_visualizer.expanded_display_requested") is True
+            rig.units = units
+
+        collapse()
+        assert coordinator.phase is Phase.ORDINARY
+        assert rig.current["unit"] is source
+        assert source_scene.visualizer_item.presentation.outer_rect == before
+        assert rig.settings.get_widgets_map() == placement
+        assert rig.identity() == identity and rig.reloads == []
+        assert coordinator.covered_unit is None
+        assert writes == ([False] if route == "restored-at-startup" else [True, False])
+        assert rig.settings.save_calls == len(writes)
+        assert not rig.owner.expanded_display
+        for unit in rig.units:
+            scene = unit.runtime.scene_controller
+            assert not scene.visualizer_expanded_overlays_drawn
+            assert not scene.ordinary_widgets_covered
     finally:
         rig.close()

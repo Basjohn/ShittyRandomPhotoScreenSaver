@@ -2600,7 +2600,11 @@ class DisplayManager(QObject):
         """
 
         target = bool(enabled)
+        owner = self._quick_visualizer_owner
+        ordinary_runtime = getattr(owner, "ordinary_presentation_runtime", None)
         visualizer_unit = self._quick_visualizer_unit
+        if ordinary_runtime is not None:
+            visualizer_unit = next((unit for unit in self._live_quick_units() if unit.runtime is ordinary_runtime), None)
         for unit in tuple(self.displays):
             if not isinstance(unit, QuickDisplayUnit) or unit.is_retired:
                 continue
@@ -2626,18 +2630,16 @@ class DisplayManager(QObject):
                 _visualizer_host_binding(self).project_base_authored_origin()
             return
 
-        owner = self._quick_visualizer_owner
-        chosen = self._quick_visualizer_unit
-        if owner is None or chosen is None or chosen.is_retired:
+        if owner is None or visualizer_unit is None or visualizer_unit.is_retired:
             return
         if not _visualizer_host_binding(self).install_authored_layout(
-            chosen,
+            visualizer_unit,
             owner,
             install_observer=True,
         ):
             # No ordinary adjacency applies (for example persisted CUSTOM). If
             # the presenter is otherwise eligible, allow its generic pack once.
-            chosen.presenter.set_authored_layout_enabled(
+            visualizer_unit.presenter.set_authored_layout_enabled(
                 True,
                 restore_base=False,
                 reflow=True,
@@ -2909,11 +2911,11 @@ class DisplayManager(QObject):
             # Nothing to lose: end the open session through its own Cancel, then enter Edit on this display.
             if not self.cancel_custom_layout_session() or layout.is_active:
                 return False
-        # Fullscreen Edit (M3c; supersedes "Edit collapses an expanded view"): Edit on a resting expanded view's
-        # display stays expanded and edits only its full-display overlays; Edit on another display leaves the view
-        # expanded and edits the other displays (plan 1B.1). A view still entering or moving collapses at its
-        # commit edge for an ordinary global Edit, as before.
+        # Wait for a cross-display handoff to settle so the session captures the correct retained display.
+        # A resting expansion still admits Fullscreen Edit or an ordinary Edit beside it.
         coordinator = _takeover_coordinator(self)
+        if coordinator is not None and coordinator.display_move_pending:
+            return False
         excluded: tuple[QuickDisplayUnit, ...] = ()
         if coordinator is not None:
             coordinator.edit_entered(on_view_display=unit is None or unit is self._quick_visualizer_unit)
@@ -3722,11 +3724,11 @@ class DisplayManager(QObject):
         return next((live for live in self._live_quick_units() if display_key(live) == display), None)
 
     def _move_quick_visualizer_to_display(self, display: str) -> bool:
-        """The takeover's display move (plan 1B.12): the Edit owner's chrome-less hop and Save onto that display."""
+        """Retarget the takeover through the shared retained transfer without committing ordinary geometry."""
         target = self._quick_unit_for_display(display)
         if target is None:
             return False
-        moved = self._quick_custom_layout_owner.move_visualizer_to_display(target)
+        moved = self._quick_custom_layout_owner.transfer_visualizer_presentation_to(target)
         if moved:
             self._refresh_all_quick_context_menus()
         return moved
@@ -4011,7 +4013,8 @@ class DisplayManager(QObject):
             raise RuntimeError("visualizer profile activation has no admitted display owner")
         if owner.presentation_runtime is not unit.runtime:
             raise RuntimeError("visualizer profile display disagrees with presentation runtime")
-        screen = unit.runtime.window.screen()
+        ordinary_runtime = getattr(owner, "ordinary_presentation_runtime", unit.runtime)
+        screen = ordinary_runtime.window.screen()
         layout = getattr(self, "_quick_custom_layout_owner", None)
         if layout is not None and layout.is_editing and layout.session is not None:
             from core.settings.visualizer_mode_registry import get_visualizer_layout_profile

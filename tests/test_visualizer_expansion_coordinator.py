@@ -595,7 +595,7 @@ def _arranged(rects, *, on: int, accept: bool = True, mode: str = CAPABLE, reque
         if accept:
             manager._quick_visualizer_unit = target
         return accept
-    manager._quick_custom_layout_owner = SimpleNamespace(is_active=False, move_visualizer_to_display=move)
+    manager._quick_custom_layout_owner = SimpleNamespace(is_active=False, transfer_visualizer_presentation_to=move)
     manager._refresh_all_quick_context_menus = lambda: None
     manager.settings_manager = SimpleNamespace(set=lambda key, value: None, save=lambda: None,
                                                get=lambda key, default=None: None)   # the snapshot keeps the intent

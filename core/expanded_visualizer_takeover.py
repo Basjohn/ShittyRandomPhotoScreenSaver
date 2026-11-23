@@ -151,6 +151,13 @@ class EnterCommitted:
 class ExitCommitted:
     generation: int
     txn: int
+    display: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExitFailed:
+    generation: int
+    txn: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,7 +269,7 @@ class Shutdown:
 
 
 Event = (
-    GenerationReady | GlyphPressed | EnterPrepared | EnterFailed | EnterCommitted | ExitCommitted | ModeRequested
+    GenerationReady | GlyphPressed | EnterPrepared | EnterFailed | EnterCommitted | ExitCommitted | ExitFailed | ModeRequested
     | ModeCycleRequested | ModeActivated | ModeRejected | TransferRequested | TransferCommitted | TransferFailed | DisplayLost
     | EditEntered | EditExited | EditResolutionDeclined | SettingsOpened | OwnerRetired | Shutdown
 )
@@ -297,11 +304,12 @@ class CancelEnter:
 
 @dataclass(frozen=True, slots=True)
 class BeginExit:
-    """Collapse (D2); answer ``ExitCommitted``."""
+    """Collapse (D2); answer ``ExitCommitted`` or ``ExitFailed`` for a refused return."""
 
     txn: int
     animate: bool
     reason: ExitReason
+    return_display: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,6 +430,8 @@ class TakeoverState:
     edit_elsewhere: bool = False
     #: A collapse press under Fullscreen Edit (or an Edit beside the view), waiting on the session's own Save/Cancel.
     edit_collapse_press: int | None = None
+    #: The committed ordinary display while a fullscreen excursion is active.
+    ordinary_display: str | None = None
     transfer_target: str | None = None
     transfer_resume_expanded: bool = False
     #: A collapsed view's transfer the user asked to end display-wide (plan 1B.12): the enter begins at its commit.
@@ -475,7 +485,8 @@ def _resting_phase(state: TakeoverState) -> Phase:
 def _rest(state: TakeoverState) -> TakeoverState:
     """Settle to DORMANT/ORDINARY with nothing in flight."""
     return replace(state, phase=_resting_phase(state), txn_origin=None, deferred_expand=None,
-                   transfer_target=None, transfer_resume_expanded=False, transfer_then_expand=False)
+                   ordinary_display=None, transfer_target=None, transfer_resume_expanded=False,
+                   transfer_then_expand=False)
 
 
 def _begin_enter(state: TakeoverState, origin: Origin, animate: bool) -> tuple[TakeoverState, BeginEnter]:
@@ -490,11 +501,14 @@ def _begin_exit(state: TakeoverState, reason: ExitReason, animate: bool = True) 
     origin = Origin.USER if reason is ExitReason.USER else None
     state = replace(state, phase=Phase.EXITING, txn=txn, txn_origin=origin, txn_animate=animate,
                     deferred_expand=None)
-    return state, BeginExit(txn, animate, reason)
+    target = state.ordinary_display if state.ordinary_display != state.display else None
+    return state, BeginExit(txn, animate, reason, target)
 
 
 def _user_collapse(state: TakeoverState) -> tuple[TakeoverState, tuple[Action, ...]]:
-    """Accept the user's collapse: the intent is written False now (collapse is always attainable)."""
+    """Clear intent now for a local collapse, or at the commit of a fallible display return."""
+    if state.ordinary_display is not None and state.ordinary_display != state.display:
+        return state, ()
     if state.requested:
         return replace(state, requested=False, clear_intent_at_rest=False), (PersistIntent(False),)
     return replace(state, clear_intent_at_rest=False), ()
@@ -688,7 +702,10 @@ def _exit_committed(state: TakeoverState, event: ExitCommitted) -> Step:
         return _unchanged(state, Outcome.STALE, "no such exit running")
     held = state.held_mode_request
     deferred = state.deferred_expand
-    rested, writes = _flush_cleared_intent(_rest(replace(state, held_mode_request=None)))
+    user_return = event.display is not None and state.txn_origin is Origin.USER
+    rested = _rest(replace(state, held_mode_request=None,
+                           display=event.display if event.display is not None else state.display))
+    rested, writes = _user_collapse(rested) if user_return else _flush_cleared_intent(rested)
     if held is not None:
         # Capable -> incapable: the mode changes only after the collapse has committed (D3); the intent is cleared
         # when that mode activates (a rejection leaves the capable mode, and the intent, in place).
@@ -699,6 +716,17 @@ def _exit_committed(state: TakeoverState, event: ExitCommitted) -> Step:
         return _applied(rested, *writes, begin)
     step = _settle_resting(rested, animate=True)
     return _applied(step.state, *writes, *step.actions)
+
+
+def _exit_failed(state: TakeoverState, event: ExitFailed) -> Step:
+    if state.phase is not Phase.EXITING or event.txn != state.txn:
+        return _unchanged(state, Outcome.STALE, "no such exit running")
+    held = state.held_mode_request
+    state = replace(state, phase=Phase.EXPANDED, txn_origin=None, deferred_expand=None,
+                    held_mode_request=None)
+    if held is not None:
+        return _applied(state, RejectModeRequest(held.request_id, "ordinary display return refused"))
+    return _applied(state)
 
 
 def _mode_requested(state: TakeoverState, event: ModeRequested) -> Step:
@@ -805,9 +833,10 @@ def _transfer_requested(state: TakeoverState, event: TransferRequested) -> Step:
         return Step(state, (RejectTransfer(event.request_id, reason),), Outcome.REJECTED, reason)
     txn = state.txn + 1
     source = state.display
+    ordinary = (state.ordinary_display or source) if expanded or then_expand else None
     state = replace(state, phase=Phase.TRANSFER_PENDING, txn=txn, txn_origin=None,
-                    transfer_target=event.target_display, transfer_resume_expanded=expanded,
-                    transfer_then_expand=then_expand)
+                    ordinary_display=ordinary, transfer_target=event.target_display,
+                    transfer_resume_expanded=expanded, transfer_then_expand=then_expand)
     return _applied(state, BeginTransfer(txn, event.request_id, str(source), event.target_display, expanded,
                                          expanded or then_expand))
 
@@ -931,6 +960,7 @@ _HANDLERS = {
     EnterFailed: _enter_failed,
     EnterCommitted: _enter_committed,
     ExitCommitted: _exit_committed,
+    ExitFailed: _exit_failed,
     ModeRequested: _mode_requested,
     ModeCycleRequested: _mode_cycle_requested,
     ModeActivated: _mode_activated,
@@ -951,7 +981,7 @@ _HANDLERS = {
 __all__ = [
     "Action", "BeginEnter", "BeginExit", "BeginTransfer", "CancelEnter", "DisplayLost", "EditEntered",
     "EditExited", "EditResolutionDeclined", "EndFullscreenEdit", "EnterCommitted", "EnterFailed", "EnterPrepared", "Event",
-    "ExitCommitted", "ExitReason", "ForwardModeRequest", "GenerationReady", "GlyphPressed", "HeldModeRequest",
+    "ExitCommitted", "ExitFailed", "ExitReason", "ForwardModeRequest", "GenerationReady", "GlyphPressed", "HeldModeRequest",
     "ModeActivated", "ModeCycleRequested", "ModeRejected", "ModeRequested", "Origin", "Outcome", "OwnerRetired", "PersistIntent", "Phase",
     "RESTING_PHASES", "RejectModeRequest", "RejectTransfer", "RequestEditResolution", "RetireTakeover",
     "RollbackTransfer", "RunEnter", "SettingsOpened", "Shutdown", "Step", "TRANSACTION_PHASES", "TakeoverState",

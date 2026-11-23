@@ -206,6 +206,7 @@ class QuickDisplayVisualizerOwner:
     _expanded_display = False
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
+    _ordinary_presentation_runtime: Any = None
     _expanded_overlays_drawn = False
     _expanded_display_style = "default"
     # Engine-worker path class defaults (in process until __init__ reads the path); the worker path owns the values.
@@ -340,6 +341,7 @@ class QuickDisplayVisualizerOwner:
         # (no more feeding while it is current; a mode change while the arrow is held prepares the new one).
         self._neighbour_prewarm: tuple[Any, Any, Any] | None = None
         self._expanded_source: Any = None
+        self._ordinary_presentation_runtime = None
         # The drawn world extent last handed to the controller (``set_drawn_world_extent``): the display-wide card's
         # while it is drawn, None while the ordinary card is, so each route writes it at its edges only.
         self._drawn_world_published: tuple[float, float] | None = None
@@ -443,6 +445,15 @@ class QuickDisplayVisualizerOwner:
     @property
     def render_identity(self) -> Any:
         return self._render_identity
+
+    @property
+    def ordinary_presentation_runtime(self) -> Any:
+        """The runtime whose display bounds constrain the committed ordinary placement."""
+        return self._ordinary_presentation_runtime or self._presentation_runtime
+
+    def set_ordinary_presentation_runtime(self, runtime: Any) -> None:
+        """Preserve the ordinary geometry context across a presentation-only hop."""
+        self._ordinary_presentation_runtime = None if runtime is self._presentation_runtime else runtime
 
     @property
     def presentation_runtime(self) -> Any:
@@ -986,8 +997,7 @@ class QuickDisplayVisualizerOwner:
         presentation edge moves. In order, each step at a publication edge (no timer): the target's renderer is
         prepared on the target's own render thread from the latest snapshot while the source keeps drawing (bounded by
         the prepared reveal's deadline); the view fades out where it is (``on_fade_out``); at zero opacity it is put
-        on its ordinary card and ``hop`` moves the admission (the CUSTOM move and its Save; the scene transfer carries
-        the mode's render-thread history); once that history has landed it fades in on the target, display-wide when
+        on its ordinary card and ``hop`` moves the retained admission (the scene transfer carries the mode's render-thread history); once that history has landed it fades in on the target, display-wide when
         ``end_expanded`` (``on_fade_in(moved)``), and ``on_complete(moved)`` follows the fully visible frame. A hop
         that fails fades the view back in where it was. False (nothing done) when retired, not running, or already
         on that display. A later ``set_expanded_display`` or retirement abandons the move (its callbacks are dropped).
@@ -1110,15 +1120,11 @@ class QuickDisplayVisualizerOwner:
 
         move.stage, move.stage_at = "hold", float(self._transition_clock())
         source_expanded = bool(takeover.source)
-        # The move admits, projects and commits the ordinary card (CUSTOM truth), never the display-wide one: put the
-        # view on its ordinary card first, still at zero opacity, its overlays leaving with it.
+        # Withdraw the source's overlays at zero opacity before moving the admission.
         self._expanded_display = False
         self._expanded_source = None
         takeover.drawn_expanded = False
         self._project_expanded_overlays()
-        ordinary = self._resolve_current_presentation()
-        if ordinary is not None:
-            self._apply_resolved_presentation(replace(ordinary, scene_fade=0.0))
         moved = False
         try:
             moved = bool(move.hop())
@@ -1217,7 +1223,8 @@ class QuickDisplayVisualizerOwner:
         style = self._expanded_display_style if style is None else style
         self._expanded_source = ordinary
         return resolve_expanded_visualizer_presentation(
-            ordinary, display_size=_expanded_display_size(self._presentation_runtime, style), display_style=style)
+            ordinary, display_size=_expanded_display_size(self._presentation_runtime, style),
+            dpr=self._presentation_runtime.display_identity.device_pixel_ratio, display_style=style)
 
     def _apply_expanded_presentation(self, presentation: Any) -> None:
         """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics, and learns the
@@ -1536,7 +1543,7 @@ class QuickDisplayVisualizerOwner:
             resolve_visualizer_presentation,
         )
 
-        identity = self._presentation_runtime.display_identity
+        identity = self.ordinary_presentation_runtime.display_identity
         _x, _y, width, height = identity.geometry
         dpr = float(identity.device_pixel_ratio)
         if dpr <= 0.0:
@@ -3060,6 +3067,7 @@ class QuickDisplayVisualizerOwner:
         self._takeover = None
         self._expanded_display = False
         self._expanded_source = None
+        self._ordinary_presentation_runtime = None
         self._drawn_world_published = None
         self._transition_request_serial += 1  # disarm any queued one-shot
         self._transition_failure_callback = None

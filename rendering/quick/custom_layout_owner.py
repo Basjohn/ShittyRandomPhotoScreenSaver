@@ -1571,11 +1571,23 @@ class QuickCustomLayoutOwner:
         )
         return True
 
+    def transfer_visualizer_presentation_to(self, target: Any) -> bool:
+        """Retarget the retained fullscreen presentation without opening an ordinary layout session."""
+        owner, source = self._visualizer_provider()
+        if self._retired or self._active or owner is None or source is None or source is target:
+            return False
+        if target.is_retired or target not in self._participants_provider():
+            return False
+        home_runtime = owner.ordinary_presentation_runtime
+        self._transfer_visualizer_between_units(source, target)
+        owner.set_ordinary_presentation_runtime(home_runtime)
+        return True
+
     def move_visualizer_to_display(self, target_unit: Any) -> bool:
         """Move the Visualizer onto ``target_unit``'s display and commit it, with no Edit chrome (plan 1B.12).
 
-        The display-glyph route of the Expanded Visualizer's takeover: the same transaction as Edit's display hop
-        followed by Save (one session holding only the Visualizer, its working rect projected onto the target as the
+        The same transaction as Edit's display hop followed by Save (one session holding only the Visualizer,
+        its working rect projected onto the target as the
         hop projects it, the cross-display scene coordinator's retained transfer, then the ordinary Save: commit, live
         promotion, release). Nothing of Edit shows: the source and target scenes are bound as a direct gesture binds
         its display (``bind_direct_custom_layout_session``: no chrome, no input taken), so the projected rect reaches
@@ -3976,14 +3988,38 @@ class QuickCustomLayoutOwner:
                 "CUSTOM visualizer transfer has no exact display binding"
             )
 
+        visualizer_item = None
+        if self._active:
+            session = self._session
+            if session is None:
+                raise RuntimeError("CUSTOM visualizer transfer lost its edit session")
+            visualizer_item = next(
+                (item for item in session.items() if item.model_identity == "spotify_visualizer"),
+                None,
+            )
+            if visualizer_item is None:
+                raise RuntimeError("CUSTOM visualizer transfer lost its session item")
+            pixels_per_world = self._pixels_per_world_from_geometry(
+                visualizer_item.current_global_rect,
+                visualizer_item.current_viewport_extent,
+                geometry_kind=visualizer_item.geometry_kind,
+            )
+        self._transfer_visualizer_between_units(source_binding.unit, target_binding.unit)
+        if visualizer_item is not None:
+            self._visualizer_pixels_per_world[visualizer_item.source_key] = pixels_per_world
+
+    def _transfer_visualizer_between_units(self, source: Any, target: Any) -> None:
+        """Move the retained scene admission and the unit lifecycle edge as one transaction."""
+        source_scene = source.runtime.scene_controller
+        target_scene = target.runtime.scene_controller
         owner, current_unit = self._visualizer_provider()
         if owner is None or current_unit is None:
             raise RuntimeError("CUSTOM visualizer transfer has no admitted owner")
-        if current_unit is not source_binding.unit:
+        if current_unit is not source:
             raise RuntimeError(
                 "CUSTOM visualizer lifecycle owner disagrees with retained scene source"
             )
-        if getattr(source_binding.unit, "visualizer_owner", None) is not owner:
+        if getattr(source, "visualizer_owner", None) is not owner:
             raise RuntimeError(
                 "CUSTOM visualizer source unit lost lifecycle retirement ownership"
             )
@@ -3993,7 +4029,7 @@ class QuickCustomLayoutOwner:
                 "CUSTOM visualizer display transfer has no manager ownership seam"
             )
 
-        target_owner = getattr(target_binding.unit, "visualizer_owner", None)
+        target_owner = getattr(target, "visualizer_owner", None)
         if target_owner is not None:
             if target_owner is owner:
                 raise RuntimeError(
@@ -4027,42 +4063,15 @@ class QuickCustomLayoutOwner:
             logger.warning(
                 "[CUSTOM_LAYOUT] Discarded orphaned Visualizer target admission "
                 "target=%s identity=%s",
-                target_binding.identity,
+                target.screen_index,
                 discarded,
             )
 
         source_scene.transfer_visualizer_to(target_scene)
         try:
-            if not transfer_unit(target_binding.unit):
+            if not transfer_unit(target):
                 raise RuntimeError(
                     "CUSTOM visualizer display ownership transfer rejected"
-                )
-            # In a real active Edit session the item geometry has already been
-            # projected onto the target before this synchronous notification.
-            # Refresh the one pixels-per-world authority from that final QRect so
-            # a target-fit hop is the only non-wheel operation allowed to change
-            # scale. Standalone unit tests may exercise this transaction without
-            # an active session; they intentionally skip this session-only cache.
-            if self._active:
-                session = self._session
-                if session is None:
-                    raise RuntimeError("CUSTOM visualizer transfer lost its edit session")
-                visualizer_item = next(
-                    (
-                        item
-                        for item in session.items()
-                        if item.model_identity == "spotify_visualizer"
-                    ),
-                    None,
-                )
-                if visualizer_item is None:
-                    raise RuntimeError("CUSTOM visualizer transfer lost its session item")
-                self._visualizer_pixels_per_world[visualizer_item.source_key] = (
-                    self._pixels_per_world_from_geometry(
-                        visualizer_item.current_global_rect,
-                        visualizer_item.current_viewport_extent,
-                        geometry_kind=visualizer_item.geometry_kind,
-                    )
                 )
         except Exception as lifecycle_error:
             try:

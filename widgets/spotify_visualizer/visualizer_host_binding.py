@@ -256,6 +256,14 @@ class VisualizerHostBinding:
             )
         return placement
 
+    def _ordinary_unit(self, owner: Any) -> Any:
+        services = self._services
+        chosen = services.admitted_unit()
+        runtime = getattr(owner, "ordinary_presentation_runtime", None)
+        if runtime is None or (chosen is not None and chosen.runtime is runtime):
+            return chosen
+        return next((unit for unit in services.live_units() if unit.runtime is runtime), None)
+
     def project_base_authored_origin(self) -> bool:
         """Project the plain (undocked) authored Visualizer origin once, if admitted.
 
@@ -264,7 +272,7 @@ class VisualizerHostBinding:
         """
 
         owner = self._services.admitted_owner()
-        chosen = self._services.admitted_unit()
+        chosen = self._ordinary_unit(owner)
         if owner is None or chosen is None or chosen.is_retired:
             return False
         placement = self.resolve_placement(chosen, owner, authored_layout_enabled=False)
@@ -323,13 +331,12 @@ class VisualizerHostBinding:
         def _on_authored_geometry(widget_id: str, geometry: Any) -> None:
             if widget_id != "media":
                 return
-            if (
-                services.caller_retired()
-                or services.admitted_owner() is not owner
-                or services.admitted_unit() is not chosen
-            ):
+            if services.caller_retired() or services.admitted_owner() is not owner:
                 return
-            VisualizerHostBinding(services).install_authored_layout(
+            binding = VisualizerHostBinding(services)
+            if binding._ordinary_unit(owner) is not chosen:
+                return
+            binding.install_authored_layout(
                 chosen,
                 owner,
                 install_observer=False,
@@ -693,11 +700,13 @@ class VisualizerHostBinding:
         if unit is not None and unit is not services.admitted_unit():
             return False
         services.disconnect_media()
-        chosen = services.admitted_unit()
-        if chosen is not None:
-            chosen.presenter.set_layout_observer(None)
-            chosen.presenter.set_external_stack_obstacles(None)
-            clear_visualizer_input_admissions(chosen)
+        ordinary = self._ordinary_unit(services.admitted_owner())
+        if ordinary is not None:
+            ordinary.presenter.set_layout_observer(None)
+            ordinary.presenter.set_external_stack_obstacles(None)
+        host = services.admitted_unit()
+        if host is not None:
+            clear_visualizer_input_admissions(host)
         # An orbit still held when the Visualizer goes is saved now; its release never comes.
         services.release_view_state()
         services.record_admission(None, None)
@@ -719,8 +728,10 @@ class VisualizerHostBinding:
         if owner is None or host is None:
             return None
         services.disconnect_media()
-        host.presenter.set_layout_observer(None)
-        host.presenter.set_external_stack_obstacles(None)
+        ordinary = self._ordinary_unit(owner)
+        if ordinary is not None:
+            ordinary.presenter.set_layout_observer(None)
+            ordinary.presenter.set_external_stack_obstacles(None)
         scene = host.runtime.scene_controller
         clear_visualizer_input_admissions(host)
         try:
