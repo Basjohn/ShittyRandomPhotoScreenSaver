@@ -2036,11 +2036,13 @@ follow-ups with their evidence folders).
     instead require an explicit application restart. No arbitrary "all Settings changes rebuild" rule.
   - [ ] **Profiles/desktop:** Standard RUN/CONFIG, MC, diagnostic and eventual SMP consume the
     SAME architecture, with their real input/security and source/visualizer policies. Windows
-    **Winlogon/secure/unknown desktop is NEVER an interactive Settings or Theme Studio admission**;
-    preserve the existing saver exit/input and verified secure-to-interactive handoff behaviour.
-    Do not block, paint over, steal focus from, delay or interact with Windows lock/login UI;
-    no cross-desktop HWND/shield/browser/credential launch. Treat permissions/desktop identity
-    as a separately tested admission axis, not an inferred profile flag; unknown fails closed.
+    **Winlogon/secure/unknown desktop retains EXACTLY the existing proved saver
+    Settings request, exit and handoff behaviour**: do not invent either an
+    automatic live Settings window or a blanket ban on a historically valid
+    Settings action. No extra HWND, Studio/shield, browser/OAuth, new input
+    capture or lock/login focus manipulation. Treat account/credential actions
+    as fail-closed on noninteractive/unknown desktops; desktop identity and
+    Settings-request authority are separate axes and need real Windows proof.
     Existing Std/MC runtime behaviour remains as-is until its specific gate passes.
   - [ ] **Real QWidget Studio integration:** retain current Settings UI and theme/Studio system.
     Replace the `QDialog.exec()` dependent lifecycle with an explicitly owned asynchronous
