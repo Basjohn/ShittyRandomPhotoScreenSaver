@@ -2010,8 +2010,10 @@ the lead rejects any still or showcase frame that shows one.
     slider on the existing range setting. Keep authored values, with no endpoint pinning.
   - [ ] Add the Motion section for Stream Speed, Drift and, if it belongs there, Path through the
     existing settings spec owner.
-  - [ ] If the replay isolates microbubble or particle speed, expose that layer's response as a separate
-    Studio option. Bind it to the verified owner and preserve the meaning of the shell Stream Speed range.
+  - [ ] Add separate Particle Reactivity and Microbubble Reactivity range sliders to Motion, with
+    quiet-to-loud endpoints for each layer. Bind them to the existing settings spec and each
+    layer's transport owner. These controls are a separate post-port deliverable from the
+    speed-swing investigation.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.
