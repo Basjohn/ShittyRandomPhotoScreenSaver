@@ -50,16 +50,24 @@ Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port
 method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
-**Operator priority (23 Nov):** finish [fullscreen return placement](#1d6-fullscreen-return-placement-across-displays),
-then the Dashboard naming migration, then isolate and fix the perceived response delay before Extruded Bubble
-measurements or port work. Resume the native sequence below after those gates.
+**Operator priority (23 Nov):** finish the Dashboard naming migration, then isolate and fix the perceived response
+delay before Extruded Bubble measurements or port work. Resume the native sequence below after those gates.
 
 - [ ] Dashboard naming: migrate MC's product and profile names through runtime, profile data, tooling and GitHub
-  workflows. Verify that each Windows and Linux build identifies its product as Screensaver or Dashboard.
+  workflows. Resume `experimental/dashboard-naming-wip` (`a5bcd2fcc`) from the retained `dashboard-naming`
+  worktree and its `.artifacts/handover/JOURNAL.md`. Fix legacy-only profile copying through the canonical
+  migration, rerun `tests/test_visualizer_live_check.py`, `tests/test_d1_run.py` and `tests/test_build_runner.py`,
+  then audit the upgrade/packaging paths and update Spec and Index before landing. Use GitHub builds to verify
+  that the Windows and Linux artifacts identify their product as Screensaver or Dashboard.
 - [ ] Perceived response delay: use `logs/evidence_chest/logs077d6cc043.zip` and recorded-input tooling to reproduce
-  the difference between starting fullscreen and starting as a card before expanding. Measure input-to-visible
-  response independently of the freshness overlay, including EB breathing. Locate the delayed boundary, fix it
-  after the reproduction fails on the current source, then prove both routes and guard against recurrence.
+  the sustained delay during playback. Compare fullscreen launch with later expansion, using the same music and
+  authored controls. Keep the playback ramp. The hidden worker runs on two recordings found no fullscreen-start
+  phase difference at 10 ms resolution. The saved receipts and rerunnable probes are in
+  `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/20261123_paired_worker/` and the supplied
+  trace analysis is in the sibling `20261123_operator_trace/`. They cover delivery, passage and shell draw inputs.
+  Next automate PCM-aligned, native-size pixel radius tracking on a steady visible shell, then compare against a
+  recent good runtime on the same settings. Check any measured delay against R-171 and R-248 before changing the
+  owner. Prove the fix on both startup routes and make the measured failure a regression guard before port work.
 
 **Order (lead and operator, 17 Nov):**
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
@@ -135,7 +143,7 @@ measurements or port work. Resume the native sequence below after those gates.
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High: N5.6 Extruded Bubble after N5.4 (landed 22 Nov, ABI 40), held at the usage checkpoint. Defects between N steps: 1D.6 (design note first), then 1C.10.
+- [ ] High: resume N5.6 Extruded Bubble after the Dashboard and response-delay gates at the top of this section.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -241,6 +249,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   contrast alone does not account for the shadow's effect); 4x crops, lead review.
 
 ### Item 6. Hygiene
+
+- [ ] `tools/media_key_matrix_harness.py` waits for an old `[DISPLAY_WIDGET]` window-flag message whose producer
+  has been removed. Replace the oracle with the current window-policy evidence and exercise a failing control.
 
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
@@ -2431,27 +2442,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 - [ ] Convert the traced glass at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
   14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
   layered `gl_Layer` write).
-
-### 1D.6 Fullscreen return placement across displays
-
-Case: the Visualizer sits at B2 on D1, is moved to A1 on D0, goes fullscreen and is moved to D1 (that move works),
-then leaves fullscreen. It lands at a spot mapped from D0 instead of its own B2 on D1. Log
-`logs/evidence_chest/logs2bec597a774.zip` (`screensaver_geometry.log`): every "Visualizer display move/hop" maps the
-source rect over (D0 (51,38) became D1 (2760,143)). The one time it came back to D0's original spot (06:38:37) the
-mapping only happened to match. Nothing remembers a display's own last ordinary placement. The log also shows
-borderless fullscreen transfers working smoothly.
-The 23 Nov reproduction is `logs/evidence_chest/logs0b273cc3a2.zip` (`--geo`). The card starts on D1, is sent
-fullscreen to D0, returns fullscreen to D1, and collapses with the wrong geometry. If it collapses while still on
-D0 via `V` or the down glyph, it must also return to the last good ordinary card on D1. Targeted expansion from
-an ordinary card starts the same excursion. Ordinary display moves and Edit still commit via the CUSTOM owner.
-
-- [ ] Reproduce both routes at the real display-transfer boundary with two synthetic displays and an authored
-  ordinary rect. Trace the ordinary placement and fullscreen host through transfer, exit and refusal.
-- [ ] Preserve the ordinary placement and physical binding across fullscreen hops. Use the existing takeover,
-  retained host transfer and CUSTOM authorities. Verify the same owner, the same ordinary rect and persisted state,
-  and coherent cover/overlay cleanup on both collapse inputs. Cover fullscreen startup and topology/refusal at
-  the affected boundary.
-- [ ] Verify the two-display sequence through the smallest available display harness and record its scope.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 

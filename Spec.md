@@ -972,6 +972,8 @@ that unit is not an admission condition. Numbered widget routes bind to physical
 does not reassign them. An unavailable assignment suppresses its widgets until that display returns or the user explicitly
 changes the route. Saved CUSTOM geometry is retained on its original display. `DisplayManager` decides which unit
 hosts the Visualizer, with no delayed relocation; ALL continues to select its first participating display.
+Fullscreen can temporarily draw the same Visualizer on another display. Collapsing with `V` or the down glyph
+returns it to its last ordinary display and placement. The ordinary CUSTOM record remains the placement authority.
 Everything that binds the one owner to a host unit lives in one host-neutral binding,
 `widgets/spotify_visualizer/visualizer_host_binding.py`: construction (the only construction site, and the
 rejection of a second owner), bind/start, committed-CUSTOM hydration, authored placement and Media docking, the

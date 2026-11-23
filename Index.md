@@ -93,7 +93,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | the native core module `_srpss_native_core` (what it holds, its ABI, its proofs, how the lead builds it) | `native/core/README.md`; `rendering/native/` (the one Python importer); `Current_Plan.md` item 8b |
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
-| Fullscreen controls, metadata fitting and overlay editing | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G; `core/settings/fullscreen_overlays.py` |
+| Fullscreen controls, return placement, metadata fitting and overlay editing | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` M3c and §G; `core/settings/fullscreen_overlays.py` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | Bubble drawn-radius release and remaining judder evidence | `Current_Plan.md` §5; `Docs/Historical_Bugs/R-105_Bubble_Remaining_Small_Radius_Judder.md`; `Docs/Reference/Harness_Index.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
