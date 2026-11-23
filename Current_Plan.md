@@ -51,8 +51,8 @@ method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixel
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
 **Operator priority (23 Nov):** finish the Dashboard release checks already running on GitHub. Take the Qt 6.12.1
-patch when its four matching Python wheels are published. Use the repaired timing receipts for the Waveform and
-Bubble follow-ups, then resume the native sequence below. The reported EB response delay is in the Watchlist.
+patch when its four matching Python wheels are published. Use the repaired receipts for the native timing follow-ups,
+then resume the native sequence below. The reported EB response delay is in the Watchlist.
 
 - [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
   source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
@@ -111,12 +111,6 @@ Bubble follow-ups, then resume the native sequence below. The reported EB respon
     after, margins against 0.05 ms) with Waveform now drawing natively.
 - [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
   box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
-- [ ] Transition track watch items (from the black-flicker fix, merged 22 Nov at ABI 39):
-  - [ ] Retake the N5.4 Waveform timing row on Display 1 with the repaired native cadence receipt. Keep the raw traces
-    and record CPU, RSS and private bytes alongside a native Bubble row under otherwise comparable conditions.
-    The 22 Nov `tools/baselines/preflip/n54_native_vulkan.json` run measured render time but lacked valid FPS and swap
-    gaps. Short D1 controls verified native counts for both modes on 23 Nov; see `20261123_draw_swap_receipt/d1_checks.json`
-    under `.artifacts/evidence/visualizers/shared/native_viz_timing/`. Use a quiet local window for the cost comparison.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
@@ -2939,6 +2933,14 @@ Live checklist: every box is an observation or a fix owed on evidence; delete an
   EB target and shell radii, and swaps before considering a change. Receipts are under
   `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/` and
   `.artifacts/evidence/visualizers/extruded_bubble/response_pixel_radius/20261123_live_d1_cold_124/REPORT.md`.
+
+**Waveform Ribbon Vulkan cadence (23 Nov, 4K Display 1)**
+
+- [ ] Repeat in a quieter window if the slower cadence persists in use. With the same copied profile, preset and
+  recording, a Vulkan/OpenGL/Vulkan sequence measured 50.0 / 77.2 / 51.4 draws per second. Both Vulkan runs issued
+  about 90 GUI present requests per second and began about 51 Qt frames per second. The worker produced about
+  90 publications per second in all three runs. Start from request-to-Qt-frame admission. A concurrent game was active
+  throughout. The benchmark and raw receipt locations are in `Docs/Reference/Benchmarks.md`.
 
 **Engine worker and platform (reopen only on evidence; no simple test exists)**
 

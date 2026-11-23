@@ -234,6 +234,17 @@ Visualizer's own draw (ms); late is steady late %, hitches a minute.
 Read: under game60 the three heavy 3D modes fall below 70 fps (Extruded Bubble 61, Waveform 68, Neon Lake 70) with
 render medians of 5-11 ms; the 2D modes and the lighter 3D modes hold about 90 fps with render under 1.3 ms.
 
+**Native Visualizer timing receipt, 23 Nov.** Two 45 s invisible 4K Display 1 runs on recorded `anything_mixed2`
+showed 3,523 correlated Bubble swaps and 1,964 Waveform Ribbon swaps in their steady intervals. Bubble used 101 % of
+one CPU core and 943/1,304 MB RSS/private bytes. Waveform used 140 % and 974/1,641 MB. The operator's game was active;
+whole-machine GPU utilisation medians were 38 % and 44 %. [Native timing pack](../../tools/baselines/preflip/20261123_native_viz_timing_d1.md).
+
+The same Waveform preset and copied settings, run in Vulkan/OpenGL/Vulkan order, gave 50.0/77.2/51.4 draws per second
+with median swap gaps of 20.41/12.18/19.23 ms. On Vulkan, about 90 GUI present requests per second produced about 51
+Qt frame starts per second. The recorded worker supplied about 90 publications per second on all three routes.
+Stack conditions and raw trace locations are in
+`.artifacts/evidence/visualizers/shared/native_viz_timing/20261123_draw_swap_receipt/waveform_vulkan_opengl_vulkan.json`.
+
 **Pre-flip reference, transitions (lead, 15 Nov).** The load set chosen by measured cost (operator: parity and
 regressions are proved per port, so five transitions suffice for the load comparison): the four heaviest by the 14 Nov
 overhead baseline and Crossfade as the light control. `tools/preflip_pack.py` session mode, one invisible saver session
