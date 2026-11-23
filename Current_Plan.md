@@ -81,9 +81,10 @@ Continue the native sequence below with the repaired timing receipts. The report
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Continue [N5.6 Extruded Bubble](#n5-6-extruded-bubble) on `experimental/eb-reference-conversions` in
-  `C:/Users/Basjohn/.codex/worktrees/eb-compute-binding-limit/ShittyRandomPhotoScreenSaver`. Use the plan's
-  first open box and its linked receipts on resumption. Keep the previous Claude worktree and journal
+- [ ] Continue [N5.6 Extruded Bubble](#n5-6-extruded-bubble) from the first open box and its linked receipts.
+  Start the next implementation branch from main. The retained worktree at
+  `C:/Users/Basjohn/.codex/worktrees/eb-compute-binding-limit/ShittyRandomPhotoScreenSaver` holds evidence.
+  Keep the previous Claude worktree and journal
   (`.claude/worktrees/agent-ac5f7832a73527151/.artifacts/handover/JOURNAL.md`) for the earlier core and drift
   evidence. Its scratch and evidence are under `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/`.
 - [ ] Waveform follow-ups:
