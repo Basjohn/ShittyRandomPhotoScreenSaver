@@ -81,22 +81,12 @@ Continue the native sequence below with the repaired timing receipts. The report
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
   ABI numbers reserved at dispatch; main built once per batch of C++ merges.
-- [ ] Live agents and where their work is (keep current; if an agent is cut off, resume it with SendMessage to its id,
-  or start a successor with `python tools/agent_handover.py <worktree>` (its "successor's brief") after
-  `agent_handover.py --commit <worktree>` saves anything uncommitted; never bare-remove a worktree):
-  - N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium). Worktree `F:/Programming/Apps/ShittyRandomPhotoScreenSaver/.claude/worktrees/agent-ac5f7832a73527151`, branch
-    `worktree-agent-ac5f7832a73527151` (pushed; last WIP 9d2c65fc0, built proofs merged 5ffabd288). Journal:
-    `.artifacts/handover/JOURNAL.md` in the worktree, copy `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/JOURNAL.md`. Evidence and
-    scratch (junctions to D:): `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/evidence/` (`native_core/n5_6/20261122_n56_rebuilt`,
-    `visualizers/extruded_bubble/n56_flicker`, `n56_wake_teleport`, `n56_living_acceleration`) and `.../scratch/n56/`
-    (probe scripts: `orbit_points.py`, `flicker_map.py`, `veil_probe.py`, `eb_probe.py`). Done 22 Nov: camera home
-    (a9d471c94), the music trace, port preparation (N5.6 box); wound down for the port proper.
-  - N5.2g landed 22 Nov (7965d4abe; agent retired): all 28 transitions are native. N5.6 is wound down (branch pushed,
-    worktree kept for the port proper; resume agent ac5f7832a73527151 or a successor from its journal). No agent is
-    running.
-- [ ] Modes track: N5.4 Waveform landed 22 Nov (ABI 40, merge 7b0663cf5); N5.6 Extruded Bubble, agent ac5f7832a73527151 (Opus Medium): step 1 merged (R-249); its five core C++ boxes
-  merged and built at ABI 42 (6e9093f7a) with their GPU proofs; R-250 and the camera home merged; port preparation
-  done (the N5.6 box lists the next steps). Waveform leftovers:
+- [ ] Continue [N5.6 Extruded Bubble](#n5-6-extruded-bubble) on `experimental/eb-reference-conversions` in
+  `C:/Users/Basjohn/.codex/worktrees/eb-compute-binding-limit/ShittyRandomPhotoScreenSaver`. Use the plan's
+  first open box and its linked receipts on resumption. Keep the previous Claude worktree and journal
+  (`.claude/worktrees/agent-ac5f7832a73527151/.artifacts/handover/JOURNAL.md`) for the earlier core and drift
+  evidence. Its scratch and evidence are under `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/`.
+- [ ] Waveform follow-ups:
   - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
     54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
     C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
@@ -126,7 +116,7 @@ Continue the native sequence below with the repaired timing receipts. The report
 
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
-- [ ] High: resume N5.6 Extruded Bubble from its port checklist in the modes track.
+- [ ] Resume [N5.6 Extruded Bubble](#n5-6-extruded-bubble) from its first open reference-conversion box.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
@@ -818,179 +808,59 @@ the feature (D3D11 is not stated).
   is faster than decay and the decay is gentle (both exposed as options with those defaults). Check for a missing
   base speed and idle speed; audit these controls so they complement rather than conflict. Every preset's default stays exactly what it is now (Settings spec system,
   `core/settings/visualizer_mode_settings.py`); reaction check with `waveform_music_response.py`.
-- [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
-  capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
-  - Port preparation (agent ac5f7832a73527151, 22 Nov; the three 1B defects before it are closed: R-249, R-250, and
-    the music trace below). What is ready, under `Docs/Guides/Native_Parity_And_Timing_Proof.md`:
-    - Music response: `tools/visualizer_replay/extruded_bubble_music_response.py` (the take's PCM envelope above each age
-      band's projected on-screen speed through the preset's own camera). Presets 9 and 1 on ragdoll and human (60 s):
-      newborn, 5-15 s and older bands all follow the stream speed (corr 0.79-1.00, p90/p10 1.29-1.56, lag 0.0 s); no band
-      lags. The port's response comparison runs it before and after. Evidence
-      `visualizers/extruded_bubble/music_response/20261122_onscreen/`.
-    - Frozen settings and run keys (`conventions_identity.mode_runs('extruded_bubble', offers=True)`, the canonical spec's
-      variants; adaptive state on as set): EB has no reaction modes; its emission modes are `extruded_bubble_emission_geometry`
-      SCENE (variants `""` and `:b`) and BEAM (`:extruded_bubble_emission_geometry=0`); the light (`:extruded_bubble_light_type=0`,
-      Sunlit Surface) and lighting coverage (`:extruded_bubble_lighting_coverage=0`, BEAM) change the passes drawn, so they
-      run too. The other offers (drift direction 0 and 2-7, collision scope 0 and 2, audio block size 0, 2, 3) are
-      record- and settings-driven classes: coverage windows only.
-    - Cached Python references (`owner_render_parity.py --references-only`, the same run, masks, single sampling and cache
-      key as `native_parity`; stored in `D:\Temp\Scratch\SRPSS\fast_proof\references\extruded_bubble_<key>`, the
-      index with keys, folders and frame counts in `native_core/n5_6/20261122_refs_<take>_<length>/python_references.json`):
-      drawn: `""` over the full 60 s of human_heavy1 and nightsolong_acousticsoft1 (the acceptance takes, with their
-      late-song windows; 5,503 frames each, about 685 s each: `extruded_bubble_e5058278e42c21ced601d264` (human) and `extruded_bubble_444caacbf472c9d88561b4bc` (nightsolong), indexes in `20261122_refs_human_60/` and `_night_60/`). Next (not started, wind-down
-      22 Nov): `""` over ragdoll's 60 s, then `:b`, BEAM, Sunlit, lighting BEAM and `""@overscan` over 30 s of each take
-      (`owner_render_parity.py --references-only --mode extruded_bubble --recording <take> --seconds 30 --runs
-      <mode+key ...> --placements display overscan`). NOTE: the key holds the Python renderer's sources,
-      so the conversions box below draws them again once (the guide's section 3); drawing is unattended (6 s = 47 s;
-      at most 2 processes at once). Open for the lead: the 30 s runs' late-song window. Python's drift restarts after a
-      128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
-      it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
-  - [ ] Python reference conversions (playbook checklist 16). Preserve the current appearance and retain before/after
-    stills and a comparison WebP for each changed rendering path. The core will use these sources. The probe
-    backdrop proof is indexed in the [port playbook](Docs/Guides/Native_Port_Playbook.md#pb-e13).
-    - [ ] Exclude `gl_FragDepth` from the two near-layer fragment variants. Keep the depth writes for the
-      depth-backed shell and cluster passes. Check the baked shader interfaces and replay both near passes.
-    - [ ] Address shaft and blur reads in target pixels. Keep bilinear samples inside the content even when the
-      allocation is larger. Check both blur directions and the final backdrop read against padded targets, then
-      compare recorded display and overscan frames.
-    - [ ] Convert the traced glass's loose uniforms to a block. Resolve the beads' binding-6 note in section 1D.11 and
-      record the comparison, including the previously measured one-level rounding differences.
-    - [ ] Redraw the Python references once the conversions are complete, using the frozen run keys above.
-  - [ ] The native record and route (the port's first code): `core/visualizer_engine/extruded_bubble_native_schema.py`
-    from the reading's per-frame list, the route's program, `native_record_identity.MODES['extruded_bubble']` (its
-    passes, read spans, streams and positional members). Then L: `native_record_identity.py --mode extruded_bubble
-    --recording <take> --seconds 30 --run <key> --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>` for
-    every run key above and each take (60 s for `""`), every frame identical.
-  - [ ] Coverage windows from those deliveries (`coverage_windows.py --mode extruded_bubble`), the late window from each
-    take's last 15 s. EB keeps GPU history: the drift state integrates every step from the cold start, and a render gap
-    past 128 steps (about 1.4 s) restarts a family from zero (`extruded_bubble_drift_solver.py:799-801`, reading above),
-    so a window cannot start its drawing late. Its warm-up is "compute every input, draw from the window": the native
-    stream player dispatches the drift each input with the draws skipped (the ABI 42 `when` skip) and draws the window;
-    `coverage_windows.WARMUP_INPUTS['extruded_bubble']` records that rule, with the continuity test and its restart
-    control.
-  - [ ] P, T and C as the guide's section 3 for a port; registration last.
-  - Reading (reference; Sonnet agent a531eca73061cfa21, 21 Nov, merged), as Waveform's reading above: the record per frame and
-    per Settings or card change, each stream's size rule, every pass with its targets, formats and attachments (the
-    drift compute, transparency/OIT, HDR, the depth texture and background capture, the probe, defocus, impostors and
-    optics), how it turns, and its clear; then what the port needs that the ABI 28 core lacks beyond Waveform's six C++
-    boxes (one box each, with what its proof must show), and which of Waveform's boxes it shares. File:line for every
-    claim. Extruded Bubble is its own mode: never read the original Bubble as its oracle.
-    Reading (Sonnet agent a531eca73061cfa21, 21 Nov, no code touched). `eb.py` is
-    `rendering/quick/visualizer/implementations/extruded_bubble.py`; `prog.py` is `rendering/gl_programs/extruded_bubble_program.py`;
-    `scene.py` is `rendering/gl_programs/extruded_bubble_scene.py`; `solver.py` is `.../implementations/extruded_bubble_drift_solver.py`;
-    `log.py` is `widgets/spotify_visualizer/extruded_bubble_drift_log.py`; `target.py`, `probe.py`, `defocus.py` are in
-    `rendering/quick/scene3d/`; `D4` etc. are in `Native_Core_P3_Decisions.md`.
-    - Per frame from the logical frame (`ExtrudedBubbleFrame`, `widgets/spotify_visualizer/render_state.py:732-762`): the
-      bubble records (8 floats), cluster records, time, level, flash, sustain, drift, emission, stream and its speed, travel,
-      rays, shimmer, motion phase, passage, chain activity, chain drive, the wake records (50 floats each), the drift
-      families, the step log and the knot decisions. The Settings parameters ride in the same frame as frozen fields.
-    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box): the compaction of live shells
-      (`scene.py:289-291`), the cluster packing (`:310-325`), each shell's glint proxy (`:328-341`, `eb.py:559-562`), the
-      four largest shells for the shafts (`eb.py:583-585`), the camera (`:535-536`, one assembly the logical side builds
-      too), a deep light's direction from the eye (`:537-541`), the light's screen position (`:600`, `scene.py:351-358`),
-      ray strength, flicker and reach (`eb.py:564-568`), the chain, snow, fizz and speck fills and the instance counts
-      they give: beads x 160, snow, wakes x fizz-per-wake, specks (`:611-619,648-654`, `_BEADS_PER_CHAIN` `:94`).
-    - Per Settings or card change only: the knots (`eb.py:514-516`, `scene.py:114-192`), the near layer's optical height
-      (`eb.py:517-523`), the sample count and so the programs (`:131-133,430-435`; 4 at High, 2 at Balanced, 1 below,
-      `rendering/gl_programs/scene3d.py:81-87`), the probe's face size (256, 256, 128, 64 by tier, `eb.py:86,421-428`),
-      the shaft targets at half the card (`:149-170`), the near layer at the exact card size (`defocus.py:250-297`), the
-      scene target (`eb.py:498-499`), bloom 0.55 and HDR exposure 1.0, both constants (`:87,684-685`).
-    - Streams and size rules (a slot holds 1 MiB, `core/visualizer_engine/frame_capacity.py:9`): shells at most 192 x 32 B =
-      6,144 (`eb.py:89,403`, `widgets/spotify_visualizer/extruded_bubble_simulation.py:49`), clusters 96 x 76 B = 7,296
-      (`eb.py:90,406`, `scene.py:40`), proxies 192 x 32 B = 6,144 (`eb.py:407`), wakes 384 x 200 B = 76,800 (`eb.py:404`,
-      `core/constants/extruded_bubble_world.py:34`), steps 128 x 30 float32 = 15,360 (`log.py:29-37`; the frame holds
-      their float64 form, 30,720) and knots 128 x 240 chains x 12 B = 368,640 (`log.py:286-287`,
-      `widgets/spotify_visualizer/extruded_bubble_material_paths.py:12-14,184-187`). Today the slot also carries the drift
-      geometry at its maxima: chains 240 x 48 B, snow 2,500 x 32 B, specks 216,000 x 32 B = 6,912,000
-      (`frame_capacity.py:12-42`, `core/constants/extruded_bubble_world.py:11-12`), 8,420,736 B in all. Python uploads only
-      the steps newer than the last applied (`solver.py:728-743`); a storage stream uploads its used bytes whole each
-      record (`mesh_buffers.h:12-15`),
-      up to about 0.4 MB. Six streams (shells, clusters, proxies, wakes, steps, knots) of `kMaxModeStreams` 8
-      (`mesh_buffers.h:55`).
-    - The drift (`solver.py:680-875`), D4's solver: per family geometry once per revision, a state buffer of 16 B per knot
-      or mote (chains 240 x 128 knots = 491,520 B; snow 40,000; specks 3,456,000), an aux buffer (`:817-843`) and one
-      output of at most 262,144 vec4 = 4,194,304 B (`:650-678`). Three programs: chains (local size 128, one group a
-      chain row, shared memory and `barrier()`, `:185-240`), snow and specks (local size 256, `:242-302`) and the pair
-      check (`:308-319`), every dispatch only when a step is newer than the applied serial (`:716-717`), each with a
-      64-byte block (`:67`). A geometry edit runs the old revision's pending steps on the old rows, copies the history onto
-      the new geometry (the rebase reads both geometries, bindings 9 and 13, `:204-209,263-271,757-776`), then runs the new
-      steps; a capacity growth keeps the prefix (`:834-839`); a render gap past 128 steps (about 1.4 s, `log.py:37`)
-      restarts a family from zero (`solver.py:799-801`). The draws read the output as storage at binding 6
-      (`prog.py:1454`) and the wakes at binding 7 (`:1397`).
-    - Passes of a frame in order (`eb.py:679-767`). Probe (`:681,794-821`, `probe.py:264-304`): an RGBA16F cube with a full
-      chain (`probe.py:162,192`), one D32F depth shared by the faces (`:206`), each face cleared to (0,0,0,1) and depth 1
-      (`:284,289`); per face the backdrop in probe mode (`eb.py:799-806`, `prog.py:187-199`) and each shell's glint proxy,
-      an instanced quad added ONE, ONE, depth write off (`eb.py:807-818`); then every level below the top filtered from
-      the level above of the same cube, one draw a level, a geometry shader with six invocations writing `gl_Layer`
-      (`probe.py:58-73,231-262`), 32 Gaussian taps over a cone (`:76-103`). Shafts (`eb.py:682,823-846`): the march at
-      `max(1, w // 2)` into an R16F target (`:149-170`), then two separable blurs between two such targets. Scene target
-      (`:684-685`: overlay with the card's fade, bloom, depth texture, OIT, HDR; colour RGBA16F beside the emission,
-      cleared to 0): backdrop (`:696-701`), specks, instanced quads added to colour and emission, vertex-pulled over the
-      drift output (`:702-713`), the capture (`:714`, `target.py:616-690`), the transparent block (`:717-746`,
-      `target.py:692-740`: shells, clusters, one instanced beads-snow-fizz draw over the wakes and the drift output, the
-      wake trails as a strip of 82 vertices a wake), resolved per sample on leaving (`target.py:768-812`). Near layer
-      (`eb.py:747-764`): near shells and clusters into the `DefocusLayer` (RGBA16F colour and circle, full chains, the
-      exact card size, cleared to 0, premultiplied over and MAX, no depth: `defocus.py:250-297,322-350`), then its
-      composite: mips, clip, 64 plus 32 gather taps, highlight sprites (`:366-431`; read level 4 at 2160 px optical
-      height, `:316-320`, `eb.py:88,99-101`); recorded only when a shell or cluster exists (`:751`). Leaving the scope:
-      emission resolve, bloom chain, tone-mapped overlay composite (`target.py:937-975`, D17 "What the consumers do
-      today"). Compute (`eb.py:549`) comes first in the frame.
-    - Attachments and formats: scene colour and its capture RGBA16F, capture depth R32F nearest, colour linear
-      (`target.py:672-690`); the transparent passes write accumulation (0), revealage (1) and emission (2)
-      (`prog.py:1110,1257,1898`); the near passes write colour and circle (`:1112,1259`); the probe cube RGBA16F; the shaft
-      targets R16F (`eb.py:159`). Samplers: the shafts, the captured colour and the probe (`prog.py:1997`); the shell
-      fragment samples the cube with `samplerCube` and `textureSize` (`:718,950`) at the trilinear levels
-      `sceneProbe` walks (`probe.py:111-118`).
-    - Turning: the frame is oriented first (`eb.py:472,502`), everything draws unturned at the oriented item size, and
-      only the composite and the bloom's first samples are oriented (`target.py:939-941,980-1000`). The core refuses a
-      turned bloom or composite (`native/core/src/mode_content.h:445-447`, ABI 28), so Extruded Bubble is the turned-card
-      anchoring box's third consumer (after the Oscilloscope and Waveform).
-    - Clear: all constants. The scene's colour and emission clear to 0 and its depth to 1 (`target.py:923-926`), the OIT
-      attachments to 0 and 1 (`:715-716`, the core's coverage stored inverted, D17 B), the near layer to 0
-      (`defocus.py:341-342`), the probe faces to (0,0,0,1) with depth 1 (`probe.py:284,289`); the shaft targets are fully
-      written. No port decision is open (Waveform's backdrop clear has no counterpart); the cube's alpha 1 is a clear
-      value of its own declaration.
-    - Found while reading, shapes the port:
-      - The scene's depth is inert in production. The backdrop and specks draw with the depth test off (`eb.py:680,707-712`),
-        the transparent block tests with the write mask off (`target.py:724-725`), the near layer has no depth
-        (`defocus.py:343-344`), and the capture's depth is dropped (`eb.py:714`: `_depth` is never read). So the depth holds
-        its clear of 1 all frame, and the `gl_FragDepth` writes (`prog.py:1048,1066,1217`) only reject a fragment at the
-        far plane. Declaring the scene target without depth would save the multisampled D32F, the nearest resolve and the
-        capture's R32F (D14 point 10 kept the nearest depth "as Python does", `Native_Core_P3_Decisions.md:1378-1379`), but
-        the core refuses `gl_FragDepth` into a target without depth (`mode_content.cpp:688-691`) and Python's shader is
-        the same file (`mode_content.h:3-4`): both renderers drop the writes together, proved by equal frames.
-      - The core refuses what Python's shared programs do: a fragment output at a location past the target's attachments
-        or an attachment left unwritten (`mode_content.cpp:664-683`; this answers Waveform's two-outputs question), and
-        `gl_FragDepth` into the near target, which has none (`:688-691`). The backdrop's `Emission` output over the
-        one-attachment cube face, and the near passes' `gl_FragDepth` (written outside the `NEAR_LAYER` guard,
-        `prog.py:1048,1066,1217`) need fragment variants (a `#define`), the same file for both renderers.
-      - The probe's backdrop declares the shafts sampler and reads it only outside probe mode (`prog.py:188,193-198`),
-        and the shafts draw after the probe in a frame (`eb.py:681-682`): the probe variant drops the sampler (else the
-        target would need `previous_frame`, `scene_targets.h:110`). The shell programs declare `uEnvironment`, bound
-        nowhere (`prog.py:714,1997`), which the core refuses as unbound (`mode_content.cpp:619-624`). The traced glass
-        keeps loose uniforms (`prog.py:2017-2019`): converted to blocks at the port (the plan's 1D.11 notes, with the
-        binding-6 collision and the probe geometry shader's lack of HLSL).
-      - The shaft and blur shaders address their targets by `fragUv(uFrameSize)` and `textureSize` (`prog.py:195,586`):
-        with a bucketed allocation (`scene_targets.h:15-22`) `textureSize` is the allocation, and a bilinear read at the
-        content's edge reads the slack (cleared 0) where Python clamps. Fixed in the shader (content from `u_target_px`,
-        reads clamped inside the content) unless Waveform's exact-size box answers "exact" for every explicit target.
-      - Counts against the core: 32 pass entries (3 compute, 12 probe draws, 1 prefilter, 3 shafts, 13 in the scene:
-        backdrop, specks, capture, 4 transparent, resolve, 2 near, defocus, bloom, composite; 33 with the pair check)
-        against `kMaxModePasses` 16 (`mode_content.h:187`, checked `mode_content.cpp:2152`), whose mesh mask holds 32
-        (`:5040-5041`); 5 scene targets (scene, its transparency target, near, two shaft targets; 6 with the cube) of
-        `kMaxSceneTargets` 4 (`scene_targets.h:69`); 7 storage buffers (state and aux per family and the output; 8 with the
-        check's results) of 8 (`compute_passes.h:55`); 6 streams of 8; no storage image.
-      - The near layer's read level must stay inside `defocusReadLevelCap` (`post_stages.h:163`, over the bucketed
-        allocation, D17 H); the level is 4 at 2160 px optical height and grows with it, so the proof runs the largest
-        framed aperture.
-      - Revisions are 64-bit (`core/visualizer_engine/engine_worker.py:176`, `namespace << 32`) and a record trigger or
-        member is a u32 (`compute_passes.h:24-29`): the record carries a small per-family epoch and a rebase flag, the
-        worker's mapping (no C++).
-      - A family that cannot advance fades its held drift out (`solver.py:491-517`); natively a device without the compute
-        refuses the program (D16 point 6), so the fade has no counterpart.
-      - Already in the plan: the four-sample capture cost on Vulkan (N3.1b, before this item), N3.3's L2 to L5 leftovers
-        (before the first compute consumer), the display move's history copy with the drift as its first consumer (N3.9),
-        the turned-card box, and the Light Shafts owner merged with Neon Lake's (N4.k, ported with this item).
+<a id="n5-6-extruded-bubble"></a>
+
+- [ ] **N5.6 Extruded Bubble native port**
+  - Port D4 drift compute, transparency and HDR, background capture and depth, probe and defocus, N4.k light
+    shafts, and N4.g impostors and optics.
+  - The [native port playbook](Docs/Guides/Native_Port_Playbook.md) owns shader and pass contracts.
+    The original source reading is in `git show 644c18cb3:Current_Plan.md` under N5.6 → Reading. It inventories
+    per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
+    limits against current source. Use Extruded Bubble's own references.
+  - [ ] **Prepare the Python shaders** ([playbook checklist 16](Docs/Guides/Native_Port_Playbook.md)).
+    Keep before/after stills and a comparison WebP for each changed path. The native route uses the same sources.
+    - [ ] Exclude `gl_FragDepth` from the near shell and cluster variants, which draw without a depth attachment.
+      Keep writes on the depth-backed variants and preserve existing hit and discard rules. Verify both compiled
+      interfaces and replay both near passes.
+    - [ ] Address shafts and blur in target pixels. Clamp the two blur directions and the screen's final shaft
+      sample to content texel centres before normalizing by allocation size. Test odd content with poisoned
+      padding and distinct top and bottom rows, then compare recorded display and overscan frames.
+    - [ ] Convert the traced-glass loose uniforms to a block. Record the previously measured compiler rounding
+      difference (one 8-bit level on 1–2 pixels in 14–26 of 549 frames). Move the beads' probe sampler away from
+      binding 6, which is also occupied by `EbMaterialDrift` in Vulkan's shared namespace. Keep the probe geometry
+      shader on the ratchet for its layered `gl_Layer` write, which has no HLSL variant.
+  - [ ] **Redraw the Python references** once the shader conversions and **1B.10a stream-speed range** work are
+    complete. Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
+    and `owner_render_parity.py --references-only`. The cache key includes Python shader sources. Existing
+    60 s human and nightsolong base runs are indexed in `native_core/n5_6/20261122_refs_<take>_60/python_references.json`
+    and the [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
+    - [ ] Base SCENE run (`""`), 60 s each of `human_heavy1`, `nightsolong_acousticsoft1`, and `ragdoll_quiet_intro_loud_end1`.
+      Existing human and nightsolong receipts contain 5,503 frames each. Ragdoll is still undrawn.
+    - [ ] Run alternate SCENE (`:b`), BEAM emission (`extruded_bubble_emission_geometry=0`), Sunlit Surface
+      (`extruded_bubble_light_type=0`), lighting BEAM (`extruded_bubble_lighting_coverage=0`), and base overscan.
+      Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
+      adaptive state enabled, single sampling and masks. Budget 30 s per alternate and take; apply the late-window
+      rule below before drawing. Run at most two reference processes at once.
+  - [ ] **Native record and route.** Add `core/visualizer_engine/extruded_bubble_native_schema.py`, the route
+    program, and the mode's `native_record_identity.MODES` entry with passes, read spans, streams and positional
+    members. Stage worker owners from the source reading. Map 64-bit family revisions to a small per-family
+    epoch and rebase flag in the u32 record. Prove L frame-by-frame for each take and graphics key above with
+    `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
+    --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
+  - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
+    last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
+    skip and dispatch drift from cold start; confirm continuity and the restart control in `WARMUP_INPUTS`.
+    A Python reference with a late window needs the whole take for that key. Decide which 30 s alternates need
+    that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
+    sizes 0, 2 and 3 need coverage windows for their record/settings changes.
+  - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
+    Run the largest framed aperture against `defocusReadLevelCap`, turned-card composite and bloom, and the
+    display-move drift-history contract in N3.9. Decide whether to omit the scene depth/resolve in both renderers
+    with equal-frame proof. The current scene holds depth clear 1, and the captured depth is unused. The current
+    depth-backed glass shaders still write depth; this decision is separate from the depthless near variants.
+    Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) for the
+    Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
+    `.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen/`.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
@@ -2406,15 +2276,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   `tests/test_build_foundry_window_layout.py -k keeps_the_whole_window` is a strict expected failure until then.
 - [ ] Archive Foundry's close joins a read-only worker for up to 10 s on the GUI thread (audit low 5). Bound the join tighter,
   or detach the result safely.
-
-### 1D.11 Extruded Bubble side defects from N1.6 (14 Nov; Opus Medium)
-
-- [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
-  (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
-  renumber at the port.
-- [ ] Convert the traced glass at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
-  14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
-  layered `gl_Layer` write).
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
