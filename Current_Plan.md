@@ -109,11 +109,12 @@ then resume the native sequence below. The reported EB response delay is in the 
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
     after, margins against 0.05 ms) with Waveform now drawing natively.
-  - [ ] Attribute Waveform's Vulkan frame admission gap before any mode optimization. The 23 Nov Display 1 comparison
-    measured 50.0 / 77.2 / 51.4 draws per second across Vulkan/OpenGL/Vulkan with the same settings and recording.
-    Vulkan began about 51 Qt cycles per second from about 90 GUI requests. The median swap-to-next-frame interval was
-    13.4–14.6 ms on Waveform Vulkan and 8.9 ms on Normal Bubble Vulkan. Follow the active request to the Qt frame timer
-    and prove which owner adds the wait. Use `Docs/Reference/Benchmarks.md` for the recorded conditions and traces.
+  - [ ] N5.4's deferred Display 1 timing proof (Layer T, `7b0663cf5`). The 23 Nov comparison measured 50.0 / 77.2 / 51.4
+    draws per second across Vulkan/OpenGL/Vulkan with the same settings and recording. Vulkan began about 51 Qt cycles
+    per second from about 90 GUI requests. Trace delivery of `QEvent.UpdateRequest` to the same `QQuickWindow` beside
+    the native item's request, swap and next Qt frame-begin. Use the split to attribute the wait before any scheduling
+    change. The port order and the post-port optimization sequence govern this follow-up. Evidence is indexed in
+    `Docs/Reference/Benchmarks.md`.
 - [ ] Background track: N5.2f landed 22 Nov (registered on Vulkan, 26 of 28 transitions native; agent retired). Its
   box keeps the D1 hitch rows (a game held the machine) and the non-indirect fallback form; then N5.2g.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
