@@ -421,6 +421,27 @@ OVERSCAN_RUNS = ("", ":b")
 _PLACED: dict = {"name": "display", "dpr": 1.0}
 
 
+def _placed_runs(mode, runs, placements, only):
+    """Resolve explicit run keys while keeping the default overscan set bounded."""
+    requested = set(only)
+    planned = []
+    for placement in PLACEMENTS:
+        if placement not in placements:
+            continue
+        for suffix, settings in runs:
+            key = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
+            if requested:
+                if key not in requested:
+                    continue
+            elif placement != "display" and suffix not in OVERSCAN_RUNS:
+                continue
+            planned.append((key, suffix, settings, placement))
+    missing = requested - {key for key, _, _, _ in planned}
+    if missing:
+        raise ValueError(f"unavailable run keys for the selected mode and placements: {', '.join(sorted(missing))}")
+    return planned
+
+
 @contextlib.contextmanager
 def card_placement(name: str):
     """The runs inside are drawn at placement ``name`` (``PLACEMENTS``): the hidden window's overscan
@@ -1353,16 +1374,11 @@ def references_only(out: Path, *, mode: str, offers: bool, seconds: float, recor
     out.mkdir(parents=True, exist_ok=True)
     clip = evidence.load_recording(recording, seconds)
     runs = conventions_identity.mode_runs(mode, offers)
-    planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
-    planned += [(suffix, settings, placement) for placement in placements if placement != "display"
-                for suffix, settings in runs if suffix in OVERSCAN_RUNS]
+    planned = _placed_runs(mode, runs, placements, only)
     report: dict = {"mode": mode, "clip": clip.name, "clip_frames": len(clip.frames), "seconds": seconds,
                     "references": str(references), "results": {}}
     dpr = float(QGuiApplication.primaryScreen().devicePixelRatio())
-    for suffix, settings, placement in planned:
-        key_name = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
-        if only and key_name not in only:
-            continue
+    for key_name, suffix, settings, placement in planned:
         engine_worker_link.reset_run_state_for_testing()
         key, made_of = python_references.reference_key(mode, suffix, settings, clip.name, clip.frames, placement, dpr)
         folder = Path(references) / key
@@ -1656,14 +1672,9 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                     "stage_control": NATIVE_STAGE_CONTROL, "results": {}}
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
-    planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
-    planned += [(suffix, settings, placement) for placement in placements if placement != "display"
-                for suffix, settings in runs if suffix in OVERSCAN_RUNS]
+    planned = _placed_runs(mode, runs, placements, only)
     try:
-        for suffix, settings, placement in planned:
-            key = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
-            if only and key not in only:
-                continue
+        for key, suffix, settings, placement in planned:
             engine_worker_link.reset_run_state_for_testing()
             if native_only_run:
                 entry = None if baseline is None else (baseline.get("results") or {}).get(key)
@@ -1845,7 +1856,8 @@ def main(argv=None) -> int:
     parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
-    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (<mode>[:...])")
+    parser.add_argument("--runs", nargs="*", default=(),
+                        help="explicit run keys (<mode>[:...]); append @overscan to request any run at that placement")
     parser.add_argument("--mode", default="spectrum",
                         help="with --native: the native mode drawn (one of the route's NATIVE_MODE_IDS)")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,

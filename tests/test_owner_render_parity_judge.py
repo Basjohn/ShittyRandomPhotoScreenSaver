@@ -203,6 +203,20 @@ def test_each_frame_is_judged_under_the_bounds_of_the_mode_that_drew_it():
     assert not under_oscilloscope[0]["pass"]
 
 
+def test_overscan_offer_requires_an_explicit_placement_key():
+    from tools.visualizer_replay.owner_render_parity import PLACEMENTS, _placed_runs
+
+    suffix = ":bubble_stream_direction=2"
+    runs = [("", {}), (":b", {}), (suffix, {"bubble_stream_direction": 2})]
+    default_keys = [key for key, *_ in _placed_runs("bubble", runs, PLACEMENTS, ())]
+    assert default_keys == ["bubble", "bubble:b", f"bubble{suffix}", "bubble@overscan", "bubble:b@overscan"]
+
+    requested = (f"bubble{suffix}", f"bubble{suffix}@overscan")
+    assert [key for key, *_ in _placed_runs("bubble", runs, PLACEMENTS, requested)] == list(requested)
+    with pytest.raises(ValueError, match="unavailable run keys"):
+        _placed_runs("bubble", runs, ("display",), requested)
+
+
 def test_a_windowed_run_judges_its_windows_exactly_and_skips_the_rest():
     # Coverage windows: inputs outside every window are drawn by nobody and judged by nobody; those inside are judged
     # exactly as in the full run.
