@@ -156,23 +156,46 @@ def revision_rate(publishes: list[tuple[int, int]]) -> float | None:
     return round(advance / span, 1) if span > 0 else None
 
 
+def _native_swap_window(native_draws, native_swaps, begin: int, end: int) -> tuple[int, list[float]]:
+    """Count swaps and measure gaps between drawn cycles on each display generation within this window."""
+    by_display = {}
+    for key, swap in native_swaps.items():
+        screen, generation, _cycle = key
+        if begin <= native_draws[key] <= swap < end:
+            by_display.setdefault((screen, generation), []).append(swap)
+    gaps = [(b - a) / 1e6 for times in by_display.values() for a, b in zip(times, times[1:])]
+    return sum(map(len, by_display.values())), gaps
+
+
 def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path: bool = False) -> dict:
     """The steady window's age chain from the frame trace. ``worker_path`` (the engine worker admitted): the publish
     records are the frames the main process took, each at the worker's own publish time (``PacketMailbox`` records them
     from the slot's ``publish_ns``, on the clock every process shares), so revisions/s comes from their revision
     numbering (``revision_rate``), ``publish_records_per_s`` counts them, and the waiting count and newest age at sync see only
-    newer frames that main later took (lower bounds). The rest of the chain reads exactly as in process."""
+    newer frames that main later took (lower bounds). Native draw/swap cycle IDs are separate
+    from logical revision IDs and contribute only draw counts, correlated swap counts and cadence."""
     sys.path.insert(0, str(ROOT))
+    from core.performance.frame_trace import FrameTraceEvent
     from tools.frame_trace_report import HEADER, RECORD, _read_trace_chain
 
     raw, _segments = _read_trace_chain(path)
     events: list[tuple[int, int, int]] = []
     logical: dict[tuple[int, int], int] = {}          # (ts, revision) of a publish -> its logical timestamp (ns)
+    native_draws = {}
+    native_swap_events = []
     for i in range((len(raw) - HEADER.size) // RECORD.size):
-        ts, event, _screen, revision, logical_ns, _aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
+        ts, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
         events.append((ts, event, revision))
         if event == 1:
             logical[(ts, revision)] = logical_ns
+        elif event == FrameTraceEvent.NATIVE_VISUALIZER_DRAW:
+            native_draws[(screen, aux, revision)] = ts
+        elif event == FrameTraceEvent.NATIVE_VISUALIZER_SWAP:
+            native_swap_events.append((ts, (screen, aux, revision)))
+    native_swaps = {}
+    for ts, key in sorted(native_swap_events):
+        if key in native_draws and native_draws[key] <= ts:
+            native_swaps.setdefault(key, ts)
     events.sort()
     begins = [ts for ts, e, _ in events if e == 62]
     ends = [ts for ts, e, _ in events if e == 63]
@@ -196,6 +219,8 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         waiting.append(pub_times[k][1] - r)
     swaps = [ts for ts, e, _ in steady if e == 6]
     gaps = [(b - a) / 1e6 for a, b in zip(swaps, swaps[1:])]
+    native_swap_count, native_gaps = _native_swap_window(native_draws, native_swaps, start, stop)
+    gaps.extend(native_gaps)
     first_swap: dict[int, int] = {}
     for ts, e, r in steady:
         if e == 6 and r not in first_swap:
@@ -219,6 +244,8 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
             quick_begin = None
     early = [ts for ts, e, _ in events if e == 6 and startup_end <= ts < start]
     early_gaps = [(b - a) / 1e6 for a, b in zip(early, early[1:])]
+    early_native_count, early_native_gaps = _native_swap_window(native_draws, native_swaps, startup_end, start)
+    early_gaps.extend(early_native_gaps)
     steady_publishes = [(ts, r) for ts, e, r in steady if e == 1]
     # The tick's own time: its logical timestamp (the tick's authored now, ``perf_counter``) to its publish, both on
     # the publishing process's clock (in process: main; worker path: the worker's stamp). Async-resolved modes carry
@@ -233,8 +260,12 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "steady_seconds": round(seconds, 1),
         "revisions_per_s": revision_rate(steady_publishes) if worker_path else records_per_s,
         "publish_records_per_s": records_per_s,
+        "steady_publish_count": len(steady_publishes),
         "tick_to_publish_ms": _stats(tick),
-        "frames_per_s": round(len(swaps) / seconds, 1),
+        "frames_per_s": round((len(swaps) + native_swap_count) / seconds, 1),
+        "steady_visualizer_swap_count": len(swaps) + native_swap_count,
+        "native_visualizer_draws": sum(start <= ts < stop for ts in native_draws.values()),
+        "native_visualizer_swaps": native_swap_count,
         "consumed_age_at_sync_ms": _stats(consumed),
         "newest_age_at_sync_ms": _stats(newest_age),
         # On the worker path main records a publish only for a frame it took, so a newer frame it never took is
@@ -249,7 +280,7 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "swap_gap_ms": _stats(gaps),
         "steady_late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
         "hitches_per_min": round(60.0 * sum(g > 50.0 for g in gaps) / seconds, 2),
-        "post_startup_frames": len(early),
+        "post_startup_frames": len(early) + early_native_count,
         "post_startup_late_pct": round(100.0 * sum(g > LATE_MS for g in early_gaps) / max(len(early_gaps), 1), 1),
         "sync_admissions_per_s": round(sum(1 for _, e, _ in steady if e == 74) / seconds, 1),
     }
@@ -1148,9 +1179,15 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     worker_path = engine_worker_path(args.app_arg)
     summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None,
                                  worker_path=worker_path))
-    if worker_path and not summary["publish_records_per_s"] and args.mode != "none":
-        # Fail closed: without the worker's publish stamps the age chain would read as empty, not as measured.
-        raise RuntimeError("engine-worker run recorded no publish in the trace (no publish_ns reached the main side)")
+    start_ns, stop_ns = summary["steady_window_ns"]
+    measure_visualizer = args.mode != "none" and start_ns < stop_ns
+    if measure_visualizer:
+        if worker_path and not summary["steady_publish_count"]:
+            summary["visualizer_timing_failure"] = (
+                "engine-worker run recorded no publish in the steady window (no publish_ns reached the main side)"
+            )
+        elif not summary["steady_visualizer_swap_count"]:
+            summary["visualizer_timing_failure"] = "no correlated Visualizer swaps in the steady window"
     if args.display_off or args.process_samples:
         (out / "power_samples.jsonl").write_text("".join(json.dumps(row) + "\n" for row in power_samples),
                                                  encoding="utf-8")
@@ -1178,7 +1215,8 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     # draws it (N5.4, 22 Nov) and the run is judged on the frame figures like every native mode.
     from core.diagnostics.experiment_flags import parse_experiment_flags
 
-    python_waveform = (args.mode == 'waveform_ribbon'
+    python_waveform = (measure_visualizer and "visualizer_timing_failure" not in summary
+                       and args.mode == 'waveform_ribbon'
                        and parse_experiment_flags(list(args.app_arg)).graphics_backend != 'vulkan')
     if python_waveform and not phases_path.exists():
         raise RuntimeError('Waveform run has no phase/admission receipt')
@@ -1220,8 +1258,11 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
             print(f"  {name:9s} {pair[name]}")
     for failure in (summary.get("transition_session") or {}).get("failures", ()):
         print(f"FAIL transition session: {failure}")
+    timing_failure = summary.get("visualizer_timing_failure")
+    if timing_failure:
+        print(f"FAIL Visualizer timing: {timing_failure}")
     print(f"written {out / 'summary.json'}")
-    return 3 if (summary.get("transition_session") or {}).get("failures") else 0
+    return 3 if timing_failure or (summary.get("transition_session") or {}).get("failures") else 0
 
 
 if __name__ == "__main__":

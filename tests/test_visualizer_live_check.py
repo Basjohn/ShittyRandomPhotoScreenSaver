@@ -273,3 +273,97 @@ def test_the_pcm_check_is_path_aware_and_fails_closed_on_both_paths():
             waveform_pcm_receipt(phases, recorded=True, worker_path=worker_path)
     # Without a recording nothing is required.
     assert waveform_pcm_receipt({}, recorded=False, worker_path=True)["waveform_pcm_evidence"] is None
+
+
+def test_native_visualizer_receipt_counts_drawn_cycles_and_only_their_swaps(tmp_path):
+    from tools.frame_trace_report import HEADER, MAGIC, RECORD
+    from tools.visualizer_live_check import analyse_trace
+
+    base = 10**12
+    ms = 10**6
+    rows = [
+        (base, 63, -1, -1, 0, 0),                         # Startup finished.
+        (base + 20*ms, 84, 1, 1, 0, 5),
+        (base + 21*ms, 85, 1, 1, 0, 5),                    # Post-startup draw and swap.
+        (base + 2100*ms, 84, 1, 2, 0, 5),
+        (base + 2101*ms, 85, 1, 2, 0, 5),
+        (base + 2102*ms, 85, 1, 2, 0, 5),                  # Duplicate swap is not another frame.
+        (base + 2110*ms, 85, 1, 3, 0, 5),                  # No draw in this cycle.
+        (base + 2113*ms, 84, 1, 4, 0, 5),                  # Draw without a swap.
+        (base + 2114*ms, 85, 0, 4, 0, 5),                  # Same cycle, another screen.
+        (base + 2115*ms, 85, 1, 4, 0, 6),                  # Same screen, another generation.
+        (base + 2116*ms, 81, 1, 4, 0, 12),                 # A native transition tick is not a Visualizer draw.
+        (base + 2117*ms, 99, 1, 4, 0, 5),                 # An unrelated marker is also not a draw.
+        (base + 2128*ms, 84, 1, 5, 0, 5),
+        (base + 2129*ms, 85, 1, 5, 0, 5),
+        (base + 3000*ms, 62, -1, -1, 0, 0),
+    ]
+
+    def report(name, rows):
+        path = tmp_path / name
+        path.write_bytes(HEADER.pack(MAGIC, 1, RECORD.size, 0) + b"".join(RECORD.pack(*row) for row in rows))
+        return analyse_trace(path)
+
+    active = report("native.bin", rows)
+    assert active["frames_per_s"] == 2.0
+    assert active["native_visualizer_draws"] == 3 and active["native_visualizer_swaps"] == 2
+    assert active["swap_gap_ms"] == {"median": 28.0, "p90": 28.0}
+    assert active["steady_late_pct"] == 100
+    assert active["post_startup_frames"] == 1
+    assert active["publish_to_swap_ms"] is None          # Render-cycle numbers are not logical revisions.
+
+    idle = report("idle.bin", [row for row in rows if row[1] != 84])
+    assert idle["frames_per_s"] == idle["post_startup_frames"] == 0
+    assert idle["native_visualizer_draws"] == idle["native_visualizer_swaps"] == 0
+    assert idle["swap_gap_ms"] is None
+
+
+@pytest.mark.parametrize(
+    "mode, off_ms, swap_ms, close_ms, worker, expected",
+    [
+        ("spectrum", None, None, 4000, True, 3),        # Valid publications, no draw.
+        ("spectrum", None, None, 4000, False, 3),       # Same guard on the in-process path.
+        ("spectrum", 3000, 3400, 4000, True, 3),       # A draw after the first off edge cannot rescue the row.
+        ("spectrum", None, 4100, 4000, True, 3),       # A draw during teardown cannot rescue the row.
+        ("spectrum", 1500, None, 4000, True, 0),       # Off before the steady window intentionally clips it out.
+        ("spectrum", None, None, 1500, True, 0),       # Teardown before steady timing also leaves no window.
+        ("none", None, None, 4000, True, 0),           # Transition-only or otherwise no Visualizer measurement.
+        ("spectrum", None, 2450, 26000, True, 0),      # One measured swap legitimately rounds to 0.0 fps.
+    ],
+)
+def test_live_report_requires_a_measured_swap_in_an_active_steady_window(
+    tmp_path, mode, off_ms, swap_ms, close_ms, worker, expected,
+):
+    from tools.frame_trace_report import HEADER, MAGIC, RECORD
+    from tools.visualizer_live_check import _report, build_parser
+
+    args = build_parser().parse_args(["--mode", mode, "--app-arg=--vulkan"])
+    if not worker:
+        args.app_arg.append("--viz-in-process")
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "screensaver_perf.log").touch()
+    base, ms = 10**12, 10**6
+    rows = [(base, 63, -1, -1, 0, 0), (base + close_ms*ms, 62, -1, -1, 0, 0),
+            (base + 2400*ms, 1, 0, 8, base + 2399*ms, 5)]
+    if swap_ms is not None:
+        rows += [(base + (swap_ms - 1)*ms, 84, 0, 9, 0, 5), (base + swap_ms*ms, 85, 0, 9, 0, 5)]
+    trace = logs / "screensaver_frame_trace.bin"
+    data = HEADER.pack(MAGIC, 1, RECORD.size, 0) + b"".join(RECORD.pack(*row) for row in rows)
+    trace.write_bytes(data)
+    if off_ms is not None:
+        args.display_off = f"{off_ms / 1000}:1"
+        (tmp_path / "power_edges.jsonl").write_text(
+            json.dumps({"perf_ns": base + off_ms*ms, "state": 0}), encoding="utf-8",
+        )
+
+    assert _report(args, tmp_path, None, {}, {}, [], None, None) == expected
+    assert trace.read_bytes() == data
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["frames_per_s"] == 0.0
+    if expected:
+        assert summary["visualizer_timing_failure"] == "no correlated Visualizer swaps in the steady window"
+        assert summary["steady_visualizer_swap_count"] == 0
+    else:
+        assert "visualizer_timing_failure" not in summary
+        assert summary["steady_visualizer_swap_count"] == (1 if swap_ms is not None else 0)

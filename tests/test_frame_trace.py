@@ -1342,3 +1342,49 @@ def test_report_splits_chk29_bubble_render_body(tmp_path: Path) -> None:
         "parent_interval=render_mode_begin->render_mode_ready n=1 median_ms=0.100"
     ) in out
     assert "screen=1 bubble_render_p95_tail " in out
+
+
+def test_native_visualizer_draw_and_swap_share_the_actual_drawing_cycle() -> None:
+    from types import SimpleNamespace
+    from rendering.quick.scene_controller import QuickSceneController
+    from rendering.quick.visualizer.telemetry import VisualizerRenderNodeTelemetry
+
+    records = []
+    counter = SimpleNamespace(draws=35, refused_run=0, failing=False)
+    composite = SimpleNamespace(content_status=lambda: counter)
+    route = SimpleNamespace(trace_composite=composite)
+    scene = SimpleNamespace(
+        _frame_trace=SimpleNamespace(record=lambda event, **fields: records.append((event, fields))),
+        _window=SimpleNamespace(screen_index=1, runtime_generation=5),
+        _frame_trace_render_cycle_sequence=0,
+        _frame_trace_last_swapped_draw_sequence=0,
+        _frame_trace_native_baseline=None,
+        _frame_trace_native_draw_cycle=0,
+        _visualizer_telemetry=VisualizerRenderNodeTelemetry(),
+        _visualizer_item=SimpleNamespace(native_route=route),
+    )
+    for name in dir(QuickSceneController):
+        if name.startswith("_trace_"):
+            method = getattr(QuickSceneController, name)
+            if callable(method):
+                setattr(scene, name, method.__get__(scene))
+
+    def cycle(change, *, swap=True):
+        scene._trace_before_frame_begin()
+        scene._trace_after_synchronizing()
+        change()
+        scene._trace_after_rendering()
+        if swap:
+            scene._trace_frame_swapped()
+            scene._trace_frame_swapped()             # The same drawing edge cannot count twice.
+
+    cycle(lambda: setattr(counter, "draws", 36))
+    cycle(lambda: setattr(counter, "refused_run", 1))
+    cycle(lambda: setattr(counter, "draws", 37), swap=False)
+    cycle(lambda: None)                              # A later unrelated swap cannot consume the unswapped draw.
+    route.trace_composite = None
+    cycle(lambda: None)
+
+    native = [(int(event), fields["revision"], fields["screen_index"], fields["auxiliary"])
+              for event, fields in records if int(event) in (84, 85)]
+    assert native == [(84, 1, 1, 5), (85, 1, 1, 5), (84, 3, 1, 5)]

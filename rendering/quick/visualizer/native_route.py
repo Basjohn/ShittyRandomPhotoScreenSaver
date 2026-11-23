@@ -647,6 +647,11 @@ class NativeVisualizerRoute:
         """The bound identity's native item (None while nothing is bound)."""
         return None if self._content is None else self._content.item
 
+    @property
+    def trace_composite(self) -> Any:
+        """The bound composite's actual native draw counter, read only by the window trace."""
+        return None if self._content is None else self._content.composite
+
     def prepare(self) -> None:
         """At attach (long before an activation): each kind's native item made and its synchronisation asked for, so it
         has read its window's framebuffer by the first activation of any native mode (round 2, L1: only its own
