@@ -788,6 +788,7 @@ the feature (D3D11 is not stated).
   - [ ] Verify the scene-fade exceptions on R-242 with the current D12 rule (a). Drive the owner replay from the start
     of each take. Cover variant-a `nightsolong_acousticsoft1` input 22 at the recorded display placement. Cover offer
     directions 2 and 6 at input 337 at display and overscan. Retain and classify residuals under the existing limits.
+    Use current-source references and preserve the operator's intended fullscreen density and breathing improvements.
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11); 4K is measured (D12).
   - [ ] Ambience-off reads higher than ambience-on at 4K: variant b differs from variant a in many settings, so measure
     one frame with only the ambience switched (`bubble_check.py` `COST_RUNS`).
