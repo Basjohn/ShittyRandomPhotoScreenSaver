@@ -71,11 +71,12 @@ def test_both_linux_install_scripts_have_separate_executables_desktop_entries_an
     dashboard = linux_build.install_script("dashboard")
     for binary, script in (("srpss-screensaver", standard), ("srpss-dashboard", dashboard)):
         assert f'APP="{binary}"' in script
-        assert 'PREFIX="$HOME/.local/opt/$APP"' in script
+        assert 'PREFIX="$HOME/.local/opt/$INSTALL_ID"' in script
         assert 'ln -sf "$PREFIX/$APP" "$BIN/$APP"' in script
-        assert '$APP.desktop' in script
-        assert '$APP-settings.desktop' in script
-        assert 'if [[ ! -d "$HOME/.local/opt/$PEER" ]]; then' in script
+        assert '"$APP:$APP_LABEL:/s"' in script
+        assert '"$APP-settings:$APP_LABEL Settings:/c"' in script
+        assert '$APPS/$id.desktop' in script
+        assert 'if [[ ! -d "$HOME/.local/opt/$PEER_ID" ]]; then' in script
         assert "__APP_" not in script and "__RUN_MODE__" not in script
     assert "SRPSS Screensaver" in standard and "SRPSS Dashboard" in dashboard
 
@@ -107,7 +108,7 @@ def test_generated_installers_are_valid_bash_when_available(tmp_path: Path) -> N
         assert subprocess.run([bash, "-n", str(path)], check=False).returncode == 0
 
 
-def test_installing_and_uninstalling_mc_preserves_existing_screensaver(tmp_path: Path, monkeypatch) -> None:
+def test_installing_and_uninstalling_dashboard_preserves_existing_screensaver(tmp_path: Path, monkeypatch) -> None:
     """Actual shell install contract, with tiny test-owned stand-ins rather than a 480 MB Nuitka distribution."""
     bash = shutil.which("bash")
     if not bash or sys.platform == "win32":

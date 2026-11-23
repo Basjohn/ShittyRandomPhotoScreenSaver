@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tools import linux_build
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,3 +103,41 @@ def test_build_entry_points_and_workflow_reference_existing_files() -> None:
     assert "linux-build/*" in workflow and "workflow_dispatch" in workflow
     windows = (ROOT / "scripts" / "linux" / "build_from_windows.ps1").read_text(encoding="utf-8")
     assert "linux-build.yml" in windows and "srpss-linux" in workflow and "srpss-linux" in windows
+
+
+@pytest.mark.parametrize("profile", tuple(linux_build.PROFILES))
+def test_linux_frozen_smoke_opens_the_installed_product(profile, tmp_path, monkeypatch):
+    from tools import linux_smoke_dist
+
+    class ReachedDisplayProbe(Exception):
+        pass
+
+    _, binary, install_id = linux_build.PROFILES[profile]
+    product = tmp_path / f"SRPSS-test-linux-{profile}-x86_64"
+    product.mkdir()
+    (product / binary).touch()
+    install_script = product / "install.sh"
+    install_script.touch()
+    out = tmp_path / "run" / "out"
+
+    def install(command, *, env, check):
+        assert command == [str(install_script)] and check
+        installed = Path(env["HOME"]) / ".local" / "opt" / install_id / binary
+        installed.parent.mkdir(parents=True)
+        installed.touch()
+        shared = Path(env["XDG_DATA_HOME"]) / "SRPSS"
+        for folder in ("themes", "presets/visualizer_modes", "sounds"):
+            (shared / folder).mkdir(parents=True)
+
+    def start_xvfb(_display):
+        raise ReachedDisplayProbe
+
+    monkeypatch.setattr(linux_smoke_dist.lh, "require_linux", lambda: None)
+    monkeypatch.setattr(linux_smoke_dist.lh, "child_env",
+                        lambda _display, profile, _logs: {"XDG_DATA_HOME": str(profile / "data")})
+    monkeypatch.setattr(linux_smoke_dist.lh, "start_xvfb", start_xvfb)
+    monkeypatch.setattr(linux_smoke_dist.evidence_media, "redirect_output", lambda *_args: out)
+    monkeypatch.setattr(linux_smoke_dist.subprocess, "run", install)
+
+    with pytest.raises(ReachedDisplayProbe):
+        linux_smoke_dist.main([str(product)])

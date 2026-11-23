@@ -423,8 +423,8 @@ Lab gates and plans: [Waveform_Ribbon_Lab_Plan.md](Waveform_Ribbon_Lab_Plan.md),
 | `main.py`, `main_dashboard.py` | The product. RUN diagnostics: `--debug/-d --verbose/-v --perf --usage --handle-attribution --viz --geo --life --cache --steam --feeds --noupdates --set --fresh --frame-trace --gui-stall-stacks` (the last needs `--frame-trace`). Bounded runs: `--exit-after SECONDS /s` (RUN only; the product's own terminal path) and `--only-display INDEX` (one screen, numbered as the logs number them). `--log-dir=DIR` redirects logs (a CLI argument, never an environment variable). `tools/d1_run.py`, `tools/run_matrix.py` and `tools/visualizer_live_check.py` wrap these. Contracts: Harness_Index §1B, §10. |
 | `main_diagnostic.py` | The dedicated Diagnostic product entry (own per-user diagnostic log root; excluded from `run_matrix`). |
 | `.github/workflows/windows-build.yml`, `linux-build.yml`, `native-module.yml` | The only build paths; driven by `tools/github_remote_build.py` / `scripts/linux/build_from_windows.ps1`. |
-| `.github/tests/test_linux_mc_build_contract.py` | A Linux Dashboard build-selection test kept beside the workflows. |
-| `.github/tools/linux_smoke_dist.py` | A byte-near copy of `tools/linux_smoke_dist.py` (differs by one `mkdir(parents=True)`); the workflow runs the `tools/` one. See Candidates. |
+| `.github/tests/test_linux_dashboard_build_contract.py` | A Linux Dashboard build-selection test kept beside the workflows. |
+| `.github/tools/linux_smoke_dist.py` | Delegates to `tools/linux_smoke_dist.py`, the frozen Linux smoke harness used by the workflow. |
 | `tests/_*.py` (`_display_manager_doubles.py`, `_gl_test_utils.py`, `_invisible_windows.py`, `_settings_context_stub.py`, `_feed_transport_cancel_probe.py`, `_network_stall_harness.py`, `_qt_exit_tripwire_probe.py`, `_msaa_render_noise.py`, `_visualizer_frozen_settings.py`, `_visualizer_presentation.py`, reference-form modules) | Test infrastructure the rules point agents at: shared doubles, the invisible-window pattern (opacity 0, transparent for input, tool window), frozen settings. Not commands. |
 
 ## Candidates to retire
@@ -436,7 +436,6 @@ found on 12 Nov 2026, counting an import or a path mention as a caller. "Newer" 
 | Tool | Evidence it is dead or superseded | Newer / keeper | Confidence |
 |---|---|---|---|
 | `verify_compile.py` (root) | Compiles three hard-coded UI files; no caller anywhere; `python -m py_compile` and the test suite cover it. | `tests/run_chunked.py` preflight collection | high |
-| `.github/tools/linux_smoke_dist.py` | Copy of `tools/linux_smoke_dist.py` (193 lines each, one line differs); no workflow, test or doc runs the copy. | `tools/linux_smoke_dist.py` | high (delete the copy, keep the tool) |
 | `tools/convert_weather_svgs.py`, `tools/download_weather_icons.py` | One-off weather-icon helpers; only `test_artifact_paths_contract.py` (an unrouted-writer list) and one Harness_Index line mention them; `convert_weather_svgs` repeats `convert_svg_to_png`. | `tools/convert_svg_to_png.py` | medium |
 | `tools/SRPSS_R80_ABC_Runner_GUI_v2.py` | GUI front for the R-80 oracle; no test, no tool or doc caller beyond one Harness_Index line; the CLI `visualizer_switch_abc_harness.py auto/score/classify` does the same job and has a test. | `tools/visualizer_switch_abc_harness.py` | medium |
 | `tools/gc_gen2_attribution_harness.py`, `tools/viz_logical_gil_contention_harness.py` | Attribution for the closed P0 Visualizer hitch; no test; the lesson is recorded (GIL-held C calls); the live check reports the GIL share and `--usage` the sampler cost. | `visualizer_live_check.py`, `--usage` | medium |

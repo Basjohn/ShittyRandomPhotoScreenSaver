@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import linux_headless as lh  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools import artifact_paths, evidence_media  # noqa: E402
+from tools.linux_build import PROFILES  # noqa: E402
 
 # Dedicated Xvfb with one virtual display. Enough time for first-use Qt/QML
 # initialization, without relying on the production logger's startup messages.
@@ -90,8 +91,9 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1:
         raise SystemExit(__doc__)
     product = Path(argv[0]).resolve()
-    binary = "srpss-dashboard" if "-linux-dashboard-" in product.name else "srpss-screensaver"
-    app_profile = "Dashboard" if binary == "srpss-dashboard" else "Screensaver"
+    profile_name = "dashboard" if "-linux-dashboard-" in product.name else "screensaver"
+    _, binary, install_id = PROFILES[profile_name]
+    app_profile = profile_name.title()
     if not (product / binary).is_file() or not (product / "install.sh").is_file():
         return _fail(f"{product} lacks expected {binary} or install.sh")
 
@@ -109,7 +111,7 @@ def main(argv: list[str]) -> int:
     env = lh.child_env(display, profile, logs)
     env["HOME"] = str(home)
     subprocess.run([str(product / "install.sh")], env=env, check=True)
-    installed = home / ".local" / "opt" / binary / binary
+    installed = home / ".local" / "opt" / install_id / binary
     data = profile / "data" / "SRPSS"
     for required in (installed, data / "themes", data / "presets" / "visualizer_modes", data / "sounds"):
         if not required.exists():
