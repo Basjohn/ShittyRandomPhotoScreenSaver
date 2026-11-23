@@ -184,6 +184,27 @@ Theme-authored semantic controls include surface material/colour and **surface t
 Curated theme pairs can be regenerated into the new single schema without byte-preserving the originals or maintaining the old mirror catalogue indefinitely. Protect user-created files and Custom state via one-time import/backup with diagnostics and safe fallback. SMP Skin ZIPs are an optional SECOND presentation layer, scoped to supported and user-enabled targets only, not a third global theme. Normal Settings/ordinary widgets remain fully themeable even where skin artwork is unsupported. The full visual authoring Studio is SMP M10, not another theme-engine unification milestone. Design: SMP document 05.
 
 
+## Planned live-Settings lifecycle (23 Nov 2026, after M4 and Theme Studio)
+
+The complete operator-approved design is
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`.
+Keep the present QWidget Settings shell, typed ThemeSpec, materials,
+semantic style/shape, existing native layered-HWND backdrop and the
+independent Qt Quick Theme Studio. The later **lifecycle** milestone
+introduces an engine-owned asynchronous Settings session: window open
+and close should preserve the healthy graphics generation, safe theme
+updates project live through existing owners, targeted capability
+transactions only touch affected resources. Substantial but safe visual
+reconfigurations use **fade OUT -> commit -> authoritative frame -> fade
+IN** as second-last resort; full display generation teardown is last
+resort with all existing strict barriers. Do not add a second renderer
+or rewrite Settings as QML. Theme Studio's modal/conceal/expose contract
+must be explicitly adapted for a non-modal Settings dialog without
+layered-window, focus, Winlogon or first-paint regressions.
+**Not yet implemented:** full-stop Settings behaviour remains current
+until its own L0-L7 acceptance. M4/Theme Studio are not blocked by this
+later work.
+
 ## Proven Windows backdrop mapping
 
 Material density calibration belongs to runtime semantic composition, not authored catalogue files.
