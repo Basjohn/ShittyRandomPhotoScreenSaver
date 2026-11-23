@@ -845,13 +845,15 @@ the feature (D3D11 is not stated).
       at most 2 processes at once). Open for the lead: the 30 s runs' late-song window. Python's drift restarts after a
       128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
       it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
-  - [ ] Python conversions first (playbook checklist 16), with stills before and after and the showcase WebP, so the
-    core draws the same files: the backdrop's `Emission` output and the near passes' `gl_FragDepth` behind fragment
-    variants (`prog.py:1048,1066,1217`), the probe backdrop without the shafts sampler, `uEnvironment` removed or bound
-    (`prog.py:714,1997`), the traced glass's loose uniforms to a block (`prog.py:2017-2019`; one 8-bit level on 1-2
-    pixels alone, decide with the beads' binding-6 note in 1D.11), the shaft and blur reads from `u_target_px` and
-    clamped inside the content (`prog.py:195,586`). Then redraw the references above once (`--references-only`, the
-    same commands).
+  - [ ] Python reference conversions (playbook checklist 16). Preserve the current appearance and retain before/after
+    stills and a comparison WebP for each changed rendering path. The core will use these sources.
+    - [ ] Split the probe backdrop from the screen backdrop's shafts sampler and `Emission` attachment. Remove the
+      traced-glass `uEnvironment` sampler after confirming that it has no active reader.
+    - [ ] Convert the near passes' `gl_FragDepth` to fragment variants and the shaft and blur reads to target-pixel
+      coordinates clamped inside the content.
+    - [ ] Convert the traced glass's loose uniforms to a block. Resolve the beads' binding-6 note in section 1D.11 and
+      record the comparison, including the previously measured one-level rounding differences.
+    - [ ] Redraw the Python references once the conversions are complete, using the frozen run keys above.
   - [ ] The native record and route (the port's first code): `core/visualizer_engine/extruded_bubble_native_schema.py`
     from the reading's per-frame list, the route's program, `native_record_identity.MODES['extruded_bubble']` (its
     passes, read spans, streams and positional members). Then L: `native_record_identity.py --mode extruded_bubble
