@@ -6,6 +6,19 @@ source now; open acceptance work (mock parity, hardware window checks, further a
 `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §4; the operator's interface concept is
 `Docs/Audits/SRPSS_Waveform_Studio_Design_Pack_2026-11-03.zip`.
 
+**Planned non-modal Settings lifecycle (operator, 23 Nov; not implemented):**
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`
+specifies the post-M4/Theme Studio/post-Concrete-Rain cross-profile change.
+The description below documents the existing `QDialog.exec()` and
+`WindowPresence` behaviour, which is STILL AUTHORITATIVE until migration.
+The future SettingsSession must redesign the `exec()`-dependent conceal,
+native WM_PAINT/exposure, same-window reveal and application-modality seam
+without creating a second logical Visualizer or a new renderer. Preserve
+the operator's Studio previews, undo and editable presets; Winlogon/
+unknown desktop cannot admit interactive Settings/Studio. All existing
+Studio focus, stop, frame and error tests continue to bind until replaced
+by stronger shared-controller proofs.
+
 ## 1. What it is
 
 A Studio is a top-level Qt Quick window (`ui/studio/qml/StudioShell.qml`) opened from a Visualizer mode's preset
