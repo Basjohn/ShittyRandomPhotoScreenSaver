@@ -261,6 +261,11 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   against a CPU twin of probe.py's chain; lookups at levels 0, 2 and 3 and across face edges; controls: swapped
   faces, a per-face box chain, a clamped read). Traps found there: a cube's layers left out of a layout prime
   (Vulkan VUID-vkCmdDraw-None-09600), a cube's mipped sampler refused as a defocus layer's.
+- Extruded Bubble reference: the cube backdrop writes colour and uses the face dimensions for Ember Grain. The screen
+  backdrop samples shafts and writes colour and emission. Both variants share the `EbFullscreen` layout. The recorded
+  replay matched all 24 frames across ordinary and active-grain runs. The zero-size grain control differed on all 12 of
+  its frames. The [local proof](../../.artifacts/evidence/visualizers/extruded_bubble/capture/20261123_backdrop_grain_comparison/report.md)
+  retains frame hashes, comparison media, timing samples and QSB reflection for this conversion.
 
 <a id="pb-e24"></a>
 ### E24 Heightfields (N4.e; catalogue: [E24](../Reference/Primitives.md#e24))

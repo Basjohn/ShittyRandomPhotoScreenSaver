@@ -314,6 +314,40 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
 
 
 @pytest.mark.qt
+def test_probe_faces_and_screen_draw_with_distinct_backdrop_interfaces(target, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations import extruded_bubble as implementation
+
+    capture, host = target
+    renderer = implementation.QuickExtrudedBubbleRenderer()
+    host._implementations["extruded_bubble"] = renderer
+    faces = []
+    capture_probe = implementation.SceneProbe.capture
+    draw_arrays = gl.glDrawArrays
+
+    def record_draw(*args):
+        faces.append(int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)))
+        return draw_arrays(*args)
+
+    def observe_probe(probe, draw):
+        def observe_face(*args):
+            with monkeypatch.context() as patch:
+                patch.setattr(gl, "glDrawArrays", record_draw)
+                return draw(*args)
+        return capture_probe(probe, observe_face)
+
+    monkeypatch.setattr(implementation.SceneProbe, "capture", observe_probe)
+    capture.render(host, _snapshot())
+    assert len(faces) == 6 and len(set(faces)) == 1
+    probe = faces[0]
+    screen = renderer._resources.program(*dict(implementation._PROGRAM_ROWS)["backdrop"])
+    assert gl.glGetUniformLocation(probe, "uShafts") == -1
+    assert gl.glGetFragDataLocation(probe, "Emission") == -1
+    assert gl.glGetUniformLocation(screen, "uShafts") >= 0
+    assert gl.glGetFragDataLocation(screen, "Emission") == 1
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize('light_type', ('Sunlit Surface', 'Deep Light'))
 def test_light_strength_scales_glint_proxy_hdr_without_moving_physical_records(target, monkeypatch, light_type):
     from OpenGL import GL as gl
@@ -551,6 +585,37 @@ def test_ember_grain_breaks_the_dust_into_grit_and_is_dormant_without_dust(targe
                            - change[1:-1, 2:]).mean()
         return laplacian / max(np.abs(change).mean(), 1e-6)
     assert roughness(grit, smooth) > 1.4 * roughness(smooth, at(0.6, 0.0))
+
+
+@pytest.mark.qt
+def test_probe_ember_grain_uses_cube_face_pixels(target, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations import extruded_bubble as implementation
+
+    capture, host = target
+    renderer = implementation.QuickExtrudedBubbleRenderer()
+    host._implementations["extruded_bubble"] = renderer
+    set_uniforms = renderer._uniforms.set
+
+    def zero_probe_size(program, values):
+        if values.get("uProbeMode") == 1.0:
+            values = {**values, "uFrameSize": (0.0, 0.0)}
+        return set_uniforms(program, values)
+
+    def probe_face(grain):
+        capture.render(host, _snapshot(extruded_bubble_dust=1.0, extruded_bubble_ember_grain=grain))
+        previous = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_CUBE_MAP))
+        try:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, renderer._probe.texture)
+            return bytes(gl.glGetTexImage(gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, gl.GL_RGB, gl.GL_FLOAT))
+        finally:
+            gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, previous)
+
+    grain, smooth = probe_face(1.0), probe_face(0.0)
+    with monkeypatch.context() as control:
+        control.setattr(renderer._uniforms, "set", zero_probe_size)
+        assert probe_face(0.0) == smooth
+        assert probe_face(1.0) != grain
 
 
 @pytest.mark.qt

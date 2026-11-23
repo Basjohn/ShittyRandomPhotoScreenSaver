@@ -846,9 +846,8 @@ the feature (D3D11 is not stated).
       128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
       it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
   - [ ] Python reference conversions (playbook checklist 16). Preserve the current appearance and retain before/after
-    stills and a comparison WebP for each changed rendering path. The core will use these sources.
-    - [ ] Split the probe backdrop from the screen backdrop's shafts sampler and `Emission` attachment. Remove the
-      traced-glass `uEnvironment` sampler after confirming that it has no active reader.
+    stills and a comparison WebP for each changed rendering path. The core will use these sources. The probe
+    backdrop proof is indexed in the [port playbook](Docs/Guides/Native_Port_Playbook.md#pb-e13).
     - [ ] Convert the near passes' `gl_FragDepth` to fragment variants and the shaft and blur reads to target-pixel
       coordinates clamped inside the content.
     - [ ] Convert the traced glass's loose uniforms to a block. Resolve the beads' binding-6 note in section 1D.11 and

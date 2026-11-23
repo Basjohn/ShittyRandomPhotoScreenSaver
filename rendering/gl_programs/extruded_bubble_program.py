@@ -75,7 +75,6 @@ uniform float uFilm;            // soap-film tint strength
 uniform vec2 uFilmRange;        // film thickness range, nm
 uniform float uCrisp;           // 0 softly focused (mocks 1-4) .. 1 crisp (abyss, sixth mock)
 #define SURFACE_Y uSurfaceY
-vec2 equirectUv(vec3 d) { return vec2(atan(d.x, -d.z) / 6.28318530718 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5); }
 vec3 equirectDirection(vec2 uv) {
     float lon = (uv.x - 0.5) * 6.28318530718, lat = (uv.y - 0.5) * 3.14159265359;
     return vec3(sin(lon) * cos(lat), sin(lat), -cos(lon) * cos(lat));
@@ -185,19 +184,17 @@ vec2 waterSpecks(vec3 ray, vec2 framePx) {
     return vec2(warm, cool) * (0.6 + 0.6 * clouds);
 }
 """
-BACKDROP_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
-                     "in vec2 vNdc;\nuniform sampler2D uShafts;\nuniform vec2 uFrameSize;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
-                     + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
+_BACKDROP_BODY = ("uniform vec2 uFrameSize;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
+                  + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
-    float shafts = uProbeMode > 0.5
-                 ? 0.6 * pow(max(dot(ray, uSunBelow), 0.0), 3.0) * uRays
-                 : texture(uShafts, fragUv(uFrameSize)).r * uRays;
-    if (uProbeMode < 0.5) {
-        float s = texture(uShafts, fragUv(uFrameSize)).r;
-        shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
-    }
+#ifdef EB_PROBE_BACKDROP
+    float shafts = 0.6 * pow(max(dot(ray, uSunBelow), 0.0), 3.0) * uRays;
+#else
+    float s = texture(uShafts, fragUv(uFrameSize)).r;
+    float shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
+#endif
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
     float beamFocus = 6.0 / max(uBeamWidth*uBeamWidth,0.01);
     shafts *= mix(1.0, pow(max(dot(ray, uSunBelow), 0.0), beamFocus) * 3.0, uRayFocus * (1.0-uLightingScene));
@@ -360,10 +357,16 @@ void main() {
         colour += uLightColour * uGlintPower * (pow(g, uGlintSharp) + pow(g, uGlintSharp * 0.1) * 0.02);
     }
     FragColor = vec4(colour, 1.0);
+#ifndef EB_PROBE_BACKDROP
     vec3 glow = max(colour - 1.1, 0.0) * 0.4;
     Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
+#endif
 }
 """)
+_BACKDROP_HEADER = "#version 460 core\nlayout(location=0) out vec4 FragColor;\nin vec2 vNdc;\n"
+BACKDROP_FRAGMENT = (_BACKDROP_HEADER + "layout(location=1) out vec4 Emission;\n"
+                     "uniform sampler2D uShafts;\n" + _BACKDROP_BODY)
+PROBE_BACKDROP_FRAGMENT = _BACKDROP_HEADER + "#define EB_PROBE_BACKDROP\n" + _BACKDROP_BODY
 
 # Volumetric shafts at half resolution, jittered, then blurred: smooth beams without per-pixel grain.
 SHAFT_FRAGMENT = ("#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL
@@ -712,7 +715,6 @@ void main() {
 }
 """
 SHADE_GLSL = SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
-uniform sampler2D uEnvironment;
 uniform sampler2D uBackground;   // what was drawn before the bubbles, covering the target allocation
 uniform vec3 uSunScreen;
 uniform vec2 uTargetSize;
@@ -724,7 +726,6 @@ uniform float uLens;             // share of the light through a bubble taken fr
 uniform float uPixelSize;        // view units per pixel at unit distance
 uniform mat4 uProjection;
 uniform vec2 uFrameSize;
-vec3 environment(vec3 dir, float blur) { return textureLod(uEnvironment, equirectUv(dir), blur).rgb; }
 // What the captured frame shows at a view-space point (negative where it is off screen).
 vec4 behindAt(vec3 viewPoint, float blurPx) {
     vec4 clip = uProjection * vec4(viewPoint, 1.0);
@@ -2009,14 +2010,15 @@ void main() {
 # them and binds the packed block once per draw.
 from rendering.gl_programs.portable import pack_block, portable_family  # noqa: E402
 
-EB_SAMPLERS = {"uShafts": 4, "uBackground": 5, "uProbe": 6, "uSource": 0, "uEnvironment": 0}
+EB_SAMPLERS = {"uShafts": 4, "uBackground": 5, "uProbe": 6, "uSource": 0}
 # The water, the shafts and their blur over the fullscreen triangle.
 _FULLSCREEN, FULLSCREEN_BLOCK = portable_family(
-    {"vertex": FULL_VERTEX, "backdrop": BACKDROP_FRAGMENT, "shafts": SHAFT_FRAGMENT, "blur": BLUR_FRAGMENT},
-    (("vertex", ("backdrop",)), ("vertex", ("shafts",)), ("vertex", ("blur",))),
+    {"vertex": FULL_VERTEX, "backdrop": BACKDROP_FRAGMENT, "probe_backdrop": PROBE_BACKDROP_FRAGMENT,
+     "shafts": SHAFT_FRAGMENT, "blur": BLUR_FRAGMENT},
+    (("vertex", ("backdrop",)), ("vertex", ("probe_backdrop",)), ("vertex", ("shafts",)), ("vertex", ("blur",))),
     block="EbFullscreen", samplers=EB_SAMPLERS)
-FULL_VERTEX, BACKDROP_FRAGMENT, SHAFT_FRAGMENT, BLUR_FRAGMENT = (
-    _FULLSCREEN["vertex"], _FULLSCREEN["backdrop"], _FULLSCREEN["shafts"], _FULLSCREEN["blur"])
+FULL_VERTEX, BACKDROP_FRAGMENT, PROBE_BACKDROP_FRAGMENT, SHAFT_FRAGMENT, BLUR_FRAGMENT = (
+    _FULLSCREEN["vertex"], _FULLSCREEN["backdrop"], _FULLSCREEN["probe_backdrop"], _FULLSCREEN["shafts"], _FULLSCREEN["blur"])
 # What a fullscreen program's block starts from: the unshaped scene light (the shafts' extent; zero elsewhere).
 FULLSCREEN_DEFAULTS = {"uLightFaces": (0.0, 1.0, 0.0), "uLightTravel": (0.0, -1.0, 0.0),
                        "uLightAxis": (0.0, -1.0, 0.0), "uLightReach": (0.0, 0.0, 0.0)}
@@ -2046,6 +2048,7 @@ def block_defaults(layout) -> bytes:
 
 __all__ = [
     "BACKDROP_FRAGMENT",
+    "PROBE_BACKDROP_FRAGMENT",
     "BEAD_VERTEX",
     "BLUR_FRAGMENT",
     "BUBBLE_FRAGMENT",

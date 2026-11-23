@@ -62,7 +62,7 @@ try:
         program=compile_program(vs,fs,label='distortion audit '+kind);programs.append(program)
         gl.glUseProgram(program)
         loc=lambda name:gl.glGetUniformLocation(program,name)
-        for name,val in [('uDiag',5),('uProbe',2),('uBackground',0),('uEnvironment',0)]:gl.glUniform1i(loc(name),val)
+        for name,val in [('uDiag',5),('uProbe',2),('uBackground',0)]:gl.glUniform1i(loc(name),val)
         for name,val in [('uPixel',2*tan[1]/H),('uPixelSize',2*tan[1]/H),('uFocus',0),('uAperture',0),('uCrisp',1),('uNearLayer',0),('uNearCoc',0),('uNearMax',_near_spread(H)),('uProbeLevels',1),('uBehind',8),('uLens',1),('uShell',.03),('uFrameShare',1)]:gl.glUniform1f(loc(name),val)
         gl.glUniform3f(loc('uIors'),1.15,2,1)
         gl.glUniform2f(loc('uTan'),*tan)
