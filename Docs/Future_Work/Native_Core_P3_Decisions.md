@@ -1255,7 +1255,9 @@ tie off a content edge with 3 or more scatter pixels in its 3x3 (the isolation c
 once the clause is retired, 21 Nov), and nightsolong input 22 as before. No bound changed. Two tracked exceptions of the same scene-fade
 double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
 337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
-`20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. The Oscilloscope's
+`20261117_offer_tie_classes/`). The 23 Nov post-R-242 replay retains input 337 as the sole failing frame for both
+  offers at display and overscan. Keep the existing bounds and trace the remaining fade edge. The current receipt is
+  indexed in [Native Bubble parity investigation](Native_Bubble_Parity_Investigation.md). The Oscilloscope's
 owner rule (a) (lead's decision, 21 Nov): one-level pixels outside the mask on its beam are judged against Python's own
 placement variance, at most 52 a frame, as scatter (one level only, outside the translucency mask); rule (a)'s ties
 (10 a frame, at most 3 levels), isolation and every other limit are unchanged, and no group or density bound is added.

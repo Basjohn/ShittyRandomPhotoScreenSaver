@@ -57,7 +57,7 @@ Continue the native sequence below with the repaired timing receipts. The report
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
    layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
    rule (b) over the four takes, the 2560 x 1440 cost, and the D1 rehearsal.
-2. Recheck Bubble's three tracked inputs under R-242 and the current D12 rule (a). Use the completed post-fix
+2. Attribute Bubble's remaining switch-frame tie at input 337 under the current D12 rule (a). Use the post-fix
    Spectrum and Spline Curve long-take controls in the residuals section.
 3. Bubble GPU optimisation under the guide (its box), alongside step 4.
 4. Ports, each under the guide from its first brief: the Oscilloscope (N5.1), then Waveform (N5.4) under the fast
@@ -780,10 +780,10 @@ the feature (D3D11 is not stated).
     - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
       Vulkan's late frames fall within the control's spread. If it is the driver's or Qt's, record it in D12 and ask
       the operator. Then Bubble's own T tools (its diagnostics guide).
-  - [ ] Verify the scene-fade exceptions on R-242 with the current D12 rule (a). Drive the owner replay from the start
-    of each take. Cover offer directions 2 and 6 at input 337 at display and overscan. Retain and classify residuals
-    under the existing limits. Use current-source references and preserve the operator's intended fullscreen density
-    and breathing improvements.
+  - [ ] Attribute the remaining non-isolated masked tie verdict at mode-switch input 337 for offer directions 2 and 6.
+    It persists after R-242 at display and overscan. Check the fade values at the owner and the composite edge before
+    changing either path. Use the proof in `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` and retain the
+    operator's intended fullscreen density and breathing improvements.
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11); 4K is measured (D12).
   - [ ] Ambience-off reads higher than ambience-on at 4K: variant b differs from variant a in many settings, so measure
     one frame with only the ambience switched (`bubble_check.py` `COST_RUNS`).
@@ -845,15 +845,6 @@ the feature (D3D11 is not stated).
       at most 2 processes at once). Open for the lead: the 30 s runs' late-song window. Python's drift restarts after a
       128-step gap as the core's does, so a Python reference of a window near a take's end must draw every frame up to
       it: for Extruded Bubble the late window of any run key costs that key's full 60 s draw. Today only `""` has it.
-  - [ ] C++ (ABI 44 reserved for this slice; design check against ABI 42): storage buffers counted per compute entry, not
-    per program. EB's drift declares 12 storage buffers (geometry, state and aux for each of chains, snow and specks;
-    one output; the check's cases and results: `extruded_bubble_drift_solver.py:166-191,244-248,310-311`), and D3's
-    geometry buffers count among them (`compute_passes.h:87-92`), but the program's list is refused past
-    `kMaxStorageBuffers` 8 (`mode_content.cpp:2613`). An entry binds at most 6 (chains: steps, geometry, old geometry,
-    state, aux, out), within today's 8, so the limit belongs on each entry's bindings; the program's
-    list rises to 16. Proof: EB's real program admitted; an entry binding 9 refused with its reason; nothing at rest.
-    Negative control: the program-wide count refuses EB's list. (Or merge each role's three families into one buffer
-    with offsets; the lead decides.)
   - [ ] Python conversions first (playbook checklist 16), with stills before and after and the showcase WebP, so the
     core draws the same files: the backdrop's `Emission` output and the near passes' `gl_FragDepth` behind fragment
     variants (`prog.py:1048,1066,1217`), the probe backdrop without the shafts sampler, `uEnvironment` removed or bound

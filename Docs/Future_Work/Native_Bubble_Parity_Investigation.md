@@ -108,3 +108,19 @@ of `nightsolong_acousticsoft1`. The pixel coordinates, Python and native values,
 receipt exactly. The shortened replay used the same first 90 scripted inputs as the full take. Receipts are under
 `.artifacts/evidence/native_core/fast_proof/20261123_bubble_tracked_recheck/` (prefix proof) and
 `20261123_bubble_cold_prefix/native_render_parity.json` (rule verdict). D12's bound and the accepted exception are unchanged.
+
+## Current-source scene-switch checks, 23 Nov 2026
+
+The Normal Bubble port has the operator's accepted parity under D12's bounded rules. The current follow-up checks the
+known fade edges. The four targeted direction-offer runs drew 324 inputs each from the same Studio script. Input 337 is
+the only failing frame in each run, at display and overscan. Each verdict lists one remaining non-isolated masked tie. At display, the
+past-one-level coordinates and values form subsets of the earlier input-337 failures. The overscan runs extend the
+coverage with the authored half-device-pixel placement. The acceptance limits are unchanged.
+
+The offer result and frame crops are in `.artifacts/evidence/native_core/fast_proof/20261123_bubble_fade_offers/`.
+`20261123_bubble_tracked_recheck/` retains the cold-prefix proof and both transcripts. Use these current-reference
+comparisons when investigating the switch. Historical fullscreen captures reflect earlier density and breathing settings.
+
+For later optimization, the [compact parity and timing archive](../../.artifacts/evidence/native_core/n5_1_bubble/20261123_parity_timing_compact/bubble-parity-and-timing.zip)
+contains the 12 raw timing traces, applied settings, timing samples, current parity reports with hashes, the failing crops,
+and a verified SHA-256 manifest. The full source receipts remain in their run directories.
