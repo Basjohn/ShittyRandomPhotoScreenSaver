@@ -9,9 +9,9 @@ shows Windows' default application box on the taskbar.
 Where the icon is:
 
 * source: ``SRPSS.ico`` at the repository root;
-* Nuitka onedir (the Media Center): beside the executable, which is the distribution root every compiled module's
+* Nuitka onedir (the Dashboard): beside the executable, which is the distribution root every compiled module's
   ``__file__`` is relative to;
-* Nuitka onefile (``SRPSS.scr``, ``SRPSS_Diagnostic.scr``): in the extraction folder (``--onefile-tempdir-spec``),
+* Nuitka onefile (``SRPSS_Screensaver.scr``, ``SRPSS_Screensaver_Diagnostic.scr``): in the extraction folder (``--onefile-tempdir-spec``),
   again the root of every compiled module's ``__file__`` and the folder of the running executable; the launcher's own
   folder (``System32``, ``release/screensaver``) holds only the ``.scr``.
 

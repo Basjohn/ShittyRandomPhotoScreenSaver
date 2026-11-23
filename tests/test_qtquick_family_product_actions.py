@@ -184,7 +184,7 @@ def test_display_steam_routes_profile_and_private_clipboard_actions(
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: False)
-    monkeypatch.setattr(mc, "is_mc_build", lambda: False)
+    monkeypatch.setattr(mc, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         secure_url_launcher,
         "open_steam_target",

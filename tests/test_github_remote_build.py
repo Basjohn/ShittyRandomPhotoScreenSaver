@@ -42,19 +42,19 @@ def test_the_workflow_builds_only_the_requested_commit_with_the_canonical_worker
     for name in ("target", "commit", "token"):
         assert re.search(rf"^      {name}:\n", triggers, re.MULTILINE), name
     assert "ref: ${{ inputs.commit }}" in text and "git rev-parse HEAD" in text     # checked out, then verified
-    for script in ("scripts/venv/build_nuitka.ps1", "scripts/venv/build_nuitka_mc_onedir.ps1"):
+    for script in ("scripts/venv/build_nuitka.ps1", "scripts/venv/build_nuitka_dashboard_onedir.ps1"):
         assert script in text and (ROOT / script).is_file()
     assert "tools\\github_remote_build.py manifest" in text and remote.MANIFEST_NAME in text
     assert "name: srpss-${{ inputs.target }}\n" in text
     assert {f"srpss-{key}" for key in remote.TARGETS} == {target.artifact for target in remote.TARGETS.values()}
-    assert re.search(r"options:\n((?:\s+- \w+\n)+)", triggers).group(1).split() == ["-", "standard", "-", "media_center"]
+    assert re.search(r"options:\n((?:\s+- \w+\n)+)", triggers).group(1).split() == ["-", "screensaver", "-", "dashboard"]
     assert "runs-on: windows" in text and "python-version: \"3.14\"" in text
     assert "ISCC" not in text                                                       # installers stay local
 
 
 def test_the_canonical_workers_run_unattended():
     # A fresh machine or runner cannot answer Nuitka's Dependency Walker prompt; "no" is FATAL (first remote run).
-    for script in ("scripts/venv/build_nuitka.ps1", "scripts/venv/build_nuitka_mc_onedir.ps1"):
+    for script in ("scripts/venv/build_nuitka.ps1", "scripts/venv/build_nuitka_dashboard_onedir.ps1"):
         assert '"--assume-yes-for-downloads",' in (ROOT / script).read_text(encoding="utf-8"), script
 
 
@@ -80,7 +80,7 @@ def _repo(tmp_path: Path, version: str = "9.8.7") -> Path:
     _git(root, "config", "core.autocrlf", "false")
     (root / "versioning.py").write_text(f'APP_VERSION: str = "{version}"\n', encoding="utf-8")
     (root / "scripts").mkdir()
-    (root / "scripts" / "SRPSS_MediaCenter_Installer.iss").write_text(
+    (root / "scripts" / "SRPSS_Dashboard_Installer.iss").write_text(
         "[Setup]\nAppVersion=1.0\nVersionInfoVersion=1.0\nAppName=x\n", encoding="utf-8")
     (root / "themes").mkdir()
     (root / "themes" / "a.srtheme").write_text("{}", encoding="utf-8")
@@ -94,7 +94,7 @@ def _repo(tmp_path: Path, version: str = "9.8.7") -> Path:
 def _carry_native(root: Path) -> None:
     """What the product job's place-native and frozen probe leave: the run's native core with its own manifest in
     release/<module payload>, and the probe's report (tests/test_native_module_build.py runs place-native itself)."""
-    module = remote.MODULE_TARGETS[remote.TARGETS["standard"].native]
+    module = remote.MODULE_TARGETS[remote.TARGETS["screensaver"].native]
     pyd = root / "release" / module.primary
     pyd.parent.mkdir(parents=True, exist_ok=True)
     pyd.write_bytes(b"MZ native core")
@@ -127,7 +127,7 @@ def _publish_built(root: Path, target_key: str, *, payload: bytes = b"binary") -
     extra.parent.mkdir(parents=True, exist_ok=True)
     extra.write_bytes(b"payload-data")
     (root / "logs").mkdir(exist_ok=True)
-    stem = "build_nuitka" if target_key == "standard" else "build_nuitka_mc_onedir"
+    stem = "build_nuitka" if target_key == "screensaver" else "build_nuitka_dashboard_onedir"
     (root / "logs" / f"{stem}_{TOKEN}.log").write_text("built", encoding="utf-8")
     if target.native:
         _carry_native(root)
@@ -176,9 +176,9 @@ def _tamper(staging: Path, case: str) -> dict:
     elif case == "escape":
         manifest["files"]["release/screensaver/../../outside.txt"] = {"bytes": 1, "sha256": "0"}
     elif case == "diagnostic":
-        (staging / "release" / "diagnostic" / "SRPSS_Diagnostic.scr").write_bytes(b"other!")
-        entry = manifest["files"]["release/diagnostic/SRPSS_Diagnostic.scr"]
-        entry["sha256"] = remote.sha256_file(staging / "release" / "diagnostic" / "SRPSS_Diagnostic.scr")
+        (staging / "release" / "diagnostic" / "SRPSS_Screensaver_Diagnostic.scr").write_bytes(b"other!")
+        entry = manifest["files"]["release/diagnostic/SRPSS_Screensaver_Diagnostic.scr"]
+        entry["sha256"] = remote.sha256_file(staging / "release" / "diagnostic" / "SRPSS_Screensaver_Diagnostic.scr")
     elif case == "no-manifest":
         manifest_path.unlink()
         return {}
@@ -189,30 +189,30 @@ def _tamper(staging: Path, case: str) -> dict:
 @pytest.mark.parametrize("case", ["byte", "missing", "extra", "escape", "diagnostic", "no-manifest"])
 def test_an_altered_or_incomplete_download_is_refused(tmp_path, case):
     root = _repo(tmp_path)
-    _publish_built(root, "standard")
-    staging = _artifact(root, "standard", tmp_path / "staging")
+    _publish_built(root, "screensaver")
+    staging = _artifact(root, "screensaver", tmp_path / "staging")
     _tamper(staging, case)
     with pytest.raises(remote.RemoteBuildError):
-        remote.validate_staging(staging, "standard", commit=_git(root, "rev-parse", "HEAD"), version="9.8.7",
+        remote.validate_staging(staging, "screensaver", commit=_git(root, "rev-parse", "HEAD"), version="9.8.7",
                                 token=TOKEN, **_checks())
 
 
 @pytest.mark.parametrize("field,value", [("commit", "f" * 40), ("version", "9.8.8"), ("token", "20261108_120000_000002")])
 def test_a_build_of_another_commit_version_or_run_is_refused(tmp_path, field, value):
     root = _repo(tmp_path)
-    _publish_built(root, "standard")
-    staging = _artifact(root, "standard", tmp_path / "staging")
+    _publish_built(root, "screensaver")
+    staging = _artifact(root, "screensaver", tmp_path / "staging")
     expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN, **_checks(),
                 field: value}
     with pytest.raises(remote.RemoteBuildError, match=field):
-        remote.validate_staging(staging, "standard", **expected)
+        remote.validate_staging(staging, "screensaver", **expected)
 
 
 def test_the_runner_refuses_to_describe_a_commit_it_did_not_build(tmp_path):
     root = _repo(tmp_path)
-    _publish_built(root, "standard")
+    _publish_built(root, "screensaver")
     with pytest.raises(remote.RemoteBuildError, match="requested"):
-        remote.build_manifest(root, "standard", "a" * 40, TOKEN)
+        remote.build_manifest(root, "screensaver", "a" * 40, TOKEN)
 
 
 def test_version_comes_from_the_built_commit_not_the_working_tree(tmp_path):
@@ -228,7 +228,7 @@ def test_version_comes_from_the_built_commit_not_the_working_tree(tmp_path):
 
 def _release_with_previous(tmp_path: Path) -> Path:
     release = tmp_path / "release"
-    for directory in remote.TARGETS["standard"].payload_dirs:
+    for directory in remote.TARGETS["screensaver"].payload_dirs:
         (release / directory).mkdir(parents=True)
         (release / directory / "previous.txt").write_text(directory, encoding="utf-8")
     return release
@@ -236,32 +236,32 @@ def _release_with_previous(tmp_path: Path) -> Path:
 
 def test_publishing_swaps_in_the_validated_payload(tmp_path):
     root = _repo(tmp_path)
-    _publish_built(root, "standard", payload=b"new")
-    staging = _artifact(root, "standard", tmp_path / "staging")
+    _publish_built(root, "screensaver", payload=b"new")
+    staging = _artifact(root, "screensaver", tmp_path / "staging")
     release = _release_with_previous(tmp_path)
-    remote.publish_payload(staging, release, "standard")
-    assert (release / "screensaver" / "SRPSS.scr").read_bytes() == b"new"
+    remote.publish_payload(staging, release, "screensaver")
+    assert (release / "screensaver" / "SRPSS_Screensaver.scr").read_bytes() == b"new"
     assert not (release / "screensaver" / "previous.txt").exists()
     assert not list(release.glob(".remote_previous_*"))
 
 
 def test_a_failed_swap_restores_the_previous_payload(tmp_path, monkeypatch):
     root = _repo(tmp_path)
-    _publish_built(root, "standard", payload=b"new")
-    staging = _artifact(root, "standard", tmp_path / "staging")
+    _publish_built(root, "screensaver", payload=b"new")
+    staging = _artifact(root, "screensaver", tmp_path / "staging")
     release = _release_with_previous(tmp_path)
     real_move = shutil.move
 
     def move(source, destination):
         if Path(destination).name == "diagnostic":
-            raise PermissionError("SRPSS_Diagnostic.scr is in use")
+            raise PermissionError("SRPSS_Screensaver_Diagnostic.scr is in use")
         return real_move(source, destination)
 
     monkeypatch.setattr(remote.shutil, "move", move)
     with pytest.raises(remote.RemoteBuildError, match="previous payload was kept"):
-        remote.publish_payload(staging, release, "standard")
+        remote.publish_payload(staging, release, "screensaver")
     monkeypatch.setattr(remote.shutil, "move", real_move)
-    for directory in remote.TARGETS["standard"].payload_dirs:
+    for directory in remote.TARGETS["screensaver"].payload_dirs:
         assert sorted(path.name for path in (release / directory).iterdir()) == ["previous.txt"]
     assert not list(release.glob(".remote_previous_*"))
 
@@ -344,52 +344,52 @@ def _artifacts(tmp_path: Path) -> dict[str, Path]:
 
 def test_both_products_build_in_parallel_and_publish_after_validation(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [RUNNING, SUCCESS], "media_center": [RUNNING, RUNNING, SUCCESS]})
+    cli = FakeCli(artifacts, {"screensaver": [RUNNING, SUCCESS], "dashboard": [RUNNING, RUNNING, SUCCESS]})
     order = []
     results, events, release = _orchestrate(
-        tmp_path, monkeypatch, cli, ["standard", "media_center"],
+        tmp_path, monkeypatch, cli, ["screensaver", "dashboard"],
         between=lambda: order.append(("between", list(cli.downloads))),
     )
-    assert [key for key, *_ in cli.dispatched] == ["standard", "media_center"]       # both dispatched up front
+    assert [key for key, *_ in cli.dispatched] == ["screensaver", "dashboard"]       # both dispatched up front
     assert {sha for *_, sha, _token in cli.dispatched} == {_git(tmp_path / "repo", "rev-parse", "HEAD")}
     assert order == [("between", [])]                     # local work runs while GitHub builds, before downloads
     assert all(result.ok for result in results.values())
-    assert (release / "screensaver" / "SRPSS.scr").read_bytes() == b"standard-new"
-    assert (release / "media_center" / "SRPSS_Media_Center.exe").read_bytes() == b"media_center-new"
+    assert (release / "screensaver" / "SRPSS_Screensaver.scr").read_bytes() == b"screensaver-new"
+    assert (release / "dashboard" / "SRPSS_Dashboard.exe").read_bytes() == b"dashboard-new"
     assert all(results[key].evidence_path is not None for key in results)
-    assert ("link", "standard", "https://github.invalid/runs/100") in events
+    assert ("link", "screensaver", "https://github.invalid/runs/100") in events
     assert any(kind == "status" and payload.startswith("Building") for kind, _key, payload in events)
     assert not (tmp_path / "repo" / remote.STAGING_DIR / TOKEN).exists()             # staging cleaned up
 
 
 def test_a_failed_run_keeps_the_previous_payload_and_logs_the_failure(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [RUNNING, FAILURE]})
-    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"])
-    assert not results["standard"].ok and cli.downloads == []
+    cli = FakeCli(artifacts, {"screensaver": [RUNNING, FAILURE]})
+    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver"])
+    assert not results["screensaver"].ok and cli.downloads == []
     assert (release / "screensaver" / "previous.txt").is_file()
-    assert "C2065" in results["standard"].log_path.read_text(encoding="utf-8")
+    assert "C2065" in results["screensaver"].log_path.read_text(encoding="utf-8")
 
 
 def test_an_invalid_download_keeps_the_previous_payload(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    _tamper(artifacts["standard"], "byte")
-    cli = FakeCli(artifacts, {"standard": [SUCCESS]})
-    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"])
-    assert not results["standard"].ok and "integrity" in results["standard"].detail
+    _tamper(artifacts["screensaver"], "byte")
+    cli = FakeCli(artifacts, {"screensaver": [SUCCESS]})
+    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver"])
+    assert not results["screensaver"].ok and "integrity" in results["screensaver"].detail
     assert sorted(path.name for path in (release / "screensaver").iterdir()) == ["previous.txt"]
 
 
 def test_a_stop_cancels_the_real_runs_on_github(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [RUNNING], "media_center": [RUNNING]})
+    cli = FakeCli(artifacts, {"screensaver": [RUNNING], "dashboard": [RUNNING]})
     polls = {"count": 0}
 
     def cancelled():
         polls["count"] += 1
         return polls["count"] > 6
 
-    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["standard", "media_center"],
+    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver", "dashboard"],
                                               cancelled=cancelled)
     assert sorted(cli.cancelled) == [100, 101]
     assert all(result.aborted and result.returncode == 130 for result in results.values())
@@ -398,7 +398,7 @@ def test_a_stop_cancels_the_real_runs_on_github(tmp_path, monkeypatch):
 
 def test_a_run_seen_only_after_the_stop_is_still_cancelled(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [RUNNING]}, appear=False)
+    cli = FakeCli(artifacts, {"screensaver": [RUNNING]}, appear=False)
     flag = {"stop": False}
 
     def cancelled():
@@ -406,25 +406,25 @@ def test_a_run_seen_only_after_the_stop_is_still_cancelled(tmp_path, monkeypatch
             flag["stop"] = True
         return flag["stop"]
 
-    results, _events, _release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"], cancelled=cancelled)
-    assert cli.cancelled == [100] and results["standard"].aborted
+    results, _events, _release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver"], cancelled=cancelled)
+    assert cli.cancelled == [100] and results["screensaver"].aborted
 
 
 def test_a_run_github_refuses_to_start_is_reported_not_waited_for(tmp_path, monkeypatch):
     # A refused run never gets its custom name (8 Nov: the repository allowed only local actions).
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [RUNNING]}, appear=False, refused="https://github.invalid/runs/9")
-    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"])
-    assert not results["standard"].ok and "could not start the workflow" in results["standard"].detail
-    assert results["standard"].run_url == "https://github.invalid/runs/9"
+    cli = FakeCli(artifacts, {"screensaver": [RUNNING]}, appear=False, refused="https://github.invalid/runs/9")
+    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver"])
+    assert not results["screensaver"].ok and "could not start the workflow" in results["screensaver"].detail
+    assert results["screensaver"].run_url == "https://github.invalid/runs/9"
     assert (release / "screensaver" / "previous.txt").is_file()
 
 
 def test_a_branch_that_moved_since_pre_flight_is_never_built(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
-    cli = FakeCli(artifacts, {"standard": [SUCCESS]})
-    results, _events, _release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"], moved=True)
-    assert cli.dispatched == [] and "moved since pre-flight" in results["standard"].detail
+    cli = FakeCli(artifacts, {"screensaver": [SUCCESS]})
+    results, _events, _release = _orchestrate(tmp_path, monkeypatch, cli, ["screensaver"], moved=True)
+    assert cli.dispatched == [] and "moved since pre-flight" in results["screensaver"].detail
 
 
 # ------------------------------------------------------------------------------------------- Build Runner tab
@@ -434,15 +434,15 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     github = {job.key: job for job in build_runner.jobs_for_mode("github", tmp_path)}
     venv = {job.key: job for job in build_runner.jobs_for_mode("venv", tmp_path)}
     # The remote products and local steps, then the optional Linux jobs: the other tabs' own Linux job, and Linux
-    # Media Center, which only this tab offers (its own contract: tests/test_linux_mc_build_contract.py); last the
+    # Dashboard, which only this tab offers (its own contract: tests/test_linux_dashboard_build_contract.py); last the
     # optional native modules, the product's core and the P1 harness (their own contract:
     # tests/test_native_module_build.py).
-    assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
-                            "linux", "linux_mc", "native_module"]
-    assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
-    assert "linux_mc" not in venv and not github["linux_mc"].default_selected
-    assert github["linux_mc"].kind == github["linux"].kind and github["linux_mc"].script == github["linux"].script
-    for key in ("standard", "media_center"):
+    assert list(github) == ["screensaver", "dashboard", "reddit_helper", "screensaver_installer", "dashboard_installer",
+                            "linux_screensaver", "linux_dashboard", "native_module"]
+    assert github["linux_screensaver"] == venv["linux_screensaver"] and not github["linux_screensaver"].default_selected     # the other tabs' own job
+    assert "linux_dashboard" not in venv and not github["linux_dashboard"].default_selected
+    assert github["linux_dashboard"].kind == github["linux_screensaver"].kind and github["linux_dashboard"].script == github["linux_screensaver"].script
+    for key in ("screensaver", "dashboard"):
         assert github[key].kind == "github" and github[key].script == tmp_path / remote.WORKFLOW_PATH
         assert github[key].artifacts == venv[key].artifacts and github[key].output_dir == venv[key].output_dir
         # The remote build also carries the native core (published with it); the local worker's job does not.
@@ -451,7 +451,7 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
             path.relative_to(tmp_path / "release").as_posix() for path in github[key].artifacts), carried)
     assert github["reddit_helper"].script == venv["reddit_helper"].script          # built locally, venv worker
     # The installers are the venv tab's own local jobs, unchanged but for the label: GitHub has no say (operator, 8 Nov).
-    for key in ("standard_installer", "media_center_installer"):
+    for key in ("screensaver_installer", "dashboard_installer"):
         assert replace(github[key], name=venv[key].name) == venv[key]
     assert build_runner.normalize_mode("GitHub") == "github" and build_runner.normalize_mode("x") == "normal"
     assert build_runner.parse_args(["--mode", "github"]).mode == "github"
@@ -471,14 +471,14 @@ def _ok(key):
 
 def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(monkeypatch, tmp_path):
     jobs = build_runner.jobs_for_mode("github", tmp_path)
-    selected = {"standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer"}
+    selected = {"screensaver", "dashboard", "reddit_helper", "screensaver_installer", "dashboard_installer"}
     order = []
 
     def run_remote(_root, _cli, keys, _commit, _token, *, emit, between, **_kwargs):
         order.append(("dispatch", tuple(keys)))
         between()
-        results = {"standard": remote.RemoteResult("standard", 1, "failed", Path("l"), Path("o")),
-                   "media_center": _ok("media_center")}
+        results = {"screensaver": remote.RemoteResult("screensaver", 1, "failed", Path("l"), Path("o")),
+                   "dashboard": _ok("dashboard")}
         for key in keys:
             emit("done", key, results[key])
         return results
@@ -500,12 +500,12 @@ def test_the_pipeline_runs_the_helper_while_github_builds_and_installers_after(m
     while not app._events.empty():
         events.append(app._events.get())
     # Installers compile locally after the GitHub products, whatever GitHub reported, exactly as the venv tab
-    # compiles them after its own builds: the failed Standard build leaves the previous payload, which is packaged.
-    assert order == [("dispatch", ("standard", "media_center")), ("local", "reddit_helper"),
-                     ("local", "standard_installer"), ("local", "media_center_installer")]
+    # compiles them after its own builds: the failed Screensaver build leaves the previous payload, which is packaged.
+    assert order == [("dispatch", ("screensaver", "dashboard")), ("local", "reddit_helper"),
+                     ("local", "screensaver_installer"), ("local", "dashboard_installer")]
     done = {event[1]: event[2] for event in events if event[0] == "job_done"}
-    assert set(done) == {"standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer"}
-    assert events[-1][0] == "pipeline_done" and events[-1][1] is False               # the Standard build failed
+    assert set(done) == {"screensaver", "dashboard", "reddit_helper", "screensaver_installer", "dashboard_installer"}
+    assert events[-1][0] == "pipeline_done" and events[-1][1] is False               # the Screensaver build failed
 
 
 def test_installers_alone_on_the_github_tab_compile_locally_like_the_venv_tab(monkeypatch, tmp_path):
@@ -529,11 +529,11 @@ def test_installers_alone_on_the_github_tab_compile_locally_like_the_venv_tab(mo
     app = SimpleNamespace(_events=queue.Queue())
     preflight = build_runner.PreflightResult(remote_commit=remote.PushedCommit("main", "c" * 40, "x", "c" * 40))
     build_runner.BuildRunnerApp._github_pipeline_worker(
-        app, jobs, {"standard_installer", "media_center_installer"}, preflight, build_runner.BuildProcessOwner())
+        app, jobs, {"screensaver_installer", "dashboard_installer"}, preflight, build_runner.BuildProcessOwner())
     events = []
     while not app._events.empty():
         events.append(app._events.get())
-    assert order == ["standard_installer", "media_center_installer"]
+    assert order == ["screensaver_installer", "dashboard_installer"]
     assert events[-1][0] == "pipeline_done" and events[-1][1] is True
 
 
@@ -544,8 +544,8 @@ def test_the_linux_build_runs_on_the_pinned_commit_while_github_builds(monkeypat
     preflight = build_runner.PreflightResult(remote_commit=commit)
     # The pre-flight's commit reaches the Linux worker; the other tabs' Linux job (no pinned commit) and other jobs
     # take nothing.
-    assert build_runner._job_arguments(by_key["linux"], preflight) == ["-Branch", "main", "-Commit", "c" * 40]
-    assert build_runner._job_arguments(by_key["linux"], build_runner.PreflightResult()) == []
+    assert build_runner._job_arguments(by_key["linux_screensaver"], preflight) == ["-Branch", "main", "-Commit", "c" * 40]
+    assert build_runner._job_arguments(by_key["linux_screensaver"], build_runner.PreflightResult()) == []
     assert build_runner._job_arguments(by_key["reddit_helper"], preflight) == []
 
 
@@ -591,11 +591,11 @@ def test_the_linux_build_runs_beside_the_windows_runs_and_never_holds_their_retr
 
     def run_job(job, _preflight, *, process_owner):
         owners[job.key] = process_owner
-        if job.key == "linux":
-            note(("linux", "running"))
+        if job.key == "linux_screensaver":
+            note(("linux_screensaver", "running"))
             linux_running.set()
             # Following its run: it ends after the Windows side is wholly done (bounded for the negative control).
-            note(("linux", "done" if installer_compiled.wait(5.0) else "held the Windows side"))
+            note(("linux_screensaver", "done" if installer_compiled.wait(5.0) else "held the Windows side"))
         elif job.key == "reddit_helper":
             note(("local", job.key, "Linux already running" if linux_running.wait(5.0) else "Linux not started"))
         else:
@@ -606,24 +606,24 @@ def test_the_linux_build_runs_beside_the_windows_runs_and_never_holds_their_retr
     _local_pipeline_fakes(monkeypatch, run_remote, run_job)
     app = SimpleNamespace(_events=queue.Queue())
     build_runner.BuildRunnerApp._github_pipeline_worker(
-        app, jobs, {"standard", "media_center", "reddit_helper", "media_center_installer", "linux"}, preflight,
+        app, jobs, {"screensaver", "dashboard", "reddit_helper", "dashboard_installer", "linux_screensaver"}, preflight,
         pipeline_owner)
-    assert order.index(("linux", "running")) < order.index(("local", "reddit_helper", "Linux already running"))
-    assert [entry for entry in order if entry != ("linux", "running")] == [
-        ("dispatch", ("standard", "media_center")), ("local", "reddit_helper", "Linux already running"),
-        ("published", ("standard", "media_center")), ("local", "media_center_installer"), ("linux", "done")]
-    assert owners["reddit_helper"] is pipeline_owner and owners["linux"] is not pipeline_owner
+    assert order.index(("linux_screensaver", "running")) < order.index(("local", "reddit_helper", "Linux already running"))
+    assert [entry for entry in order if entry != ("linux_screensaver", "running")] == [
+        ("dispatch", ("screensaver", "dashboard")), ("local", "reddit_helper", "Linux already running"),
+        ("published", ("screensaver", "dashboard")), ("local", "dashboard_installer"), ("linux_screensaver", "done")]
+    assert owners["reddit_helper"] is pipeline_owner and owners["linux_screensaver"] is not pipeline_owner
     events = _drain(app)
-    assert ("job_done", "linux") in [event[:2] for event in events]
+    assert ("job_done", "linux_screensaver") in [event[:2] for event in events]
     assert events[-1][0] == "pipeline_done" and events[-1][1] is True                # after the Linux job's done
 
     # Linux alone (no Windows product selected): it still runs, and the pipeline waits for it.
     order.clear()
     installer_compiled.set()
     app = SimpleNamespace(_events=queue.Queue())
-    build_runner.BuildRunnerApp._github_pipeline_worker(app, jobs, {"linux"}, preflight,
+    build_runner.BuildRunnerApp._github_pipeline_worker(app, jobs, {"linux_screensaver"}, preflight,
                                                         build_runner.BuildProcessOwner())
-    assert order == [("linux", "running"), ("linux", "done")]
+    assert order == [("linux_screensaver", "running"), ("linux_screensaver", "done")]
     assert _drain(app)[-1][:2] == ("pipeline_done", True)
 
 
@@ -684,26 +684,26 @@ def test_a_stop_ends_the_linux_build_and_the_windows_runs_and_compiles_no_instal
         return results
 
     def run_job(job, _preflight, *, process_owner):
-        if job.key != "linux":
+        if job.key != "linux_screensaver":
             note(("local", job.key))
             return build_runner.JobResult(0, "Completed", Path("log"), job.output_dir)
         process = process_owner.start(["pwsh", "build_from_windows.ps1"])
         linux_running.set()
         process.wait()
         aborted = process_owner.retire(process)
-        note(("linux", "ended by the stop" if aborted else "ran on"))
+        note(("linux_screensaver", "ended by the stop" if aborted else "ran on"))
         return build_runner.JobResult(130 if aborted else 0, "Aborted" if aborted else "Completed", Path("log"),
                                       job.output_dir, aborted=aborted)
 
     _local_pipeline_fakes(monkeypatch, run_remote, run_job)
     app = SimpleNamespace(_events=queue.Queue())
     build_runner.BuildRunnerApp._github_pipeline_worker(
-        app, jobs, {"standard", "reddit_helper", "standard_installer", "linux"}, preflight, owner)
-    assert sorted(order) == sorted([("dispatch", ("standard",)), ("windows runs cancelled on GitHub", ("standard",)),
-                                    ("linux", "ended by the stop")])
+        app, jobs, {"screensaver", "reddit_helper", "screensaver_installer", "linux_screensaver"}, preflight, owner)
+    assert sorted(order) == sorted([("dispatch", ("screensaver",)), ("windows runs cancelled on GitHub", ("screensaver",)),
+                                    ("linux_screensaver", "ended by the stop")])
     events = _drain(app)
-    assert ("job_cancelled", "standard_installer") in events
-    linux_done = [index for index, event in enumerate(events) if event[:2] == ("job_done", "linux")]
+    assert ("job_cancelled", "screensaver_installer") in events
+    linux_done = [index for index, event in enumerate(events) if event[:2] == ("job_done", "linux_screensaver")]
     assert linux_done and events[linux_done[0]][2].aborted
     assert events[-1][0] == "pipeline_done" and events[-1][3] is True and linux_done[0] < len(events) - 1
 
@@ -812,8 +812,8 @@ def test_the_linux_dispatch_sends_inputs_only_for_a_pinned_commit():
     assert "commit=" not in rest and "token=" not in rest
     base = re.search(r"\$dispatchArgs = @\(([^)]*)\)", rest)
     assert base and "'workflow', 'run', $Workflow, '--ref', $Branch" in base.group(1) and "-f" not in base.group(1)
-    profile_inputs = re.findall(r"if \(\$Profile -eq 'mc'\) \{ \$dispatchArgs \+= @\(([^)]*)\) \}", rest)
-    assert len(profile_inputs) == 1 and "profile=mc" in profile_inputs[0]
+    profile_inputs = re.findall(r"if \(\$Profile -eq 'dashboard'\) \{ \$dispatchArgs \+= @\(([^)]*)\) \}", rest)
+    assert len(profile_inputs) == 1 and "profile=dashboard" in profile_inputs[0]
     assert "-f" not in rest.replace(profile_inputs[0], "")
     # One dispatch, of the built argument list.
     assert re.findall(r"Invoke-Checked gh \S+", dispatch) == ["Invoke-Checked gh $dispatchArgs"]
@@ -834,7 +834,7 @@ def test_preflight_names_the_pushed_commit_and_warns_about_local_differences(mon
     build_runner._github_preflight(result, jobs, build_runner.REPO_ROOT)
     assert result.remote_commit is commit and result.notes == [f"GitHub builds {commit.describe()}"]
     assert any("gh auth login" in error for error in result.errors)
-    assert {"standard", "media_center"} <= result.unavailable_jobs
+    assert {"screensaver", "dashboard"} <= result.unavailable_jobs
     assert any("not origin/main" in warning for warning in result.warnings)
     assert any("uncommitted" in warning for warning in result.warnings)
 
@@ -865,7 +865,7 @@ def test_preflight_reports_the_actions_policy(monkeypatch):
     result = build_runner.PreflightResult()
     build_runner._github_preflight(result, build_runner.jobs_for_mode("github"), build_runner.REPO_ROOT)
     assert any("only its own actions" in error for error in result.errors)
-    assert {"standard", "media_center"} <= result.unavailable_jobs
+    assert {"screensaver", "dashboard"} <= result.unavailable_jobs
 
 
 def test_gh_calls_run_inside_the_cancellable_process_owner():
@@ -885,15 +885,15 @@ def test_the_headless_run_drives_the_tabs_own_pipeline(monkeypatch):
 
     def pipeline(host, jobs, selected, preflight, owner):
         seen["selected"] = set(selected)
-        host._events.put(("job_status", "standard", "Building"))
-        host._events.put(("job_done", "standard", _ok("standard")))
+        host._events.put(("job_status", "screensaver", "Building"))
+        host._events.put(("job_done", "screensaver", _ok("screensaver")))
         host._events.put(("pipeline_done", True, "All selected jobs completed successfully.", False))
 
     monkeypatch.setattr(build_runner.BuildRunnerApp, "_github_pipeline_worker", pipeline)
     lines = []
     assert build_runner.run_headless(None, out=lines.append) == 0
-    assert seen["selected"] == {"standard", "media_center", "reddit_helper",       # what the tab pre-selects (the
-                                "standard_installer", "media_center_installer"}    # venv tab's installers included)
+    assert seen["selected"] == {"screensaver", "dashboard", "reddit_helper",       # what the tab pre-selects (the
+                                "screensaver_installer", "dashboard_installer"}    # venv tab's installers included)
     assert lines[0] == f"[FOUNDRY] GitHub builds {commit.describe()}" and lines[-1].endswith("successfully.")
-    assert build_runner.run_headless(["standard", "bogus"], out=lines.append) == 2
+    assert build_runner.run_headless(["screensaver", "bogus"], out=lines.append) == 2
     assert build_runner.main(["--mode", "venv", "--run"]) == 2                     # local modes stay in the window

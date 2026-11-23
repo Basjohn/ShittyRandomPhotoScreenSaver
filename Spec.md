@@ -86,26 +86,31 @@ one-way migration and quality/cost measurements live in `Docs/Reference/Image_Qu
 
 ## Build control and products
 
-**Build execution owner:** Agents may edit/review build source and inspect reports, but **must not run any Nuitka, Build Runner, helper, installer or other frozen product build**. These are time-consuming **operator-executed gates**; the operator supplies logs, reports and physical acceptance. **Exception (operator, 8 Nov 2026):** the lead may run the **GitHub Remote** Standard/Media Center builds (`python tools/github_remote_build.py run ...`, or Build Runner's GitHub Remote tab), which compile on GitHub-hosted runners and put no build load on the operator's machine; local Nuitka, helper (Reddit Helper) and installer builds stay the operator's own to run (12 Nov 2026: the operator locally, or the lead through GitHub workflows only; the lead never builds on this machine), and subagents never start builds of either kind. Do not auto-request a full four-chunk test suite alongside source corrections. `Docs/Guides/Python314_Cutover.md` owns current interpreter/toolchain details.
+**Build execution owner:** Agents may edit/review build source and inspect reports, but **must not run any Nuitka, Build Runner, helper, installer or other frozen product build**. These are time-consuming **operator-executed gates**; the operator supplies logs, reports and physical acceptance. **Exception (operator, 8 Nov 2026):** the lead may run the **GitHub Remote** Screensaver and Dashboard builds (`python tools/github_remote_build.py run ...`, or Build Runner's GitHub Remote tab), which compile on GitHub-hosted runners and put no build load on the operator's machine; local Nuitka, helper (Reddit Helper) and installer builds stay the operator's own to run (12 Nov 2026: the operator locally, or the lead through GitHub workflows only; the lead never builds on this machine), and subagents never start builds of either kind. Do not auto-request a full four-chunk test suite alongside source corrections. `Docs/Guides/Python314_Cutover.md` owns current interpreter/toolchain details.
 
 
 `tools/build_runner.py` owns sequential build execution. One active process owner places the Windows build root
 in a kill-on-close Job Object before resuming it; Emergency Stop and runner shutdown cancel that tree and prevent
 queued jobs from starting. Operator abort is distinct from compiler failure. A new run creates a fresh owner.
-The Standard job compiles once and publishes the same binary twice: `release/screensaver/SRPSS.scr` and
-`release/diagnostic/SRPSS_Diagnostic.scr` (checked byte-for-byte against the compiled binary). The published file's
-name selects the diagnostic flavour at startup (`core/build_profile.py`: exactly `SRPSS_Diagnostic`, read from the
+The Screensaver job compiles once and publishes the same binary twice: `release/screensaver/SRPSS_Screensaver.scr` and
+`release/diagnostic/SRPSS_Screensaver_Diagnostic.scr` (checked byte-for-byte against the compiled binary). The published file's
+name selects the diagnostic flavour at startup (`core/build_profile.py`: exactly `SRPSS_Screensaver_Diagnostic`, read from the
 launched binary's long path), so there is no Diagnostic job or second compile (operator direction, 2026-10-10).
 Builds compile without a console; the diagnostic flavour opens a terminal only with `--debug`, so installing it from
-Explorer or running a soak never pops one. Only Standard and Media Center have installers. Build concurrency remains script-owned.
-The optional **Linux (GitHub runner)** job (not selected by default; unavailable without the GitHub CLI) runs
+Explorer or running a soak never pops one. Screensaver and Dashboard each have an installer. Build concurrency remains script-owned.
+The optional Linux jobs use the GitHub CLI and run
 `scripts/linux/build_from_windows.ps1`, which builds on a GitHub Ubuntu runner and downloads
-`release/linux/SRPSS-<version>-linux-x86_64.tar.gz`; nothing Linux is built or virtualised locally
-(`Docs/Guides/Linux_Guide.md` §7). The **GitHub Remote** tab builds Standard and Media Center on GitHub-hosted Windows
+`release/linux/SRPSS-<version>-linux-screensaver-x86_64.tar.gz` or
+`release/linux/SRPSS-<version>-linux-dashboard-x86_64.tar.gz`. The Linux jobs compile on GitHub
+(`Docs/Guides/Linux_Guide.md` §7). The **GitHub Remote** tab builds Screensaver and Dashboard on GitHub-hosted Windows
 runners through the same venv workers, downloads them to staging, validates them against a manifest and the requested
 pushed commit, and only then publishes them into `release\`; its opt-in local installers package only builds validated
 in the same run whose repository installer inputs equal the built commit (`Docs/Guides/GitHub_Remote_Build.md`).
-Operator builds and installed acceptance do not block source work.
+Dashboard uses its own Settings profile and shares the Screensaver data root for caches and credentials.
+The forward-only profile and settings-key migration is owned by `core/settings/json_store.py` and
+`core/settings/legacy_setting_aliases.py`. See `Docs/Architecture/Persisted_Input_Compatibility.md`.
+
+Installed acceptance does not block source work.
 The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
 distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
 Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic
@@ -114,7 +119,7 @@ cancellation owner. Direct build scripts invoke the same prerequisite. A generat
 unchanged resources do not recompile for each job. Before any expensive PowerShell product compilation, Build Foundry
 and the direct worker both clear that job's canonical `release/<product>` directory. A locked old artifact therefore
 fails before compilation rather than after a full Nuitka run, and publication retains one bounded four-attempt retry for
-a transient Windows handle race. Every Standard and Media Center runtime build also
+a transient Windows handle race. Every Screensaver and Dashboard runtime build also
 writes a persistent Nuitka compilation report and a compact footprint JSON into `logs/`: artifact/published bytes,
 file count, largest payload files/top-level buckets, and QRC source-vs-generated-module reference sizes. These reports
 describe the current build only and exist to identify real package/dependency bloat before exclusions are added.
@@ -126,8 +131,8 @@ imports `QtQuick` and `QtQuick.Effects` (the saver scene and everything shared) 
 build-layout authority checks both QML trees and rejects any other external QML namespace until the package contract is
 deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven unused families, including
 WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, the non-Basic Controls styles (the
-Basic closure the Studio imports is kept), Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
-the same exclusion authority; the diagnostic file is the Standard binary itself. Native Qt Multimedia remains
+Basic closure the Studio imports is kept), Charts/Graphs/DataVisualization and Location/Positioning. Screensaver, Dashboard and their Venv workers use
+the same exclusion authority; the diagnostic file is the Screensaver binary itself. Native Qt Multimedia remains
 packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
 context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
 The PySide6 QtQuick binding has a binding-level dependency on `PySide6.QtOpenGL`, even though SRPSS application
@@ -142,7 +147,7 @@ the current frozen dependency graph and runtime acceptance both agree. WGL remai
 surface and must not be confused with WebGL. A new dependency cut requires a fresh current-build report plus runtime
 acceptance of the affected surface.
 
-Only Standard and Media Center have installers. Their two canonical `.iss` files are self-contained and each requires
+Screensaver and Dashboard each have an installer. Their two canonical `.iss` files are self-contained and each requires
 Inno Setup 6.7.2 or newer, deletes the previous expected `Setup_*.exe` before compilation so failure cannot masquerade
 as success, and owns the same fixed SRPSS installer visual language (`modern dark slate includetitlebar hidebevels` plus
 a charcoal wizard surface). No third installer-visual include is an authority. This is an installer-specific VCL
@@ -150,8 +155,7 @@ presentation contract, not a second Settings Theme renderer and not a user-selec
 `SRPSS.ico` is the single brand asset: `SetupIconFile` owns the executable/window icon while each installer loads that ICO
 into Setup and Uninstall's small wizard bitmap plane with transparent background handling. The explicit ICO `[Files]`
 entry is first so early extraction does not traverse the solid runtime payload. Build Foundry discovers Inno 7 before 6,
-retains explicit override/PATH fallback, and removes stale expected installer output before invocation. Standard installers
-must not resurrect immutable QRC-owned imagery as loose files; Media Center's recursive release wildcard is the one
+retains explicit override/PATH fallback, and removes stale expected installer output before invocation. The Screensaver installer preserves immutable imagery in the QRC package. The Dashboard installer's recursive release wildcard is the one
 app-payload copy. The obsolete `ui/assets/installer/LogoBMP.bmp` has no remaining installer or Build Foundry owner and is
 retired rather than retained as dead source baggage.
 
@@ -243,7 +247,7 @@ text, borders, shadows and authored theme files independent. Settings solves com
 semantic ink; widget materials retain their actual-ink contrast guard. One shared backdrop per display remains the
 only runtime card capture owner. Contract: `Docs/Guides/Custom_Style_Implementation.md`.
 
-The curated source pack contains Settings themes and deterministic Widget counterparts (semantic colours plus the pair's card material), including deliberately light/white-adjacent and silver/metal palettes. Catalogue discovery owns membership; documentation does not pin the editable pack count. Settings-theme filenames end with the pair's material tag (`[Glass]`, `[Acrylic]`, `[Frosted]`, `[Mica]` or `[Smoked]`; operator, 8 Nov 2026: one material per pair, the Settings window and the cards alike). Widget counterpart display names and filenames omit those tags (the Themes tab shows the material as a list tag) while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while every frozen/installed flavour reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Normal and Media Center installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
+The curated source pack contains Settings themes and deterministic Widget counterparts (semantic colours plus the pair's card material), including deliberately light/white-adjacent and silver/metal palettes. Catalogue discovery owns membership; documentation does not pin the editable pack count. Settings-theme filenames end with the pair's material tag (`[Glass]`, `[Acrylic]`, `[Frosted]`, `[Mica]` or `[Smoked]`; operator, 8 Nov 2026: one material per pair, the Settings window and the cards alike). Widget counterpart display names and filenames omit those tags (the Themes tab shows the material as a list tag) while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while every frozen/installed flavour reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Screensaver and Dashboard installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
 
 Immutable application assets are Qt resources. Their canonical sources live under `ui/assets/`, grouped by ownership;
 `ui/resources/assets.qrc` embeds ordinary fonts, UI icons, branding and widget imagery under `:/srpss/...`.
@@ -939,7 +943,7 @@ state; reopening starts at zero. Copy Frame includes the preview orientation.
 Per-mode visualizer preset JSON files are **user-authored state**. Users may add arbitrary counts, delete presets down to one survivor, and leave sparse authored numbers such as `1, 5, 20`. Runtime compacts whatever authored presets exist into slider positions plus trailing Custom without renaming/deleting their files. The Studio's Save To <Preset> resolves the real backing file; Save Preset As chooses a non-colliding authored number. The actual mode directories are the catalogue and packaging authority; no preset inventory manifest or mtime pruning is maintained. Startup never deletes files or requires contiguous numbers. Explicit imports/release refresh validate and snapshot all incoming presets before transactionally replacing numbered target files; Custom and unnumbered operator files survive. See `Docs/Reference/Visualizer_Preset_Repair.md` for replacement and installer ownership.
 
 A shipped catalog expansion that moves the trailing Custom position must migrate historical persisted selection before default, lender or preset overlays can reinterpret it as newly authored art. Preserve live artistic values and the independent Custom snapshot; a versioned input migration must not become a runtime selection heuristic.
-Frozen Standard, Media Center **and Diagnostic** share the **same** `%ProgramData%\SRPSS\presets\visualizer_modes` curated directory and `%ProgramData%\SRPSS\presets\visualizer_mode_overrides` explicit-override directory. Diagnostic is a logging/build profile, never a separate curated-preset authority; it must not select or migrate old `diagnostic-onefile` preset copies. Source/dev mode retains repository preset resolution. Do not alter, normalize or silently replace operator-authored JSON when enforcing path parity.
+Frozen Screensaver, Dashboard **and Diagnostic** share the **same** `%ProgramData%\SRPSS\presets\visualizer_modes` curated directory and `%ProgramData%\SRPSS\presets\visualizer_mode_overrides` explicit-override directory. Diagnostic is a logging/build profile, never a separate curated-preset authority; it must not select or migrate old `diagnostic-onefile` preset copies. Source/dev mode retains repository preset resolution. Do not alter, normalize or silently replace operator-authored JSON when enforcing path parity.
 
 ## Visualizer interactions
 
@@ -1013,7 +1017,7 @@ Slide adds no effect-local timer, clock, worker or resource owner; true Perspect
 **Planned cross-profile Settings lifecycle supersession (operator, 23 Nov 2026; NOT
 IMPLEMENTED):** `Current_Plan.md` item 1B.8 and
 `Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md` L0-L7
-admit transactional, non-teardown Settings on Standard/MC/diagnostic and eventual SMP
+admit transactional, non-teardown Settings on Screensaver, Dashboard, Diagnostic and eventual SMP
 **after M4 Theme unification, Theme Studio and Concrete Rain**. Read-only open/close
 retains the healthy graphics generation; settings changes use minimal owner-scoped
 transactions; truly visually discontinuous but safe changes use compositor fade-out/
@@ -1069,12 +1073,12 @@ registry, modelled on the display-power authority; it is no module global and no
   unchanged.
 - **Dormancy:** registration stores a factory only, filtered at `initialize` by each descriptor's launch-time
   product gate. The first lease creates the instance, and only while its capability is active; factories import their
-  implementation inside the call. Standard SRPSS declares no service and creates nothing.
+  implementation inside the call. Screensaver declares no service and creates nothing.
 - **Service rules:** every service exposes `retire()`. A service never tags its own delayed work with a display or
   Settings generation; it uses `service_owner_key(name)` and cancels that key itself.
 - **Settings-teardown failure stays fatal.** When `stop(reason="settings")` raises, no half-retired generation can be
   proven gone, so there is no safe host for a replacement. Live services are retired first (exactly once, on the UI
-  thread) so devices and database handles close deterministically, then the process exits with code 1. MC Settings therefore keeps playback alive across an ordinary Settings visit but not
+  thread) so devices and database handles close deterministically, then the process exits with code 1. Dashboard Settings therefore keeps playback alive across an ordinary Settings visit but not
   across a failed teardown. SMP's live Settings (SMP plan §9) is a separate application policy that never enters
   this teardown path.
 

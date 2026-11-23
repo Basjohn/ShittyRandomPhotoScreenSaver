@@ -15,8 +15,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 
 STEMS = {
-    "standard": "build_nuitka",
-    "media_center": "build_nuitka_mc_onedir",
+    "screensaver": "build_nuitka",
+    "dashboard": "build_nuitka_dashboard_onedir",
     "reddit_helper": "build_reddit_helper",
 }
 RUN_TOKEN = re.compile(r"^\d{8}_\d{6}_\d{6}$")

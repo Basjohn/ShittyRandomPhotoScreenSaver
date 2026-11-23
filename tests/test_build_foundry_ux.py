@@ -106,7 +106,7 @@ def test_elapsed_format() -> None:
     assert build_runner.format_elapsed(-4) == "00:00"
 
 
-def _clock_harness(keys=("standard",)) -> SimpleNamespace:
+def _clock_harness(keys=("screensaver",)) -> SimpleNamespace:
     widgets = {key: SimpleNamespace(status=_Recorder(), tip=None) for key in keys}
     return SimpleNamespace(
         _job_widgets=widgets, _job_started={}, _job_base_text={}, _job_shown_text={},
@@ -115,32 +115,32 @@ def _clock_harness(keys=("standard",)) -> SimpleNamespace:
 
 def test_row_clock_starts_once_and_ticks_from_the_poll() -> None:
     h = _clock_harness()
-    App._set_job_status(h, "standard", "Queued", now=100.0)
-    App._set_job_status(h, "standard", "Building", now=130.0)  # a later status must not restart the clock
-    assert h._job_started["standard"] == 100.0
-    assert h._job_widgets["standard"].status.options["text"] == "Building  00:30"
+    App._set_job_status(h, "screensaver", "Queued", now=100.0)
+    App._set_job_status(h, "screensaver", "Building", now=130.0)  # a later status must not restart the clock
+    assert h._job_started["screensaver"] == 100.0
+    assert h._job_widgets["screensaver"].status.options["text"] == "Building  00:30"
     App._tick_job_clocks(h, now=165.0)
-    assert h._job_widgets["standard"].status.options["text"] == "Building  01:05"
+    assert h._job_widgets["screensaver"].status.options["text"] == "Building  01:05"
 
 
 def test_tick_touches_a_label_only_when_its_text_changes() -> None:
     h = _clock_harness()
-    App._set_job_status(h, "standard", "Building", now=0.0)
-    before = len(h._job_widgets["standard"].status.calls)
+    App._set_job_status(h, "screensaver", "Building", now=0.0)
+    before = len(h._job_widgets["screensaver"].status.calls)
     App._tick_job_clocks(h, now=0.4)
     App._tick_job_clocks(h, now=0.9)
-    assert len(h._job_widgets["standard"].status.calls) == before
+    assert len(h._job_widgets["screensaver"].status.calls) == before
     App._tick_job_clocks(h, now=1.0)
-    assert len(h._job_widgets["standard"].status.calls) == before + 1
+    assert len(h._job_widgets["screensaver"].status.calls) == before + 1
 
 
 def test_finished_job_stops_its_clock() -> None:
     h = _clock_harness()
-    App._set_job_status(h, "standard", "Building", now=0.0)
-    App._end_job_clock(h, "standard")
-    calls = len(h._job_widgets["standard"].status.calls)
+    App._set_job_status(h, "screensaver", "Building", now=0.0)
+    App._end_job_clock(h, "screensaver")
+    calls = len(h._job_widgets["screensaver"].status.calls)
     App._tick_job_clocks(h, now=50.0)
-    assert len(h._job_widgets["standard"].status.calls) == calls
+    assert len(h._job_widgets["screensaver"].status.calls) == calls
 
 
 def test_poll_drives_the_clock_without_a_new_timer() -> None:
@@ -220,11 +220,11 @@ def _result(returncode: int, detail: str, aborted: bool = False) -> build_runner
 
 
 def test_failure_note_is_the_readable_reason_and_only_for_real_failures() -> None:
-    assert build_runner.job_failure_note("Standard", _result(1, "GitHub run failure: https://x/1")) == (
-        "Standard: GitHub run failure: https://x/1")
-    assert build_runner.job_failure_note("Standard", _result(1, "  ")) == "Standard: exit code 1"
-    assert build_runner.job_failure_note("Standard", _result(0, "ok")) is None
-    assert build_runner.job_failure_note("Standard", _result(1, "stopped", aborted=True)) is None
+    assert build_runner.job_failure_note("Screensaver", _result(1, "GitHub run failure: https://x/1")) == (
+        "Screensaver: GitHub run failure: https://x/1")
+    assert build_runner.job_failure_note("Screensaver", _result(1, "  ")) == "Screensaver: exit code 1"
+    assert build_runner.job_failure_note("Screensaver", _result(0, "ok")) is None
+    assert build_runner.job_failure_note("Screensaver", _result(1, "stopped", aborted=True)) is None
 
 
 class _Link(_Recorder):
@@ -239,8 +239,8 @@ def _done_harness() -> SimpleNamespace:
     widgets = SimpleNamespace(status=_Recorder(), log_link=_Link(), evidence_link=_Link(), output_link=_Link(),
                               run_link=_Link(), tip=tip)
     return SimpleNamespace(
-        _job_widgets={"standard": widgets},
-        _jobs=(SimpleNamespace(key="standard", name="Standard"),),
+        _job_widgets={"screensaver": widgets},
+        _jobs=(SimpleNamespace(key="screensaver", name="Screensaver"),),
         _job_started={}, _job_base_text={}, _job_shown_text={},
         _failure_notes=[], _progress_completed=0, _progress_total=1,
         _progress_bar=SimpleNamespace(stop=lambda: None, configure=lambda **_k: None),
@@ -253,22 +253,22 @@ def _done_harness() -> SimpleNamespace:
 
 def test_failed_job_detail_reaches_the_footer_and_the_row_tooltip() -> None:
     h = _done_harness()
-    App._dispatch_event(h, ("job_done", "standard", _result(1, "GitHub run failure: https://x/1")))
+    App._dispatch_event(h, ("job_done", "screensaver", _result(1, "GitHub run failure: https://x/1")))
     assert "GitHub run failure: https://x/1" in h._footer_status.options["text"]
-    assert h._job_widgets["standard"].tip.text == "GitHub run failure: https://x/1"
-    assert h._job_widgets["standard"].status.options["text"].startswith("Failed")
+    assert h._job_widgets["screensaver"].tip.text == "GitHub run failure: https://x/1"
+    assert h._job_widgets["screensaver"].status.options["text"].startswith("Failed")
 
 
 def test_successful_job_leaves_footer_and_tooltip_alone() -> None:
     h = _done_harness()
-    App._dispatch_event(h, ("job_done", "standard", _result(0, "ok")))
+    App._dispatch_event(h, ("job_done", "screensaver", _result(0, "ok")))
     assert h._footer_status.calls == []
-    assert h._job_widgets["standard"].tip.text == ""
+    assert h._job_widgets["screensaver"].tip.text == ""
 
 
 def test_pipeline_done_footer_keeps_the_failure_reasons() -> None:
-    text = build_runner.footer_with_failures("Pipeline completed with one or more failures.", ["Standard: boom"])
-    assert text.startswith("Pipeline completed") and "Standard: boom" in text
+    text = build_runner.footer_with_failures("Pipeline completed with one or more failures.", ["Screensaver: boom"])
+    assert text.startswith("Pipeline completed") and "Screensaver: boom" in text
     assert build_runner.footer_with_failures("All good.", []) == "All good."
 
 
@@ -285,7 +285,7 @@ def test_main_run_without_mode_runs_the_github_pipeline(monkeypatch) -> None:
     called: dict = {}
     monkeypatch.setattr(build_runner, "run_headless", lambda select, iscc_override=None: called.setdefault("ok", 0))
     monkeypatch.setattr(build_runner, "load_preferences", lambda: SimpleNamespace(mode="normal"))
-    assert build_runner.main(["--run", "--select", "standard"]) == 0
+    assert build_runner.main(["--run", "--select", "screensaver"]) == 0
     assert "ok" in called
 
 

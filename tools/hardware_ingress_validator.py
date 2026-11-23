@@ -209,11 +209,11 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
     prep: Dict[str, Any] = {}
 
     try:
-        proc, launch_io = _launch_runtime("mc", appdata_root, log_dir, args.mc_window_flags)
+        proc, launch_io = _launch_runtime("dashboard", appdata_root, log_dir, args.dashboard_window_flags)
         target_pid = int(proc.pid)
         target = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target is None:
-            raise RuntimeError(f"Failed to locate MC window for pid={target_pid}")
+            raise RuntimeError(f"Failed to locate Dashboard window for pid={target_pid}")
 
         log_file = _wait_for_log_file(log_dir, timeout_s=12.0)
         if log_file is None:
@@ -226,7 +226,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         if args.scenario == "manual_focus":
             _beep(800, 200)
             _banner("MANUAL FOCUS PHASE")
-            print("Click / focus the SRPSS MC window now.")
+            print("Click / focus the SRPSS Dashboard window now.")
             sys.stdout.flush()
             _countdown(args.manual_focus_seconds, "Focus window")
             prep = {"scenario": args.scenario, "focus_ok": True}
@@ -260,7 +260,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
 
             _beep(800, 200)
             _banner("PHASE 2 / 3 -- MANUAL CLICK / FOCUS SRPSS")
-            print("NOW: Click inside the SRPSS MC window with YOUR MOUSE.")
+            print("NOW: Click inside the SRPSS Dashboard window with YOUR MOUSE.")
             print("This simulates the real user repro path.")
             print(f"You have {args.manual_focus_seconds:.1f}s to click it...\n")
             sys.stdout.flush()
@@ -301,7 +301,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
             _banner("SINGLE PHASE CAPTURE")
             if not focus_ok:
                 _banner("WARNING: SRPSS IS NOT FOCUSED")
-                print("Results may not reflect focused-MC behavior.")
+                print("Results may not reflect focused-Dashboard behavior.")
             else:
                 print("SRPSS is focused.")
             print("Press your real media keys now (Volume Up/Down, Play/Pause).")
@@ -332,13 +332,13 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "timestamp": ts, "scenario": args.scenario,
             "profile_mode": args.profile_mode, "profile_status": profile_status,
-            "focus_policy": args.focus_policy, "mc_window_flags": args.mc_window_flags,
+            "focus_policy": args.focus_policy, "dashboard_window_flags": args.dashboard_window_flags,
             "observe_seconds": args.observe_seconds, "response_timeout_s": args.response_timeout_s,
             "target_pid": target_pid, "target_hwnd": target.hwnd,
             "target_window": target.to_dict(),
             "target_native_styles": _native_window_styles(target.hwnd),
             "focus_ok": focus_ok,
-            "runtime_contract": _evaluate_runtime_contract("mc", target, log_file),
+            "runtime_contract": _evaluate_runtime_contract("dashboard", target, log_file),
             "log_file": str(log_file), "verbose_log_file": str(vlog) if vlog else None,
             "output_dir": str(out_dir), "keyboard_events": key_events,
             "phases": [p.__dict__ for p in phases],
@@ -381,7 +381,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hardware ingress validator for U-05.")
     parser.add_argument("--profile-mode", choices=("isolated", "live", "mirrored"), default="mirrored")
     parser.add_argument("--focus-policy", choices=("strict", "realistic"), default="realistic")
-    parser.add_argument("--mc-window-flags", choices=("default", "splash"), default="default")
+    parser.add_argument("--dashboard-window-flags", choices=("default", "splash"), default="default")
     parser.add_argument("--scenario", choices=("focused_idle", "focused_clicked", "manual_focus", "focus_transition"), default="focus_transition")
     parser.add_argument("--observe-seconds", type=float, default=12.0)
     parser.add_argument("--response-timeout-s", type=float, default=2.5)

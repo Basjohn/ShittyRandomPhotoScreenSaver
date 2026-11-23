@@ -1,7 +1,7 @@
-"""Observer-backed MC reality harness for U-05 media/key failures.
+"""Observer-backed Dashboard reality harness for U-05 media/key failures.
 
 This harness does not treat synthetic key success as proof. It launches/focuses
-MC, prepares the selected focused scenario, then watches real keyboard ingress
+Dashboard, prepares the selected focused scenario, then watches real keyboard ingress
 with a low-level Windows hook and correlates it with SRPSS logs.
 """
 
@@ -338,12 +338,12 @@ def _make_appdata(args: argparse.Namespace, timestamp: str) -> tuple[Optional[Pa
 
 def _write_report(path: Path, payload: Dict[str, Any]) -> None:
     lines: List[str] = []
-    lines.append("# MC Media/Key Reality Harness Report")
+    lines.append("# Dashboard Media/Key Reality Harness Report")
     lines.append("")
     lines.append(f"- Timestamp: `{payload['timestamp']}`")
     lines.append(f"- Scenario: `{payload['scenario']}`")
     lines.append(f"- Profile mode: `{payload['profile_mode']}`")
-    lines.append(f"- MC window flags: `{payload.get('mc_window_flags', 'default')}`")
+    lines.append(f"- Dashboard window flags: `{payload.get('dashboard_window_flags', 'default')}`")
     lines.append(f"- Observe seconds: `{payload['observe_seconds']}`")
     lines.append(f"- Runtime contract pass: `{bool((payload.get('runtime_contract') or {}).get('passed'))}`")
     lines.append(f"- Focus OK: `{bool(payload.get('focus_ok'))}`")
@@ -407,11 +407,11 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
     prep: Dict[str, Any] = {}
 
     try:
-        proc, launch_io_handles = _launch_runtime("mc", appdata_root, log_dir, args.mc_window_flags)
+        proc, launch_io_handles = _launch_runtime("dashboard", appdata_root, log_dir, args.dashboard_window_flags)
         target_pid = int(proc.pid)
         target_window = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target_window is None:
-            raise RuntimeError(f"Failed to locate MC window for pid={target_pid}; logs={log_dir}")
+            raise RuntimeError(f"Failed to locate Dashboard window for pid={target_pid}; logs={log_dir}")
 
         log_file = _wait_for_log_file(log_dir, timeout_s=12.0)
         if log_file is None:
@@ -422,7 +422,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
             tails.append(LogTail(verbose_log_file))
 
         if args.scenario == "manual_focus":
-            print("[REALITY] Manual focus mode: click/focus the real SRPSS MC window now.")
+            print("[REALITY] Manual focus mode: click/focus the real SRPSS Dashboard window now.")
             print(f"[REALITY] Waiting {args.manual_focus_seconds:.1f}s before capture...")
             time.sleep(max(0.0, args.manual_focus_seconds))
             prep = {"scenario": args.scenario, "focus_ok": True}
@@ -445,7 +445,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
             phase1 = _capture_input_events(args.observe_seconds, target_window.hwnd, "unfocused_before_click")
             keyboard_events.extend(phase1["keyboard_events"])
             mouse_events.extend(phase1["mouse_events"])
-            print("[REALITY] Phase 2 setup: click/focus SRPSS exactly like the failing MC path.")
+            print("[REALITY] Phase 2 setup: click/focus SRPSS exactly like the failing Dashboard path.")
             print(f"[REALITY] Waiting {args.manual_focus_seconds:.1f}s before focused capture...")
             setup = _capture_input_events(args.manual_focus_seconds, target_window.hwnd, "focus_setup")
             keyboard_events.extend(setup["keyboard_events"])
@@ -488,7 +488,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
             "profile_mode": args.profile_mode,
             "profile_status": profile_status,
             "focus_policy": args.focus_policy,
-            "mc_window_flags": args.mc_window_flags,
+            "dashboard_window_flags": args.dashboard_window_flags,
             "observe_seconds": args.observe_seconds,
             "target_pid": target_pid,
             "target_hwnd": target_window.hwnd,
@@ -502,7 +502,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
                 for key, value in prep.items()
                 if key not in {"helper_proc", "_helper_proc", "minimized_hwnds"}
             },
-            "runtime_contract": _evaluate_runtime_contract("mc", target_window, log_file),
+            "runtime_contract": _evaluate_runtime_contract("dashboard", target_window, log_file),
             "log_file": str(log_file),
             "verbose_log_file": str(verbose_log_file) if verbose_log_file is not None else None,
             "output_dir": str(out_dir),
@@ -551,10 +551,10 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="MC physical-key reality harness for U-05.")
+    parser = argparse.ArgumentParser(description="Dashboard physical-key reality harness for U-05.")
     parser.add_argument("--profile-mode", choices=("isolated", "live", "mirrored"), default="mirrored")
     parser.add_argument("--focus-policy", choices=("strict", "realistic"), default="realistic")
-    parser.add_argument("--mc-window-flags", choices=("default", "splash"), default="default")
+    parser.add_argument("--dashboard-window-flags", choices=("default", "splash"), default="default")
     parser.add_argument(
         "--scenario",
         choices=("focused_idle", "focused_clicked", "manual_focus", "focus_transition"),
@@ -574,7 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     payload = run_reality_harness(build_parser().parse_args())
     artifact_paths.discard_run_scratch(SCRATCH_OWNER)
-    print("[REALITY] Completed MC reality capture")
+    print("[REALITY] Completed Dashboard reality capture")
     print(f"[REALITY] Report JSON: {Path(payload['output_dir']) / 'reality_report.json'}")
     print(f"[REALITY] Report MD:   {Path(payload['output_dir']) / 'reality_report.md'}")
     return 0

@@ -1,7 +1,7 @@
 """Display 1 run: the real saver from source on ONE named display, bounded, with grabbed frames, logs and the trace.
 
 The lead's verification harness (Current_Plan 1B.14; operator, 11 Nov: bounded runs on Display 1 are permitted,
-Display 0 is rare: the lead only, through ``--allow-primary``, never in a test, recipe or automated run, and agents never take it). It starts ``main_mc.py`` (or ``main.py``) with the product's own RUN-only flags
+Display 0 is rare: the lead only, through ``--allow-primary``, never in a test, recipe or automated run, and agents never take it). It starts ``main_dashboard.py`` (or ``main.py``) with the product's own RUN-only flags
 ``--only-display <index>`` and ``--exit-after <seconds>``, from a COPY of a profile, and brings back:
 
 * **frames**: at the requested times after the first reveal, the saver window's own content on that display (the
@@ -59,7 +59,7 @@ from tools import visualizer_live_check as live_check  # noqa: E402
 from tools.live_check_settings_roundtrip import EXIT_AFTER_REASON  # noqa: E402
 from tools.run_matrix import FAULT_RE, SAFE_FLAGS  # noqa: E402
 
-ENTRIES = {"mc": ("main_mc.py", "Screensaver_MC", "SRPSS_MC"), "main": ("main.py", "Screensaver", "SRPSS")}
+ENTRIES = {"dashboard": ("main_dashboard.py", "Dashboard", "SRPSS_Dashboard"), "main": ("main.py", "Screensaver", "SRPSS")}
 # --frame-trace is always on; --fresh is pointless (logs go to the run's own folder); the short aliases are left out.
 DIAG_FLAGS = frozenset(flag for flag in SAFE_FLAGS - {"--fresh", "--frame-trace"} if flag.startswith("--"))
 
@@ -80,7 +80,7 @@ RECIPE = r"""
 Recipe: Spline Curve's bar border at the card edge (1B.14 first use). The operator sees the mode's white lines reach
 about one pixel past the card border at the left edge (mid height), the bottom edge and both bottom corners; no
 off-screen render reproduces it. From the main checkout, on Display 1, with a COPY of the operator's profile (a folder
-holding SRPSS and SRPSS_MC, as %APPDATA% does: theme Amethyst Night [Single] [Glass], CUSTOM layout, the mode's white
+holding SRPSS and SRPSS_Dashboard, as %APPDATA% does: theme Amethyst Night [Single] [Glass], CUSTOM layout, the mode's white
 bar border on; the run copies it again and edits only that copy):
 
   .venv\Scripts\python.exe tools\d1_run.py --display 1 --profile <profile copy> --mode devcurve
@@ -1297,10 +1297,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-primary", action="store_true",
                         help="permit the primary display (rare: the lead only, for a specific check nothing else can make; never in a test, recipe or automated run; agents never pass it)")
     parser.add_argument("--seconds", type=float, default=30.0, help="--exit-after for the saver (default 30, max 600)")
-    parser.add_argument("--entry", choices=sorted(ENTRIES), default="mc",
-                        help="mc (main_mc.py, interaction mode; default) or main (main.py: input exits the saver)")
+    parser.add_argument("--entry", choices=sorted(ENTRIES), default="dashboard",
+                        help="dashboard (main_dashboard.py, interaction mode; default) or main (main.py: input exits the saver)")
     parser.add_argument("--profile", type=Path,
-                        help="a folder holding SRPSS and SRPSS_MC (as %%APPDATA%% does); copied, never edited "
+                        help="a folder holding SRPSS and SRPSS_Dashboard (as %%APPDATA%% does); copied, never edited "
                              "(default: %%APPDATA%% itself, copied)")
     parser.add_argument("--mode", help="Visualizer mode id written into the copy (e.g. devcurve = Spline Curve)")
     parser.add_argument("--preset", type=int, help="curated preset, 1-based (default: the profile's own)")

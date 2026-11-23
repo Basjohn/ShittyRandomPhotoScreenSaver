@@ -79,7 +79,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Just Make It Work pool selection, provider admission and legacy feed migration | `Docs/Reference/Wallpaper_Pool_Selection.md`; `sources/rss/pools.py` |
 | Sources' pool/feed rows and their stored validity marks | `Docs/Reference/Feeds.md` § Wallpaper feeds; `sources/rss/source_health.py`; `ui/tabs/online_source_rows.py` |
 | Visualizer preset directory authority, repair/import/export and explicit replacement | `Docs/Reference/Visualizer_Preset_Repair.md`; `core/visualizer_preset_tree.py` |
-| accepted Standard/MC Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md` |
+| accepted Screensaver and Dashboard Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md` |
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
@@ -162,7 +162,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | Guided Setup / Quick Start / Settings Layout tab (Arrange, Layout Slots, Reset Widget Layouts) | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
-| logging / bounded MC CLI capture / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
+| logging / bounded Dashboard CLI capture / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / acceptance authority | `Docs/TestSuite.md` |
 | durable test authoring / mutable-authority hygiene | `Docs/Guides/Test_Durability.md` |

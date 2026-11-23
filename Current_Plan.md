@@ -53,12 +53,9 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
 **Operator priority (23 Nov):** finish the Dashboard naming migration, then isolate and fix the perceived response
 delay before Extruded Bubble measurements or port work. Resume the native sequence below after those gates.
 
-- [ ] Dashboard naming: migrate MC's product and profile names through runtime, profile data, tooling and GitHub
-  workflows. Resume `experimental/dashboard-naming-wip` (`a5bcd2fcc`) from the retained `dashboard-naming`
-  worktree and its `.artifacts/handover/JOURNAL.md`. Fix legacy-only profile copying through the canonical
-  migration, rerun `tests/test_visualizer_live_check.py`, `tests/test_d1_run.py` and `tests/test_build_runner.py`,
-  then audit the upgrade/packaging paths and update Spec and Index before landing. Use GitHub builds to verify
-  that the Windows and Linux artifacts identify their product as Screensaver or Dashboard.
+- [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
+  source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
+  Verify an upgrade from a legacy profile using a disposable copy.
 - [ ] Perceived response delay: use `logs/evidence_chest/logs077d6cc043.zip` and recorded-input tooling to reproduce
   the sustained delay during playback. Compare fullscreen launch with later expansion, using the same music and
   authored controls. Keep the playback ramp. The hidden worker runs on two recordings found no fullscreen-start
@@ -170,7 +167,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
     since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
     not; fold it there too, with a control.
-- [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
+- [ ] Defect (operator): in the Dashboard profile, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
@@ -252,6 +249,8 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 - [ ] `tools/media_key_matrix_harness.py` waits for an old `[DISPLAY_WIDGET]` window-flag message whose producer
   has been removed. Replace the oracle with the current window-policy evidence and exercise a failing control.
+- [ ] Reconcile the raw-thread policy check with the existing PacketMailbox wake thread and its lifecycle
+  owner. `tests/unit/test_policy_compliance.py` flags `core/visualizer_engine/packet_mailbox.py:472`.
 
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
@@ -1999,7 +1998,7 @@ follow-ups with their evidence folders).
 - [ ] **Context Menu backdrop correctness (operator, 16 Nov; close before SMP):** its current `MaterialSurface` samples the shared wallpaper/dimming pyramid, even when right-clicked over another card or the fullscreen Visualizer. This distorts an image which is not actually behind the menu. The menu and its submenu must either sample the *real visible underlay* or render as straightforward theme-coloured translucent surfaces; never advertise a false glass result.
   - [ ] **Investigate first, bounded to the existing material/native compositor:** assess native QRhi's retained layer textures and N5.9's proposed overlap-limited Visualizer glass (D7 point 7; ≤0.3 ms). That source alone omits ordinary cards. Check whether a colour-accurate, correctly ordered *local* composited-underlay texture for the menu's rectangle can be obtained without a new fullscreen capture, CPU/GPU readback, synchronous right-click frame fence, duplicate blur chain, Visualizer-frame work while no menu is shown, or compositor rearchitecture. Test both menu and submenu as they move and overlap other surfaces. No risky new capture owner just to simulate glass.
   - [ ] **Decide by evidence, not the material label:** adopt true blurred/translucent glass only if its sampled colours and spatial details reflect the actually visible wallpaper/cards/Visualizer, its local cost is within N5.9's overlap budget where relevant, and opening, submenu reveal and frame p90 show no meaningful hitch or regression. **Otherwise choose Normal with theme-derived RGBA opacity/tint** (including existing ink-contrast, border, shadow, hover and opacity-adjust authority): a naturally transparent coloured menu with no special wallpaper sampling, fabricated distortion, capture or extra material pass. No new theme switch required.
-  - [ ] **Proof and ordering:** compare right-click over bright/dark wallpaper, opaque/translucent cards and active fullscreen Visualizer, including while a wallpaper transition runs; check submenus, clipping, colour/alpha, light/dark themes and mixed DPR on both native OpenGL and Vulkan where supported. Capture pixel evidence plus GPU cost, input-to-menu latency, frame p90 and dormancy, with the Visualizer uninterrupted. Place final material behaviour in `Docs/Architecture/Card_Surface_Materials.md`; use focused Context Menu regressions. This is pre-SMP surface work, shared across Standard/MC/SMP, and must not create an SMP-only renderer.
+  - [ ] **Proof and ordering:** compare right-click over bright/dark wallpaper, opaque/translucent cards and active fullscreen Visualizer, including while a wallpaper transition runs; check submenus, clipping, colour/alpha, light/dark themes and mixed DPR on both native OpenGL and Vulkan where supported. Capture pixel evidence plus GPU cost, input-to-menu latency, frame p90 and dormancy, with the Visualizer uninterrupted. Place final material behaviour in `Docs/Architecture/Card_Surface_Materials.md`; use focused Context Menu regressions. This is pre-SMP surface work, shared across Screensaver, Dashboard and SMP, and must not create an SMP-only renderer.
   - [ ] **Fullscreen Now Playing vs Context Menu underlays (operator, 19 Nov):** the shared wallpaper/dimming material backdrop cannot represent the foreground of an active fullscreen Visualizer. The ordinary Media Control Bar's theme material is accepted and must not regress. **Now Playing is resolved independently:** its optional card and its shared transport bar use semantic **Normal** colour fills with alpha blending directly over the live Visualizer, never false material sampling. Visualizers → Fullscreen Mode → Now Playing has independent **Media Bar Fill Opacity** and **Card Fill Opacity** adjustments (-1..+1, zero = the currently resolved Normal widget-card alpha); those controls affect fills only, leaving outline, separators, glyphs, text, artwork, shadow and timing unchanged. Ordinary Media still uses its own independent material and opacity Style Overrides, including the volume-track-inspired treatment. Validate both fullscreen card on/off, bar/floating, bright/dark and fast-changing Visualizers, Custom positioning, mixed DPI, reset/reload, transitions and original OSD priority; no extra shader/capture or new Media controller.
   - [ ] **Context Menu retains its own evidence-based decision:** true composited-underlay material only if the preceding Context Menu gate proves correct pixels and its GPU/input budget; otherwise theme-semantic Normal RGBA transparency is the reliable fallback. It must not depend on Visualizer preset metadata, palette sampling, or Now Playing's local opacity adjustments. Keep the menu/submenu performance and appearance gates above unchanged.
   - [ ] **Seekbar track and progress-fill surface investigation (do not dismiss):** inspect the ordinary Media seekbar and fullscreen Now Playing seekbar separately for their semantic RGBA fill, alpha/composition and existing material-source availability. Compare a subtle inherited material where the true underlay is available with semantic Normal translucency where it is not; preserve separate track/fill roles, progress legibility, scrubbing hit targets and controls. Decide by screenshots and GPU timing rather than dismissing thin geometry or requiring a new blur pass.
@@ -2056,7 +2055,7 @@ follow-ups with their evidence folders).
     complete engine-owned teardown/rebuild only for proven structural incompatibility, device/context
     failure or irrecoverable owner state, never as a shortcut. Process-global/backend changes may
     instead require an explicit application restart. No arbitrary "all Settings changes rebuild" rule.
-  - [ ] **Profiles/desktop:** Standard RUN/CONFIG, MC, diagnostic and eventual SMP consume the
+  - [ ] **Profiles/desktop:** Screensaver RUN/CONFIG, Dashboard, Diagnostic and eventual SMP consume the
     SAME architecture, with their real input/security and source/visualizer policies. Windows
     **Winlogon/secure/unknown desktop retains EXACTLY the existing proved saver
     Settings request, exit and handoff behaviour**: do not invent either an
@@ -2065,7 +2064,7 @@ follow-ups with their evidence folders).
     capture or lock/login focus manipulation. Treat account/credential actions
     as fail-closed on noninteractive/unknown desktops; desktop identity and
     Settings-request authority are separate axes and need real Windows proof.
-    Existing Std/MC runtime behaviour remains as-is until its specific gate passes.
+    Existing Screensaver and Dashboard runtime behaviour remains as-is until its specific gate passes.
   - [ ] **Settings conceal/restore for BOTH Studios (mandatory, not optional polish):**
     keep the existing QWidget Settings alive in the same SettingsSession but
     **visible only until the Studio presents its FIRST authoritative frame**;
@@ -2192,7 +2191,7 @@ Agents build harnesses and prove them hidden; each visible run is short, bounded
 Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen run" is run in these sessions.
 
 - [~] Cursor after exit (R-183) on D1 with `tools/cursor_exit_observer.py`: key, click, mouse-move, link click
-  (browser launch stubbed), Settings and Media Center exits, the pointer placed over the saver on D1 for the
+  (browser launch stubbed), Settings and Dashboard exits, the pointer placed over the saver on D1 for the
   run and put back after; a verdict per path. Then R-183 is accepted, or the failing path is fixed at the
   retire owner and re-run.
 - [~] Held-right pan on D1: real pointer capture on a foreground window (press, drag, release; a click still
@@ -3078,7 +3077,7 @@ Durable behaviour: `Docs/Reference/Visualizer_Studio.md`; evidence:
 `Docs/Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md`. Source-level file/Qt checks do
 not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not an installed ProgramData tree.
 
-- [ ] On a freshly installed Standard or MC build as an ordinary Windows user (when one is available): the
+- [ ] On a freshly installed Screensaver or Dashboard build as an ordinary Windows user (when one is available): the
   installer grants Modify on the shared ProgramData Visualizer preset tree **and its existing files**; Save and Save
   Camera over a shipped preset work; Save As and reopen work; Save As New Preset's file dialog lands in the right
   folder in an installed build (ProgramData's shared preset tree). If one fails, fix the installer's ACL grant
@@ -3086,8 +3085,8 @@ not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not a
 
 **Frozen release gate (operator scheduled)**
 
-- [ ] Standard/Diagnostic from one compile.
-- [ ] MC and Reddit Helper installed startup/exit.
+- [ ] Screensaver and Diagnostic from one compile.
+- [ ] Dashboard and Reddit Helper installed startup/exit.
 - [ ] Settings/widgets/cache/audio and installer behaviour.
 - [ ] Installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
   replacement; verify Diagnostic now reads that installed theme tree too.

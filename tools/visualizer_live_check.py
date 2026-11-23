@@ -1,4 +1,4 @@
-"""Live-shape check for a Visualizer mode: the real MC saver, invisible, optionally under a game-like load.
+"""Live-shape check for a Visualizer mode: the real Dashboard saver, invisible, optionally under a game-like load.
 
     .venv/Scripts/python tools/visualizer_live_check.py --mode extruded_bubble --preset 1 --load game60
     .venv/Scripts/python tools/visualizer_live_check.py --mode shockwave_grid --preset 2 --seconds 90 --load none
@@ -7,13 +7,13 @@ Offline harnesses time a renderer or a logical tick on its own. They cannot show
 Qt's threaded render loop holding the GUI thread in its sync request while the previous frame renders (which made EB
 draw a revision ~20 ms old, 2026-10-31), or the render and GUI threads stalling behind the logical thread's GIL-held
 Python (every GL call hands the GIL over; while the logical tick runs, the render thread gets about one call through
-per 5 ms switch interval). This runs the real ``main_mc.py`` and reports that whole chain, so a new or changed mode
+per 5 ms switch interval). This runs the real ``main_dashboard.py`` and reports that whole chain, so a new or changed mode
 meets it before the operator does.
 
 * **Display safety:** the saver runs from a COPY of ``%APPDATA%\\SRPSS`` (mode, preset and ``--set`` overrides are
   written into the copy only) with its display windows given an empty window region (no pixel and no click, yet presented as an ordinary window: opacity 0 or click-through would make it layered), never topmost and never focused. A guard
   checks every visible window of the run once a second and kills the run if any is not; ``--visible`` opts out (an
-  ordinary MC run, one display).
+  ordinary Dashboard run, one display).
 * **Music:** ``--clip`` (default a ~2 min mixed real-music recording) is played as the loopback in real time
   (``tools/visualizer_replay/live_audio.py``): the whole live audio path runs on recorded music, every run hears the
   same passages, and playback is reported as playing whatever the machine itself plays. ``--clip none`` uses the
@@ -41,7 +41,7 @@ meets it before the operator does.
 * **Output** goes to ``.artifacts/evidence/visualizers/<mode>/live_check/<YYYYMMDD>_<label>/``
   (``tools/artifact_paths.py``; an explicit ``--out`` inside the repository must follow that layout). The profile
   copy lives only while the run needs it: at the end of every run, failures included, its settings are kept beside
-  the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_mc.json`` (``SRPSS_MC``) and the
+  the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_dashboard.json`` (``SRPSS_Dashboard``) and the
   ``profile/`` copy (Steam image cache, backups, encrypted credentials) is deleted.
 * **Report** (``summary.json`` and a table, steady window only: startup and teardown are reported apart): logical
   tick time and its share of its thread's time, revisions/s, the age chain (publish -> sync -> render -> swap, the
@@ -671,7 +671,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     isolate_profile_paths(out)
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
     # ``display``: the product's RUN flag naming one screen (the saver's logs number them), so a run measures one size.
-    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
+    sys.argv = [str(ROOT / "main_dashboard.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
                 *(["--noupdates"] if no_updates else []), *(["--only-display", str(display)] if display is not None
                                                            else []), *app_args, "/s"]
     phases.production_startup()
@@ -680,7 +680,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         from tools.d1_run import apply_settings
 
         try:
-            applied = apply_settings(list(settings), application="Screensaver_MC")
+            applied = apply_settings(list(settings), application="Dashboard")
         except (KeyError, ValueError, RuntimeError) as exc:
             (out / "settings_refused.txt").write_text(str(exc), encoding="utf-8")
             print(f"REFUSED setting: {exc}", file=sys.stderr)
@@ -726,7 +726,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     with stack:
-        runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
+        runpy.run_path(str(ROOT / "main_dashboard.py"), run_name="__main__")
 
 
 # -- parent: profile, load, guard, report -------------------------------------------------------------------------
@@ -820,15 +820,25 @@ def _kill_tree(pid: int) -> None:
 
 
 def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides: dict, *, appdata_root=None,
-                     settings_folder: str = "SRPSS_MC") -> Path:
-    """Copy MC's settings profile (``SRPSS_MC``) and the shared data root (``SRPSS``); edit only the copy.
+                     settings_folder: str = "SRPSS_Dashboard") -> Path:
+    """Copy Dashboard's settings profile (``SRPSS_Dashboard``) and the shared data root (``SRPSS``); edit only the copy.
 
     ``settings_folder`` is the profile whose Visualizer is set (``SRPSS`` for the ordinary saver, ``tools/d1_run.py``
     ``--entry main``); ``mode=None`` copies without touching the Visualizer.
     """
     appdata = Path(os.environ["APPDATA"]) if appdata_root is None else Path(appdata_root)
-    for name in ("SRPSS", "SRPSS_MC"):
-        shutil.copytree(appdata / name, out / "profile" / name)
+    profile = out / "profile"
+    shutil.copytree(appdata / "SRPSS", profile / "SRPSS")
+    for name in ("SRPSS_MC", "SRPSS_Dashboard"):
+        source = appdata / name
+        if source.exists():
+            shutil.copytree(source, profile / name)
+    # Resolve on the disposable copy: the canonical migration owns conflicts
+    # and failures, without ever moving the operator's real directory.
+    from core.settings.json_store import determine_storage_path
+    determine_storage_path("Dashboard", base_dir=profile)
+    if not (profile / "SRPSS_Dashboard").is_dir():
+        raise FileNotFoundError(f"Dashboard settings profile missing in {appdata}")
     if mode is None:
         return out / "profile"
     path = out / "profile" / settings_folder / "settings_v2.json"
@@ -856,7 +866,7 @@ def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides:
 
 
 # The profile folders' settings, kept beside the results once the copy is deleted.
-RUN_SETTINGS = (("SRPSS", "run_settings_v2.json"), ("SRPSS_MC", "run_settings_v2_mc.json"))
+RUN_SETTINGS = (("SRPSS", "run_settings_v2.json"), ("SRPSS_Dashboard", "run_settings_v2_dashboard.json"))
 
 
 def retire_profile_copy(out: Path) -> list[Path]:
@@ -920,7 +930,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="visualizer setting override, written into the copied profile only")
     parser.add_argument("--seconds", type=float, default=120.0)
     parser.add_argument("--load", default="none", help="gpu_load_generator profile (e.g. game60: lead only, after the operator's yes), or 'none' (default)")
-    parser.add_argument("--visible", action="store_true", help="an ordinary visible MC run (takes one display)")
+    parser.add_argument("--visible", action="store_true", help="an ordinary visible Dashboard run (takes one display)")
     parser.add_argument("--clip", default=str(DEFAULT_CLIP),
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")
     parser.add_argument("--clip-start", type=float, default=0.0, help="seconds into the recording")

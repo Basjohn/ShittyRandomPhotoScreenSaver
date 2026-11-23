@@ -16,7 +16,7 @@ from copy import deepcopy
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
-from core.settings.default_contract import MC_PROFILE
+from core.settings.default_contract import DASHBOARD_PROFILE
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.visualizer_mode_registry import (
     get_visualizer_geometry_kind,
@@ -265,7 +265,7 @@ def _stored_widgets(bad: dict, good: dict, freeform: dict, stale: dict) -> dict:
     }
 
 
-@pytest.mark.parametrize("application", (None, MC_PROFILE), ids=("standard", "media_center"))
+@pytest.mark.parametrize("application", (None, DASHBOARD_PROFILE), ids=("standard", "dashboard"))
 def test_settings_load_repairs_every_stored_card_entry_and_leaves_legal_ones_bit_identical(tmp_path, application):
     import uuid
 

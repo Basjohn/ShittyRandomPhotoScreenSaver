@@ -28,7 +28,7 @@ data locations, product builds (including from Windows) and the Linux test route
 | Held-left orbit | Qt mouse grab (no cursor confinement) |
 | Credentials | IMAP password `plain::` 0600; OAuth tokens and Steam not persisted (see §2) |
 | `/p` preview, `.scr`, Reddit secure-desktop helper, Inno installer | Windows-only by nature |
-| Product build | Screensaver standalone validated locally; MC standalone option wired to same Linux workflow, Build Runner GitHub Remote, and per-profile install scripts; MC GitHub smoke pending |
+| Product build | Screensaver standalone validated locally; Dashboard standalone option wired to same Linux workflow, Build Runner GitHub Remote, and per-profile install scripts; Dashboard GitHub smoke pending |
 | Background texture adoption (PR-04), Qt image-pool retention (R-97) | bound on Linux (Itanium exports) |
 
 ## 2. Ordered checklist
@@ -100,8 +100,8 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 5: build and desktop integration
 
 - [x] `tools/linux_build.py` / `scripts/linux/build.sh` product + `install.sh`; local build and `tools/linux_smoke_dist.py` pass.
-- [~] `.github/workflows/linux-build.yml`: screensaver and MC selectable (`profile` input or `linux-build/mc-*` tag); neither profile's updated workflow has yet received a GitHub acceptance run.
-- [~] **MC Linux build:** `tools/linux_build.py --profile mc` compiles `main_mc.py` as `srpss-mc`; per-profile tarball, desktop entry, installed settings isolation and shared curated-data ownership. Source-contract tests passed; first Ubuntu build, installed `/s` and `/c` smoke still outstanding.
+- [~] `.github/workflows/linux-build.yml`: screensaver and Dashboard selectable (`profile` input or `linux-build/dashboard-*` tag); neither profile's updated workflow has yet received a GitHub acceptance run.
+- [~] **Dashboard Linux build:** `tools/linux_build.py --profile dashboard` compiles `main_dashboard.py` as `srpss-dashboard`; per-profile tarball, desktop entry, installed settings isolation and shared curated-data ownership. Source-contract tests passed; first Ubuntu build, installed `/s` and `/c` smoke still outstanding.
 - [~] `scripts/linux/build_from_windows.ps1` (parses; guards verified). Awaiting a first operator run.
 - [x] Idle activation documented (guide §3); exit-on-input verified on Linux.
 

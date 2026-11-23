@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
-from core.settings.legacy_setting_aliases import promote_legacy_section_aliases, RETIRED_SETTING_KEYS
+from core.settings.legacy_setting_aliases import promote_legacy_section_aliases, promote_dashboard_section, RETIRED_SETTING_KEYS
 from core.settings.scene3d_detail_input_compat import (
     SCENE3D_TRANSITIONS_DETAIL_KEY,
     promote_legacy_transitions_detail,
@@ -591,4 +591,5 @@ def normalize_sst_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
         else:
             normalized[key] = value
 
+    normalized, _dashboard_repaired = promote_dashboard_section(normalized, nested=True)
     return normalized

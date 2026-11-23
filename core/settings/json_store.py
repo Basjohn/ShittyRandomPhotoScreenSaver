@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Tuple
 
 from core.logging.logger import get_logger
+from core.settings.legacy_setting_aliases import promote_dashboard_section
 from core.settings.persistence import (
     PersistenceTicket,
     flush_settings_path,
@@ -153,6 +154,7 @@ class JsonSettingsStore:
             else:
                 flat[key] = value
 
+        flat, dashboard_repaired = promote_dashboard_section(flat)
         flat, repaired_atomic = _promote_flattened_atomic_mappings(flat)
         if repaired_atomic:
             logger.info(
@@ -193,7 +195,7 @@ class JsonSettingsStore:
             ),
         }
         self._finish_load_locked()
-        if repaired_atomic or repaired_roots or widget_theme_repaired:
+        if repaired_atomic or repaired_roots or widget_theme_repaired or dashboard_repaired:
             # The in-memory image now differs from disk and must be written once
             # at the next durability boundary. Mark it as a real state revision
             # so a second load does not depend on compatibility promotion again.
@@ -421,19 +423,61 @@ class JsonSettingsStore:
 def determine_storage_path(app_name: str, *, base_dir: Path | None = None) -> Path:
     """Compute the canonical storage path for the given application profile.
 
-    Only the two canonical profiles ("Screensaver" and "Screensaver_MC") map to
-    the well-known SRPSS / SRPSS_MC directories. Any other app_name (e.g. test
+    Only the two canonical profiles ("Screensaver" and "Dashboard") map to
+    the well-known SRPSS / SRPSS_Dashboard directories. Resolving Dashboard
+    moves its former profile into place if no Dashboard directory exists. Any other app_name (e.g. test
     UUIDs) is placed in an isolated subdirectory so it can never contaminate the
     production settings file.
     """
     if base_dir is None:
         base_dir = _default_appdata_dir()
-    _CANONICAL = {"Screensaver": "SRPSS", "Screensaver_MC": "SRPSS_MC"}
+    _CANONICAL = {"Screensaver": "SRPSS", "Dashboard": "SRPSS_Dashboard"}
+    if app_name == "Dashboard":
+        _migrate_dashboard_directory(base_dir)
     folder = _CANONICAL.get(app_name)
     if folder is None:
         # Non-production profile — isolate under SRPSS_profiles/<app_name>
         folder = f"SRPSS_profiles/{app_name}"
     return (base_dir / folder / "settings_v2.json").resolve()
+
+
+def _migrate_dashboard_directory(base_dir: Path) -> None:
+    """Move the whole former profile once, without replacing a destination."""
+    source = base_dir / "SRPSS_MC"
+    destination = base_dir / "SRPSS_Dashboard"
+    if not source.exists():
+        return
+    if destination.exists():
+        logger.warning("Dashboard settings migration skipped: both %s and %s exist; using Dashboard", source, destination)
+        return
+    try:
+        if os.name == "nt":
+            # Windows rename fails if the destination appears concurrently.
+            os.rename(source, destination)
+        else:
+            # Linux renameat2 with RENAME_NOREPLACE protects even an empty destination.
+            import ctypes
+            import errno
+            libc = ctypes.CDLL(None, use_errno=True)
+            rename = libc.renameat2
+            rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+            rename.restype = ctypes.c_int
+            if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1):
+                error = ctypes.get_errno()
+                raise OSError(error, os.strerror(error), str(source), str(destination))
+    except FileExistsError:
+        logger.warning("Dashboard settings migration conflict: %s already exists; using Dashboard", destination)
+    except FileNotFoundError:
+        if destination.exists() and not source.exists():
+            logger.info("Dashboard settings migration completed by another process: %s", destination)
+        else:
+            logger.exception("Dashboard settings migration failed from %s to %s", source, destination)
+            raise
+    except Exception:
+        logger.exception("Dashboard settings migration failed from %s to %s", source, destination)
+        raise
+    else:
+        logger.info("Migrated Dashboard settings from %s to %s", source, destination)
 
 
 _STORE_REGISTRY_LOCK = threading.RLock()

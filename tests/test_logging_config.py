@@ -273,7 +273,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
     tmp_path,
     monkeypatch,
 ):
-    executable = tmp_path / "installed" / "SRPSS_Diagnostic.scr"
+    executable = tmp_path / "installed" / "SRPSS_Screensaver_Diagnostic.scr"
     executable.parent.mkdir()
     executable.write_bytes(b"fixture")
     monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
@@ -376,7 +376,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
 
 
 def test_diagnostic_log_dir_falls_back_localappdata_then_temp(tmp_path, monkeypatch, windows_platform):
-    executable = tmp_path / "install" / "SRPSS_Diagnostic.scr"
+    executable = tmp_path / "install" / "SRPSS_Screensaver_Diagnostic.scr"
     executable.parent.mkdir()
     executable.write_bytes(b"fixture")
     local_root = tmp_path / "local"
@@ -415,7 +415,7 @@ def test_diagnostic_fresh_clear_and_get_use_exact_same_resolved_dir(
     tmp_path,
     monkeypatch,
 ):
-    executable = tmp_path / "installed" / "SRPSS_Diagnostic.scr"
+    executable = tmp_path / "installed" / "SRPSS_Screensaver_Diagnostic.scr"
     executable.parent.mkdir()
     executable.write_bytes(b"fixture")
     log_dir = executable.parent / "logs"
@@ -491,7 +491,7 @@ def test_handle_attribution_is_explicit_and_implies_usage_without_diagnostic_all
     assert diagnostic.handle_attribution is True
 
 def test_normal_frozen_build_remains_logging_disabled(tmp_path, monkeypatch):
-    executable = tmp_path / "SRPSS.scr"
+    executable = tmp_path / "SRPSS_Screensaver.scr"
     executable.write_bytes(b"fixture")
     monkeypatch.setattr(logger_mod, "is_compiled_runtime", lambda: True)
     monkeypatch.setattr(logger_mod.sys, "executable", str(executable))

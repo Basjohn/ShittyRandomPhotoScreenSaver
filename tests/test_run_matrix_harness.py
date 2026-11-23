@@ -144,7 +144,7 @@ def test_refuses_existing_artifact_directory_before_launch(tmp_path: Path) -> No
     assert launches == 0
 
 
-@pytest.mark.parametrize("entrypoint", [None, "main_mc.py", "main.py"])
+@pytest.mark.parametrize("entrypoint", [None, "main_dashboard.py", "main.py"])
 def test_admits_canonical_launchers_and_explicit_diagnostic_flags(tmp_path: Path, entrypoint) -> None:
     item = _case("run", argv=["--fresh", "--set"])
     if entrypoint is None:
@@ -154,7 +154,7 @@ def test_admits_canonical_launchers_and_explicit_diagnostic_flags(tmp_path: Path
     path = tmp_path / "matrix.json"
     _write_matrix(path, [item])
     case = load_matrix(path)[0]
-    assert case.entrypoint == (entrypoint or "main_mc.py")
+    assert case.entrypoint == (entrypoint or "main_dashboard.py")
     assert case.argv == ("/s", "--fresh", "--set")
 
 
@@ -208,7 +208,7 @@ def test_current_run_evidence_across_rotation_reset_and_missing_logs(tmp_path: P
         return 0
 
     argv = ("/s", "--fresh") if mode == "fresh" else ("/s",)
-    report = run_matrix([RunCase("one", "main_mc.py", argv, 1)], tmp_path / "out",
+    report = run_matrix([RunCase("one", "main_dashboard.py", argv, 1)], tmp_path / "out",
                         runner=runner, log_dir=logs)
     result = report["results"][0]
     assert report["status"] == expected
@@ -236,7 +236,7 @@ def test_allows_new_evidence_subdirectory_inside_log_root(tmp_path: Path) -> Non
         (logs / "screensaver_qml.log").write_text(_qml_markers())
         return 0
 
-    report = run_matrix([RunCase("one", "main_mc.py", ("/s", "--fresh"), 1)],
+    report = run_matrix([RunCase("one", "main_dashboard.py", ("/s", "--fresh"), 1)],
                         logs / "run_matrix" / "new", runner=runner, log_dir=logs)
     assert report["status"] == "passed"
 
@@ -253,7 +253,7 @@ def test_missing_provenance_is_explicit_unavailable(tmp_path: Path, monkeypatch)
         (logs / "screensaver_qml.log").write_text(_qml_markers())
         return 0
 
-    report = run_matrix([RunCase("one", "main_mc.py", ("/s",), 1)], tmp_path / "out",
+    report = run_matrix([RunCase("one", "main_dashboard.py", ("/s",), 1)], tmp_path / "out",
                         runner=runner, log_dir=logs)
     assert report["status"] == "unavailable"
     assert report["results"][0]["source_attribution"] == {"unavailable": ["git unavailable"]}
@@ -261,7 +261,7 @@ def test_missing_provenance_is_explicit_unavailable(tmp_path: Path, monkeypatch)
 
 def test_child_uses_only_product_owned_exit_and_captured_process_output(tmp_path: Path, monkeypatch) -> None:
     def launch(command, **kwargs):
-        assert command == ["python", "main_mc.py", "/s", "--exit-after", "1"]
+        assert command == ["python", "main_dashboard.py", "/s", "--exit-after", "1"]
         assert set(kwargs) == {"cwd", "stdout", "stderr", "check"}
         kwargs["stdout"].write(b"stdout")
         kwargs["stderr"].write(b"stderr")
@@ -269,7 +269,7 @@ def test_child_uses_only_product_owned_exit_and_captured_process_output(tmp_path
 
     monkeypatch.setattr(harness.subprocess, "run", launch)
     out, err = tmp_path / "stdout.bin", tmp_path / "stderr.bin"
-    assert harness._run_child(["python", "main_mc.py", "/s", "--exit-after", "1"], tmp_path, out, err) == 0
+    assert harness._run_child(["python", "main_dashboard.py", "/s", "--exit-after", "1"], tmp_path, out, err) == 0
     assert out.read_bytes() == b"stdout"
     assert err.read_bytes() == b"stderr"
 
@@ -294,7 +294,7 @@ def test_fresh_runs_preserve_prior_evidence_inside_product_logs(tmp_path: Path) 
         (logs / "screensaver_qml.log").write_text(_qml_markers(f"case{calls}"))
         return 0
 
-    cases = [RunCase(name, "main_mc.py", ("/s", "--fresh"), 1) for name in ("first", "second")]
+    cases = [RunCase(name, "main_dashboard.py", ("/s", "--fresh"), 1) for name in ("first", "second")]
     report = run_matrix(cases, out, runner=runner, log_dir=logs)
     assert [r["status"] for r in report["results"]] == ["passed", "passed"]
 
@@ -314,7 +314,7 @@ def test_snapshot_failure_is_explicit_unavailable(tmp_path: Path, monkeypatch) -
         raise PermissionError("snapshot denied")
 
     monkeypatch.setattr(harness.shutil, "copy2", denied)
-    report = run_matrix([RunCase("one", "main_mc.py", ("/s",), 1)], tmp_path / "out",
+    report = run_matrix([RunCase("one", "main_dashboard.py", ("/s",), 1)], tmp_path / "out",
                         runner=runner, log_dir=logs)
     assert report["status"] == "unavailable"
     assert any("snapshot denied" in reason for reason in report["results"][0]["evidence"]["unavailable"])
@@ -336,7 +336,7 @@ def test_selected_handle_attribution_scopes_canonical_session_reset(tmp_path: Pa
             '{"event":"session_start","target_pid":2,"utc":"new"}\n')
         return 0
 
-    report = run_matrix([RunCase("one", "main_mc.py", ("/s", "--handle-attribution"), 1)],
+    report = run_matrix([RunCase("one", "main_dashboard.py", ("/s", "--handle-attribution"), 1)],
                         tmp_path / "out", runner=runner, log_dir=logs)
     assert report["status"] == "passed"
 
@@ -353,7 +353,7 @@ def test_fresh_unchanged_fault_log_reports_ambiguous_scope_without_old_fault_fai
         (logs / "screensaver_qml.log").write_text(_qml_markers())
         return 0
 
-    report = run_matrix([RunCase("one", "main_mc.py", ("/s", "--fresh"), 1)],
+    report = run_matrix([RunCase("one", "main_dashboard.py", ("/s", "--fresh"), 1)],
                         tmp_path / "out", runner=runner, log_dir=logs)
     assert report["status"] == "unavailable"
     assert report["results"][0]["faults"] == []

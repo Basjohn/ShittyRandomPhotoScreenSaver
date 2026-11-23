@@ -1,16 +1,16 @@
 ; Inno Setup script for ShittyRandomPhotoScreenSaver (SRPSS)
 ; Builds an installer that:
-; - Copies SRPSS.scr into %SystemRoot%\System32
-; - Sets SCRNSAVE.EXE for the current user to SRPSS.scr
+; - Copies SRPSS_Screensaver.scr into %SystemRoot%\System32
+; - Sets SCRNSAVE.EXE for the current user to SRPSS_Screensaver.scr
 ;
 ; Usage (dev side):
-; 1) Run tools/build_runner.py and build Standard Screensaver.
-; 2) Compile this .iss file in Inno Setup (or select Standard Installer).
-; 3) Distribute release\installers\Setup_SRPSS.exe to end users.
+; 1) Run tools/build_runner.py and build Screensaver.
+; 2) Compile this .iss file in Inno Setup (or select Screensaver Installer).
+; 3) Distribute release\installers\Setup_SRPSS_Screensaver.exe to end users.
 
 ; Remove yesterday's installer before compiler-version/style validation.
 ; A failed compile must never leave stale Setup_*.exe looking current.
-#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS.exe')
+#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS_Screensaver.exe')
 
 ; Installer styling/background directives require Inno Setup 6.7.2+; 7.x remains supported.
 #if Ver < EncodeVer(6, 7, 2)
@@ -19,7 +19,7 @@
 
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
-AppName=ShittyRandomPhotoScreenSaver
+AppName=SRPSS Screensaver
 AppVersion=5.1.4
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
@@ -28,7 +28,7 @@ PrivilegesRequired=admin
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir=..\release\installers
-OutputBaseFilename=Setup_SRPSS
+OutputBaseFilename=Setup_SRPSS_Screensaver
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
@@ -61,7 +61,7 @@ Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescript
 Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Main screensaver from the canonical release payload.
-Source: ".\..\release\screensaver\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
+Source: ".\..\release\screensaver\SRPSS_Screensaver.scr"; DestDir: "{sys}"; Flags: ignoreversion
 
 ; Immutable provider logos are Qt resources in the SCR. Do not resurrect loose
 ; image copies here; ui/resources/assets.qrc is the runtime authority.
@@ -94,7 +94,7 @@ Name: "{commonappdata}\SRPSS\logs"; Permissions: users-modify
 Name: "{commonappdata}\SRPSS\helper_signals"; Permissions: users-modify
 
 [InstallDelete]
-; The Standard SCR is a Nuitka onefile using a stable per-user extraction cache.
+; The Screensaver SCR is a Nuitka onefile using a stable per-user extraction cache.
 ; Clean it on upgrade so retired frozen dependencies (WebEngine/pytz/etc.) cannot
 ; survive merely because a prior onefile payload had already extracted them.
 Type: filesandordirs; Name: "{localappdata}\SRPSS\onefile"
@@ -103,7 +103,8 @@ Type: filesandordirs; Name: "{localappdata}\SRPSS\onefile"
 ; caches, credentials, themes, presets, and other state remain untouched.
 Type: files; Name: "{userappdata}\SRPSS\settings_v2.json"; Tasks: resetsettings
 
-; Remove legacy screen saver binaries.
+; Remove superseded screen saver filenames.
+Type: files; Name: "{sys}\SRPSS.scr"
 Type: files; Name: "{sys}\\Sprss.scr"
 Type: files; Name: "{sys}\\PSrpss.scr"
 Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
@@ -121,8 +122,8 @@ Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 ; Deleting only settings_v2.json would otherwise let first launch re-import these legacy values.
 Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver"; Flags: deletekey; Tasks: resetsettings
 
-; Set SRPSS.scr as the current user's active screensaver.
-Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
+; Set SRPSS_Screensaver.scr as the current user's active screensaver.
+Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS_Screensaver.scr"; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{commondesktop}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"

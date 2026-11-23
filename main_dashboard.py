@@ -1,13 +1,13 @@
-"""Alternate entry point for SRPSS manual controller (MC) build.
+"""Alternate entry point for SRPSS Dashboard build.
 
 This launcher forces RUN (/s) mode by default when no explicit
 screensaver argument is provided, while still delegating all real
 initialisation and mode handling to ``main.main``.
 
 Usage:
-- ``SRPSS MC.exe``            -> runs the screensaver (RUN mode)
-- ``SRPSS MC.exe /c``         -> opens settings (CONFIG mode)
-- ``SRPSS MC.exe --debug /s`` -> runs screensaver with debug logging
+- ``SRPSS_Dashboard.exe``            -> runs the screensaver (RUN mode)
+- ``SRPSS_Dashboard.exe /c``         -> opens settings (CONFIG mode)
+- ``SRPSS_Dashboard.exe --debug /s`` -> runs screensaver with debug logging
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import sys
 from main import main as core_main, parse_screensaver_args
 from core.spawn_child import importing_parents_main
 
-# A worker process of the MC build re-executes this module first (``__parents_main__``): it needs none of the
+# A worker process of the Dashboard build re-executes this module first (``__parents_main__``): it needs none of the
 # application's imports (checkpoint audit 10, A10-M1; ``main.py`` skips its own the same way).
 if not importing_parents_main(__name__):
     from core.settings.settings_manager import SettingsManager
@@ -51,7 +51,7 @@ def main() -> int:
         logger.debug("[MISC] Exception suppressed: %s", e)
 
     result = 0
-    result = core_main(entrypoint="main_mc")
+    result = core_main(entrypoint="main_dashboard")
     return result
 
 

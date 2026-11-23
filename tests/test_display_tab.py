@@ -210,11 +210,11 @@ class TestDisplayTab:
 
     def test_mc_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path, monkeypatch):
         """MC profile should present Interaction Mode as locked on."""
-        import core.mc
-        monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
+        import core.dashboard
+        monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
         settings = SettingsManager(
             organization="Test",
-            application="Screensaver_MC",
+            application="Dashboard",
             storage_base_dir=tmp_path / "mc_display_tab",
         )
         settings.set("input.interaction_mode", False)
@@ -228,11 +228,11 @@ class TestDisplayTab:
 
     def test_mc_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path, monkeypatch):
         """MC profile save path should persist true even if settings were stale."""
-        import core.mc
-        monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
+        import core.dashboard
+        monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
         settings = SettingsManager(
             organization="Test",
-            application="Screensaver_MC",
+            application="Dashboard",
             storage_base_dir=tmp_path / "mc_display_save",
         )
         settings.set("input.interaction_mode", False)

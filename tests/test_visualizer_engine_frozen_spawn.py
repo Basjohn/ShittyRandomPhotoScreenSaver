@@ -12,7 +12,7 @@ target. These tests drive that path in a child interpreter (no window, no device
 
 Until A10-M1 that module level imported the Qt GUI, Quick and Widgets stack, the engine and Settings in every worker
 (measured 8 Nov from a ``main.py`` parent: 1.6 s to ready, 112 MB RSS, 83 MB USS per worker, against 0.3 s / 31 MB /
-18 MB for the target alone); ``main.py`` (and ``main_mc.py``) now skip their application imports in a worker
+18 MB for the target alone); ``main.py`` (and ``main_dashboard.py``) now skip their application imports in a worker
 (``core.spawn_child``). The frozen run itself (and its cold spawn timed against the first configure's 6 s bound,
 checkpoint audit 9 A9-L2) is the operator's check: no test builds. The package is compiled in by every build family
 (``--include-package=core.visualizer_engine``) and the frozen audit requires ``core.visualizer_engine.engine_worker``
@@ -39,7 +39,7 @@ repo, entry, target = sys.argv[1], sys.argv[2], sys.argv[3]
 sys.path.insert(0, repo)
 import multiprocessing as mp
 
-# The production parent: its __main__ is main.py (or the MC build's main_mc.py). A spawned child re-executes that
+# The production parent: its __main__ is main.py (or the MC build's main_dashboard.py). A spawned child re-executes that
 # module level first, as the frozen child runs it as __parents_main__.
 main_module = sys.modules["__main__"]
 main_module.__file__ = os.path.join(repo, entry)
@@ -114,7 +114,7 @@ def test_a_spawn_from_the_production_entry_reaches_visualizer_worker_main_withou
     assert not set(GUI_DLLS) & set(result["qt_dlls"]), result["qt_dlls"]
 
 
-@pytest.mark.parametrize("entry", ("main.py", "main_mc.py"))
+@pytest.mark.parametrize("entry", ("main.py", "main_dashboard.py"))
 def test_an_image_worker_spawned_from_a_production_entry_loads_no_qt_gui_stack(tmp_path, entry):
     # Every worker role runs the parent's main module first: the image workers (which predate 5.7) carried the same
     # ~65 MB for the whole run. The MC build's entry imports main.py from its own module level.
@@ -140,7 +140,7 @@ print("RESULT " + json.dumps({
 '''
 
 
-@pytest.mark.parametrize("entry", ("main.py", "main_mc.py"))
+@pytest.mark.parametrize("entry", ("main.py", "main_dashboard.py"))
 @pytest.mark.parametrize("run_name", ("__parents_main__", "srpss_entry_import"))
 def test_a_frozen_child_runs_the_entry_module_without_the_application_imports(tmp_path, entry, run_name):
     # The frozen path, without a build: the entry module executed as ``__parents_main__`` (directly, or main.py

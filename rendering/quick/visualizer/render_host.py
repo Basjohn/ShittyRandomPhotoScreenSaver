@@ -40,7 +40,7 @@ def create_lifecycle_telemetry_if_admitted() -> (
 
     The switch/resource ownership telemetry (P1) is a diagnostic experiment, not
     a runtime feature: without ``--viz-switch-telemetry`` or ``--abc-drive`` the
-    process admission is disabled and this returns ``None``, so Standard/MC
+    process admission is disabled and this returns ``None``, so Standard/Dashboard
     runtime allocates no telemetry object, takes no new lock, and keeps no new
     bookkeeping. Tests/tools inject a telemetry object directly instead of
     depending on process argv.
@@ -157,7 +157,7 @@ class QuickVisualizerRenderHost:
         self._carryover: VisualizerRenderCarryover | None = None
         # Opt-in only: injected telemetry (tests/tools) wins; otherwise consult
         # the process experiment admission. ``None`` == disabled == no new
-        # allocation/lock/bookkeeping for ordinary Standard/MC runtime.
+        # allocation/lock/bookkeeping for ordinary Standard/Dashboard runtime.
         self._lifecycle: VisualizerRenderHostLifecycleTelemetry | None = (
             lifecycle_telemetry
             if lifecycle_telemetry is not None

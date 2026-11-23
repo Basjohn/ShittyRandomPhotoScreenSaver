@@ -13,7 +13,7 @@ LAYOUT_SCRIPT = REPO_ROOT / "tools" / "build_layout.ps1"
 
 
 def test_waveform_floor_maps_are_required_and_packaged_by_both_product_workers():
-    for script in ('build_nuitka.ps1','build_nuitka_mc_onedir.ps1'):
+    for script in ('build_nuitka.ps1','build_nuitka_dashboard_onedir.ps1'):
         source=(REPO_ROOT/'scripts'/'venv'/script).read_text(encoding='utf-8')
         assert '--include-data-dir=assets/textures/waveform_floor=assets/textures/waveform_floor' in source
     layout=LAYOUT_SCRIPT.read_text(encoding='utf-8')
@@ -68,7 +68,7 @@ def test_build_runner_preflight_checks_friend_pulse_and_system_stats_assets() ->
 def test_every_product_worker_generates_and_retains_the_two_binary_qrc_packs() -> None:
     scripts = (
         REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
     for script in scripts:
         worker = script.read_text(encoding="utf-8")
@@ -83,7 +83,7 @@ def test_every_product_worker_generates_and_retains_the_two_binary_qrc_packs() -
 def test_every_product_worker_emits_nuitka_and_footprint_reports_without_dropping_qrc() -> None:
     scripts = (
         REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
     for script in scripts:
         worker = script.read_text(encoding="utf-8")
@@ -385,7 +385,7 @@ def test_qml_bloat_prune_contract_is_shared_by_every_product_worker() -> None:
 
     scripts = (
         REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
     for script in scripts:
         worker = script.read_text(encoding="utf-8")
@@ -431,9 +431,9 @@ def test_qml_prune_arguments_keep_authored_qtquick_effects_and_drop_unused_famil
 
 
 
-def test_media_center_workers_fail_if_forbidden_frozen_payload_survives() -> None:
+def test_dashboard_workers_fail_if_forbidden_frozen_payload_survives() -> None:
     for relative in (
-        "scripts/venv/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_dashboard_onedir.ps1",
     ):
         worker = (REPO_ROOT / relative).read_text(encoding="utf-8")
         assert "'Assert-SRPSSForbiddenFrozenPayloadAbsent'," in worker
@@ -536,7 +536,7 @@ def test_frozen_bloat_contract_preserves_qtquick_opengl_binding_and_rejects_unus
 def test_every_runtime_worker_explicitly_keeps_pyside_qtopengl_for_qtquick() -> None:
     workers = (
         REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
     for worker in workers:
         source = worker.read_text(encoding="utf-8")
@@ -550,7 +550,7 @@ def test_every_runtime_worker_explicitly_keeps_pyside_qtopengl_for_qtquick() -> 
 def test_every_product_worker_clears_published_payload_before_nuitka() -> None:
     scripts = (
         REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
     for script in scripts:
         worker = script.read_text(encoding="utf-8")

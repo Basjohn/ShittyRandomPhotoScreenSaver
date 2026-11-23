@@ -586,7 +586,7 @@ def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
         "    return _filtered\n",
         encoding="utf-8",
     )
-    (repo / "main_mc.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
+    (repo / "main_dashboard.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
     (repo / "main_diagnostic.py").write_text(
         "from main import parse_screensaver_args\n", encoding="utf-8"
     )
@@ -652,7 +652,7 @@ def test_windows_run_console_auto_closes_unless_keep_open_is_explicit(monkeypatc
         "    return _filtered\n",
         encoding="utf-8",
     )
-    (repo / "main_mc.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
+    (repo / "main_dashboard.py").write_text("from main import parse_screensaver_args\n", encoding="utf-8")
     python_exe = repo / ".venv" / "Scripts" / "python.exe"
     python_exe.parent.mkdir(parents=True)
     python_exe.write_bytes(b"fixture-python")

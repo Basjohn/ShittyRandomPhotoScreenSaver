@@ -88,7 +88,7 @@ def test_the_gui_import_detector_reads_every_import_form():
         assert not worker_qt.imports_qt_gui(code), code
 
 
-@pytest.mark.parametrize("worker", ("build_nuitka.ps1", "build_nuitka_mc_onedir.ps1"))
+@pytest.mark.parametrize("worker", ("build_nuitka.ps1", "build_nuitka_dashboard_onedir.ps1"))
 def test_every_windows_build_worker_passes_the_user_plugin_with_the_icon(worker):
     # Without it a build compiles the hook back in (the audit would then refuse publication).
     text = (ROOT / "scripts" / "venv" / worker).read_text(encoding="utf-8")

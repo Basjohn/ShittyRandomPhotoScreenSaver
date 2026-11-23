@@ -6,7 +6,7 @@ and a Nuitka build runs the same executable with ``--multiprocessing-fork``, its
 ``__parents_main__`` (the always-on multiprocessing plugin). Every worker role (the image workers, the Visualizer's
 engine worker) therefore executed ``main.py``'s whole module level first, the Qt GUI, Quick and Widgets stack, the
 engine and Settings included: measured 8 Nov at ~1.3 s more per spawn and ~80 MB more per worker than its own target
-needs. ``main.py`` (and an entry wrapper that imports it, ``main_mc.py``) asks this before its application imports and
+needs. ``main.py`` (and an entry wrapper that imports it, ``main_dashboard.py``) asks this before its application imports and
 skips them in a worker: a worker only needs what its target imports, and its environment (the native thread-pool size,
 the Quick render-loop variables) is inherited from the parent that set it. The parent's own module level is unchanged.
 

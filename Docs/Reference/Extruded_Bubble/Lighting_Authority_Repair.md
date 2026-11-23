@@ -14,7 +14,7 @@ fan and axial envelope from the pre-acceptance checkpoint; width1x must preserve
 its selective fixed-depth shading approximation. Do not impose the later lateral cone, world-field march
 or experimental attenuation on BEAM. Keep P1 in BEAM and preserve operator-authored presets/Custom.
 SCENE owns further fixed-world Surface/Deep scattering and physical-optics experiments. Verify both choices
-in real MC on the saved routes before claiming visual parity. Physical lighting remains active EB scope,
+in real Dashboard on the saved routes before claiming visual parity. Physical lighting remains active EB scope,
 not deferred generic ray tracing or G2 shadow work.
 
 ## Source audit, corrected owners and remaining contradictions
@@ -83,7 +83,7 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
 ## Delivery boundaries and acceptance
 
 **Latest operator override:** restore BEAM from the pre-acceptance checkpoint, isolate subsequent experiments
-to SCENE, and preserve saved MC display routes. This supersedes the earlier shared-cone/world-field delivery
+to SCENE, and preserve saved Dashboard display routes. This supersedes the earlier shared-cone/world-field delivery
 approach below; the earlier attempts and failures remain evidence, not current BEAM behavior. See §63–64.
 
 

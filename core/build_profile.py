@@ -1,10 +1,10 @@
 """Process-local build flavour identity.
 
-One compile publishes two files from the same binary: ``SRPSS.scr`` and
-``SRPSS_Diagnostic.scr`` (operator direction 2026-10-10: the diagnostic
+One compile publishes two files from the same binary: ``SRPSS_Screensaver.scr`` and
+``SRPSS_Screensaver_Diagnostic.scr`` (operator direction 2026-10-10: the diagnostic
 artifact always comes with a Standard build, with no second compile). In a
 compiled runtime the published file's own name selects the flavour, exactly
-``SRPSS_Diagnostic`` and nothing looser, read from the launched binary's long
+``SRPSS_Screensaver_Diagnostic`` and nothing looser, read from the launched binary's long
 path before anything else is imported (``main.py``). Source runs select it only
 through the explicit ``main_diagnostic.py`` entry point. No environment
 variables or marker files.
@@ -16,14 +16,14 @@ import sys
 
 
 _DIAGNOSTIC_BUILD = False
-DIAGNOSTIC_ARTIFACT_STEM = "SRPSS_Diagnostic"
+DIAGNOSTIC_ARTIFACT_STEM = "SRPSS_Screensaver_Diagnostic"
 
 
 def is_compiled_runtime() -> bool:
     """Return whether this process is running from compiled application code.
 
     Runtime packaging and product flavour are deliberately separate concepts:
-    a standard, Media Center, or diagnostic executable is compiled, while only
+    a standard, Dashboard, or diagnostic executable is compiled, while only
     the dedicated diagnostic entry point activates ``_DIAGNOSTIC_BUILD``.
     """
 
@@ -71,7 +71,7 @@ def artifact_selects_diagnostic(argv0: str) -> bool:
 
 def activate_flavour_for_artifact(argv0: str) -> bool:
     """Select the diagnostic flavour when this compiled runtime was launched as
-    ``SRPSS_Diagnostic``; source runs never select it by name. Returns whether it did."""
+    ``SRPSS_Screensaver_Diagnostic``; source runs never select it by name. Returns whether it did."""
     if is_compiled_runtime() and artifact_selects_diagnostic(argv0):
         activate_diagnostic_build()
         return True

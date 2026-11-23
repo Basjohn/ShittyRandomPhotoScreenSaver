@@ -26,10 +26,10 @@ and `_reload_all_tab_settings` take the pill from the same `pill_of`, so both ha
 its pill vocabulary there; nothing else in the dialog names it.
 
 - **Profile gating:** `available(profile)` reads `SettingsProfile.current()`, which asks the one product-identity
-  predicate (`core/mc.py`); a new product profile extends that predicate, never a second resolver. An unavailable
+  predicate (`core/dashboard.py`); a new product profile extends that predicate, never a second resolver. An unavailable
   tab is absent from the sidebar, the content stack and the tab-key mapping. No Settings surface compares the store's
-  application name with a literal: "the MC build keeps Interaction Mode on" has one owner,
-  `core.mc.interaction_mode_forced` / `effective_interaction_mode`, which the Display tab, Guided Setup and the
+  application name with a literal: "the Dashboard build keeps Interaction Mode on" has one owner,
+  `core.dashboard.interaction_mode_forced` / `effective_interaction_mode`, which the Display tab, Guided Setup and the
   runtime (context-menu lock and toggle) all call. Bar: `tests/test_mc_interaction_single_owner.py`.
 - **Remembered tab:** `ui.last_tab_key` is the memory; positions are never persisted. Hiding a tab cannot shift a
   remembered one, and a remembered tab the profile hides keeps its memory while Settings opens on its first tab.

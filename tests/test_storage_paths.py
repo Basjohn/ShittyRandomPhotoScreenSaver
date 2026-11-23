@@ -44,15 +44,15 @@ class TestPathResolution:
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
         normal = storage_paths.get_app_data_dir("Screensaver")
         storage_paths.reset_module_cache()
-        mc = storage_paths.get_app_data_dir("Screensaver_MC")
+        mc = storage_paths.get_app_data_dir("Dashboard")
         assert mc == normal and mc.name == "SRPSS"
         for getter in (storage_paths.get_cache_dir, storage_paths.get_state_dir,
                        storage_paths.get_feed_cache_dir, storage_paths.get_steam_dir):
-            assert getter("Screensaver_MC") == getter("Screensaver")
-        assert storage_paths.get_steam_cache_dir("Screensaver_MC", "profile_x").is_relative_to(normal)
+            assert getter("Dashboard") == getter("Screensaver")
+        assert storage_paths.get_steam_cache_dir("Dashboard", "profile_x").is_relative_to(normal)
         assert not (tmp_base / "SRPSS_MC").exists()
-        settings = determine_storage_path("Screensaver_MC", base_dir=tmp_base)
-        assert settings.parent.name == "SRPSS_MC"
+        settings = determine_storage_path("Dashboard", base_dir=tmp_base)
+        assert settings.parent.name == "SRPSS_Dashboard"
 
     def test_get_app_data_dir_unknown_profile(self, tmp_base: Path, monkeypatch):
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
@@ -129,8 +129,8 @@ def test_feed_snapshots_and_artwork_use_the_shared_data_root_under_mc(tmp_path, 
     from core.feeds.cache import FeedCacheStore
 
     monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["main_mc.py"])
-    assert storage_paths.detect_current_profile() == "Screensaver_MC"
+    monkeypatch.setattr(sys, "argv", ["main_dashboard.py"])
+    assert storage_paths.detect_current_profile() == "Dashboard"
 
     assert FeedCacheStore().root == tmp_path.resolve() / "SRPSS" / "cache" / "feeds"
     assert not (tmp_path / "SRPSS_MC").exists()

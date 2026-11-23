@@ -107,7 +107,7 @@ def test_open_url_no_fallback_returns_false(mock_webbrowser, mock_bridge) -> Non
 def test_winlogon_never_spawns_firefox_when_bridge_is_missing(monkeypatch) -> None:
     from core.windows import secure_url_launcher as launcher
 
-    monkeypatch.setattr(launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(launcher, "is_diagnostic_build", lambda: False)
     monkeypatch.setattr(launcher.os, "getenv", lambda name, default="":
                         "Winlogon" if name == "SESSIONNAME" else default)
@@ -124,7 +124,7 @@ def test_winlogon_handoff_does_not_gate_saver_exit_on_helper_readiness(monkeypat
     """R-02: durable queue admission succeeds even if task wake is unconfirmed."""
     from core.windows import secure_url_launcher as launcher
 
-    monkeypatch.setattr(launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(launcher, "is_diagnostic_build", lambda: False)
     monkeypatch.setattr(launcher.os, "getenv", lambda name, default="":
                         "Winlogon" if name == "SESSIONNAME" else default)
@@ -144,7 +144,7 @@ def test_winlogon_handoff_does_not_gate_saver_exit_on_helper_readiness(monkeypat
 def test_winlogon_queue_and_task_admission_succeeds_without_direct_browser(monkeypatch) -> None:
     from core.windows import secure_url_launcher as launcher
 
-    monkeypatch.setattr(launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(launcher, "is_diagnostic_build", lambda: False)
     monkeypatch.setattr(launcher.os, "getenv", lambda name, default="":
                         "Winlogon" if name == "SESSIONNAME" else default)
@@ -161,7 +161,7 @@ def test_winlogon_queue_and_task_admission_succeeds_without_direct_browser(monke
 def test_ordinary_saver_without_queue_fails_closed_without_browser(monkeypatch) -> None:
     from core.windows import secure_url_launcher as launcher
 
-    monkeypatch.setattr(launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(launcher, "is_diagnostic_build", lambda: False)
     monkeypatch.setattr(launcher.os, "getenv", lambda name, default="":
                         "Console" if name == "SESSIONNAME" else default)
@@ -189,7 +189,7 @@ def test_all_saver_external_link_families_queue_without_direct_browser(
 ) -> None:
     from core.windows import secure_url_launcher as launcher
 
-    monkeypatch.setattr(launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(launcher, "is_diagnostic_build", lambda: False)
     monkeypatch.setattr(launcher.os, "getenv", lambda name, default="":
                         session_name if name == "SESSIONNAME" else default)
@@ -214,7 +214,7 @@ def test_steam_target_uses_direct_protocol_for_interactive_build(
 ) -> None:
     from core.windows import secure_url_launcher
 
-    monkeypatch.setattr(secure_url_launcher, "is_mc_build", lambda: True)
+    monkeypatch.setattr(secure_url_launcher, "is_dashboard_build", lambda: True)
     target = friend_message_target("76561198000000001")
     assert target is not None
 
@@ -231,7 +231,7 @@ def test_steam_target_uses_https_helper_route_for_normal_screensaver(
 ) -> None:
     from core.windows import secure_url_launcher
 
-    monkeypatch.setattr(secure_url_launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(secure_url_launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(secure_url_launcher, "is_diagnostic_build", lambda: False)
     target = store_target(620)
     assert target is not None
@@ -255,7 +255,7 @@ def test_rejected_interactive_steam_target_falls_back_to_https(
 ) -> None:
     from core.windows import secure_url_launcher
 
-    monkeypatch.setattr(secure_url_launcher, "is_mc_build", lambda: True)
+    monkeypatch.setattr(secure_url_launcher, "is_dashboard_build", lambda: True)
     target = store_target(620)
     assert target is not None
 
@@ -278,7 +278,7 @@ def test_normal_steam_target_fails_closed_without_secure_helper(
 ) -> None:
     from core.windows import secure_url_launcher
 
-    monkeypatch.setattr(secure_url_launcher, "is_mc_build", lambda: False)
+    monkeypatch.setattr(secure_url_launcher, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(secure_url_launcher, "is_diagnostic_build", lambda: False)
     mock_bridge.is_bridge_available.return_value = False
     target = store_target(620)
@@ -301,7 +301,7 @@ def test_steam_launch_failure_log_does_not_repeat_private_target(
 ) -> None:
     from core.windows import secure_url_launcher
 
-    monkeypatch.setattr(secure_url_launcher, "is_mc_build", lambda: True)
+    monkeypatch.setattr(secure_url_launcher, "is_dashboard_build", lambda: True)
     target = friend_message_target("76561198000000001")
     assert target is not None
 

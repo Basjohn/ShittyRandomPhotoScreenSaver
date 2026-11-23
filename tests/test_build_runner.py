@@ -15,7 +15,7 @@ def _make_helper_inputs(root: Path, mode: str) -> None:
         root / "helpers" / "reddit_helper_worker.py",
         root / "core" / "constants" / "timing.py",
         root / "core" / "logging" / "logger.py",
-        root / "core" / "mc.py",
+        root / "core" / "dashboard.py",
         root / "core" / "windows" / "browser_window_routing.py",
         root / "core" / "windows" / "reddit_helper_runtime.py",
         root / "build_deps" / "requirements_helper.txt",
@@ -40,16 +40,16 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
     assert venv[0].script == tmp_path / "scripts" / "venv" / "build_nuitka.ps1"
     assert normal[2].script == tmp_path / "scripts" / "build_reddit_helper.ps1"
     assert venv[2].script == tmp_path / "scripts" / "venv" / "build_reddit_helper.ps1"
-    assert normal[3].script == venv[3].script == tmp_path / "scripts" / "SRPSS_Installer.iss"
-    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_MediaCenter_Installer.iss"
-    # No separate diagnostic job: the Standard compile also publishes SRPSS_Diagnostic.scr.
+    assert normal[3].script == venv[3].script == tmp_path / "scripts" / "SRPSS_Screensaver_Installer.iss"
+    assert normal[4].script == venv[4].script == tmp_path / "scripts" / "SRPSS_Dashboard_Installer.iss"
+    # No separate diagnostic job: the Screensaver compile also publishes SRPSS_Screensaver_Diagnostic.scr.
     assert not {"diagnostic", "diagnostic_installer"} & {job.key for job in normal}
     for jobs in (normal, venv):
-        assert jobs[0].companion_artifacts == (tmp_path / "release" / "diagnostic" / "SRPSS_Diagnostic.scr",)
-        assert all(job.default_selected for job in jobs if job.key != "linux")
+        assert jobs[0].companion_artifacts == (tmp_path / "release" / "diagnostic" / "SRPSS_Screensaver_Diagnostic.scr",)
+        assert all(job.default_selected for job in jobs if job.key != "linux_screensaver")
     assert [job.output_dir for job in normal] == [
         tmp_path / "release" / "screensaver",
-        tmp_path / "release" / "media_center",
+        tmp_path / "release" / "dashboard",
         tmp_path / "release" / "reddit_helper",
         tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
@@ -59,14 +59,14 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
 
 def test_linux_job_is_optional_runs_the_github_runner_script_and_needs_gh(tmp_path, monkeypatch):
     for mode in ("normal", "venv"):
-        linux = next(job for job in build_runner.jobs_for_mode(mode, tmp_path) if job.key == "linux")
+        linux = next(job for job in build_runner.jobs_for_mode(mode, tmp_path) if job.key == "linux_screensaver")
         assert linux.default_selected is False and linux.kind == "powershell"
         assert linux.script == tmp_path / "scripts" / "linux" / "build_from_windows.ps1"
-        assert linux.expected_artifact.name == f"SRPSS-{build_runner.APP_VERSION}-linux-x86_64.tar.gz"
+        assert linux.expected_artifact.name == f"SRPSS-{build_runner.APP_VERSION}-linux-screensaver-x86_64.tar.gz"
     real_which = build_runner.shutil.which
     monkeypatch.setattr(build_runner.shutil, "which", lambda name: None if name == "gh" else real_which(name))
     result = build_runner.run_preflight("normal")
-    assert "linux" in result.unavailable_jobs
+    assert "linux_screensaver" in result.unavailable_jobs
     assert any("GitHub CLI" in warning for warning in result.warnings)
     # An optional job never makes the default selection fail preflight.
     assert not any(error.startswith("Linux") for error in result.errors)
@@ -205,7 +205,7 @@ def test_run_job_rejects_zero_exit_without_expected_artifact(monkeypatch, tmp_pa
 
 
 def test_a_standard_build_without_its_diagnostic_copy_fails(tmp_path, monkeypatch):
-    job = next(job for job in build_runner.jobs_for_mode("venv", tmp_path) if job.key == "standard")
+    job = next(job for job in build_runner.jobs_for_mode("venv", tmp_path) if job.key == "screensaver")
     stale = job.companion_artifacts[0]
     stale.parent.mkdir(parents=True)
     stale.write_bytes(b"stale diagnostic from an older build")
@@ -213,7 +213,7 @@ def test_a_standard_build_without_its_diagnostic_copy_fails(tmp_path, monkeypatc
     def compile_standard_only(*_args, **_kwargs):
         assert not stale.exists(), "the old diagnostic copy survived until the worker started"
         job.expected_artifact.parent.mkdir(parents=True, exist_ok=True)
-        job.expected_artifact.write_bytes(b"fresh standard")
+        job.expected_artifact.write_bytes(b"fresh screensaver")
         return SimpleNamespace(wait=lambda: 0)
 
     owner = SimpleNamespace(start=compile_standard_only, retire=lambda _process: False)
@@ -269,8 +269,8 @@ def test_smoke_payload_uses_only_tools_runner_owner():
 
     assert payload["mode"] == "venv"
     assert len(payload["jobs"]) == 6
-    assert all(job["default_selected"] for job in payload["jobs"] if job["key"] != "linux")
-    assert Path(payload["jobs"][3]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
+    assert all(job["default_selected"] for job in payload["jobs"] if job["key"] != "linux_screensaver")
+    assert Path(payload["jobs"][3]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss"
     assert not (build_runner.REPO_ROOT / "scripts" / "build_runner.py").exists()
     assert not (build_runner.REPO_ROOT / "scripts" / "venv" / "build_runner_venv.py").exists()
 
@@ -410,21 +410,21 @@ def test_preflight_blocks_unverifiable_or_old_inno(monkeypatch, tmp_path):
     # but independent, so assert specifically on the Inno jobs/error.
     monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: (6, 7, 1))
     old = build_runner.run_preflight("normal", tmp_path)
-    assert "standard_installer" in old.unavailable_jobs
-    assert "media_center_installer" in old.unavailable_jobs
+    assert "screensaver_installer" in old.unavailable_jobs
+    assert "dashboard_installer" in old.unavailable_jobs
     assert any("6.7.2 or newer is required" in error for error in old.errors)
 
     monkeypatch.setattr(build_runner, "_query_iscc_version", lambda _path: None)
     unknown = build_runner.run_preflight("normal", tmp_path)
-    assert "standard_installer" in unknown.unavailable_jobs
+    assert "screensaver_installer" in unknown.unavailable_jobs
     assert any("Could not determine Inno Setup compiler version" in error for error in unknown.errors)
 
 def test_workers_and_installers_share_the_canonical_output_layout():
     scripts = build_runner.REPO_ROOT / "scripts"
     normal_standard = (scripts / "build_nuitka.ps1").read_text(encoding="utf-8")
     venv_standard = (scripts / "venv" / "build_nuitka.ps1").read_text(encoding="utf-8")
-    standard_installer = (scripts / "SRPSS_Installer.iss").read_text(encoding="utf-8")
-    media_installer = (scripts / "SRPSS_MediaCenter_Installer.iss").read_text(
+    screensaver_installer = (scripts / "SRPSS_Screensaver_Installer.iss").read_text(encoding="utf-8")
+    media_installer = (scripts / "SRPSS_Dashboard_Installer.iss").read_text(
         encoding="utf-8"
     )
 
@@ -433,14 +433,14 @@ def test_workers_and_installers_share_the_canonical_output_layout():
     assert '("{0}\\{1}" -f $BuildWorkspace, $BuildTarget)' in venv_standard
     assert "venv\\build_nuitka.ps1" in normal_standard
     assert "--output-dir=$BuildOutputDir" in venv_standard
-    assert r"OutputDir=..\release\installers" in standard_installer
-    assert r"release\screensaver\SRPSS.scr" in standard_installer
-    assert r"release\reddit_helper\*" in standard_installer
+    assert r"OutputDir=..\release\installers" in screensaver_installer
+    assert r"release\screensaver\SRPSS_Screensaver.scr" in screensaver_installer
+    assert r"release\reddit_helper\*" in screensaver_installer
     assert r"OutputDir=..\release\installers" in media_installer
-    assert r"release\media_center\*" in media_installer
-    # The Standard worker publishes its own binary as the diagnostic file, never a second compile.
+    assert r"release\dashboard\*" in media_installer
+    # The Screensaver worker publishes its own binary as the diagnostic file, never a second compile.
     assert not (scripts / "venv" / "build_nuitka_diagnostic.ps1").exists()
-    assert '[string]$DiagnosticArtifactName = "SRPSS_Diagnostic"' in venv_standard
+    assert '[string]$DiagnosticArtifactName = "SRPSS_Screensaver_Diagnostic"' in venv_standard
     assert "-TargetPath $DiagnosticDir" in venv_standard
     assert "Copy-Item -LiteralPath $primaryArtifact.FullName" in venv_standard
 
@@ -449,7 +449,7 @@ def test_workers_and_installers_share_the_canonical_output_layout():
             job.key: job
             for job in build_runner.jobs_for_mode(mode)
         }
-        for key in ("standard", "media_center", "reddit_helper"):
+        for key in ("screensaver", "dashboard", "reddit_helper"):
             job = jobs[key]
             worker = job.script.read_text(encoding="utf-8")
             if mode == "normal":
@@ -463,7 +463,7 @@ def test_workers_and_installers_share_the_canonical_output_layout():
 def test_visualizer_shader_validation_tracks_source_assets_without_retired_blob():
     scripts = build_runner.REPO_ROOT / "scripts" / "venv"
     onefile = (scripts / "build_nuitka.ps1").read_text(encoding="utf-8")
-    onedir = (scripts / "build_nuitka_mc_onedir.ps1").read_text(encoding="utf-8")
+    onedir = (scripts / "build_nuitka_dashboard_onedir.ps1").read_text(encoding="utf-8")
     shared = (build_runner.REPO_ROOT / "tools" / "build_layout.ps1").read_text(
         encoding="utf-8"
     )
@@ -502,7 +502,7 @@ def test_run_job_clears_previous_product_output_before_expensive_worker(monkeypa
     script.write_text("Write-Host ok", encoding="utf-8")
     output_dir = tmp_path / "release" / "diagnostic"
     output_dir.mkdir(parents=True)
-    stale = output_dir / "SRPSS_Diagnostic.scr"
+    stale = output_dir / "SRPSS_Screensaver_Diagnostic.scr"
     stale.write_bytes(b"stale locked-candidate")
     job = build_runner.Job(
         "diagnostic",
@@ -510,7 +510,7 @@ def test_run_job_clears_previous_product_output_before_expensive_worker(monkeypa
         "powershell",
         script,
         output_dir,
-        output_dir / "SRPSS_Diagnostic.scr",
+        output_dir / "SRPSS_Screensaver_Diagnostic.scr",
     )
 
     def fake_run(command, **kwargs):
@@ -548,7 +548,7 @@ def test_run_job_reports_locked_previous_payload_before_worker_launch(monkeypatc
         "powershell",
         script,
         output_dir,
-        output_dir / "SRPSS_Diagnostic.scr",
+        output_dir / "SRPSS_Screensaver_Diagnostic.scr",
     )
 
     monkeypatch.setattr(

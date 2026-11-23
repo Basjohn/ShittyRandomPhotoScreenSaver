@@ -172,13 +172,13 @@ def test_an_unavailable_tab_is_absent_and_never_shifts_the_remembered_tab(manage
 
 
 def test_availability_reads_the_one_product_identity_predicate(manager, monkeypatch):
-    import core.mc as mc
-    hidden = _registry_without(monkeypatch, "scene3d", predicate=lambda profile: not profile.mc)
-    monkeypatch.setattr(mc, "is_mc_build", lambda: True)
+    import core.dashboard as mc
+    hidden = _registry_without(monkeypatch, "scene3d", predicate=lambda profile: not profile.dashboard)
+    monkeypatch.setattr(mc, "is_dashboard_build", lambda: True)
     dialog = _dialog(manager)
     assert hidden.key not in dialog._tab_keys
     _destroy(dialog)
-    monkeypatch.setattr(mc, "is_mc_build", lambda: False)
+    monkeypatch.setattr(mc, "is_dashboard_build", lambda: False)
     dialog = _dialog(manager)
     assert hidden.key in dialog._tab_keys
     _destroy(dialog)

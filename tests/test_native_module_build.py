@@ -303,7 +303,7 @@ def _tamper(staging: Path, case: str, target=NATIVE) -> None:
         _edit_manifest(staging, lambda m: m.update(native_source="native/foreign"))
     elif case == "escape":
         _edit_manifest(staging, lambda m: m["files"].update(
-            {f"release/{target.payload_dirs[0]}/../screensaver/SRPSS.scr": {"bytes": 1, "sha256": "0"}}))
+            {f"release/{target.payload_dirs[0]}/../screensaver/SRPSS_Screensaver.scr": {"bytes": 1, "sha256": "0"}}))
 
 
 @pytest.mark.parametrize("target", [NATIVE], ids=lambda target: target.key)
@@ -398,9 +398,9 @@ def test_place_native_refuses_an_altered_module_and_places_nothing(tmp_path, cas
 
 
 def _product_with_core(root: Path, tmp_path: Path, *, probe: dict | None = None) -> Path:
-    """A Standard build of the fixture commit carrying the placed core, uploaded as the product workflow does."""
+    """A Screensaver build of the fixture commit carrying the placed core, uploaded as the product workflow does."""
     sha = _placed(root, tmp_path)
-    target = remote.TARGETS["standard"]
+    target = remote.TARGETS["screensaver"]
     for relative in (target.primary, *target.companions):
         path = root / "release" / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -419,7 +419,7 @@ def _product_with_core(root: Path, tmp_path: Path, *, probe: dict | None = None)
 
 def _validate_product(staging: Path, root: Path):
     sha = _git(root, "rev-parse", "HEAD")
-    return remote.validate_staging(staging, "standard", commit=sha, version="9.8.7", token=TOKEN,
+    return remote.validate_staging(staging, "screensaver", commit=sha, version="9.8.7", token=TOKEN,
                                    qt_version=remote.qt_version_at_commit(root, sha),
                                    shaders=remote.shaders_at_commit(root, sha, NATIVE.source))
 
@@ -494,12 +494,12 @@ def test_each_module_dispatches_the_one_native_workflow_with_its_source():
     cli = remote.GitHubCli(run=run)
     sha = "c" * 40
     cli.dispatch("native_module", "work/branch", sha, TOKEN)
-    cli.dispatch("standard", "main", sha, TOKEN)
+    cli.dispatch("screensaver", "main", sha, TOKEN)
     for call, target in zip(calls, (NATIVE,)):
         assert call == ["gh", "workflow", "run", remote.NATIVE_WORKFLOW_FILE, "--ref", "work/branch",
                         "-f", f"commit={sha}", "-f", f"token={TOKEN}", "-f", f"source={target.source}"]
     assert calls[1] == ["gh", "workflow", "run", remote.WORKFLOW_FILE, "--ref", "main",
-                        "-f", "target=standard", "-f", f"commit={sha}", "-f", f"token={TOKEN}"]
+                        "-f", "target=screensaver", "-f", f"commit={sha}", "-f", f"token={TOKEN}"]
     cli.find_run(f"native_module-{TOKEN}", workflow=NATIVE.workflow)
     cli.startup_failure(remote.datetime.now(remote.timezone.utc), sha, workflow=NATIVE.workflow)
     assert all(call[call.index("--workflow") + 1] == remote.NATIVE_WORKFLOW_FILE for call in calls[2:])
@@ -532,7 +532,7 @@ def test_validated_modules_are_published_into_release_with_their_manifests(tmp_p
     (release / "native_module").mkdir(parents=True)
     (release / "native_module" / "previous.pyd").write_bytes(b"old")
     (release / "screensaver").mkdir()
-    (release / "screensaver" / "SRPSS.scr").write_bytes(b"product")
+    (release / "screensaver" / "SRPSS_Screensaver.scr").write_bytes(b"product")
     cli = FakeCli(artifacts, {"native_module": [RUNNING, SUCCESS]})
     results, release = _orchestrate(tmp_path, monkeypatch, cli, keys=("native_module",),
                                     release=release)
@@ -550,7 +550,7 @@ def test_validated_modules_are_published_into_release_with_their_manifests(tmp_p
         for name in target.report_names(TOKEN):
             assert (tmp_path / "logs" / name).is_file()
     assert not (release / "native_module" / "previous.pyd").exists()
-    assert (release / "screensaver" / "SRPSS.scr").read_bytes() == b"product"     # the products are untouched
+    assert (release / "screensaver" / "SRPSS_Screensaver.scr").read_bytes() == b"product"     # the products are untouched
 
 
 def test_an_invalid_module_download_keeps_the_previous_module(tmp_path, monkeypatch):
@@ -676,7 +676,7 @@ def test_preflight_makes_only_the_modules_unavailable_for_an_unpushed_head_or_an
     for result in (_preflight_with(monkeypatch, replace_head(pushed, "a" * 40)),
                    _preflight_with(monkeypatch, pushed, registered=False)):
         assert set(remote.MODULE_TARGETS) <= result.unavailable_jobs and not result.errors
-        assert not {"standard", "media_center"} & result.unavailable_jobs
+        assert not {"screensaver", "dashboard"} & result.unavailable_jobs
         assert any(warning.startswith("Native Module:") for warning in result.warnings)
 
 

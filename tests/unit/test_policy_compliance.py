@@ -197,7 +197,7 @@ class TestSettingsPolicyCompliance:
 
     VALID_CATEGORIES = [
         "display", "timing", "queue", "input", "overlay", "window",
-        "theme", "weather", "reddit", "spotify", "rss", "mc", "debug",
+        "theme", "weather", "reddit", "spotify", "rss", "dashboard", "debug",
         "advanced", "performance", "transition", "widget", "image",
     ]
 

@@ -50,7 +50,7 @@ def test_build_helper_arguments_matches_expected_shape():
 
 
 def test_installer_and_harness_have_no_retired_reddit_startup_artifacts():
-    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss").read_text(encoding="utf-8")
     harness_source = (REPO_ROOT / "tools" / "reddit_helper_task_harness.py").read_text(encoding="utf-8")
 
     assert r"\SRPSS\RedditHelper" not in installer
@@ -76,7 +76,7 @@ def test_storage_recovery_harness_exercises_bounded_failure_path():
 
 
 def test_installer_declares_minimal_programdata_permissions_without_acl_reconciler():
-    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss").read_text(encoding="utf-8")
 
     assert 'Name: "{commonappdata}\\SRPSS\\helper"; Permissions: users-readexec' in installer
     assert 'Name: "{commonappdata}\\SRPSS\\url_queue"; Permissions: users-modify' in installer
@@ -94,7 +94,7 @@ def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
     # The top-level script delegates; installer layout is controlled by venv worker.
     build_script = (REPO_ROOT / "scripts" / "venv" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
     wrapper = (REPO_ROOT / "scripts" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
-    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss").read_text(encoding="utf-8")
 
     assert "venv\\build_reddit_helper.ps1" in wrapper
     assert "& $worker" in wrapper

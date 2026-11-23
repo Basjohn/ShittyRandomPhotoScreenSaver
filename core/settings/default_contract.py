@@ -8,7 +8,7 @@ Product defaults have one authority:
 
 * ``default_settings.DEFAULT_SETTINGS`` for the Normal/Screensaver profile;
 * ``default_profile_overrides.PROFILE_DEFAULT_OVERRIDES`` for genuine profile
-  differences such as Media Center always-on-top behavior.
+  differences such as Dashboard always-on-top behavior.
 
 No reader should invent a second persisted product default in a call-site
 literal.  Defensive reads may ask this module for the canonical value instead.
@@ -23,12 +23,12 @@ from .default_profile_overrides import PROFILE_DEFAULT_OVERRIDES
 from .default_settings import DEFAULT_SETTINGS
 
 NORMAL_PROFILE = "Screensaver"
-MC_PROFILE = "Screensaver_MC"
+DASHBOARD_PROFILE = "Dashboard"
 MISSING_DEFAULT = object()
 
 
 def _resolve_profile(application: str | None) -> str:
-    return MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
+    return DASHBOARD_PROFILE if application == DASHBOARD_PROFILE else NORMAL_PROFILE
 
 
 @lru_cache(maxsize=2)
@@ -44,10 +44,10 @@ def _canonical_defaults_readonly(profile: str) -> dict[str, Any]:
     was ~0.5ms, enough to stall hot paths that read settings per frame/event).
     """
     defaults = deepcopy(DEFAULT_SETTINGS)
-    if profile == MC_PROFILE:
+    if profile == DASHBOARD_PROFILE:
         defaults = merge_default_overrides(
             defaults,
-            PROFILE_DEFAULT_OVERRIDES.get(MC_PROFILE, {}),
+            PROFILE_DEFAULT_OVERRIDES.get(DASHBOARD_PROFILE, {}),
         )
     return defaults
 
@@ -77,12 +77,12 @@ def get_raw_default_settings(application: str | None = None) -> dict[str, Any]:
     create a cycle.
     """
 
-    profile = MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
+    profile = DASHBOARD_PROFILE if application == DASHBOARD_PROFILE else NORMAL_PROFILE
     defaults = deepcopy(DEFAULT_SETTINGS)
-    if profile == MC_PROFILE:
+    if profile == DASHBOARD_PROFILE:
         defaults = merge_default_overrides(
             defaults,
-            PROFILE_DEFAULT_OVERRIDES.get(MC_PROFILE, {}),
+            PROFILE_DEFAULT_OVERRIDES.get(DASHBOARD_PROFILE, {}),
         )
     return defaults
 
@@ -261,7 +261,7 @@ __all__ = [
     "resolve_card_border_width_setting_px",
     "WIDGETS_BORDERLESS_KEY",
     "resolve_widgets_borderless",
-    "MC_PROFILE",
+    "DASHBOARD_PROFILE",
     "MISSING_DEFAULT",
     "NORMAL_PROFILE",
     "get_canonical_default",

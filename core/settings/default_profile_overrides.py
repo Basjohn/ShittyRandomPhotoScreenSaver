@@ -1,17 +1,17 @@
 """Profile-specific canonical default overrides.
 
 This small data module is written by ``tools/default_settings_editor.py``.
-Normal defaults live directly in ``default_settings.py``. Only MC differences
-apply on top for the ``Screensaver_MC`` profile. Stable profile names keep
+Normal defaults live directly in ``default_settings.py``. Only Dashboard differences
+apply on top for the ``Dashboard`` profile. Stable profile names keep
 exports and runtime reset behavior on the same source.
 """
 from __future__ import annotations
 
 
 PROFILE_DEFAULT_OVERRIDES = {'Screensaver': {},
- 'Screensaver_MC': {'display': {'show_on_monitors': [2]},
+ 'Dashboard': {'display': {'show_on_monitors': [2]},
                     'input': {'interaction_mode': True},
-                    'mc': {'always_on_top': True},
+                    'dashboard': {'always_on_top': True},
                     'widgets': {'clock': {'monitor': 'ALL'},
                                 'clock2': {'monitor': 2},
                                 'clock3': {'monitor': 'ALL'},

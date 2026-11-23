@@ -4,8 +4,8 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLERS = (
-    ROOT / "scripts" / "SRPSS_Installer.iss",
-    ROOT / "scripts" / "SRPSS_MediaCenter_Installer.iss",
+    ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss",
+    ROOT / "scripts" / "SRPSS_Dashboard_Installer.iss",
 )
 
 

@@ -4,12 +4,12 @@ full QML/asset validation and forbidden frozen-payload verification.
 #>
 [CmdletBinding()]
 param(
-    [string]$EntryPoint = 'main_mc.py',
-    [string]$AppName = 'SRPSS_Media_Center',
+    [string]$EntryPoint = 'main_dashboard.py',
+    [string]$AppName = 'SRPSS_Dashboard',
     [switch]$Console
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$worker = Join-Path $PSScriptRoot 'venv\build_nuitka_mc_onedir.ps1'
+$worker = Join-Path $PSScriptRoot 'venv\build_nuitka_dashboard_onedir.ps1'
 & $worker -EntryPoint $EntryPoint -AppName $AppName -Console:$Console -BuildWorkspace normal
-if (-not $?) { throw 'Canonical SRPSS Media Center worker failed.' }
+if (-not $?) { throw 'Canonical SRPSS Dashboard worker failed.' }

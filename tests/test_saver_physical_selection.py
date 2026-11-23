@@ -67,7 +67,7 @@ def test_legacy_capture_absent_target_and_all_none(tmp_path, monkeypatch):
 
 
 def test_profile_repair_reset_import_and_export(tmp_path, monkeypatch):
-    manager, live = make_manager(tmp_path, monkeypatch, profile='Screensaver_MC')
+    manager, live = make_manager(tmp_path, monkeypatch, profile='Dashboard')
     assert manager.get('display.show_on_monitors') == [2]
     assert manager.get(BINDINGS_KEY) == {'2': B}
     manager.set('display.show_on_monitors', 'broken')
@@ -204,7 +204,7 @@ def test_onboarding_and_arrange_use_effective_physical_selection(tmp_path, monke
 
 
 def test_actual_gui_zero_screens_captures_unresolved_migration(tmp_path, monkeypatch):
-    manager, live = make_manager(tmp_path, monkeypatch, screens=(), profile='Screensaver_MC')
+    manager, live = make_manager(tmp_path, monkeypatch, screens=(), profile='Dashboard')
     assert manager.get(BINDINGS_KEY) == {'2': None}
     live[0] = (A, B)
     assert admitted(manager, live) == set()

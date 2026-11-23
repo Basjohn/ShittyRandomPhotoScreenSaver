@@ -1,19 +1,19 @@
-"""Media/input matrix harness for MC/normal runtime key-routing investigations.
+"""Media/input matrix harness for Dashboard/normal runtime key-routing investigations.
 
 This harness is designed for the U-05 bug family:
-- focused MC window loses media/normal key behavior after click,
+- focused Dashboard window loses media/normal key behavior after click,
 - context-menu or external focus changes behavior,
 - runtime variants diverge.
 
 It automates:
-1) optional isolated-profile launch (MC/normal),
+1) optional isolated-profile launch (Dashboard/normal),
 2) deterministic focus-state transitions,
 3) safe key probes (volume step + transition key),
 4) evidence collection (foreground snapshots, volume deltas, log deltas),
 5) JSON + Markdown report output.
 
 Usage examples:
-  python tools/media_key_matrix_harness.py --launch mc
+  python tools/media_key_matrix_harness.py --launch dashboard
   python tools/media_key_matrix_harness.py --launch run
   python tools/media_key_matrix_harness.py --launch none --pid 12345
 """
@@ -520,11 +520,11 @@ def _seed_profile_settings(appdata_root: Path, image_dir: Path) -> None:
     prev_appdata = os.environ.get("APPDATA")
     try:
         os.environ["APPDATA"] = str(appdata_root)
-        mc = SettingsManager(application="Screensaver_MC")
-        mc.set("sources.folders", [str(image_dir)])
-        mc.set("sources.rss_feeds", [])
-        mc.set("input.hard_exit", True)
-        mc.save()
+        dashboard = SettingsManager(application="Dashboard")
+        dashboard.set("sources.folders", [str(image_dir)])
+        dashboard.set("sources.rss_feeds", [])
+        dashboard.set("input.hard_exit", True)
+        dashboard.save()
 
         normal = SettingsManager(application="Screensaver")
         normal.set("sources.folders", [str(image_dir)])
@@ -544,7 +544,7 @@ def _apply_harness_safety_settings(appdata_root: Path) -> None:
     prev_appdata = os.environ.get("APPDATA")
     try:
         os.environ["APPDATA"] = str(appdata_root)
-        for app in ("Screensaver_MC", "Screensaver"):
+        for app in ("Dashboard", "Screensaver"):
             sm = SettingsManager(application=app)
             sm.set("widgets.reddit.enabled", False)
             sm.set("widgets.reddit.exit_on_click", False)
@@ -601,7 +601,7 @@ def _launch_runtime(
     launch: str,
     appdata_root: Optional[Path],
     log_dir: Path,
-    mc_window_flags: str = "default",
+    dashboard_window_flags: str = "default",
 ) -> tuple[subprocess.Popen[str], List[Any]]:
     # Child-process isolation only: the product learns its log root and window role from
     # command-line arguments, never from SRPSS_* environment variables.
@@ -610,10 +610,10 @@ def _launch_runtime(
         env["APPDATA"] = str(appdata_root)
 
     redirect = [f"--log-dir={log_dir}"]
-    if mc_window_flags != "default":
-        redirect.append(f"--mc-window-flags={mc_window_flags}")
-    if launch == "mc":
-        cmd = [sys.executable, "main_mc.py", "--debug", *redirect, "/s"]
+    if dashboard_window_flags != "default":
+        redirect.append(f"--dashboard-window-flags={dashboard_window_flags}")
+    if launch == "dashboard":
+        cmd = [sys.executable, "main_dashboard.py", "--debug", *redirect, "/s"]
     elif launch == "run":
         cmd = [sys.executable, "main.py", "--debug", *redirect, "/s"]
     else:
@@ -1070,9 +1070,9 @@ def _evaluate_runtime_contract(launch: str, target_window: WindowInfo, log_file:
         if not condition:
             missing.append(name)
 
-    if launch == "mc":
-        _must("target class indicates Qt Tool/Splash MC window", "Tool" in target_window.klass or "Splash" in target_window.klass)
-        _must("log has MC window flag mode", "[DISPLAY_WIDGET] MC window flag mode=" in log_text)
+    if launch == "dashboard":
+        _must("target class indicates Qt Tool/Splash Dashboard window", "Tool" in target_window.klass or "Splash" in target_window.klass)
+        _must("log has Dashboard window flag mode", "[DISPLAY_WIDGET] MC window flag mode=" in log_text)
         _must("log has display widget creation", "DisplayWidget created for screen" in log_text)
         _must("log has GL compositor creation", "[GL COMPOSITOR] Created shared compositor" in log_text)
         _must("log has show_on_screen", "Showing on screen " in log_text)
@@ -1270,8 +1270,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Media/input matrix harness for U-05.")
     parser.add_argument(
         "--launch",
-        choices=("mc", "run", "none"),
-        default="mc",
+        choices=("dashboard", "run", "none"),
+        default="dashboard",
         help="Launch runtime variant or attach to existing pid.",
     )
     parser.add_argument(

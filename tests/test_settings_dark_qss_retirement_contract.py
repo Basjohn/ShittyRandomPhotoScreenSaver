@@ -201,8 +201,8 @@ def test_color_picker_wrapper_owns_legacy_subsettings_chrome_semantically() -> N
 
 def test_build_and_installer_have_no_legacy_stylesheet_filename_contract() -> None:
     for relative in (
-        "scripts/SRPSS_Installer.iss",
-        "scripts/SRPSS_MediaCenter_Installer.iss",
+        "scripts/SRPSS_Screensaver_Installer.iss",
+        "scripts/SRPSS_Dashboard_Installer.iss",
         "tools/build_layout.ps1",
         "tools/build_runner.py",
     ):
@@ -214,5 +214,5 @@ def test_build_and_installer_have_no_legacy_stylesheet_filename_contract() -> No
 
     # Installers copy the theme directory generically; removing one obsolete
     # file therefore needs no filename-specific installer rewrite.
-    assert "themes\\*" in _source("scripts/SRPSS_Installer.iss")
+    assert "themes\\*" in _source("scripts/SRPSS_Screensaver_Installer.iss")
 

@@ -804,7 +804,7 @@ class RuntimeDestructionBarrier:
         observational only: no garbage collection, owner release, retry, or
         continuation decision is performed here, and its cost is bounded by the
         tracer's own item / query / time caps. It used to be diagnostic-only, so
-        a fully logged source run (``main_mc`` with every CLI log flag) still
+        a fully logged source run (``main_dashboard`` with every CLI log flag) still
         could not name what held a surviving owner.
         """
 

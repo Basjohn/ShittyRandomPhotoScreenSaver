@@ -1,13 +1,13 @@
-"""Run the real MC saver with per-phase timers on Extruded Bubble's render thread and logical publish.
+"""Run the real Dashboard saver with per-phase timers on Extruded Bubble's render thread and logical publish.
 
     .venv/Scripts/python tools/eb_live_phases.py --out logs/eb_live_phases.json -- --perf --frame-trace --exit-after 120 /s
 
-Starts ``main_mc.py`` in this process (MC never takes over both displays) with tool-only wrappers around EB's
+Starts ``main_dashboard.py`` in this process (Dashboard never takes over both displays) with tool-only wrappers around EB's
 render stages (probe, shafts, near layer, background capture, drift solver, uniforms, instance packing), every
 ``gl_query`` / host fence state read, and the logical ``_publish_logical_state``; at exit it writes median/p90/p99
 milliseconds per frame (and per tick) plus solver restarts to ``--out``. The first 200 frames are dropped (startup).
 
-Use it under the real competing load the question is about, with ``--log-dir=<scratch folder>`` among the main_mc arguments so the operator's own logs stay untouched. Offline harnesses (``eb_gpu_stage_cost``, ``eb_logical_cost_probe``)
+Use it under the real competing load the question is about, with ``--log-dir=<scratch folder>`` among the main_dashboard arguments so the operator's own logs stay untouched. Offline harnesses (``eb_gpu_stage_cost``, ``eb_logical_cost_probe``)
 cannot see Qt's scene, the swap chain, the real driver queue or the other displays; this can.
 """
 from __future__ import annotations
@@ -267,16 +267,16 @@ def waveform_worker_configuration(engine):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
-    parser.add_argument("mc_args", nargs=argparse.REMAINDER, help="arguments for main_mc.py after --")
+    parser.add_argument("dashboard_args", nargs=argparse.REMAINDER, help="arguments for main_dashboard.py after --")
     args = parser.parse_args()
-    mc_args = args.mc_args[1:] if args.mc_args[:1] == ["--"] else args.mc_args
+    dashboard_args = args.dashboard_args[1:] if args.dashboard_args[:1] == ["--"] else args.dashboard_args
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
-    sys.argv = [str(ROOT / "main_mc.py"), *mc_args]
+    sys.argv = [str(ROOT / "main_dashboard.py"), *dashboard_args]
     production_startup()
     _install()
     atexit.register(lambda: args.out.write_text(json.dumps(_summary(), indent=1), encoding="utf-8"))
-    runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
+    runpy.run_path(str(ROOT / "main_dashboard.py"), run_name="__main__")
     return 0
 
 

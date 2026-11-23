@@ -259,11 +259,11 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
 
             self._events: queue.Queue[tuple] = queue.Queue()
 
-    standard = build_runner.Job(
-        "standard", "Standard", "powershell", tmp_path / "standard.ps1", tmp_path, tmp_path / "SRPSS.scr"
+    screensaver = build_runner.Job(
+        "screensaver", "Screensaver", "powershell", tmp_path / "screensaver.ps1", tmp_path, tmp_path / "SRPSS_Screensaver.scr"
     )
     installer = build_runner.Job(
-        "standard_installer", "Installer", "inno", tmp_path / "setup.iss", tmp_path, tmp_path / "setup.exe"
+        "screensaver_installer", "Installer", "inno", tmp_path / "setup.iss", tmp_path, tmp_path / "setup.exe"
     )
     calls: list[tuple[str, object]] = []
     monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
@@ -297,8 +297,8 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
     build_runner.BuildRunnerApp._pipeline_worker(
         harness,
         "venv",
-        (standard, installer),
-        {standard.key, installer.key},
+        (screensaver, installer),
+        {screensaver.key, installer.key},
         build_runner.PreflightResult(),
         owner,
     )
@@ -315,7 +315,7 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
         owner,
     )
     assert calls == []
-    # The Diagnostic build is a companion of the Standard compile, not a job of its own.
+    # The Diagnostic build is a companion of the Screensaver compile, not a job of its own.
     assert "diagnostic" not in build_runner.QRC_RUNTIME_JOB_KEYS
 
 
@@ -333,7 +333,7 @@ def test_foundry_does_not_launch_product_jobs_after_qrc_prerequisite_failure(mon
             self._events: queue.Queue[tuple] = queue.Queue()
 
     job = build_runner.Job(
-        "standard", "Standard", "powershell", tmp_path / "standard.ps1", tmp_path, tmp_path / "SRPSS.scr"
+        "screensaver", "Screensaver", "powershell", tmp_path / "screensaver.ps1", tmp_path, tmp_path / "SRPSS_Screensaver.scr"
     )
     launched: list[str] = []
     monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
@@ -378,7 +378,7 @@ def test_foundry_marks_selected_jobs_cancelled_when_qrc_sidecar_is_aborted(monke
             self._events: queue.Queue[tuple] = queue.Queue()
 
     job = build_runner.Job(
-        "standard", "Standard", "powershell", tmp_path / "standard.ps1", tmp_path, tmp_path / "SRPSS.scr"
+        "screensaver", "Screensaver", "powershell", tmp_path / "screensaver.ps1", tmp_path, tmp_path / "SRPSS_Screensaver.scr"
     )
     monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
     monkeypatch.setattr(

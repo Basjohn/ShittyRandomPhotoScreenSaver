@@ -1,6 +1,6 @@
 """Atomic file replacement for data shared by concurrently running builds.
 
-The normal saver and MC share one data root (``core.settings.storage_paths``),
+The normal saver and Dashboard share one data root (``core.settings.storage_paths``),
 and per-path locks are in-process only. A reader in either process must see
 the old file or the new one, never a partial write.
 """

@@ -3,10 +3,10 @@
 Simulated frozen layouts (Nuitka 4.2 ``--file-reference-choice=runtime``: every compiled module's ``__file__`` is
 relative to the running executable's folder):
 
-* onefile (``SRPSS.scr``): the launcher sits in ``System32`` with nothing beside it; the payload, ``SRPSS.ico``
+* onefile (``SRPSS_Screensaver.scr``): the launcher sits in ``System32`` with nothing beside it; the payload, ``SRPSS.ico``
   included, is extracted to ``{CACHE_DIR}/SRPSS/onefile/<identity>/``, which holds the running ``SRPSS.exe`` and is
   the package root;
-* onedir (the Media Center): the executable, ``SRPSS.ico`` and the package root are one folder.
+* onedir (the Dashboard): the executable, ``SRPSS.ico`` and the package root are one folder.
 
 A file that exists but does not decode is never taken (the old lookups took any existing file).
 """
@@ -26,7 +26,7 @@ ICON = REPO / app_icon.ICON_FILE_NAME
 
 
 def _onefile_layout(root: Path) -> dict:
-    launcher = root / "Windows" / "System32" / "SRPSS.scr"
+    launcher = root / "Windows" / "System32" / "SRPSS_Screensaver.scr"
     launcher.parent.mkdir(parents=True)
     launcher.write_bytes(b"MZ")
     extraction = root / "AppData" / "Local" / "SRPSS" / "onefile" / "a765cafa83d50bcd6feb"
@@ -38,11 +38,11 @@ def _onefile_layout(root: Path) -> dict:
 
 
 def _onedir_layout(root: Path) -> dict:
-    dist = root / "Program Files" / "SRPSS Media Center"
+    dist = root / "Program Files" / "SRPSS Dashboard"
     (dist / "ui" / "studio").mkdir(parents=True)
-    (dist / "SRPSS_Media_Center.exe").write_bytes(b"MZ")
+    (dist / "SRPSS_Dashboard.exe").write_bytes(b"MZ")
     shutil.copyfile(ICON, dist / app_icon.ICON_FILE_NAME)
-    exe = str(dist / "SRPSS_Media_Center.exe")
+    exe = str(dist / "SRPSS_Dashboard.exe")
     return {"package_root": dist, "executable": exe, "launcher": exe, "expected": dist / app_icon.ICON_FILE_NAME}
 
 
@@ -82,7 +82,7 @@ def test_executable_icon_resource_fallback(qt_app):
 def test_main_and_studio_read_the_one_owner():
     """No product module but the owner names the icon file; ``main.py`` and the Studio window read the owner."""
     pattern = re.compile(r"SRPSS\.ico")
-    product = [REPO / "main.py", REPO / "main_mc.py", REPO / "main_diagnostic.py"]
+    product = [REPO / "main.py", REPO / "main_dashboard.py", REPO / "main_diagnostic.py"]
     for folder in ("core", "engine", "rendering", "ui", "widgets"):
         product.extend((REPO / folder).rglob("*.py"))
     owner = (REPO / "ui" / "app_icon.py").resolve()

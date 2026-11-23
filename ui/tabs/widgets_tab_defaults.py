@@ -293,7 +293,7 @@ def _edit_shared_widget_theme_color(
 def _cache_data_root(tab: WidgetsTab) -> Path:
     """Cache families live in the data root, not the per-profile settings folder.
 
-    Under MC the settings folder is ``SRPSS_MC`` while every cache is in the
+    Under Dashboard the settings folder is ``SRPSS_Dashboard`` while every cache is in the
     shared ``SRPSS`` root; an isolated manager supplies its own root.
     """
     from core.settings.storage_paths import resolve_app_data_dir

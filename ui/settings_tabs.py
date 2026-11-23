@@ -7,7 +7,7 @@ declares it with ``available(profile)``; an unavailable tab is absent from the s
 persisted-tab mapping. The persisted tab is a key (``ui.last_tab_key``), never a position, so hiding a tab cannot
 shift a remembered one.
 
-The profile is answered by the one product-identity predicate (``core/mc.py``); never add a second resolver here.
+The profile is answered by the one product-identity predicate (``core/dashboard.py``); never add a second resolver here.
 A new tab adds one descriptor; it builds lazily, owns its own pill vocabulary through ``pill_of`` and must not keep
 hidden value-owner widgets (Studio-owned values live in a value cache, see ``ui/tabs/media/spec_mode_builder.py``).
 
@@ -34,14 +34,14 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SettingsProfile:
-    """The product identity Settings is opened in. ``mc``: the Manual Controller build."""
+    """The product identity Settings is opened in. ``dashboard``: the Dashboard build."""
 
-    mc: bool = False
+    dashboard: bool = False
 
     @classmethod
     def current(cls) -> "SettingsProfile":
-        from core import mc
-        return cls(mc=bool(mc.is_mc_build()))
+        from core import dashboard
+        return cls(dashboard=bool(dashboard.is_dashboard_build()))
 
 
 def _no_pill(_view_state: Mapping[str, Any]) -> str:

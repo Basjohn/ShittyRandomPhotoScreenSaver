@@ -73,7 +73,7 @@ def dispatch_reddit_url_product_action(
 
     URL trust/admission happens in ``RedditPresentationModel`` before this seam.
     The injected opener owns direct-vs-secure-handoff policy.  A successful
-    ordinary-saver handoff requests normal saver exit; MC/diagnostic interactive
+    ordinary-saver handoff requests normal saver exit; Dashboard/diagnostic interactive
     builds remain running.  Helper readiness is deliberately not represented.
     """
 

@@ -20,7 +20,7 @@ audit (``tools/frozen_build_audit.py``) checks the result in Nuitka's report and
 that runs on a QtCore import still imports a GUI module, so a Nuitka upgrade that reshapes the hook fails the build
 instead of shipping it.
 
-Passed by ``scripts/venv/build_nuitka.ps1`` and ``scripts/venv/build_nuitka_mc_onedir.ps1`` together with the icon
+Passed by ``scripts/venv/build_nuitka.ps1`` and ``scripts/venv/build_nuitka_dashboard_onedir.ps1`` together with the icon
 (``--user-plugin=tools/nuitka_worker_qt_plugin.py``). Runs only inside the Nuitka compiler; never imported by the
 application.
 """

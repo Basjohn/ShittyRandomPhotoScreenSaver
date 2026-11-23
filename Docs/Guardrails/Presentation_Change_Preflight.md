@@ -78,7 +78,7 @@ approval (Future_Work §2.5).** These are limited existing-code interface invari
 services, library/skin systems, multiple hosts or runtime profile switching while doing today's work.
 
 ShittyMusicPlayer is a long-term goal (`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md`
-sections 7 and 8). It will run in two hosts: inside the compositor on the screensaver and MC builds, and in desktop
+sections 7 and 8). It will run in two hosts: inside the compositor on the screensaver and Dashboard builds, and in desktop
 windows on an SMP profile build that has no compositor. A change to presentation code must not close that off:
 
 1. The Media widget, Now Playing and the seek bar stay host-agnostic: no reach into the display compositor, the

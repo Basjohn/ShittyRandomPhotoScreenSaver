@@ -1,7 +1,7 @@
 # SRPSS Windows product build on a GitHub-hosted Windows runner (Build Runner's GitHub Remote tab).
 #
 # Offloads the two expensive Nuitka builds from the operator's machine. tools/github_remote_build.py dispatches one
-# run per product (so Standard and Media Center build in parallel), follows it, cancels it on request, downloads the
+# run per product (so Screensaver and Dashboard build in parallel), follows it, cancels it on request, downloads the
 # artifact, validates it against remote_build_manifest.json and the requested commit, and only then publishes it into
 # the local release tree. Operator guide: Docs/Guides/GitHub_Remote_Build.md.
 #
@@ -26,8 +26,8 @@ on:
         description: Product to build
         type: choice
         options:
-          - standard
-          - media_center
+          - screensaver
+          - dashboard
         required: true
       commit:
         description: Full 40-character SHA of the pushed commit to build (never substituted)
@@ -71,7 +71,7 @@ jobs:
         run: |
           if ($env:COMMIT -notmatch '^[0-9a-f]{40}$') { throw "commit must be a full 40-character SHA: $env:COMMIT" }
           if ($env:SRPSS_BUILD_RUN_ID -notmatch '^\d{8}_\d{6}_\d{6}$') { throw "token must be yyyyMMdd_HHmmss_ffffff" }
-          if ($env:TARGET -notin @('standard', 'media_center')) { throw "unknown target: $env:TARGET" }
+          if ($env:TARGET -notin @('screensaver', 'dashboard')) { throw "unknown target: $env:TARGET" }
 
       - uses: actions/checkout@v4
         with:
@@ -105,7 +105,7 @@ jobs:
 
       - name: Build with the canonical worker
         run: |
-          $worker = if ($env:TARGET -eq 'standard') { 'scripts/venv/build_nuitka.ps1' } else { 'scripts/venv/build_nuitka_mc_onedir.ps1' }
+          $worker = if ($env:TARGET -eq 'screensaver') { 'scripts/venv/build_nuitka.ps1' } else { 'scripts/venv/build_nuitka_dashboard_onedir.ps1' }
           pwsh -NoProfile -ExecutionPolicy Bypass -File $worker
           if ($LASTEXITCODE -ne 0) { throw "$worker failed with exit code $LASTEXITCODE" }
 

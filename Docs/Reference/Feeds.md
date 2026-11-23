@@ -224,7 +224,7 @@ Implemented FEEDS work is operator-accepted; the checks below are reference scen
   unticking a publisher removes its stories on the next runtime, and an offline restart keeps last-good stories.
 - [ ] The Feeds page reads News then Custom with every bucket closed; opening a sibling closes only that sibling; the
   one Refresh row applies to every card.
-- [ ] Magnet rows open the torrent client directly in MC and, on the saver, open it only after the saver exits through
+- [ ] Magnet rows open the torrent client directly in Dashboard and, on the saver, open it only after the saver exits through
   the existing helper/handoff path.
 - [ ] Wallpaper-feed coordination logs `[RSS_COORD] Pass:` then `+1 WxH` only at or above the displays' size; stale
   rotation retires a third only after replacements land; undersized images are never presented.

@@ -90,13 +90,13 @@ Existing sidecars remain the first destinations for their domains:
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
 
-### Bounded MC source capture
+### Bounded Dashboard source capture
 
-For an ordinary MC reproduction with normal provider updates, use the existing source
+For an ordinary Dashboard reproduction with normal provider updates, use the existing source
 entry point and explicit CLI admissions:
 
 ```powershell
-& '.\.venv\Scripts\python.exe' main_mc.py /s --debug --verbose --perf --usage --handle-attribution --viz --geo --set --life --cache --steam --feeds --frame-trace --gui-stall-stacks --viz-switch-telemetry --exit-after 40
+& '.\.venv\Scripts\python.exe' main_dashboard.py /s --debug --verbose --perf --usage --handle-attribution --viz --geo --set --life --cache --steam --feeds --frame-trace --gui-stall-stacks --viz-switch-telemetry --exit-after 40
 ```
 
 `--only-display <index>` (RUN only) puts the saver's windows on that one screen, numbered as the logs number them
@@ -106,13 +106,13 @@ entry point and explicit CLI admissions:
 `--exit-after` arms normal terminal shutdown after RUN startup, including closure of an
 active Settings dialog. It does not request Settings or drive an interaction sequence;
 record any separate manual or disposable-driver stimulus with the capture. The source
-MC entry point enables interaction mode; it is not proof of the installed MC binary.
+Dashboard entry point enables interaction mode; it is not proof of the installed Dashboard binary.
 
-For MC visual/input reproduction, preserve the saved Display, Media and Visualizer routes. Do not force them
+For Dashboard visual/input reproduction, preserve the saved Display, Media and Visualizer routes. Do not force them
 to `ALL`: that changes window count, retained overlap, focus and capture ownership. A disposable profile may
-isolate explicit test settings while preserving those routes. Record actual MC/profile identity, selected
+isolate explicit test settings while preserving those routes. Record actual Dashboard/profile identity, selected
 physical display, effective test controls and synthetic stimuli separately. A synthetic Qt mouse sequence
-that cancels native capture is not evidence that physical orbit works or fails. Use the real MC entry point
+that cancels native capture is not evidence that physical orbit works or fails. Use the real Dashboard entry point
 and the existing diagnostic capture path for visual acceptance; an isolated render host is scoped shader proof.
 
 Keep automatic updates enabled for ordinary reproductions: `--noupdates` suppresses
@@ -122,12 +122,12 @@ only in captures specifically testing those paths. `--viz-switch-telemetry` admi
 boundary telemetry without activating the A/B/C driver. `--gui-stall-stacks` requires
 `--frame-trace`. Full diagnostic logging is evidence collection, not a performance baseline.
 
-Three more opt-in admissions are parsed once at startup by `core/diagnostics/experiment_flags.py`, as `=` tokens that never reach RUN/CONFIG mode detection: `--log-dir=<path>` redirects the log root (a harness scratch folder; it is bound before `--fresh`, so a harness can never clear the operator's own logs), `--profile-cpu` wraps the CONFIG or RUN session in `cProfile` and writes `screensaver_config.pstats` / `screensaver_run.pstats` beside the logs, and `--mc-window-flags=splash` (hardware-ingress harnesses) gives the Media Center window the splash role. None of the retired `SRPSS_*` environment variables is read; frozen builds enable or relocate logging with the `<exe>.logging.cfg` / `<exe>.logdir.cfg` sidecar files.
+Three more opt-in admissions are parsed once at startup by `core/diagnostics/experiment_flags.py`, as `=` tokens that never reach RUN/CONFIG mode detection: `--log-dir=<path>` redirects the log root (a harness scratch folder; it is bound before `--fresh`, so a harness can never clear the operator's own logs), `--profile-cpu` wraps the CONFIG or RUN session in `cProfile` and writes `screensaver_config.pstats` / `screensaver_run.pstats` beside the logs, and `--dashboard-window-flags=splash` (hardware-ingress harnesses) gives the Dashboard window the splash role. None of the retired `SRPSS_*` environment variables is read; frozen builds enable or relocate logging with the `<exe>.logging.cfg` / `<exe>.logdir.cfg` sidecar files.
 
 `--handle-attribution` implies `--usage` and captures Windows handle types, with an initial
 sample followed by a 60-second cadence outside Diagnostic. It does **not** capture Python
 strong reference edges. Failure-only `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS*]` capture is
-gated by `is_diagnostic_build()` in `engine/runtime_destruction.py`; no existing MC CLI
+gated by `is_diagnostic_build()` in `engine/runtime_destruction.py`; no existing Dashboard CLI
 flag enables it. Preserve the requested entry point rather than silently changing flavour.
 
 Archive main, Qt/QML, enabled family logs, binary trace and overlapping rotations after
@@ -300,7 +300,7 @@ sidecar (30-second cadence), and retains longer bounded usage/lifecycle/main his
 `--usage` still does **not** imply handle attribution; outside Diagnostic the helper remains owned
 only by explicit `--handle-attribution`.
 
-It is not a performance baseline. Every Standard build also publishes it as `SRPSS_Diagnostic.scr` (the same
+It is not a performance baseline. Every Standard build also publishes it as `SRPSS_Screensaver_Diagnostic.scr` (the same
 binary; its name selects the flavour), so it never needs a build of its own. It has no terminal unless started with
 `--debug`, which reuses the terminal it was launched from or opens one; a direct launch runs the screensaver.
 

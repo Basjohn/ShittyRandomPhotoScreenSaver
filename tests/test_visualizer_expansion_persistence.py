@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE, require_canonical_default
+from core.settings.default_contract import DASHBOARD_PROFILE, NORMAL_PROFILE, require_canonical_default
 from core.settings.defaults import get_default_settings
 from core.settings import models
 from core.settings.models import SpotifyVisualizerSettings
@@ -64,7 +64,7 @@ def _manager(root: Path, application: str | None = None) -> SettingsManager:
 # -------------------------------------------------------------------------------- default, model, normaliser
 
 
-@pytest.mark.parametrize("profile", [NORMAL_PROFILE, MC_PROFILE])
+@pytest.mark.parametrize("profile", [NORMAL_PROFILE, DASHBOARD_PROFILE])
 def test_canonical_default_is_a_bool_in_every_profile(profile):
     assert isinstance(_canonical(profile), bool)
     assert get_default_settings(profile)["widgets"]["spotify_visualizer"][KEY] is _canonical(profile)
@@ -311,16 +311,16 @@ def test_a_hand_edited_spelling_reads_through_the_typed_model(tmp_path):
 
 def test_standard_and_mc_profiles_keep_independent_intents(tmp_path):
     standard = _manager(tmp_path, NORMAL_PROFILE)
-    mc = _manager(tmp_path, MC_PROFILE)
+    mc = _manager(tmp_path, DASHBOARD_PROFILE)
     assert standard.get_storage_path() != mc.get_storage_path()
 
-    mc.set(DOTTED, _flipped(MC_PROFILE))
+    mc.set(DOTTED, _flipped(DASHBOARD_PROFILE))
     assert standard.get(DOTTED) is _canonical(NORMAL_PROFILE)
     standard.set(DOTTED, _flipped(NORMAL_PROFILE))
     mc.reset_to_defaults()
-    assert mc.get(DOTTED) is _canonical(MC_PROFILE)
+    assert mc.get(DOTTED) is _canonical(DASHBOARD_PROFILE)
     assert standard.get(DOTTED) is _flipped(NORMAL_PROFILE)
 
     assert standard.flush(timeout=5.0) is True and mc.flush(timeout=5.0) is True
     assert _manager(tmp_path, NORMAL_PROFILE).get(DOTTED) is _flipped(NORMAL_PROFILE)
-    assert _manager(tmp_path, MC_PROFILE).get(DOTTED) is _canonical(MC_PROFILE)
+    assert _manager(tmp_path, DASHBOARD_PROFILE).get(DOTTED) is _canonical(DASHBOARD_PROFILE)

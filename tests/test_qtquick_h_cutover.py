@@ -765,7 +765,7 @@ def test_display_manager_populates_and_routes_retained_context_menu(
             return deepcopy(self.data["widgets"])
 
     settings = _Settings()
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
     manager = DisplayManager(settings_manager=settings, runtime_generation=704)
     previous = []
@@ -869,7 +869,7 @@ def test_context_menu_entries_are_refreshed_before_the_menu_becomes_visible(
             return deepcopy(self.data["widgets"])
 
     settings = _Settings()
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
     manager = DisplayManager(settings_manager=settings, runtime_generation=705)
     try:

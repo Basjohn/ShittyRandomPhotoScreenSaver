@@ -227,26 +227,26 @@ def test_settings_are_written_to_the_copy_through_the_settings_manager_and_read_
 
     applied = d1_run.apply_settings([("widgets.global.card_border_width_px", 5),
                                      ("widgets.spotify_visualizer.expanded_display_requested", True)],
-                                    application="Screensaver_MC", storage_base_dir=tmp_path / "copy")
+                                    application="Dashboard", storage_base_dir=tmp_path / "copy")
     assert applied["widgets.global.card_border_width_px"]["after"] == 5
-    assert Path(applied["_path"]) == (tmp_path / "copy" / "SRPSS_MC" / "settings_v2.json").resolve()
-    reopened = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "copy")
+    assert Path(applied["_path"]) == (tmp_path / "copy" / "SRPSS_Dashboard" / "settings_v2.json").resolve()
+    reopened = SettingsManager(application="Dashboard", storage_base_dir=tmp_path / "copy")
     reopened.load()
     assert reopened.get("widgets.global.card_border_width_px") == 5
     assert reopened.get("widgets.spotify_visualizer.expanded_display_requested") is True
     with pytest.raises(KeyError):
-        d1_run.apply_settings([("widgets.global.no_such_key", 1)], application="Screensaver_MC",
+        d1_run.apply_settings([("widgets.global.no_such_key", 1)], application="Dashboard",
                               storage_base_dir=tmp_path / "copy")
     # A member of a mapping setting (1D.2's display style): merged into the stored record, the rest kept.
     key = "widgets.spotify_visualizer.fullscreen_overlays"
     stored = reopened.get(key)
-    applied = d1_run.apply_settings([(f"{key}.display_style", "borders_to_edge")], application="Screensaver_MC",
+    applied = d1_run.apply_settings([(f"{key}.display_style", "borders_to_edge")], application="Dashboard",
                                     storage_base_dir=tmp_path / "copy")
     assert applied[f"{key}.display_style"]["after"] == "borders_to_edge"
-    merged = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "copy").get(key)
+    merged = SettingsManager(application="Dashboard", storage_base_dir=tmp_path / "copy").get(key)
     assert merged == {**stored, "display_style": "borders_to_edge"}
     with pytest.raises(KeyError):
-        d1_run.apply_settings([(f"{key}.no_such_member", 1)], application="Screensaver_MC",
+        d1_run.apply_settings([(f"{key}.no_such_member", 1)], application="Dashboard",
                               storage_base_dir=tmp_path / "copy")
 
 
@@ -260,7 +260,7 @@ def test_a_set_step_writes_a_setting_or_a_member_live_through_the_savers_own_man
 
     step = d1_run.parse_step('14:set:widgets.spotify_visualizer.fullscreen_overlays.display_style="hide_borders"')
     assert step.kind == "set"
-    manager = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path / "live")
+    manager = SettingsManager(application="Dashboard", storage_base_dir=tmp_path / "live")
     before = manager.get("widgets.spotify_visualizer.fullscreen_overlays")
     (tmp_path / "out").mkdir()
     driver = d1_run.D1Driver([step], display=1, out=tmp_path / "out")
@@ -289,9 +289,9 @@ def test_the_main_entry_edits_its_own_profile_and_the_source_is_never_touched(tm
     ordinary = json.loads((root / "SRPSS" / "settings_v2.json").read_text())["snapshot"]["widgets"]
     assert ordinary["spotify_visualizer"]["mode"] == "devcurve"
     assert ordinary["spotify_visualizer"]["preset_devcurve"] == 1
-    assert json.loads((root / "SRPSS_MC" / "settings_v2.json").read_text()) == json.loads(before["SRPSS_MC"])
+    assert json.loads((root / "SRPSS_Dashboard" / "settings_v2.json").read_text()) == json.loads(before["SRPSS_MC"])
     plain = _prepare_profile(tmp_path / "run2", None, None, {}, appdata_root=appdata)
-    assert (plain / "SRPSS_MC" / "settings_v2.json").read_text() == before["SRPSS_MC"]
+    assert (plain / "SRPSS_Dashboard" / "settings_v2.json").read_text() == before["SRPSS_MC"]
     assert {folder: (appdata / folder / "settings_v2.json").read_text() for folder in before} == before
 
 
@@ -605,7 +605,7 @@ def _main(monkeypatch, tmp_path, argv, *, displays=(D0, D1), outcome=None):
     def supervise(command, **kwargs):
         launched.append((command, kwargs))
         out = Path(command[command.index("--out") + 1])
-        launched.append(("profile_during_run", (out / "profile" / "SRPSS_MC" / "settings_v2.json").is_file()))
+        launched.append(("profile_during_run", (out / "profile" / "SRPSS_Dashboard" / "settings_v2.json").is_file()))
         return outcome or {"ended": "exited", "returncode": 1, "violation": None, "pid": 0, "seconds": 0.1}
 
     monkeypatch.setattr(d1_run, "supervise", supervise)
@@ -631,7 +631,7 @@ def test_a_failed_run_still_deletes_the_profile_copy_and_keeps_its_settings(monk
     assert kwargs["deadline_s"] > 30 and kwargs["guard"] is not None
     out = Path(command[command.index("--out") + 1])
     assert not (out / "profile").exists(), "the profile copy outlived the run"
-    mc = json.loads((out / "run_settings_v2_mc.json").read_text())
+    mc = json.loads((out / "run_settings_v2_dashboard.json").read_text())
     assert mc["snapshot"]["widgets"]["spotify_visualizer"]["mode"] == "devcurve"
     summary = json.loads((out / "summary.json").read_text())
     assert summary["failures"] and json.loads((out / "plan.json").read_text())["display"]["index"] == 1

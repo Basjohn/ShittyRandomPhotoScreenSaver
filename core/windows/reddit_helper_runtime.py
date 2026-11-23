@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.build_profile import is_diagnostic_build
-from core.mc import is_mc_build
+from core.dashboard import is_dashboard_build
 from core.logging.logger import get_logger
 from core.windows import reddit_helper_bridge
 from core.windows.reddit_helper_installer import _log_helper_event, _running_as_system
@@ -556,9 +556,9 @@ def ensure_helper_runtime(
         logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in SYSTEM context (%s)", source)
         _log_helper_event(f"bootstrap skipped system-disallowed source={source}")
         return False
-    if is_mc_build():
-        logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in MC build (%s)", source)
-        _log_helper_event(f"bootstrap skipped mc-build source={source}")
+    if is_dashboard_build():
+        logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in Dashboard build (%s)", source)
+        _log_helper_event(f"bootstrap skipped dashboard-build source={source}")
         return False
     if not reddit_helper_bridge.is_bridge_available():
         logger.warning("[REDDIT-HELPER] Bridge unavailable; helper bootstrap skipped (%s)", source)

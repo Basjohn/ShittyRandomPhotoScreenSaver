@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from core.settings.settings_manager import SettingsManager
-from core.settings.default_contract import MC_PROFILE, require_canonical_default
+from core.settings.default_contract import DASHBOARD_PROFILE, require_canonical_default
 from core.settings.visualizer_presets import (
     normalize_visualizer_custom_snapshot_cache,
 )
@@ -529,7 +529,7 @@ class TestSettingsManagerDefaults:
     def test_reset_to_defaults_reapplies_mc_profile_overrides(self, tmp_path: Path) -> None:
         manager = SettingsManager(
             organization="TestOrg",
-            application="Screensaver_MC",
+            application="Dashboard",
             storage_base_dir=tmp_path / "mc_profile",
         )
         manager.set("input.interaction_mode", False)
@@ -538,16 +538,16 @@ class TestSettingsManagerDefaults:
         manager.reset_to_defaults()
 
         assert manager.get("input.interaction_mode") == require_canonical_default(
-            "input.interaction_mode", MC_PROFILE
+            "input.interaction_mode", DASHBOARD_PROFILE
         )
         assert manager.get("display.show_on_monitors") == require_canonical_default(
-            "display.show_on_monitors", MC_PROFILE
+            "display.show_on_monitors", DASHBOARD_PROFILE
         )
 
     def test_fresh_mc_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
         manager = SettingsManager(
             organization="TestOrg",
-            application="Screensaver_MC",
+            application="Dashboard",
             storage_base_dir=tmp_path / "fresh_mc_profile",
         )
 
@@ -557,7 +557,7 @@ class TestSettingsManagerDefaults:
             "widgets.gmail.monitor",
             "widgets.media.monitor",
         ):
-            assert manager.get(key) == require_canonical_default(key, MC_PROFILE)
+            assert manager.get(key) == require_canonical_default(key, DASHBOARD_PROFILE)
 
     def test_legacy_hard_exit_persisted_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)

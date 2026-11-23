@@ -82,7 +82,7 @@ driver's own shader cache is per executable path and every onefile build is a ne
   `GL_PROGRAM_BINARY_FORMATS`, and every stage's type and source in link order. A shader edit, a driver update or
   another GPU is a clean miss; labels are not part of it.
 - **Location:** `<LOCALAPPDATA>/SRPSS/gl_program_cache/<key>.bin` via `core.platform_paths.user_local_root()`
-  (`$XDG_STATE_HOME` on Linux): outside the onefile extraction folder, shared by Standard, Media Center and source
+  (`$XDG_STATE_HOME` on Linux): outside the onefile extraction folder, shared by Standard, Dashboard and source
   runs (the key carries everything that decides validity). No local root: the store is off and links behave as before.
 - **Hit:** the file's header (magic, schema, format, length, key, payload SHA-256) must check out and the format must be
   one the driver lists, so `glProgramBinary` never raises a GL error that the node's per-frame drain would report;

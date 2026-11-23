@@ -190,8 +190,8 @@ dmypy.json
 # Legacy scratch paths retained here so older local scripts cannot expose debris.
 /build_nuitka/
 /build_nuitka_venv/
-/build_nuitka_mc_onedir/
-/build_nuitka_mc_onedir_venv/
+/build_nuitka_dashboard_onedir/
+/build_nuitka_dashboard_onedir_venv/
 /build_reddit_helper/
 /build_reddit_helper_venv/
 # Ignore generated build_deps contents but keep the tracked Reddit-helper
@@ -211,7 +211,7 @@ dmypy.json
 !/scripts/venv/
 /scripts/venv/*
 !/scripts/venv/build_nuitka.ps1
-!/scripts/venv/build_nuitka_mc_onedir.ps1
+!/scripts/venv/build_nuitka_dashboard_onedir.ps1
 !/scripts/venv/build_reddit_helper.ps1
 
 # Accidental/invalid output locations from running copied scripts from scripts/venv
@@ -221,8 +221,8 @@ dmypy.json
 /scripts/build_reddit_helper/
 /scripts/build_nuitka/
 /scripts/build_nuitka_venv/
-/scripts/build_nuitka_mc_onedir/
-/scripts/build_nuitka_mc_onedir_venv/
+/scripts/build_nuitka_dashboard_onedir/
+/scripts/build_nuitka_dashboard_onedir_venv/
 
 # Installer output / Inno leftovers
 Output/

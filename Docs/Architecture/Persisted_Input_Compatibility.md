@@ -218,10 +218,14 @@ without the safe path below.
   *Blocked:* re-registering Sine (or keeping a gated stub) to read old state,
   or remapping a Sine selection to anything but the canonical default.
 
+- **Dashboard setting section:** persisted JSON, QSettings migration and SST imports promote the former `mc` section to `dashboard` at input boundaries; current `dashboard` values take precedence. The old key is removed on promotion and the JSON repair is persisted. Tests: `tests/test_dashboard_setting_migration.py`.
+
+- **Dashboard settings directory migration** (`core/settings/json_store.py`, at canonical path resolution): when `SRPSS_MC` exists and `SRPSS_Dashboard` does not, the entire directory moves without replacing a destination. If both exist, the Dashboard directory remains authoritative and both are preserved with a warning. Migration failures are logged and raised. Shared caches and credentials remain in `SRPSS`. Tests: `tests/test_dashboard_storage_migration.py`.
+
 - **MC Feeds snapshot adoption** (`core/feeds/mc_snapshot_bridge.py`, run once per
   process by `FeedCacheStore` on the canonical shared root). Before the
   2026-10-24 shared data-root rule, MC wrote Feeds snapshots/artwork to
-  `SRPSS_MC/cache/feeds`. The bridge merge-moves them into `SRPSS/cache/feeds`
+  `SRPSS_MC/cache/feeds`. The settings move may relocate them to `SRPSS_Dashboard/cache/feeds`; the bridge checks both paths and merge-moves them into `SRPSS/cache/feeds`
   (missing files move; a collision keeps the newer mtime), then removes the
   emptied MC cache folders and an empty `SRPSS_MC/steam`. The MC folder is
   derived from the same base as the shared root, so relocated/isolated roots

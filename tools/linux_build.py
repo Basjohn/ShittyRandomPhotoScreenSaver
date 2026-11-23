@@ -1,4 +1,4 @@
-"""Build the SRPSS Linux screensaver or MC product: Nuitka standalone folder, installer and tarball.
+"""Build the SRPSS Linux screensaver or Dashboard product: Nuitka standalone folder, installer and tarball.
 
 Linux only. Entry point: ``scripts/linux/build.sh`` (or this file directly with the
 ``.venv-linux`` interpreter). From Windows: ``scripts/linux/build_from_windows.ps1``.
@@ -12,14 +12,14 @@ added for Windows therefore reaches Linux automatically; ``tests/test_build_linu
 
 Linux differences, all deliberate:
 
-* standalone folder (``srpss`` for screensaver, ``srpss-mc`` for MC), not onefile;
+* standalone folder (``srpss-screensaver`` for Screensaver, ``srpss-dashboard`` for Dashboard), not onefile;
 * no Windows-only payload (WinRT, PyAudioWPatch, ``.scr``, Reddit secure-desktop helper);
 * the curated trees the Windows installer places in ``%ProgramData%\\SRPSS`` are installed by
   the bundled ``install.sh`` into ``~/.local/share/SRPSS`` (``core/platform_paths.py``),
   with the same whole-tree replacement for presets and themes.
 
-Output (default ``release/linux``): ``SRPSS-<version>-linux-x86_64`` for the default screensaver,
-or ``SRPSS-<version>-linux-mc-x86_64`` with ``--profile mc``, each with a matching ``.tar.gz``.
+Output (default ``release/linux``): ``SRPSS-<version>-linux-screensaver-x86_64`` for the default screensaver,
+or ``SRPSS-<version>-linux-dashboard-x86_64`` with ``--profile dashboard``, each with a matching ``.tar.gz``.
 glibc compatibility follows the build machine: a binary built on glibc 2.39 needs >= 2.39.
 """
 from __future__ import annotations
@@ -36,11 +36,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 WINDOWS_BUILD_SCRIPT = REPO / "scripts" / "venv" / "build_nuitka.ps1"
 WINDOWS_LAYOUT_SCRIPT = REPO / "tools" / "build_layout.ps1"
+# The third field is the established install-directory name used for in-place upgrades.
 PROFILES = {
-    "screensaver": ("main.py", "srpss", ""),
-    "mc": ("main_mc.py", "srpss-mc", "-mc"),
+    "screensaver": ("main.py", "srpss-screensaver", "srpss"),
+    "dashboard": ("main_dashboard.py", "srpss-dashboard", "srpss-mc"),
 }
-APP_NAME = "srpss"  # original screensaver name, retained for integrations
 
 
 # Windows-only payload or options that have no Linux meaning.
@@ -166,7 +166,7 @@ def qt_prune_arguments(script: Path = WINDOWS_LAYOUT_SCRIPT) -> list[str]:
 
 
 def nuitka_arguments(output_dir: Path, jobs: int, profile: str = "screensaver") -> list[str]:
-    entrypoint, binary, _suffix = PROFILES[profile]
+    entrypoint, binary, _install_id = PROFILES[profile]
     return [
         "-m", "nuitka",
         "--standalone",
@@ -188,12 +188,12 @@ def _app_version() -> str:
 
 INSTALL_SH = r"""#!/usr/bin/env bash
 # Install this SRPSS Linux build for the current user.
-#   ./install.sh            install to ~/.local/opt/<profile>, create CLI links and menu entries
+#   ./install.sh            install to the product’s existing ~/.local/opt directory, create CLI links and menu entries
 #   ./install.sh --keep-themes       preserve existing themes, replace presets
 #   ./install.sh --keep-presets      preserve existing presets, replace themes
 #   ./install.sh --keep-themes --keep-presets  preserve both catalogues
 #   ./install.sh --uninstall
-# Curated presets/themes/sounds share ~/.local/share/SRPSS across Screensaver/MC.
+# Curated presets/themes/sounds share ~/.local/share/SRPSS across Screensaver/Dashboard.
 # Replacement is the default for both independent catalogues, like Windows' checked
 # installer tasks. Preservation switches opt out without merging the catalogues.
 set -euo pipefail
@@ -201,11 +201,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP="__APP_BINARY__"
 APP_LABEL="__APP_LABEL__"
-PREFIX="$HOME/.local/opt/$APP"
+INSTALL_ID="__INSTALL_ID__"
+PEER_ID="__PEER_ID__"
+PREFIX="$HOME/.local/opt/$INSTALL_ID"
 BIN="$HOME/.local/bin"
 APPS="$DATA/applications"
-PEER="srpss-mc"
-[[ "$APP" == "srpss-mc" ]] && PEER="srpss"
 REPLACE_THEMES=1
 REPLACE_PRESETS=1
 UNINSTALL=0
@@ -225,12 +225,17 @@ if (( UNINSTALL && (!REPLACE_THEMES || !REPLACE_PRESETS) )); then
   echo '[INSTALL] --uninstall cannot be combined with catalogue preservation switches' >&2
   exit 2
 fi
+remove_launchers() {
+  rm -f "$BIN/$1" "$APPS/$1.desktop" "$APPS/$1-settings.desktop"
+}
 if (( UNINSTALL )); then
-  rm -rf "$PREFIX" "$BIN/$APP" "$APPS/$APP.desktop" "$APPS/$APP-settings.desktop"
-  if [[ ! -d "$HOME/.local/opt/$PEER" ]]; then
+  rm -rf "$PREFIX"
+  remove_launchers "$APP"
+  remove_launchers "$INSTALL_ID"
+  if [[ ! -d "$HOME/.local/opt/$PEER_ID" ]]; then
     rm -rf "$DATA/SRPSS/presets/visualizer_modes" "$DATA/SRPSS/themes" "$DATA/SRPSS/sounds"
   fi
-  echo "[INSTALL] $APP removed (settings in ~/.config/SRPSS kept)."
+  echo "[INSTALL] $APP removed (user settings kept)."
   exit 0
 fi
 # Refuse a damaged/incomplete release before deleting existing application files.
@@ -240,6 +245,7 @@ fi
 }
 mkdir -p "$PREFIX" "$BIN" "$APPS" "$DATA/SRPSS/presets" "$DATA/SRPSS/sounds"
 rm -rf "$PREFIX" && cp -a "$HERE" "$PREFIX"
+remove_launchers "$INSTALL_ID"
 ln -sf "$PREFIX/$APP" "$BIN/$APP"
 if (( REPLACE_PRESETS )); then
   rm -rf "$DATA/SRPSS/presets/visualizer_modes"
@@ -256,7 +262,7 @@ else
   echo '[INSTALL] Themes preserved.'
 fi
 cp -a "$HERE/resources/tutuogg.ogg" "$HERE/resources/jedimodeyall.mp3" "$DATA/SRPSS/sounds/"
-for entry in "$APP:$APP_LABEL:__RUN_MODE__" "$APP-settings:$APP_LABEL Settings:/c"; do
+for entry in "$APP:$APP_LABEL:/s" "$APP-settings:$APP_LABEL Settings:/c"; do
   IFS=: read -r id name mode <<<"$entry"
   cat >"$APPS/$id.desktop" <<EOF
 [Desktop Entry]
@@ -269,18 +275,20 @@ Terminal=false
 EOF
 done
 echo "[INSTALL] Installed $APP to $PREFIX; run '$APP /c' for Settings or '$APP /s' for the main window."
-if [[ "$APP" == "srpss" ]]; then
+if [[ "$APP" == "srpss-screensaver" ]]; then
   echo '[INSTALL] Screensaver idle launch: configure xss-lock (X11) or an idle manager (Wayland).'
 fi
 """
 
 
 def install_script(profile: str = "screensaver") -> str:
-    _entrypoint, binary, _suffix = PROFILES[profile]
-    label = "SRPSS Media Center" if profile == "mc" else "SRPSS Screensaver"
+    _entrypoint, binary, install_id = PROFILES[profile]
+    peer_id = PROFILES["screensaver" if profile == "dashboard" else "dashboard"][2]
+    label = f"SRPSS {profile.title()}"
     return (INSTALL_SH.replace("__APP_BINARY__", binary)
             .replace("__APP_LABEL__", label)
-            .replace("__RUN_MODE__", "/s"))
+            .replace("__INSTALL_ID__", install_id)
+            .replace("__PEER_ID__", peer_id))
 
 
 def _write_payload_extras(dist: Path, profile: str = "screensaver") -> None:
@@ -293,17 +301,17 @@ def _write_payload_extras(dist: Path, profile: str = "screensaver") -> None:
 
 
 def build(output: Path, jobs: int, dry_run: bool, profile: str = "screensaver") -> Path:
-    entrypoint, binary, suffix = PROFILES[profile]
+    _entrypoint, binary, _install_id = PROFILES[profile]
     version = _app_version()
     build_dir = output / "build" / profile
-    dist = output / f"SRPSS-{version}-linux{suffix}-x86_64"
+    dist = output / f"SRPSS-{version}-linux-{profile}-x86_64"
     args = nuitka_arguments(build_dir, jobs, profile)
     print("[LINUX-BUILD] " + " ".join([sys.executable, *args]), flush=True)
     if dry_run:
         return dist
     subprocess.run([sys.executable, str(REPO / "tools" / "regen_qrc.py"), "--python", sys.executable], cwd=REPO, check=True)
     subprocess.run([sys.executable, *args], cwd=REPO, check=True)
-    # Nuitka's standalone folder follows the source entrypoint (main/main_mc), not necessarily --output-filename.
+    # Nuitka's standalone folder follows the source entrypoint (main/main_dashboard), not necessarily --output-filename.
     candidates = [folder for folder in build_dir.glob("*.dist") if (folder / binary).is_file()]
     if len(candidates) != 1:
         raise SystemExit(f"[LINUX-BUILD] Expected exactly one {binary} standalone dist in {build_dir}, got {candidates}")
@@ -327,7 +335,7 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
     parser.add_argument("--dry-run", action="store_true", help="print the Nuitka command only")
     parser.add_argument("--profile", choices=tuple(PROFILES), default="screensaver",
-                        help="screensaver (default) or interactive Media Center")
+                        help="screensaver (default) or interactive Dashboard")
     args = parser.parse_args()
     build(args.output.resolve(), args.jobs, args.dry_run, args.profile)
     return 0

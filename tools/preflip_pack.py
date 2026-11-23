@@ -73,7 +73,7 @@ APP_ARGS: list[str] = []
 EXTRA_SETTINGS: list[tuple[str, object]] = []
 WALLPAPER = Path("D:/Temp/Scratch/SRPSS/wallpaper_usu")
 CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"
-APPLICATION = "Screensaver_MC"
+APPLICATION = "Dashboard"
 
 VIZ_SECONDS = 45.0                  # the live check's ``--seconds`` for a Visualizer row (the 15 Nov pass's)
 TRANSITION_SECONDS = 75.0           # a per-row transition run: several repeats of one transition

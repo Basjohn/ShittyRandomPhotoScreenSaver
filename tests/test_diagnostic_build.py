@@ -46,11 +46,11 @@ def test_diagnostic_build_profile_is_explicit_and_idempotent(monkeypatch) -> Non
 def test_only_the_published_diagnostic_file_name_selects_the_flavour(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
     monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: True)
-    for name in ("SRPSS.scr", "SRPSS_Diagnostic_old.scr", "My SRPSS_Diagnostic.scr", "SRPSS Diagnostic.scr", ""):
+    for name in ("SRPSS_Screensaver.scr", "SRPSS_Screensaver_Diagnostic_old.scr", "My SRPSS_Screensaver_Diagnostic.scr", "SRPSS Diagnostic.scr", ""):
         assert build_profile.activate_flavour_for_artifact(rf"C:\Apps\{name}") is False, name
     assert build_profile.is_diagnostic_build() is False
     # Windows stores screensavers by their 8.3 short path; the long name still selects it.
-    published = tmp_path / "a long folder name" / "SRPSS_Diagnostic.scr"
+    published = tmp_path / "a long folder name" / "SRPSS_Screensaver_Diagnostic.scr"
     published.parent.mkdir()
     published.write_bytes(b"binary")
     short = published
@@ -67,7 +67,7 @@ def test_only_the_published_diagnostic_file_name_selects_the_flavour(monkeypatch
 def test_source_runs_never_select_the_flavour_by_name(monkeypatch) -> None:
     monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
     monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: False)
-    assert build_profile.activate_flavour_for_artifact(r"C:\Apps\SRPSS_Diagnostic.scr") is False
+    assert build_profile.activate_flavour_for_artifact(r"C:\Apps\SRPSS_Screensaver_Diagnostic.scr") is False
     assert build_profile.is_diagnostic_build() is False
 
 
@@ -75,8 +75,8 @@ def test_the_standard_build_publishes_the_diagnostic_file_from_its_own_binary() 
     worker = (ROOT / "scripts" / "venv" / "build_nuitka.ps1").read_text(encoding="utf-8")
 
     assert not (ROOT / "scripts" / "venv" / "build_nuitka_diagnostic.ps1").exists()
-    assert not (ROOT / "scripts" / "SRPSS_Diagnostic_Installer.iss").exists()
-    assert '[string]$DiagnosticArtifactName = "SRPSS_Diagnostic"' in worker
+    assert not (ROOT / "scripts" / "SRPSS_Screensaver_Diagnostic_Installer.iss").exists()
+    assert '[string]$DiagnosticArtifactName = "SRPSS_Screensaver_Diagnostic"' in worker
     assert f'"{build_profile.DIAGNOSTIC_ARTIFACT_STEM}"' in worker
     assert "Copy-Item -LiteralPath $primaryArtifact.FullName" in worker
     # The copy is checked byte-for-byte against the compiled binary, and a console build
@@ -89,10 +89,10 @@ def test_the_standard_build_publishes_the_diagnostic_file_from_its_own_binary() 
 def test_the_diagnostic_terminal_opens_only_with_debug() -> None:
     from core.windows.debug_console import debug_console_requested
 
-    assert debug_console_requested(["SRPSS_Diagnostic.scr"]) is False
-    assert debug_console_requested(["SRPSS_Diagnostic.scr", "/s"]) is False
-    assert debug_console_requested(["SRPSS_Diagnostic.scr", "/p", "123"]) is False
-    assert debug_console_requested(["SRPSS_Diagnostic.scr", "--debug"]) is True
+    assert debug_console_requested(["SRPSS_Screensaver_Diagnostic.scr"]) is False
+    assert debug_console_requested(["SRPSS_Screensaver_Diagnostic.scr", "/s"]) is False
+    assert debug_console_requested(["SRPSS_Screensaver_Diagnostic.scr", "/p", "123"]) is False
+    assert debug_console_requested(["SRPSS_Screensaver_Diagnostic.scr", "--debug"]) is True
     assert debug_console_requested(["--debug"]) is False           # argv[0] is never an option
     source = (ROOT / "main.py").read_text(encoding="utf-8")
     assert "if debug_console_requested(sys.argv):\n            open_debug_console()" in source
@@ -173,13 +173,13 @@ def test_a_direct_diagnostic_launch_runs_without_overriding_an_explicit_mode(
 ) -> None:
     import main
 
-    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "--debug"])
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Screensaver_Diagnostic.scr", "--debug"])
     main.default_diagnostic_launch_to_run()
-    assert main.sys.argv == ["SRPSS_Diagnostic.scr", "/s", "--debug"]
+    assert main.sys.argv == ["SRPSS_Screensaver_Diagnostic.scr", "/s", "--debug"]
 
-    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "/c:1234"])
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Screensaver_Diagnostic.scr", "/c:1234"])
     main.default_diagnostic_launch_to_run()
-    assert main.sys.argv == ["SRPSS_Diagnostic.scr", "/c:1234"]
+    assert main.sys.argv == ["SRPSS_Screensaver_Diagnostic.scr", "/c:1234"]
 
     source = (ROOT / "main_diagnostic.py").read_text(encoding="utf-8")
     assert "rendering.display_widget" not in source
@@ -196,7 +196,7 @@ def test_source_diagnostic_reuses_normal_source_log_directory(tmp_path, monkeypa
 
 
 def test_frozen_diagnostic_prefers_its_adjacent_log_directory(tmp_path, monkeypatch) -> None:
-    exe = tmp_path / "diagnostic" / "SRPSS_Diagnostic.exe"
+    exe = tmp_path / "diagnostic" / "SRPSS_Screensaver_Diagnostic.exe"
     exe.parent.mkdir(parents=True)
     monkeypatch.setattr(logging_config, "_ACTIVE_LOG_DIR", None)
 

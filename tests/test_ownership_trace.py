@@ -201,7 +201,7 @@ def test_barrier_owner_trace_runs_in_source_and_diagnostic_runs_not_standard_fro
     assert barrier._capture_diagnostic_python_owner_referrers() == ((), {})
     assert calls == []
 
-    # A source run (main_mc, main.py) traces, whatever its CLI flags.
+    # A source run (main_dashboard, main.py) traces, whatever its CLI flags.
     monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: False)
     snapshots, _metadata = barrier._capture_diagnostic_python_owner_referrers()
     assert calls == [owner] and len(snapshots) == 1

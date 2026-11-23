@@ -238,14 +238,14 @@ def test_edit_keeps_the_menu_on_press(pan_card):
 
 @pytest.mark.qt
 def test_media_center_forces_interaction_so_the_card_follows_the_same_rule(pan_card, monkeypatch):
-    import core.mc as mc
+    import core.dashboard as mc
 
     c = pan_card
     c.controller.set_interaction_mode_enabled(False)
     _press(c)
     assert c.window._plain_orbit_pending is None                # outside interaction/Ctrl: no pan admission
     _release(c)
-    monkeypatch.setattr(mc, "is_mc_build", lambda: True)
+    monkeypatch.setattr(mc, "is_dashboard_build", lambda: True)
     c.controller.set_interaction_mode_enabled(mc.effective_interaction_mode(False))
     _press(c)
     assert c.menus == []

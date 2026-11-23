@@ -6,7 +6,7 @@ Place this file in the SRPSS repository root and run it with the same Python
 environment you use for SRPSS. It provides buttons for corrected A/B runs and
 packages the resulting evidence automatically.
 
-No product settings are changed. The harness itself launches main_mc.py with:
+No product settings are changed. The harness itself launches main_dashboard.py with:
     --usage --viz --perf --life
 and uses saved geometry slot 1 with 4 contention workers.
 """
@@ -43,7 +43,7 @@ def find_repo_root() -> Path:
     candidates = [Path(__file__).resolve().parent, Path.cwd()]
     for candidate in candidates:
         if (
-            (candidate / "main_mc.py").is_file()
+            (candidate / "main_dashboard.py").is_file()
             and (candidate / "tools" / "visualizer_switch_abc_harness.py").is_file()
         ):
             return candidate
@@ -59,7 +59,7 @@ from tools import artifact_paths  # noqa: E402
 # Today's evidence folder (tools/artifact_paths.py); the app's own logs above are only read.
 EVIDENCE = artifact_paths.evidence_dir("performance", "visualizer_switch_abc", "r80")
 HARNESS = REPO / "tools" / "visualizer_switch_abc_harness.py"
-MAIN_MC = REPO / "main_mc.py"
+MAIN_DASHBOARD = REPO / "main_dashboard.py"
 PERF_LOG = LOGS / "screensaver_perf.log"
 USAGE_LOG = LOGS / "screensaver_usage.log"
 RESULT_ZIP = EVIDENCE / "ABC_R80_results.zip"
@@ -81,8 +81,8 @@ class RunnerApp(tk.Tk):
         self._log(f"Python: {sys.executable}")
 
         missing = []
-        if not MAIN_MC.is_file():
-            missing.append(str(MAIN_MC))
+        if not MAIN_DASHBOARD.is_file():
+            missing.append(str(MAIN_DASHBOARD))
         if not HARNESS.is_file():
             missing.append(str(HARNESS))
         if missing:
@@ -111,7 +111,7 @@ class RunnerApp(tk.Tk):
         ttk.Label(
             outer,
             text=(
-                "Slot 1 • 4 contention workers • main_mc.py • --usage --viz --perf --life\n"
+                "Slot 1 • 4 contention workers • main_dashboard.py • --usage --viz --perf --life\n"
                 "Run A and B separately or use Run A → B. Results are copied into "
                 ".artifacts\\evidence\\performance\\visualizer_switch_abc and can be zipped with one click."
             ),
@@ -211,10 +211,10 @@ class RunnerApp(tk.Tk):
         if self._busy:
             return
 
-        if not MAIN_MC.is_file() or not HARNESS.is_file():
+        if not MAIN_DASHBOARD.is_file() or not HARNESS.is_file():
             messagebox.showerror(
                 "Wrong location",
-                "This script cannot find main_mc.py and the ABC harness.\n"
+                "This script cannot find main_dashboard.py and the ABC harness.\n"
                 "Put it in the SRPSS repository root.",
             )
             return
@@ -285,7 +285,7 @@ class RunnerApp(tk.Tk):
         run_cmd = " ".join(
             [
                 shlex.quote(python_for_shlex),
-                "main_mc.py",
+                "main_dashboard.py",
                 "--usage",
                 "--viz",
                 "--perf",

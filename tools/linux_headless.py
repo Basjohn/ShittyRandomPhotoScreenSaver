@@ -37,7 +37,7 @@ from core.settings import SettingsManager
 settings = SettingsManager(application=sys.argv[4])
 settings.set("sources.folders", [sys.argv[1]])
 settings.set("timing.interval", int(sys.argv[2]))
-# The MC default selects physical display 2. Xvfb starts only display 1;
+# The Dashboard default selects physical display 2. Xvfb starts only display 1;
 # give this isolated test profile an explicit, present display so the
 # actual production renderer can be exercised instead of admitting zero windows.
 settings.set("display.show_on_monitors", "ALL")
