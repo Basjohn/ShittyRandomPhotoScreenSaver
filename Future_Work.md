@@ -69,6 +69,11 @@ combining (no physics engine, no extra animation clock):
 
 ## 4. Deferred maintenance / product work
 
+- Give managed worktrees distinct evidence and scratch junction targets (`tools/artifact_paths.py`).
+  Codex worktrees can share the leaf directory name, so the current leaf-based key merges their evidence roots
+  and can race first-use junction creation. Preserve existing evidence and update the handover path resolver
+  alongside new keys. Until then, use distinct run labels for parallel managed worktrees.
+
 Keep these deferred unless new evidence or an explicit request promotes them:
 
 - ImageWorker lean-spawn entry and residual memory-footprint follow-up;

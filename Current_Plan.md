@@ -70,7 +70,7 @@ Continue the native sequence below with the repaired timing receipts. The report
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
-**Resume here (lead, 21 Nov ~16:30 UTC; main at ABI 33, built; weekly about 47 %):**
+**Resume here**
 - [ ] **NEXT SESSION STARTS HERE (operator, 22 Nov):** read the orchestration handbook first and work out why the lead
   keeps failing to enforce its protections. 22 Nov failures to explain: briefs paraphrased the operator's defects (the
   "emission starfish" became a default-camera search; R-250); "no defect" results accepted against what the operator
@@ -111,8 +111,10 @@ Continue the native sequence below with the repaired timing receipts. The report
   so both backends feed it the same way, with a test. Before NF.
 - [ ] The Oscilloscope: registered and documented; left only its two side defects and its backlog line.
 
-**Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
-the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
+**Open work by slot**
+
+Follow the operator's current roster and weekly cutoff. Call the visual judge only when the comparison leaves
+an uncertain uplift or degradation.
 - [ ] Resume [N5.6 Extruded Bubble](#n5-6-extruded-bubble) from its first open reference-conversion box.
 - [ ] Bubble GPU optimisation step 3: the offline work is done (the hero and wake rejects halve the bubble pass at 4K);
   the lead's live Display 1 baseline remains.
@@ -819,8 +821,10 @@ the feature (D3D11 is not stated).
     and `owner_render_parity.py --references-only`. Keep the reference producer at the verified rendering and
     logical revision until the queue finishes. Earlier references are indexed in the
     [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
-    - [ ] Base SCENE run (`""`), 60 s each of `human_heavy1`, `nightsolong_acousticsoft1`, and `ragdoll_quiet_intro_loud_end1`.
-      Existing human and nightsolong receipts contain 5,503 frames each. Ragdoll is still undrawn.
+    - [ ] Base SCENE (`""`), 60 s of `human_heavy1` at display placement.
+    - [ ] Base SCENE (`""`), 60 s of `ragdoll_quiet_intro_loud_end1` at display placement.
+    - [ ] Base SCENE (`""`), 60 s of `nightsolong_acousticsoft1` at display placement.
+      Reference receipts go in `.artifacts/evidence/native_core/n5_6/20261123_refs_r251_<take>_60/`.
     - [ ] Run alternate SCENE (`:b`), BEAM emission (`extruded_bubble_emission_geometry=0`), Sunlit Surface
       (`extruded_bubble_light_type=0`), lighting BEAM (`extruded_bubble_lighting_coverage=0`), and base overscan.
       Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
