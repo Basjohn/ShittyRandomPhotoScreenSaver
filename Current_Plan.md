@@ -773,22 +773,17 @@ the feature (D3D11 is not stated).
     in tick-to-publish; the tail is heavier (frames over 16.7 ms 27, 39, 27 against 11, 16, 18), all of it after
     rendering ends, not sync or recording. Evidence `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`,
     `.../bubble/live_check/20261121_layer_t_root_cause/figures.txt` (agent aac773583ad93e2ab).
-    - [ ] Root cause, two candidates: the PERF HUD starting Qt's update timer on a frame of its own and the GPU
-      downclocking under lighter native load. The HUD coalescing is already in `request_visualizer_present` and has
-      a focused test. Measure the writes that still fall outside a publication on current source and whether they
-      lead the remaining long gaps. The 23 Nov D1 Bubble smoke recorded five such writes in ten (`d1_checks.json`).
-      - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
-        back to back, conditions and GPU clock recorded. Use a harness-only switch to suppress only HUD text writes;
-        keep PERF sampling, the recorded take, and display settings common to both sides.
-    - [ ] If the proof identifies an owner, correct only the path that still adds delay. Measure Bubble's per-frame
-      GUI sync before considering changes there.
+    - [ ] Attribute the residual Vulkan late frames at the Qt request and frame boundaries. The 23 Nov paired HUD
+      suppression showed no consistent reduction. Compare the request-to-frame gap with recorded GPU clocks when
+      the residual repeats. Measure GUI sync before considering changes there. See the timing receipt in
+      `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`.
     - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
       Vulkan's late frames fall within the control's spread. If it is the driver's or Qt's, record it in D12 and ask
       the operator. Then Bubble's own T tools (its diagnostics guide).
   - [ ] Verify the scene-fade exceptions on R-242 with the current D12 rule (a). Drive the owner replay from the start
-    of each take. Cover variant-a `nightsolong_acousticsoft1` input 22 at the recorded display placement. Cover offer
-    directions 2 and 6 at input 337 at display and overscan. Retain and classify residuals under the existing limits.
-    Use current-source references and preserve the operator's intended fullscreen density and breathing improvements.
+    of each take. Cover offer directions 2 and 6 at input 337 at display and overscan. Retain and classify residuals
+    under the existing limits. Use current-source references and preserve the operator's intended fullscreen density
+    and breathing improvements.
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11); 4K is measured (D12).
   - [ ] Ambience-off reads higher than ambience-on at 4K: variant b differs from variant a in many settings, so measure
     one frame with only the ambience switched (`bubble_check.py` `COST_RUNS`).

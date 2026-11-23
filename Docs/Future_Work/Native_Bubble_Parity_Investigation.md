@@ -82,3 +82,29 @@ The next bounded candidate expands the shared canonical mask quad to cover the e
 The candidate is accepted (17 Nov). Two archives of the canonical owner's Python frames on the c53 module (`20261117_mask_reference_old_control`, old vertex source composed into Python only, and `20261117_mask_reference_current`) pass all their owner checks; the old control reproduces all 549 retained c53 Python hashes exactly and both runs produce the same native hash series. The candidate changes 3,862 Python pixels across 342 inputs (3,556 by one level, maximum nine). A CPU gate over the rendered RGBA (`20261117_mask_fringe_gate/fringe_gate.json`) places every changed pixel within 1.32 px of a live hero occluder's exact circle, mapped through the retained content rect and DPR (gate: two texels of derivative support plus one of bilinear sampling); displacing the circles by eight pixels fails 2,454 of them. The worst crop (input 218) shows short straight segments where the old quad edge was tangent to the circle. The shipping Python Bubble's change is therefore only the restored antialias fringe.
 
 With the repair on both paths, rule (a) fails 89 frames (was 90): steady differences above one level stay at zero, fade differences above one level fall to five pixels across two inputs with a maximum of two (was seven, maximum five). Every steady failure is the tie count. The steady residual (`20261117_steady_residual_classes/steady_classification.json`) is 2,430 one-level pixels over 322 inputs: 1,908 isolated, 2,222 single-channel, 2,374 distinct locations across the whole content area, median 3x3 reference range five levels, 974 on ambient sprites, 225 within two pixels of a hero edge, 1,282 on neither, worst frame 34. That is D12's scatter signature; Bubble's tolerance admits none, so the bound is the lead's decision (plan box).
+
+## Display 1 HUD timing control, 23 Nov 2026
+
+The twelve 45-second D1 live checks used the same recorded take and copied Visualizer settings. PERF sampling and frame
+tracing were active on both arms. The text-enabled arms recorded 38–39 HUD writes, while the suppression arms recorded
+zero. Counts below are Qt frame-begin gaps over 16.7 ms in the steady window.
+
+| Backend | HUD text enabled | HUD text suppressed | GPU utilisation medians, enabled / suppressed |
+| --- | ---: | ---: | ---: |
+| Vulkan pair 1 | 15 | 27 | 39% / 39% |
+| Vulkan pair 2 | 48 | 18 | 70% / 38% |
+| Vulkan pair 3 | 15 | 10 | 36% / 36% |
+| OpenGL pair 1 | 7 | 7 | 39% / 38% |
+| OpenGL pair 2 | 11 | 11 | 67% / 70.5% |
+| OpenGL pair 3 | 9 | 5 | 38% / 38% |
+
+The two comparable Vulkan pairs moved in different directions. Pair 2 ran at different GPU loads. GPU clock medians for
+this sequence were 2175–2775 MHz. The earlier downclock question remains open. The current samples do not identify the HUD
+text writes as the owner of the residual. Evidence is under
+`.artifacts/evidence/visualizers/bubble/live_check/20261123_layer_t_hud_ab/analysis.json`.
+
+The 23 Nov current-source variant-a cold window reproduced only the previously accepted two-pixel exception at input 22
+of `nightsolong_acousticsoft1`. The pixel coordinates, Python and native values, and mask classification match the 21 Nov
+receipt exactly. The shortened replay used the same first 90 scripted inputs as the full take. Receipts are under
+`.artifacts/evidence/native_core/fast_proof/20261123_bubble_tracked_recheck/` (prefix proof) and
+`20261123_bubble_cold_prefix/native_render_parity.json` (rule verdict). D12's bound and the accepted exception are unchanged.
