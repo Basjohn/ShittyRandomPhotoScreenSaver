@@ -198,9 +198,16 @@ transactions only touch affected resources. Substantial but safe visual
 reconfigurations use **fade OUT -> commit -> authoritative frame -> fade
 IN** as second-last resort; full display generation teardown is last
 resort with all existing strict barriers. Do not add a second renderer
-or rewrite Settings as QML. Theme Studio's modal/conceal/expose contract
-must be explicitly adapted for a non-modal Settings dialog without
-layered-window, focus, Winlogon or first-paint regressions.
+or rewrite Settings as QML. **Both Visualizer Studio and Theme Studio
+must continue to CONCEAL Settings after the Studio's first presented
+frame, with Settings completely invisible/non-interactive until Studio
+exits, and restore the SAME QWidget without a double focus swap.**
+Non-modal Settings is not a proposal to show two editors. Use the
+existing one-transition WindowPresence/WM_PAINT strategy adapted for
+the new session, not taskbar minimization or a second window. Enforce
+these invariants with the detailed plan's automated A2/A3 real Qt/Win32
+visibility, focus, paint, first-frame and retirement gates instead of
+routine operator sign-off, without Winlogon or layered-window regression.
 **Not yet implemented:** full-stop Settings behaviour remains current
 until its own L0-L7 acceptance. M4/Theme Studio are not blocked by this
 later work.
