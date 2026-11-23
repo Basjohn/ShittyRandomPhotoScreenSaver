@@ -50,6 +50,17 @@ Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port
 method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
+**Operator priority (23 Nov):** finish [fullscreen return placement](#1d6-fullscreen-return-placement-across-displays),
+then the Dashboard naming migration, then isolate and fix the perceived response delay before Extruded Bubble
+measurements or port work. Resume the native sequence below after those gates.
+
+- [ ] Dashboard naming: migrate MC's product and profile names through runtime, profile data, tooling and GitHub
+  workflows. Verify that each Windows and Linux build identifies its product as Screensaver or Dashboard.
+- [ ] Perceived response delay: use `logs/evidence_chest/logs077d6cc043.zip` and recorded-input tooling to reproduce
+  the difference between starting fullscreen and starting as a card before expanding. Measure input-to-visible
+  response independently of the freshness overlay, including EB breathing. Locate the delayed boundary, fix it
+  after the reproduction fails on the current source, then prove both routes and guard against recurrence.
+
 **Order (lead and operator, 17 Nov):**
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
    layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
@@ -2421,7 +2432,7 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
   layered `gl_Layer` write).
 
-### 1D.6 Leaving fullscreen on another display lands the card in a poor spot (operator, 13 Nov; Opus High, design first)
+### 1D.6 Fullscreen return placement across displays
 
 Case: the Visualizer sits at B2 on D1, is moved to A1 on D0, goes fullscreen and is moved to D1 (that move works),
 then leaves fullscreen. It lands at a spot mapped from D0 instead of its own B2 on D1. Log
@@ -2429,21 +2440,18 @@ then leaves fullscreen. It lands at a spot mapped from D0 instead of its own B2 
 source rect over (D0 (51,38) became D1 (2760,143)). The one time it came back to D0's original spot (06:38:37) the
 mapping only happened to match. Nothing remembers a display's own last ordinary placement. The log also shows
 borderless fullscreen transfers working smoothly.
-- [ ] Design note first (plan 01 M3c, beside "Display moves retarget"), for the lead's approval:
-  - One authority: `rendering/quick/custom_layout_owner.py` stays the only owner of ordinary placement. A
-    remembered per-display placement is a field of that owner's stored record, keyed by monitor identity (the
-    `monitor_bindings` identity), never a second store or a renderer-side guess.
-  - When it is written: only at a committed ordinary placement on that display (Edit commit, drag commit, a
-    move's landing).
-  - When it is read: on leaving fullscreen onto a display, and on an ordinary display move landing there.
-  - Its validity rules: still on that display's current geometry and DPR, inside the safe area, no overlap
-    breaking the existing collision rules. An invalid one falls back to today's mapping.
-  - The interaction with Edit's draft, Restore Size, the shape (B2 is a position and a shape), presets of
-    placement, and the R-63/R-192 whole-pixel rules.
-- [ ] Build to the note; the move keeps "retarget before rebuild" and the fade.
-- [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
-  lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
-- [ ] Lead D1 run with both displays: the sequence above, edges read.
+The 23 Nov reproduction is `logs/evidence_chest/logs0b273cc3a2.zip` (`--geo`). The card starts on D1, is sent
+fullscreen to D0, returns fullscreen to D1, and collapses with the wrong geometry. If it collapses while still on
+D0 via `V` or the down glyph, it must also return to the last good ordinary card on D1. Targeted expansion from
+an ordinary card starts the same excursion. Ordinary display moves and Edit still commit via the CUSTOM owner.
+
+- [ ] Reproduce both routes at the real display-transfer boundary with two synthetic displays and an authored
+  ordinary rect. Trace the ordinary placement and fullscreen host through transfer, exit and refusal.
+- [ ] Preserve the ordinary placement and physical binding across fullscreen hops. Use the existing takeover,
+  retained host transfer and CUSTOM authorities. Verify the same owner, the same ordinary rect and persisted state,
+  and coherent cover/overlay cleanup on both collapse inputs. Cover fullscreen startup and topology/refusal at
+  the affected boundary.
+- [ ] Verify the two-display sequence through the smallest available display harness and record its scope.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
