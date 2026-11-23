@@ -230,14 +230,7 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
     "Extruded Bubble": (
-        "rendering.gl_programs.extruded_bubble_program.BEAD_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.BUBBLE_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.BUBBLE_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.CLUSTER_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.CLUSTER_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.NEAR_CLUSTER_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.NEAR_FRAGMENT",
-        # Not a loose uniform: SPIRV-Cross has no HLSL for the layered write (gl_Layer); converts at its port.
+        # The Python probe's layered write (gl_Layer) has no SPIRV-Cross HLSL variant.
         "rendering.quick.scene3d.probe._PREFILTER_GEOMETRY",
     ),
     "Neon Lake": (

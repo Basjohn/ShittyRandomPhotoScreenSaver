@@ -2040,7 +2040,8 @@ void main() {
 # them and binds the packed block once per draw.
 from rendering.gl_programs.portable import pack_block, portable_family  # noqa: E402
 
-EB_SAMPLERS = {"uShafts": 4, "uBackground": 5, "uProbe": 6, "uSource": 0}
+# The traced-glass vertex stage also binds material drift at 6 and wake storage at 7.
+EB_SAMPLERS = {"uShafts": 4, "uBackground": 5, "uProbe": 8, "uSource": 0}
 # The water, the shafts and their blur over the fullscreen triangle.
 _FULLSCREEN, FULLSCREEN_BLOCK = portable_family(
     {"vertex": FULL_VERTEX, "backdrop": BACKDROP_FRAGMENT, "probe_backdrop": PROBE_BACKDROP_FRAGMENT,
@@ -2061,9 +2062,18 @@ _PARTICLES, PARTICLE_BLOCK = portable_family(
 PARTICLE_VERTEX, SPECK_VERTEX, PARTICLE_FRAGMENT = _PARTICLES["proxies"], _PARTICLES["specks"], _PARTICLES["fragment"]
 
 
-# The traced glass (the shells, the procedural beads, the near layer; the fused clusters and their near variant) keeps
-# its loose uniforms: on one block each family drew 1-2 pixels per affected frame one 8-bit level apart in OpenGL
-# (shells/beads/near 26 of 549 recorded frames, clusters 14), so N1.6 does not convert it here; it converts at its port.
+# The traced glass shares one packed layout across ordinary shells, procedural beads, fused clusters and the near layer.
+_GLASS, GLASS_BLOCK = portable_family(
+    {"shell": BUBBLE_VERTEX, "beads": BEAD_VERTEX, "cluster": CLUSTER_VERTEX,
+     "shell_fragment": BUBBLE_FRAGMENT, "near_fragment": NEAR_FRAGMENT,
+     "cluster_fragment": CLUSTER_FRAGMENT, "near_cluster_fragment": NEAR_CLUSTER_FRAGMENT},
+    (("shell", ("shell_fragment", "near_fragment")), ("beads", ("shell_fragment",)),
+     ("cluster", ("cluster_fragment", "near_cluster_fragment"))),
+    block="EbGlass", samplers=EB_SAMPLERS)
+BUBBLE_VERTEX, BEAD_VERTEX, CLUSTER_VERTEX = _GLASS["shell"], _GLASS["beads"], _GLASS["cluster"]
+BUBBLE_FRAGMENT, NEAR_FRAGMENT = _GLASS["shell_fragment"], _GLASS["near_fragment"]
+CLUSTER_FRAGMENT, NEAR_CLUSTER_FRAGMENT = _GLASS["cluster_fragment"], _GLASS["near_cluster_fragment"]
+
 # The wake trails' veils: their refraction reads the captured background on its unit, as the traced glass does (from
 # f0ead35b until 1D.11 it read unit 0, which the shafts' blur always leaves empty: a veil bent black, not the water).
 _TRAILS, TRAIL_BLOCK = portable_family({"vertex": TRAIL_VERTEX, "fragment": TRAIL_FRAGMENT},
@@ -2089,6 +2099,7 @@ __all__ = [
     "COMMON",
     "EB_SAMPLERS",
     "FULLSCREEN_BLOCK",
+    "GLASS_BLOCK",
     "FULLSCREEN_DEFAULTS",
     "FULL_VERTEX",
     "TRAIL_BLOCK",

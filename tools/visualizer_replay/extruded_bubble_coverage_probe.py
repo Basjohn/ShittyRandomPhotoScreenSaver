@@ -15,7 +15,10 @@ if not disable_per_call_gl_error_checking():
 from OpenGL import GL as gl
 from tools.transition_contact_sheet import TransitionCapture
 from rendering.quick.render.gl_resources import compile_program, delete_program
-from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT
+from rendering.gl_programs.extruded_bubble_program import (
+    BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT, EB_SAMPLERS, GLASS_BLOCK,
+)
+from tools.pass_block_gl import PassBlockGL
 from rendering.gl_programs.extruded_bubble_scene import camera
 from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
 from tools import artifact_paths  # noqa: E402
@@ -32,6 +35,7 @@ paths=[root/'rendering/gl_programs/extruded_bubble_program.py',root/'rendering/g
 source_hashes={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
 W,H=1200,800
 capture=TransitionCapture(W,H)
+gl=PassBlockGL(gl)
 programs=[]
 objects=[]
 rows=[]
@@ -44,14 +48,14 @@ try:
     gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER,gl.GL_COLOR_ATTACHMENT0,gl.GL_TEXTURE_2D,tex,0)
     gl.glDrawBuffers(1,[gl.GL_COLOR_ATTACHMENT0])
     cube=int(gl.glGenTextures(1)); objects.append(cube)
-    gl.glActiveTexture(gl.GL_TEXTURE2)
+    gl.glActiveTexture(gl.GL_TEXTURE0 + EB_SAMPLERS["uProbe"])
     gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP,cube)
     for face in range(6):
         gl.glTexImage2D(gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,0,gl.GL_RGBA8,4,4,0,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,np.full((4,4,4),127,dtype='u1'))
     gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR)
     gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
     gl.glActiveTexture(gl.GL_TEXTURE0)
-    gl.glBindTexture(gl.GL_TEXTURE_2D,capture.textures[0])
+    gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], capture.textures[0])
     projection=camera(0,0,W/H)[3]
     tan=camera(0,0,W/H)[2]
     gl.glVertexAttrib1f(2,1.0)
@@ -60,9 +64,10 @@ try:
     vao=int(gl.glGenVertexArrays(1));vbo=int(gl.glGenBuffers(1))
     for kind,vs,fs in [('ordinary',BUBBLE_VERTEX,BUBBLE_FRAGMENT),('cluster',CLUSTER_VERTEX,CLUSTER_FRAGMENT)]:
         program=compile_program(vs,fs,label='distortion audit '+kind);programs.append(program)
+        gl.register(program, GLASS_BLOCK)
         gl.glUseProgram(program)
         loc=lambda name:gl.glGetUniformLocation(program,name)
-        for name,val in [('uDiag',5),('uProbe',2),('uBackground',0)]:gl.glUniform1i(loc(name),val)
+        gl.glUniform1i(loc('uDiag'), 5)
         for name,val in [('uPixel',2*tan[1]/H),('uPixelSize',2*tan[1]/H),('uFocus',0),('uAperture',0),('uCrisp',1),('uNearLayer',0),('uNearCoc',0),('uNearMax',_near_spread(H)),('uProbeLevels',1),('uBehind',8),('uLens',1),('uShell',.03),('uFrameShare',1)]:gl.glUniform1f(loc(name),val)
         gl.glUniform3f(loc('uIors'),1.15,2,1)
         gl.glUniform2f(loc('uTan'),*tan)
@@ -108,6 +113,7 @@ try:
         raise RuntimeError('source changed during coverage probe; reject this output')
     print(json.dumps(metadata,indent=2))
 finally:
+    gl.release()
     for program in programs:delete_program(program)
     if 'vbo' in locals():gl.glDeleteBuffers(1,[vbo])
     if 'vao' in locals():gl.glDeleteVertexArrays(1,[vao])

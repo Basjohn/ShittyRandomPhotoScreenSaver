@@ -61,6 +61,7 @@ from rendering.gl_programs.extruded_bubble_program import (  # the product's sha
     PARTICLE_VERTEX,
     PARTICLE_FRAGMENT,
     EB_SAMPLERS,
+    GLASS_BLOCK,
     FULLSCREEN_BLOCK,
     FULLSCREEN_DEFAULTS,
     PARTICLE_BLOCK,
@@ -660,11 +661,9 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uAperture"), settings.get("aperture", 3.0))
         gl.glUniform1f(u("uPixel"), 2.0 * tan_y / H)
         gl.glUniform1f(u("uPixelSize"), 2.0 * tan_y / H)
-        gl.glUniform1i(u("uBackground"), 5)
         gl.glUniform2f(u("uTargetSize"), *target.allocation[:2])
         gl.glUniform2f(u("uFrameSize"), W, H)
         gl.glUniform3f(u("uSunScreen"), *sun_screen)
-        gl.glUniform1i(u("uProbe"), 6)
         gl.glUniform1f(u("uProbeLevels"), PROBE.levels)
         gl.glUniform1f(u("uEta"), settings.get("eta", 1.33))
         gl.glUniform1f(u("uBehind"), settings.get("behind", 8.0))
@@ -689,7 +688,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glBindTexture(gl.GL_TEXTURE_2D, env)
         gl.glActiveTexture(gl.GL_TEXTURE5)
         gl.glBindTexture(gl.GL_TEXTURE_2D, background_tex)
-        gl.glActiveTexture(gl.GL_TEXTURE6)
+        gl.glActiveTexture(gl.GL_TEXTURE0 + EB_SAMPLERS["uProbe"])
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, PROBE.texture)
         gl.glActiveTexture(gl.GL_TEXTURE0)
 
@@ -929,7 +928,9 @@ def main():
         blocks = {ENV_FRAGMENT: (ENV_BLOCK, {}), BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
                   PROBE_BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
                   SHAFT_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
-                  BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS), PARTICLE_FRAGMENT: (PARTICLE_BLOCK, {})}
+                  BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS), PARTICLE_FRAGMENT: (PARTICLE_BLOCK, {}),
+                  **{fragment: (GLASS_BLOCK, {}) for fragment in
+                     (BUBBLE_FRAGMENT, CLUSTER_FRAGMENT, NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT)}}
         cleanup.callback(gl.release)
 
         def owned_program(*args, **kwargs):

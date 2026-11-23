@@ -8,12 +8,12 @@ from rendering.quick.render.gl_resources import delete_program
 @pytest.mark.parametrize('population,radius_share',[('specks',1.),('specks',.25),('snow',1.)])
 def test_scene_particles_keep_near_wall_interior_but_fade_at_real_entry_exit_and_containment(qt_app,population,radius_share):
     from OpenGL import GL
-    from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK,SPECK_VERTEX,BEAD_VERTEX
+    from rendering.gl_programs.extruded_bubble_program import GLASS_BLOCK,PARTICLE_BLOCK,SPECK_VERTEX,BEAD_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
     gl=PassBlockGL(GL)          # the generators' values are their pass block (N1.6), set by name as before
-    block={'specks':PARTICLE_BLOCK}.get(population)
+    block=PARTICLE_BLOCK if population=='specks' else GLASS_BLOCK
 
     # Control only the per-instance input seed. Production inlet, trajectory,
     # opacity and containment code still own the resulting point and brightness.
@@ -35,8 +35,7 @@ void main(){'''+generated+'''gl_Position=vec4(0,0,0,1);}
     target=TransitionCapture(64,64);program=buffer=0
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;void main(){colour=vec4(0);}',label='scene physical entry fade')
-        if block is not None:
-            gl.register(program,block)
+        gl.register(program,block)
         buffer=int(gl.glGenBuffers(1));gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,buffer)
         gl.glBufferData(gl.GL_SHADER_STORAGE_BUFFER,8*16,None,gl.GL_DYNAMIC_READ)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,buffer)

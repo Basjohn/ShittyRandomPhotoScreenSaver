@@ -7,10 +7,13 @@ from rendering.quick.render.gl_resources import delete_program
 
 @pytest.mark.qt
 def test_attached_beads_keep_nominal_size_and_stay_below_every_reacted_parent(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
     from tools.transition_contact_sheet import TransitionCapture
+    from tools.pass_block_gl import PassBlockGL
+
+    gl = PassBlockGL(GL)
 
     # Replace only the raster entry point: the actual production generator writes to a
     # diagnostic SSBO, so this test does not restate its geometry formulas in Python.
@@ -30,6 +33,7 @@ void main() {
     try:
         program = compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',
                                   label='production bead geometry contract')
+        gl.register(program, GLASS_BLOCK)
         gl.glUseProgram(program)
         names=np.empty(2,dtype='u4')
         gl.glCreateBuffers(2,names)
@@ -110,6 +114,7 @@ void main() {
         assert np.any((rows[32:,2]>0)&(rows[32:,3]>0))
         assert rows[31,2] <= .5 and rows[63,2] <= .5
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         for binding in (6,7):gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,binding,0)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
@@ -170,11 +175,14 @@ void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_P
 
 @pytest.mark.qt
 def test_snow_fragment_honours_fractional_population_opacity(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, GLASS_BLOCK
     from rendering.gl_programs.extruded_bubble_scene import camera
     from rendering.quick.render.gl_resources import compile_program
     from tools.transition_contact_sheet import TransitionCapture
+    from tools.pass_block_gl import PassBlockGL
+
+    gl = PassBlockGL(GL)
 
     # Override only the generated population opacity. Exercise the production snow
     # fragment and OIT output, where the old consumer discarded this varying.
@@ -190,6 +198,7 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
         gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
         gl.glDrawBuffers(1, [gl.GL_COLOR_ATTACHMENT0])
         program = compile_program(vertex, BUBBLE_FRAGMENT, label='production snow opacity contract')
+        gl.register(program, GLASS_BLOCK)
         gl.glUseProgram(program)
         location = lambda name: gl.glGetUniformLocation(program, name)
         gl.glUniformMatrix4fv(location('uProjection'), 1, False, camera(0, 0, 1)[3])
@@ -222,6 +231,7 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
         assert 0 < energies[1] < energies[2]
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
+        gl.release()
         if program: delete_program(program)
         if texture: gl.glDeleteTextures([texture])
         target.close()
@@ -229,10 +239,13 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
 
 @pytest.mark.qt
 def test_procedural_world_positions_and_radii_do_not_follow_camera_or_pixel_size(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
     from tools.transition_contact_sheet import TransitionCapture
+    from tools.pass_block_gl import PassBlockGL
+
+    gl = PassBlockGL(GL)
 
     prefix=BEAD_VERTEX.split('void main() {\n    vOpacity = 1.0;\n')[0]
     vertex=prefix+'''
@@ -242,6 +255,7 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
     target=TransitionCapture(64,64);program=0;buffers=[]
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',label='fixed procedural world')
+        gl.register(program, GLASS_BLOCK)
         names=np.empty(2,dtype='u4');gl.glCreateBuffers(2,names);buffers=list(map(int,names))
         result,wakes=buffers
         gl.glNamedBufferData(result,224*16,None,gl.GL_DYNAMIC_READ)
@@ -275,6 +289,7 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
         assert np.all(samples[0][:,3]>0)
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         for binding in (6,7):gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,binding,0)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
@@ -285,11 +300,14 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
 @pytest.mark.qt
 def test_free_chain_population_band_on_gpu_matches_its_cpu_mirror(qt_app):
     """The bead shader's population edge is chain_opacity (the renderer sizes the draw by its CPU mirror)."""
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
     from tools.transition_contact_sheet import TransitionCapture
     from widgets.spotify_visualizer.extruded_bubble_material_paths import chain_opacity
+    from tools.pass_block_gl import PassBlockGL
+
+    gl = PassBlockGL(GL)
     prefix = BEAD_VERTEX.split('void main() {\n    vOpacity = 1.0;\n')[0]
     vertex = prefix + '''
 layout(std430, binding=6) buffer BeadResults { vec4 beadResults[]; };
@@ -306,6 +324,7 @@ void main() {
     try:
         program = compile_program(vertex, '#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',
                                   label='free-chain population band')
+        gl.register(program, GLASS_BLOCK)
         gl.glUseProgram(program)
         names = np.empty(1, dtype='u4')
         gl.glCreateBuffers(1, names)
@@ -340,6 +359,7 @@ void main() {
             got = opacities(fill)
             assert got[seen] == pytest.approx((full * expected)[seen], abs=1e-5)
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, 6, 0)
         if buffer:
