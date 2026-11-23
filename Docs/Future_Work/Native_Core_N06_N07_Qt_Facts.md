@@ -481,10 +481,9 @@ module's Qt), and the `6.12` head where they differ. The harness classifies thes
 6.12.0.** Every QRhi texture on Vulkan: callers `Qt6Gui.dll` (QRhi) from our `createOffscreenTarget`, from the job
 service's bodies, on both devices alike. [SRC] `v6.12.0` `QVkTexture::create`: `imageInfo.tiling =
 VK_IMAGE_TILING_OPTIMAL; imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;` and `prepareCreate` tracks
-`usageState.layout = VK_IMAGE_LAYOUT_PREINITIALIZED`; the `6.12` head has `UNDEFINED` with the comment "Must be
-UNDEFINED (and not PREINITIALIZED) with optimal tiling". Harmless on NVIDIA (the content is undefined either way) but
-invalid usage. Route: the next PySide6/Qt patch release that carries the head's line (D11's upgrade reruns every
-gate); until then excused everywhere, by id and the Qt caller only. The native core does not work around it (it
+`usageState.layout = VK_IMAGE_LAYOUT_PREINITIALIZED`. The released Qt 6.12.1 tag uses `UNDEFINED` for optimal
+tiling. Retire the exception only after D11's upgrade reruns every gate with the matching PySide6 wheels. Until
+then excused by id and the Qt caller only. [Qt 6.12.1 source](https://github.com/qt/qtbase/blob/v6.12.1/src/gui/rhi/qrhivulkan.cpp). The native core does not work around it (it
 would mean creating every image raw); D9's slots already read the true initial layout from `nativeTexture()`.
 
 **B. `SYNC-HAZARD-WRITE-AFTER-WRITE` at `vkCmdBeginRenderPass` (a target rendered every frame): Qt's QRhi, triggered

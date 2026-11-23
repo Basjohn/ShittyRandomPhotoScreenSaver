@@ -117,9 +117,7 @@ in the Watchlist.
     (median / p90) against the Python baseline's 7.15 / 8.88, late 0 %, but fps 0.0 and no swap gaps: the live check's
     Visualizer frame counter and gaps are the Python renderer's, so a native Visualizer row measures render time
     only (its Waveform receipt gate was the same defect, fixed 22 Nov: Python-renderer runs only).
-    - [ ] Give native Visualizer rows actual frame counts and within-run gap figures from native draws and correlated
-      swaps. Check the idle / no-draw negative and preserve the Python rows and transition rows with focused tests.
-    - [ ] Retake the Waveform row and compare its CPU (137.6 % of a core, with an agent busy beside it) and RSS / private
+    - [ ] After the fast long-clip proof's layer T tooling is repaired, retake the Waveform row and compare its CPU (137.6 % of a core, with an agent busy beside it) and RSS / private
       (1,013 / 1,710 MB) against a native Bubble row.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
@@ -244,6 +242,10 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 - [ ] `tools/media_key_matrix_harness.py` waits for an old `[DISPLAY_WIDGET]` window-flag message whose producer
   has been removed. Replace the oracle with the current window-policy evidence and exercise a failing control.
+- [ ] Make Linux smoke GL diagnostics readable: `tools/linux_smoke_dist.py` prints only the last 800 characters of
+  `glxinfo -B`, cutting off the renderer and sometimes the middle of a line. Both Xvfb builds on 23 Nov passed;
+  their logs show implausible virtual VRAM figures (4294848057 MB and 914948 MB). Report the renderer and GL version
+  directly, with the full probe retained on failure. Keep the render and settings admission checks.
 - [ ] Reconcile the raw-thread policy check with the existing PacketMailbox wake thread and its lifecycle
   owner. `tests/unit/test_policy_compliance.py` flags `core/visualizer_engine/packet_mailbox.py:472`.
 
@@ -459,8 +461,8 @@ automatic successor to NF, item 9 or the first new Visualizer.
       reports drift.
     - [ ] Rerun the native tests (`pytest tests -k native`), the N0.6 rounds without excuse A (the box below), and
       one Vulkan live check of a native mode on Display 1, then commit with the figures.
-  - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
-    `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
+  - [ ] Delete A from `QT_DEFECTS` for the Qt 6.12.1 rerun. The released Qt source uses `UNDEFINED`; close this
+    only when every project round is clean without A.
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
@@ -817,9 +819,10 @@ the feature (D3D11 is not stated).
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` section 7):
   - [ ] Layer L built (e0275205c): `tools/visualizer_replay/native_record_identity.py`, test
     `tests/test_native_record_identity.py`; evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
-  - [ ] Layer T on native paths (open): the live check reads cadence from Qt Quick's frame cycles when the native core
-    draws (`frames_per_s` is 0 on Vulkan today) and per-pass GPU time from `--gpu-pass-timing`;
-    `tools/quick_frame_cadence.py` is the reference; prove it gives the Python path's swap-gap figures on an OpenGL run.
+  - [ ] Layer T on native paths: give Visualizer live-check rows actual frame counts and within-run gaps from native
+    draws and correlated swaps (`frames_per_s` is 0 on Vulkan today). Prove that idle frames do not count and that
+    Python Visualizer and transition rows retain their figures. Compare the swap-gap figures on an OpenGL control;
+    keep per-pass GPU time on `--gpu-pass-timing`.
   - [ ] Layer P built (ddb3dc8b2, ec0bf3feb, 12a688e57, d0b2e8095, 29fc590c0): cached references
     (`tools/visualizer_replay/python_references.py`), native-only `--against`, `native_stream_player.py` for Vulkan
     (generic modes only; Spectrum's own item is not played yet), `--judge-workers`. Evidence `fast_proof/20261120_*`.
