@@ -829,12 +829,15 @@ the feature (D3D11 is not stated).
       Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
       adaptive state enabled, single sampling and masks. Budget 30 s per alternate and take; apply the late-window
       rule below before drawing. Run at most two reference processes at once.
-  - [ ] **Native record and route.** Add `core/visualizer_engine/extruded_bubble_native_schema.py`, the route
-    program, and the mode's `native_record_identity.MODES` entry with passes, read spans, streams and positional
-    members. Stage worker owners from the source reading. Map 64-bit family revisions to a small per-family
-    epoch and rebase flag in the u32 record. Prove L frame-by-frame for each take and graphics key above with
-    `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
-    --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
+  - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
+    and the source reading for field and resource ownership.
+    - [ ] Publish D3 family geometry under the projected keys before the worker exposes records. Preserve the
+      source epoch through a rebase and exercise resize, retirement and replacement.
+    - [ ] Pack the native compute step/knot streams. Exercise repeated records, short gaps and the restart edge.
+    - [ ] Complete the worker record, the mode program, and its `native_record_identity.MODES` entry with passes,
+      read spans, streams and positional members. Prove L frame by frame for each take and graphics key with
+      `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
+      --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
     skip and dispatch drift from cold start; confirm continuity and the restart control in `WARMUP_INPUTS`.
