@@ -97,12 +97,13 @@ def classify_group(g: dict) -> str | None:
 
 
 def excused(g: dict) -> bool:
-    """Whether a classified group is excused where it is: A everywhere, B in 'discard' phases, D in 'grab' phases, a
-    harness artefact only in its own phases (``HARNESS_ARTEFACT_PHASES``)."""
+    """Whether a registered defect or harness artefact is excused in the recorded phase."""
     phase = g.get("phase") or ""
     defect = g.get("qt_defect")
     if defect in HARNESS_ARTEFACTS:
         return phase in HARNESS_ARTEFACT_PHASES.get(defect, ())
+    if defect not in QT_DEFECTS:
+        return False
     return (defect == "A" or (defect == "B" and "discard" in phase) or (defect == "D" and "grab" in phase))
 
 

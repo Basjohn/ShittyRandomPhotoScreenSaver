@@ -559,7 +559,7 @@ def test_a_module_that_never_loaded_reports_that_alone():
         "vulkan: the Vulkan instance failed: vkCreateInstance: -9"]
 
 
-def test_the_validation_rule_excuses_only_qts_recorded_defects():
+def test_the_validation_rule_excuses_only_qts_recorded_defects(monkeypatch):
     import vk_validation as validation
 
     def entry(eid, caller, count=1, message=""):
@@ -567,7 +567,13 @@ def test_the_validation_rule_excuses_only_qts_recorded_defects():
                 "count": count, "stack": ["VkLayer_khronos_validation.dll+0x10", f"{caller}+0x20"]}
 
     excused = {"errors": 5, "entries": [entry("VUID-VkImageCreateInfo-initialLayout-12478", "Qt6Gui.dll", 5)]}
-    assert validation.validation_summary(excused)["clean"] is True
+    if "A" in validation.QT_DEFECTS:
+        assert validation.validation_summary(excused)["clean"] is True
+    monkeypatch.delitem(validation.QT_DEFECTS, "A", raising=False)
+    with_a_retired = validation.validation_summary(excused)
+    assert with_a_retired["recorded_qt_defects_excused"] == {}
+    assert with_a_retired["unexplained_errors"] == 5
+    assert with_a_retired["clean"] is False
     # The same id from our own module, or a hazard C (never excused), is not clean; repeats are counted.
     ours = {"errors": 2, "entries": [entry("VUID-VkImageCreateInfo-initialLayout-12478", "_srpss_native_core.pyd", 2)]}
     assert validation.validation_summary(ours)["unexplained_errors"] == 2

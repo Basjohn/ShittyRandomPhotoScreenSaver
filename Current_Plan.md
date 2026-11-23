@@ -464,8 +464,6 @@ automatic successor to NF, item 9 or the first new Visualizer.
     - [ ] With A removed from `native/core/python/vk_validation.py`, run the current N0.6 proof owners
       `host_check.py` and `composite_check.py` on Vulkan with `--require-validation` and `--layer-path`. Save the loaded
       Qt version and validation receipts. The released source uses `UNDEFINED`; close A when these rounds pass.
-  - [ ] Preflight defect: deleting A from `QT_DEFECTS` only removed its description. The validator still excused A.
-    Make exception admission require a live registry entry and prove its removal makes an injected A count as an error.
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
