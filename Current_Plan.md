@@ -87,9 +87,10 @@ Continue the native sequence below with the repaired timing receipts. The report
   (`.claude/worktrees/agent-ac5f7832a73527151/.artifacts/handover/JOURNAL.md`) for the earlier core and drift
   evidence. Its scratch and evidence are under `D:/Temp/Scratch/SRPSS/worktrees/agent-ac5f7832a73527151/`.
 - [ ] Waveform follow-ups:
-  - [ ] The OpenGL `fog_steady` readback in the harness path returns one garbage texel per row (56-byte GL rows into a
-    54-byte pitch; the product's `fog_volume` agrees across APIs): a readback defect in the core's or Qt's OpenGL path,
-    C++ (with the next core batch). 4d946129a's message claims a decoder fix that f61f2bfeb reverts.
+  - [ ] Fix native OpenGL's odd-width `r16f` scene-target readback with the next core build. Qt reads into
+    tightly sized storage without setting `GL_PACK_ALIGNMENT`, so the error is upstream of the Python decoder.
+    Reproduced in Waveform's `fog_steady` and the Extruded Bubble shaft proof. Prove odd and aligned widths on
+    both APIs, and scope the alignment change to the queued harness readback.
   - [ ] Watch: one GL_INVALID_ENUM on the route's first 4x frame on OpenGL (none single-sampled; a debug context caught no
     message); not the Group Wave squares (numeric overflow, fixed). Attribute with the next OpenGL route work.
   - [ ] Watch: the quiet-GPU `stream_ring` recheck (`mesh_buffer_check.py --rounds stream_ring`, GPU state before and
@@ -856,7 +857,8 @@ the feature (D3D11 is not stated).
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
     - [ ] Verify the shaft writer's jitter and content sampling on native Vulkan and OpenGL with nonzero lens
-      shift and odd, padded targets. The [reference proof](Docs/Guides/Native_Port_Playbook.md#pb-e15) exercises
+      shift and odd, padded targets. Place the backdrop vertex through the core's scene-item matrix when its
+      scene target is bucketed, so both placements derive rays from the card's content pixels. The [reference proof](Docs/Guides/Native_Port_Playbook.md#pb-e15) exercises
       the sampling with simulated row placement and stores timings for the cost comparison.
     - [ ] Check the largest framed aperture against `defocusReadLevelCap`, the turned-card composite and bloom,
       and the display-move drift-history contract in N3.9.
