@@ -819,3 +819,34 @@ def test_guided_setup_image_time_row_is_settings_own_control(qapp, settings, set
         assert page.body.itemAt(1).layout() is not None and page.body.itemAt(1).layout().indexOf(ours) >= 0
     finally:
         wizard.deleteLater(); tab.deleteLater()
+
+
+def test_interaction_page_fits_default_settings_viewport(qapp, settings_manager):
+    """The real default Settings shell shows both choices and previews without scrolling."""
+    from core.animation import AnimationManager
+    from ui.settings_dialog import SettingsDialog
+    settings_manager.set('sources.folders', ['C:/Pictures'])
+    dialog = SettingsDialog(settings_manager, AnimationManager())
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+    dialog.resize(dialog.minimumSize())
+    try:
+        dialog.show()
+        for _ in range(10):
+            qapp.processEvents()
+        dialog.run_guided_setup()
+        panel = dialog._guided_setup_panel
+        panel.show_page('interaction')
+        for _ in range(10):
+            qapp.processEvents()
+        page, scroll = panel.pages['interaction']
+        assert scroll.verticalScrollBar().maximum() == 0
+        for button in (*page.group.buttons(), *page.borderless_group.buttons()):
+            bottom = button.mapTo(scroll.viewport(), button.rect().bottomRight())
+            assert 0 <= bottom.y() < scroll.viewport().height()
+        for still in page.stills.values():
+            bottom = still.mapTo(scroll.viewport(), still.rect().bottomRight())
+            assert bottom.y() < scroll.viewport().height()
+    finally:
+        dialog.close()
+        dialog.deleteLater()
+        qapp.processEvents()
