@@ -411,7 +411,7 @@ function Assert-SRPSSForbiddenFrozenPayloadAbsent {
 
     # This is intentionally a product assertion, not merely a size heuristic.
     # These tokens name frozen families with no SRPSS runtime contract. If
-    # Nuitka/plugin behavior changes and one comes back, the MC build must fail
+    # Nuitka/plugin behavior changes and one comes back, the Dashboard build must fail
     # rather than silently publishing dead payload.
     $forbiddenTokens = @(
         'webengine',

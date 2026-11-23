@@ -1,7 +1,7 @@
 """Best-effort browser window foreground helpers.
 
 Centralizes the "prefer display 0, then fall back cleanly" policy used by
-SCR helper launches and MC direct-open flows. This layer intentionally does
+SCR helper launches and Dashboard direct-open flows. This layer intentionally does
 not launch browsers or manipulate browser internals; it only ranks existing
 top-level windows and attempts a foreground/restore on a matching candidate.
 """

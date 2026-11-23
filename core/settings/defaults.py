@@ -104,7 +104,7 @@ def _resolve_profile(application: str | None) -> str:
 
 
 def get_default_settings(application: str | None = None) -> Dict[str, Any]:
-    """Return a private copy of canonical defaults resolved for Normal or MC."""
+    """Return a private copy of canonical defaults resolved for Normal or Dashboard."""
 
     return deepcopy(_resolved_defaults_readonly(_resolve_profile(application)))
 

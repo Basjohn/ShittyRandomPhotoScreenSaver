@@ -520,11 +520,11 @@ def _seed_profile_settings(appdata_root: Path, image_dir: Path) -> None:
     prev_appdata = os.environ.get("APPDATA")
     try:
         os.environ["APPDATA"] = str(appdata_root)
-        mc = SettingsManager(application="Dashboard")
-        mc.set("sources.folders", [str(image_dir)])
-        mc.set("sources.rss_feeds", [])
-        mc.set("input.hard_exit", True)
-        mc.save()
+        dashboard = SettingsManager(application="Dashboard")
+        dashboard.set("sources.folders", [str(image_dir)])
+        dashboard.set("sources.rss_feeds", [])
+        dashboard.set("input.hard_exit", True)
+        dashboard.save()
 
         normal = SettingsManager(application="Screensaver")
         normal.set("sources.folders", [str(image_dir)])

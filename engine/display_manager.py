@@ -4383,7 +4383,7 @@ class DisplayManager(QObject):
     def _open_quick_reddit_url(self, widget_id: str, url: str) -> bool:
         """Route one admitted Reddit URL through the existing product authority.
 
-        MC/diagnostic builds remain interactive and open directly. The ordinary
+        Dashboard/diagnostic builds remain interactive and open directly. The ordinary
         saver uses the existing secure URL launcher, then exits normally after a
         successful handoff; helper readiness never gates saver teardown.
         """
@@ -6271,7 +6271,7 @@ class DisplayManager(QObject):
         """Open any deferred Reddit URLs collected during the last cleanup.
 
         Build-aware behaviour:
-        - **MC builds**: open directly via ``QDesktopServices.openUrl()``.
+        - **Dashboard builds**: open directly via ``QDesktopServices.openUrl()``.
         - **SCR builds**: URLs were pre-queued to ProgramData at click time.
           This flush acts as a safety-net for any URLs collected during
           cleanup that weren't pre-queued (e.g. edge-case race).
@@ -6291,12 +6291,12 @@ class DisplayManager(QObject):
                 try:
                     opened = QDesktopServices.openUrl(QUrl(url))
                     if opened:
-                        logger.info("[REDDIT] MC flush opened: %s", url)
+                        logger.info("[REDDIT] Dashboard flush opened: %s", url)
                         try:
                             from core.windows.browser_window_routing import try_bring_browser_window_to_front
                             if self._thread_manager is None or not hasattr(self._thread_manager, "single_shot"):
                                 logger.warning(
-                                    "[REDDIT][FALLBACK] MC flush foreground preference skipped: "
+                                    "[REDDIT][FALLBACK] Dashboard flush foreground preference skipped: "
                                     "ThreadManager single_shot unavailable"
                                 )
                             else:
@@ -6310,13 +6310,13 @@ class DisplayManager(QObject):
                                 )
                         except Exception:
                             logger.warning(
-                                "[REDDIT][FALLBACK] MC flush foreground preference setup failed",
+                                "[REDDIT][FALLBACK] Dashboard flush foreground preference setup failed",
                                 exc_info=True,
                             )
                     else:
-                        logger.warning("[REDDIT] MC flush rejected: %s", url)
+                        logger.warning("[REDDIT] Dashboard flush rejected: %s", url)
                 except Exception:
-                    logger.warning("[REDDIT] MC flush failed: %s", url, exc_info=True)
+                    logger.warning("[REDDIT] Dashboard flush failed: %s", url, exc_info=True)
         else:
             # SCR build: URLs should have been pre-queued at click time.
             # Safety-net: queue any that weren't (collected during cleanup).

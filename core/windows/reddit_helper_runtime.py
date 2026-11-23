@@ -558,7 +558,7 @@ def ensure_helper_runtime(
         return False
     if is_dashboard_build():
         logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in Dashboard build (%s)", source)
-        _log_helper_event(f"bootstrap skipped mc-build source={source}")
+        _log_helper_event(f"bootstrap skipped dashboard-build source={source}")
         return False
     if not reddit_helper_bridge.is_bridge_available():
         logger.warning("[REDDIT-HELPER] Bridge unavailable; helper bootstrap skipped (%s)", source)

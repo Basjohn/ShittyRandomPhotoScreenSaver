@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 def _runs_on_user_desktop() -> bool:
     """Return True when this process already owns the user's interactive desktop.
 
-    MC and the diagnostic product always do. On Linux the saver is an ordinary
+    Dashboard and the diagnostic product always do. On Linux the saver is an ordinary
     session application (there is no Winlogon secure desktop and no Windows
     helper), so links open directly there too.
     """
@@ -43,7 +43,7 @@ def open_steam_target(
 
     The normal screensaver cannot reliably launch into the interactive user's
     Steam process, so it hands the validated HTTPS fallback to the existing
-    helper queue. MC/diagnostic runs try Steam first and fall back to the
+    helper queue. Dashboard/diagnostic runs try Steam first and fall back to the
     browser when Qt rejects the protocol request.
     """
 
@@ -91,7 +91,7 @@ def open_url(
     Args:
         url: The URL to open.
         fallback: If True, try ``webbrowser.open()`` after other routes fail.
-        prefer_direct: Request MC-style native URL launch before any queue route.
+        prefer_direct: Request Dashboard-style native URL launch before any queue route.
         source: Safe route label for helper diagnostics.
 
     Returns:
@@ -123,7 +123,7 @@ def open_url(
                 type(exc).__name__,
             )
 
-    # MC, the separate diagnostic product and Linux are always interactive: a
+    # Dashboard, the separate diagnostic product and Linux are always interactive: a
     # failed direct route must not enqueue work for the Windows SCR helper,
     # which none of them owns or provisions.
     secure_handoff = not user_desktop

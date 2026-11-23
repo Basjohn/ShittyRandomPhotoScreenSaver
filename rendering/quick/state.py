@@ -70,7 +70,7 @@ class QuickWindowPolicy:
         if self.role is QuickWindowRole.DASHBOARD_TOOL:
             flags |= Qt.WindowType.Tool
         else:
-            # Standard runtime and the MC splash policy both preserve the
+            # Standard runtime and the Dashboard splash policy both preserve the
             # current WM_APPCOMMAND-capable native role.
             flags |= Qt.WindowType.SplashScreen
         if self.always_on_top:

@@ -1,7 +1,7 @@
 """Profile-specific canonical default overrides.
 
 This small data module is written by ``tools/default_settings_editor.py``.
-Normal defaults live directly in ``default_settings.py``. Only MC differences
+Normal defaults live directly in ``default_settings.py``. Only Dashboard differences
 apply on top for the ``Dashboard`` profile. Stable profile names keep
 exports and runtime reset behavior on the same source.
 """

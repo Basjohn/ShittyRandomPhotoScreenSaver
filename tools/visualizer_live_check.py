@@ -1,4 +1,4 @@
-"""Live-shape check for a Visualizer mode: the real MC saver, invisible, optionally under a game-like load.
+"""Live-shape check for a Visualizer mode: the real Dashboard saver, invisible, optionally under a game-like load.
 
     .venv/Scripts/python tools/visualizer_live_check.py --mode extruded_bubble --preset 1 --load game60
     .venv/Scripts/python tools/visualizer_live_check.py --mode shockwave_grid --preset 2 --seconds 90 --load none
@@ -13,7 +13,7 @@ meets it before the operator does.
 * **Display safety:** the saver runs from a COPY of ``%APPDATA%\\SRPSS`` (mode, preset and ``--set`` overrides are
   written into the copy only) with its display windows given an empty window region (no pixel and no click, yet presented as an ordinary window: opacity 0 or click-through would make it layered), never topmost and never focused. A guard
   checks every visible window of the run once a second and kills the run if any is not; ``--visible`` opts out (an
-  ordinary MC run, one display).
+  ordinary Dashboard run, one display).
 * **Music:** ``--clip`` (default a ~2 min mixed real-music recording) is played as the loopback in real time
   (``tools/visualizer_replay/live_audio.py``): the whole live audio path runs on recorded music, every run hears the
   same passages, and playback is reported as playing whatever the machine itself plays. ``--clip none`` uses the
@@ -930,7 +930,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="visualizer setting override, written into the copied profile only")
     parser.add_argument("--seconds", type=float, default=120.0)
     parser.add_argument("--load", default="none", help="gpu_load_generator profile (e.g. game60: lead only, after the operator's yes), or 'none' (default)")
-    parser.add_argument("--visible", action="store_true", help="an ordinary visible MC run (takes one display)")
+    parser.add_argument("--visible", action="store_true", help="an ordinary visible Dashboard run (takes one display)")
     parser.add_argument("--clip", default=str(DEFAULT_CLIP),
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")
     parser.add_argument("--clip-start", type=float, default=0.0, help="seconds into the recording")

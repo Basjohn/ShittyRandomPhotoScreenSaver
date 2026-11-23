@@ -1,4 +1,4 @@
-"""Run the real MC saver with per-phase timers on Extruded Bubble's render thread and logical publish.
+"""Run the real Dashboard saver with per-phase timers on Extruded Bubble's render thread and logical publish.
 
     .venv/Scripts/python tools/eb_live_phases.py --out logs/eb_live_phases.json -- --perf --frame-trace --exit-after 120 /s
 

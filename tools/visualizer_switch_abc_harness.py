@@ -800,7 +800,7 @@ def main(argv: list[str] | None = None) -> int:
             "--abc-drive=<condition> and --abc-layout-slot=<slot> are appended. "
             "main_dashboard.py injects RUN mode when no explicit screensaver mode is "
             "supplied; frozen .scr builds still need their normal '/s'. Default "
-            "targets the MC build and includes retained lifecycle detail."
+            "targets the Dashboard build and includes retained lifecycle detail."
         ),
     )
     p_auto.add_argument("--layout-slot", default="1", dest="layout_slot")

@@ -271,7 +271,7 @@ def main() -> int:
                         help="after --launch-s, wait this long for a self-exiting run (e.g. an "
                              "--exit-after run script) to exit on its own before any forced close")
     parser.add_argument("--launch-script", default=None,
-                        help="python script to launch instead of `main.py /c` (e.g. an MC run "
+                        help="python script to launch instead of `main.py /c` (e.g. an Dashboard run "
                              "script that requests Settings in the running saver)")
     parser.add_argument("--profile-folder", default="SRPSS",
                         help="AppData folder whose settings_v2.json is backed up/restored")
