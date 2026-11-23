@@ -259,6 +259,8 @@ decision, recorded with its reason.
     `--frame-trace` observes the draw counter around Qt's native frame driver. It pairs only a draw and swap in the
     same display, generation and render cycle. The summary counts both, uses correlated swaps for FPS and
     within-window gaps, and reserves logical publication-to-swap age for evidence that carries logical revisions.
+    A requested Visualizer measurement over a nonempty steady window fails if no correlated swaps occurred.
+    The failed report still writes its summary and keeps its trace.
 - **To build** (`Current_Plan.md`, "Fast long-clip proof" and "Bubble optimisation proof gap"):
   - a profile of the replay's time;
   - layer L for the native record;

@@ -260,8 +260,10 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "steady_seconds": round(seconds, 1),
         "revisions_per_s": revision_rate(steady_publishes) if worker_path else records_per_s,
         "publish_records_per_s": records_per_s,
+        "steady_publish_count": len(steady_publishes),
         "tick_to_publish_ms": _stats(tick),
         "frames_per_s": round((len(swaps) + native_swap_count) / seconds, 1),
+        "steady_visualizer_swap_count": len(swaps) + native_swap_count,
         "native_visualizer_draws": sum(start <= ts < stop for ts in native_draws.values()),
         "native_visualizer_swaps": native_swap_count,
         "consumed_age_at_sync_ms": _stats(consumed),
@@ -1177,9 +1179,15 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     worker_path = engine_worker_path(args.app_arg)
     summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None,
                                  worker_path=worker_path))
-    if worker_path and not summary["publish_records_per_s"] and args.mode != "none":
-        # Fail closed: without the worker's publish stamps the age chain would read as empty, not as measured.
-        raise RuntimeError("engine-worker run recorded no publish in the trace (no publish_ns reached the main side)")
+    start_ns, stop_ns = summary["steady_window_ns"]
+    measure_visualizer = args.mode != "none" and start_ns < stop_ns
+    if measure_visualizer:
+        if worker_path and not summary["steady_publish_count"]:
+            summary["visualizer_timing_failure"] = (
+                "engine-worker run recorded no publish in the steady window (no publish_ns reached the main side)"
+            )
+        elif not summary["steady_visualizer_swap_count"]:
+            summary["visualizer_timing_failure"] = "no correlated Visualizer swaps in the steady window"
     if args.display_off or args.process_samples:
         (out / "power_samples.jsonl").write_text("".join(json.dumps(row) + "\n" for row in power_samples),
                                                  encoding="utf-8")
@@ -1207,7 +1215,8 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     # draws it (N5.4, 22 Nov) and the run is judged on the frame figures like every native mode.
     from core.diagnostics.experiment_flags import parse_experiment_flags
 
-    python_waveform = (args.mode == 'waveform_ribbon'
+    python_waveform = (measure_visualizer and "visualizer_timing_failure" not in summary
+                       and args.mode == 'waveform_ribbon'
                        and parse_experiment_flags(list(args.app_arg)).graphics_backend != 'vulkan')
     if python_waveform and not phases_path.exists():
         raise RuntimeError('Waveform run has no phase/admission receipt')
@@ -1249,8 +1258,11 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
             print(f"  {name:9s} {pair[name]}")
     for failure in (summary.get("transition_session") or {}).get("failures", ()):
         print(f"FAIL transition session: {failure}")
+    timing_failure = summary.get("visualizer_timing_failure")
+    if timing_failure:
+        print(f"FAIL Visualizer timing: {timing_failure}")
     print(f"written {out / 'summary.json'}")
-    return 3 if (summary.get("transition_session") or {}).get("failures") else 0
+    return 3 if timing_failure or (summary.get("transition_session") or {}).get("failures") else 0
 
 
 if __name__ == "__main__":
