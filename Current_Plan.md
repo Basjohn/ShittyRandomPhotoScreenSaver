@@ -825,7 +825,9 @@ the feature (D3D11 is not stated).
       binding 6, which is also occupied by `EbMaterialDrift` in Vulkan's shared namespace. Keep the probe geometry
       shader on the ratchet for its layered `gl_Layer` write, which has no HLSL variant.
   - [ ] **Redraw the Python references** once the shader conversions and **1B.10a stream-speed range** work are
-    complete. Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
+    complete. Use a fresh explicit `--references` root for this redraw and the matching native runs. The
+  reference-only path's cache key covers drawing sources and skips the logical-digest comparison.
+  Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
     and `owner_render_parity.py --references-only`. The cache key includes Python shader sources. Existing
     60 s human and nightsolong base runs are indexed in `native_core/n5_6/20261122_refs_<take>_60/python_references.json`
     and the [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
@@ -858,7 +860,7 @@ the feature (D3D11 is not stated).
       holds depth clear 1 and drops the captured depth. The depth-backed glass shaders still write fragment depth.
     - [ ] Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) on the
       Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
-      `.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen/`.
+      [the archived 22 Nov response trace](.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen.zip).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
@@ -1995,12 +1997,14 @@ the lead rejects any still or showcase frame that shows one.
   working ... We get that even though for example P9 is set minimum 0.13 and maximum 0.89. We're supposed to get that
   full range (with fast attack slow decay as always) that is set."** (This is the "older bubbles don't accelerate"
   report: the 22 Nov trace's 0.79-1.00 is age bands' correlation with the stream, never the range the stream reaches.)
-  Fix before N5.6's references: measure the achieved stream speed against the authored minimum and maximum over whole
-  songs (`tools/visualizer_replay/extruded_bubble_music_response.py`, the song's PCM envelope above it); the speed must
-  be wired to energy, sweep the full authored range (quiet near the minimum, loud near the maximum), never pin, attack
-  faster than it decays, decay gentle (the same rule as Waveform's travel-speed slider). Find what compresses it
-  (normalisation, smoothing, a clamp, an adaptive floor), fix at the owner, prove on Presets 9 and 1 with a control.
-  The N5.6 references stored 22 Nov (human_heavy1, nightsolong) are redrawn after the fix.
+  - The [recorded and fixed-input reproductions](.artifacts/evidence/visualizers/extruded_bubble/stream_speed_range/)
+    show the stream below its lower endpoint during quiet playback and below its upper endpoint at settled full
+    energy. The stream applies an activity multiplier after interpolation and a soft ceiling to its music drive.
+  - [ ] Fix the stream's own energy-to-speed mapping and attack/release. Preserve the play ramp, pause motion,
+    age-independent forward transport and authored controls. Use the existing body-energy feed.
+  - [ ] Prove the endpoints and asymmetric response with held and stepped inputs, then compare the recorded
+    human, nightsolong and ragdoll runs against baseline. Show that the stream sweeps its range without pinning
+    during active passages. Finish these checks before drawing the N5.6 references.
 - [ ] Extruded Bubble Studio, with the Studio work (operator, 22 Nov):
   - [ ] Stream Speed becomes one range slider (minimum = speed at least energy, maximum = speed at most energy), replacing
     the quiet/peak pair, which is harder to use; presets keep their values through the spec owner (repair fill, never
