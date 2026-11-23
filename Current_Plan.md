@@ -57,8 +57,8 @@ Continue the native sequence below with the repaired timing receipts. The report
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
    layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
    rule (b) over the four takes, the 2560 x 1440 cost, and the D1 rehearsal.
-2. The scene-fade double-rounding fix (the "Spectrum and Spline Curve long-take residuals" box). Then rerun Bubble's
-   tracked exceptions and the Spectrum and Spline Curve control.
+2. Recheck Bubble's three tracked inputs under R-242 and the current D12 rule (a). Use the completed post-fix
+   Spectrum and Spline Curve long-take controls in the residuals section.
 3. Bubble GPU optimisation under the guide (its box), alongside step 4.
 4. Ports, each under the guide from its first brief: the Oscilloscope (N5.1), then Waveform (N5.4) under the fast
    proof's split (the guide's section 7: full-take native-only runs against cached references; windows only for
@@ -767,9 +767,8 @@ the feature (D3D11 is not stated).
     `outer_origin=(803.0, 517.0)`, dpr 1.
 - [ ] N5.1 Bubble (registered on the route, offered on Vulkan; D12 "As built: Bubble"; statistics and eliminated
   suspicions `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; tools `Docs/Guides/Native_Bubble_Diagnostics.md`;
-  follow the Native Port Playbook; no further tolerance widening). Proved: layer P on OpenGL over the four 60 s takes,
-  on Vulkan over the 5.5 s replay only; L indirectly; C at 4K. Not proved: T. Rule (b) passes on the 5.5 s replay;
-  owner rule (a) fails three steady frames on two of the four 60 s takes under today's rule. Remaining, in order:
+  follow the Native Port Playbook; no further tolerance widening). The long-take current-rule rechecks cleared the three
+  steady failures. Layer T and the current-source replay of the tracked scene-fade inputs remain open.
   - [ ] Layer T on Vulkan (lead, Display 1): first runs 20 Nov match the Python OpenGL control in median and p90 and
     in tick-to-publish; the tail is heavier (frames over 16.7 ms 27, 39, 27 against 11, 16, 18), all of it after
     rendering ends, not sync or recording. Evidence `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`,
@@ -786,16 +785,9 @@ the feature (D3D11 is not stated).
     - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
       Vulkan's late frames fall within the control's spread. If it is the driver's or Qt's, record it in D12 and ask
       the operator. Then Bubble's own T tools (its diagnostics guide).
-  - [ ] Checkpoint audit 8 M1, what is left (D12's Bubble line):
-    - [ ] A straight line of 65 one-level pixels (groups of 22) still passes the 16 x 16 density bound of 26: decide
-      whether it needs its own rule.
-    - [ ] Rule (b)'s density bound is not set (evidence `fast_proof/20261121_rule_b_60s_*`); it waits for the 60 s decision.
-    - [ ] Rerun the offers and rule (b)'s 684 frames under the fix; classify any newly failing frame, never widen a bound.
-  - [ ] Bubble's 60 s takes under today's rules (audit 8 M2; evidence `fast_proof/20261120_m2_rule_a_60s_*`,
-    `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`): classify and decide; no bound raised.
-  - [ ] Tracked exceptions of the scene-fade double-rounding class (D12's Bubble line; no bound change): the
-    `nightsolong_acousticsoft1` input 22 pair and the `stream_direction=2` and `=6` offer runs at input 337; they
-    disappear when the scene-fade fix lands. Evidence `n5_1_bubble/20261117_offers/`, `20261117_offer_tie_classes/`.
+  - [ ] Verify the scene-fade exceptions on R-242 with the current D12 rule (a). Drive the owner replay from the start
+    of each take to cover variant-a `nightsolong_acousticsoft1` input 22 and the offer directions 2 and 6 at input 337
+    at both placements. Retain frame receipts and classify any residual under the existing limits.
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11); 4K is measured (D12).
   - [ ] Ambience-off reads higher than ambience-on at 4K: variant b differs from variant a in many settings, so measure
     one frame with only the ambience switched (`bubble_check.py` `COST_RUNS`).
@@ -1385,9 +1377,6 @@ the feature (D3D11 is not stated).
     - Fixed at the source by the card quad (ABI 32, merged 21 Nov): failed frames 23 -> 6, class A gone. The 6 left
       (class B, one-level touching pairs, also seen in Python against itself) are backlog: human_heavy1 a 2358, 4200;
       nightsolong a 941, 4194, b 4836; anything_mixed2 a 2151.
-  - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
-    (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
-    Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
   - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
     output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
 - [ ] Bubble GPU optimisation (Opus Medium agent ae6c6e5974266bad5, 21 Nov; the live Display 1 baseline is the lead's)
