@@ -289,6 +289,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 - Traps: `RenderTo3DTextureSlice` on Vulkan needs a 1.1 instance (the facts probe reads the adopted instance's
   `apiVersion`); a 3D texture cannot be multisampled; the fog's steady share must never be eroded (`Primitives.md`
   E15); the shaft source downsample reads a multisampled texture (N1.8's resolve-first set).
+- Extruded Bubble's shaft blur uses two targets with matching content and allocation sizes. Each blur tap and the
+  backdrop's final read clamp to content texel centres. The [reference proof](../../.artifacts/evidence/visualizers/extruded_bubble/capture/20261123_raster_qa/report.md)
+  includes asymmetric rows, poisoned padding, recorded display and overscan replays, timings and native shader bakes.
 - Proof: standard plus the 3D slice-by-slice readback proved in N3.3 (D16 "3D storage images").
 
 <a id="pb-e5"></a>

@@ -184,15 +184,32 @@ vec2 waterSpecks(vec3 ray, vec2 framePx) {
     return vec2(warm, cool) * (0.6 + 0.6 * clouds);
 }
 """
+_SHAFT_SAMPLING_GLSL = """
+vec2 shaftContentOrigin(vec2 allocation, vec2 content) {
+#ifdef SRPSS_NATIVE_CORE
+    // SceneTargets puts the content at the bottom of the target's memory rows.
+    return vec2(0.0, allocation.y - content.y);
+#else
+    return vec2(0.0);  // Python's OpenGL content starts at framebuffer row zero.
+#endif
+}
+vec2 shaftSampleUv(vec2 contentUv, vec2 allocation, vec2 content) {
+    vec2 origin = shaftContentOrigin(allocation, content);
+    vec2 uv = contentUv * (content / allocation) + origin / allocation;
+    return clamp(uv, (origin + 0.5) / allocation, (origin + content - 0.5) / allocation);
+}
+"""
 _BACKDROP_BODY = ("uniform vec2 uFrameSize;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
-                  + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
+                  + SRPSS_CONVENTIONS_FRAGMENT_GLSL + _SHAFT_SAMPLING_GLSL + """
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
 #ifdef EB_PROBE_BACKDROP
     float shafts = 0.6 * pow(max(dot(ray, uSunBelow), 0.0), 3.0) * uRays;
 #else
-    float s = texture(uShafts, fragUv(uFrameSize)).r;
+    vec2 pixel = fragPixel(u_target_px) - shaftContentOrigin(u_target_px, uFrameSize);
+    vec2 allocation = vec2(textureSize(uShafts, 0));
+    float s = texture(uShafts, shaftSampleUv(pixel / uFrameSize, allocation, uShaftContentPx)).r;
     float shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
 #endif
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
@@ -365,13 +382,14 @@ void main() {
 """)
 _BACKDROP_HEADER = "#version 460 core\nlayout(location=0) out vec4 FragColor;\nin vec2 vNdc;\n"
 BACKDROP_FRAGMENT = (_BACKDROP_HEADER + "layout(location=1) out vec4 Emission;\n"
-                     "uniform sampler2D uShafts;\n" + _BACKDROP_BODY)
+                     "uniform sampler2D uShafts;\nuniform vec2 u_target_px;\nuniform vec2 uShaftContentPx;\n"
+                     + _BACKDROP_BODY)
 PROBE_BACKDROP_FRAGMENT = _BACKDROP_HEADER + "#define EB_PROBE_BACKDROP\n" + _BACKDROP_BODY
 
 # Volumetric shafts at half resolution, jittered, then blurred: smooth beams without per-pixel grain.
 SHAFT_FRAGMENT = ("#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL
                   + COMMON + SRPSS_CONVENTIONS_FRAGMENT_GLSL) + """
-uniform vec2 uFrameSize;        // the half-resolution shaft target's pixels (fragPixel's target: the jitter's seed)
+uniform vec2 u_target_px;      // the explicit half-resolution shaft target's content pixels
 uniform float uShaftScale;     // source pattern frequency (1: the shared pattern's)
 uniform float uShaftSoft;       // threshold softness 0..1
 uniform float uShaftFan;
@@ -549,7 +567,13 @@ float beamShafts(vec3 ray, vec3 rayOrigin, float maxDistance, vec3 sunBelow, flo
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
-    float jitter = fract(52.9829189*fract(dot(fragPixel(uFrameSize),vec2(0.06711056,0.00583715))));
+#ifdef SRPSS_NATIVE_CORE
+    // Recover the pixel centre from the content viewport even when the writer's allocation has slack.
+    vec2 pixel = floor(ndcToUv(vNdc + uLensShift) * u_target_px) + 0.5;
+#else
+    vec2 pixel = fragPixel(u_target_px);
+#endif
+    float jitter = fract(52.9829189*fract(dot(pixel,vec2(0.06711056,0.00583715))));
     if (uLightingScene < 0.5) {
         float toward = pow(max(dot(ray, uSunBelow), 0.0), 2.0);
         float march = beamShafts(ray, rayOrigin, 45.0, uSunBelow, uShaftY, uTime, 40, jitter) * 0.13 * (0.25 + toward);
@@ -585,15 +609,17 @@ BLUR_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uSource;
 uniform vec2 uStep;
-""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
+uniform vec2 u_target_px;  // the explicit content size shared by the ping-pong targets
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + _SHAFT_SAMPLING_GLSL + """
 void main() {
-    vec2 size = vec2(textureSize(uSource, 0));   // the blur draws a target of its source's size
-    vec2 here = fragPixel(size);
+    // Both blur targets have the same allocation and content.
+    vec2 allocation = vec2(textureSize(uSource, 0));
+    vec2 here = fragPixel(allocation) - shaftContentOrigin(allocation, u_target_px);
     const float w[5] = float[5](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
-    float sum = texture(uSource, here / size).r * w[0];
+    float sum = texture(uSource, shaftSampleUv(here / u_target_px, allocation, u_target_px)).r * w[0];
     for (int i = 1; i < 5; ++i) {
-        sum += texture(uSource, (here + uStep * float(i) * 1.5) / size).r * w[i];
-        sum += texture(uSource, (here - uStep * float(i) * 1.5) / size).r * w[i];
+        sum += texture(uSource, shaftSampleUv((here + uStep * float(i) * 1.5) / u_target_px, allocation, u_target_px)).r * w[i];
+        sum += texture(uSource, shaftSampleUv((here - uStep * float(i) * 1.5) / u_target_px, allocation, u_target_px)).r * w[i];
     }
     FragColor = vec4(sum);
 }

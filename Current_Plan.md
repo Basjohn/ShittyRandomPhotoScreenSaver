@@ -820,9 +820,6 @@ the feature (D3D11 is not stated).
   - [ ] **Prepare the Python shaders** ([playbook checklist 16](Docs/Guides/Native_Port_Playbook.md)).
     Keep before/after stills and a comparison WebP for each changed path. Use the
     [port proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run) for verified rendering fixes.
-    - [ ] Address shafts and blur in target pixels. Clamp the two blur directions and the screen's final shaft
-      sample to content texel centres before normalizing by allocation size. Test odd content with poisoned
-      padding and distinct top and bottom rows, then compare recorded display and overscan frames.
     - [ ] Convert the traced-glass loose uniforms to a block. Record the previously measured compiler rounding
       difference (one 8-bit level on 1–2 pixels in 14–26 of 549 frames). Move the beads' probe sampler away from
       binding 6, which is also occupied by `EbMaterialDrift` in Vulkan's shared namespace. Keep the probe geometry
@@ -852,13 +849,16 @@ the feature (D3D11 is not stated).
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
-    Run the largest framed aperture against `defocusReadLevelCap`, turned-card composite and bloom, and the
-    display-move drift-history contract in N3.9. Decide whether to omit the scene depth/resolve in both renderers
-    with equal-frame proof. The current scene holds depth clear 1, and the captured depth is unused. The current
-    depth-backed glass shaders still write depth; this decision is separate from the depthless near variants.
-    Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) for the
-    Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
-    `.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen/`.
+    - [ ] Verify the shaft writer's jitter and content sampling on native Vulkan and OpenGL with nonzero lens
+      shift and odd, padded targets. The [reference proof](Docs/Guides/Native_Port_Playbook.md#pb-e15) exercises
+      the sampling with simulated row placement and stores timings for the cost comparison.
+    - [ ] Check the largest framed aperture against `defocusReadLevelCap`, the turned-card composite and bloom,
+      and the display-move drift-history contract in N3.9.
+    - [ ] Decide whether to omit the scene depth and resolve in both renderers with equal-frame proof. The scene
+      holds depth clear 1 and drops the captured depth. The depth-backed glass shaders still write fragment depth.
+    - [ ] Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) on the
+      Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
+      `.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen/`.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
