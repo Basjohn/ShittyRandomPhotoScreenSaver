@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Tuple
 
 from core.logging.logger import get_logger
+from core.settings.legacy_setting_aliases import promote_dashboard_section
 from core.settings.persistence import (
     PersistenceTicket,
     flush_settings_path,
@@ -153,6 +154,7 @@ class JsonSettingsStore:
             else:
                 flat[key] = value
 
+        flat, dashboard_repaired = promote_dashboard_section(flat)
         flat, repaired_atomic = _promote_flattened_atomic_mappings(flat)
         if repaired_atomic:
             logger.info(
@@ -193,7 +195,7 @@ class JsonSettingsStore:
             ),
         }
         self._finish_load_locked()
-        if repaired_atomic or repaired_roots or widget_theme_repaired:
+        if repaired_atomic or repaired_roots or widget_theme_repaired or dashboard_repaired:
             # The in-memory image now differs from disk and must be written once
             # at the next durability boundary. Mark it as a real state revision
             # so a second load does not depend on compatibility promotion again.

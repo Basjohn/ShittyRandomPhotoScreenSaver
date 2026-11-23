@@ -284,6 +284,8 @@ class SettingsManager(QObject):
 
         try:
             migrated = self._migrate_from_qsettings(organization, app_name)
+            if not migrated and app_name == "Dashboard" and self._storage_base_dir is None:
+                migrated = self._migrate_from_qsettings(organization, "Screensaver_MC")
             if migrated:
                 logger.info(
                     "Migrated legacy QSettings profile '%s/%s' into %s",
@@ -329,6 +331,8 @@ class SettingsManager(QObject):
             except Exception:
                 logger.debug("[MIGRATE] Failed to read legacy key %s", key, exc_info=True)
 
+        from core.settings.legacy_setting_aliases import promote_dashboard_section
+        flat, _dashboard_repaired = promote_dashboard_section(flat)
         flat, repaired_roots = promote_legacy_structured_store_shape(flat)
         if repaired_roots:
             logger.info(
@@ -2316,3 +2320,4 @@ class SettingsManager(QObject):
         """Delegates to core.settings.sst_io."""
         from core.settings.sst_io import normalize_sst_snapshot
         return normalize_sst_snapshot(snapshot)
+

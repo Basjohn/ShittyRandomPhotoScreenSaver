@@ -97,9 +97,9 @@ class TestMCDefaults:
         from core.settings.settings_manager import SettingsManager
 
         settings = SettingsManager(application="Dashboard", storage_base_dir=tmp_path)
-        expected = bool(require_canonical_default("mc.always_on_top", "Dashboard"))
+        expected = bool(require_canonical_default("dashboard.always_on_top", "Dashboard"))
 
-        assert settings.get_bool("mc.always_on_top", not expected) is expected
+        assert settings.get_bool("dashboard.always_on_top", not expected) is expected
 
 
 class TestExportImportIsolation:

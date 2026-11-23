@@ -78,8 +78,8 @@ def test_real_persisted_fallbacks_are_canonical_product_defaults() -> None:
         "PROFILE_DEFAULT_OVERRIDES",
     )
     assert "mc" not in defaults
-    assert "always_on_top" in overrides["Dashboard"]["mc"]
-    assert isinstance(overrides["Dashboard"]["mc"]["always_on_top"], bool)
+    assert "always_on_top" in overrides["Dashboard"]["dashboard"]
+    assert isinstance(overrides["Dashboard"]["dashboard"]["always_on_top"], bool)
 
 
 def test_runtime_history_and_settings_session_state_are_not_product_defaults() -> None:
@@ -243,7 +243,7 @@ def test_import_coercion_is_schema_driven_not_key_list_driven() -> None:
     assert "if isinstance(canonical, int)" in manager
     assert "if isinstance(canonical, float):" in manager
     assert '"queue.history_size",' not in manager
-    assert '"mc.always_on_top",' not in manager
+    assert '"dashboard.always_on_top",' not in manager
 
 
 def test_json_store_persists_explicit_null_as_distinct_from_missing() -> None:
@@ -611,7 +611,7 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
                 if key not in left:
                     # Recurse into a newly-added subtree so its leaves match the
                     # flattened overlay (e.g. a brand-new ``mc`` section becomes
-                    # ``mc.always_on_top`` rather than the whole ``mc`` dict).
+                    # ``dashboard.always_on_top`` rather than the whole ``mc`` dict).
                     result.update(collect_diff({}, right[key], path))
                 elif key not in right:
                     result.update(collect_diff(left[key], {}, path))

@@ -25,6 +25,30 @@ RETIRED_SETTING_KEYS = frozenset({
 }) | frozenset(RETIRED_ROOT_SETTING_KEYS)  # transitions.direction (SC1)
 
 
+def promote_dashboard_section(data: Mapping[str, Any], *, nested: bool = False) -> tuple[dict[str, Any], bool]:
+    """Move the retired product section at input boundaries; current values win."""
+    result = deepcopy(dict(data))
+    changed = False
+    if nested:
+        old = result.get("mc")
+        if isinstance(old, Mapping):
+            result.pop("mc")
+            current = result.get("dashboard")
+            if "dashboard" not in result or isinstance(current, Mapping):
+                merged = dict(current) if isinstance(current, Mapping) else {}
+                for key, value in old.items():
+                    merged.setdefault(key, deepcopy(value))
+                result["dashboard"] = merged
+            changed = True
+    else:
+        for key in list(result):
+            if str(key).startswith("mc."):
+                result.setdefault("dashboard." + str(key)[3:], result[key])
+                del result[key]
+                changed = True
+    return result, changed
+
+
 def is_legacy_setting_alias(key: object) -> bool:
     return str(key) in LEGACY_DOTTED_SETTING_ALIASES
 
@@ -64,3 +88,4 @@ __all__ = [
     "is_legacy_setting_alias",
     "promote_legacy_section_aliases",
 ]
+

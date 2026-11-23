@@ -1,8 +1,8 @@
-"""Standalone GUI for editing canonical Normal and MC default settings.
+"""Standalone GUI for editing canonical Normal and Dashboard default settings.
 
 The tree is generated recursively from the canonical base literal, so new
 settings appear automatically. Normal saves become the authoritative base;
-only MC differences remain in the compact profile overlay. After a save the
+only Dashboard differences remain in the compact profile overlay. After a save the
 defaults authority check runs in a fresh Python process, so it validates the
 sources just written; a failure restores them. Nothing else is generated.
 """
@@ -103,7 +103,7 @@ _NO_DEFAULT = object()
 _PROFILE_MODULE_HEADER = '''"""Profile-specific canonical default overrides.
 
 This small data module is written by ``tools/default_settings_editor.py``.
-Normal defaults live directly in ``default_settings.py``. Only MC differences
+Normal defaults live directly in ``default_settings.py``. Only Dashboard differences
 apply on top for the ``Dashboard`` profile. Stable profile names keep
 exports and runtime reset behavior on the same source.
 """
@@ -218,7 +218,7 @@ _SECTION_DESCRIPTIONS = {
     "accessibility": "accessibility and display-protection behavior",
     "display": "image presentation and rendering behavior",
     "input": "interaction and pointer behavior",
-    "mc": "Dashboard window behavior",
+    "dashboard": "Dashboard window behavior",
     "queue": "image queue behavior",
     "scene3d": "3D detail tiers for 3D transitions and Visualizers",
     "sources": "local and feed source selection",
@@ -327,8 +327,8 @@ def build_profile_models(
     overrides: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
     normal = merge_default_overrides(base, overrides.get(NORMAL_PROFILE, {}))
-    mc = merge_default_overrides(normal, overrides.get(DASHBOARD_PROFILE, {}))
-    return {NORMAL_PROFILE: normal, DASHBOARD_PROFILE: mc}
+    dashboard = merge_default_overrides(normal, overrides.get(DASHBOARD_PROFILE, {}))
+    return {NORMAL_PROFILE: normal, DASHBOARD_PROFILE: dashboard}
 
 
 def build_profile_overrides(
@@ -336,10 +336,10 @@ def build_profile_overrides(
     models: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     normal = dict(models[NORMAL_PROFILE])
-    mc = dict(models[DASHBOARD_PROFILE])
+    dashboard = dict(models[DASHBOARD_PROFILE])
     return {
         NORMAL_PROFILE: {},
-        DASHBOARD_PROFILE: deep_difference(normal, mc),
+        DASHBOARD_PROFILE: deep_difference(normal, dashboard),
     }
 
 
@@ -487,14 +487,14 @@ def merge_imported_profile(
     models: Mapping[str, Mapping[str, Any]],
     profile: str,
     imported: Mapping[str, Any],
-    mc_explicit_paths: set[tuple[str, ...]],
+    dashboard_explicit_paths: set[tuple[str, ...]],
 ) -> tuple[dict[str, dict[str, Any]], set[tuple[str, ...]]]:
-    """Merge imported settings while preserving MC's explicit inheritance breaks."""
+    """Merge imported settings while preserving Dashboard's explicit inheritance breaks."""
     merged_models = {
         NORMAL_PROFILE: deepcopy(dict(models[NORMAL_PROFILE])),
         DASHBOARD_PROFILE: deepcopy(dict(models[DASHBOARD_PROFILE])),
     }
-    explicit_paths = set(mc_explicit_paths)
+    explicit_paths = set(dashboard_explicit_paths)
 
     if profile == DASHBOARD_PROFILE:
         merged_models[DASHBOARD_PROFILE] = merge_default_overrides(
@@ -504,18 +504,18 @@ def merge_imported_profile(
         explicit_paths.update(leaf_paths(imported))
         return merged_models, explicit_paths
 
-    old_mc = merged_models[DASHBOARD_PROFILE]
+    old_dashboard = merged_models[DASHBOARD_PROFILE]
     explicit_values = {
-        path: deepcopy(get_path(old_mc, path))
+        path: deepcopy(get_path(old_dashboard, path))
         for path in explicit_paths
-        if get_path(old_mc, path, _MISSING) is not _MISSING
+        if get_path(old_dashboard, path, _MISSING) is not _MISSING
     }
     new_normal = merge_default_overrides(merged_models[NORMAL_PROFILE], imported)
-    new_mc = deepcopy(new_normal)
+    new_dashboard = deepcopy(new_normal)
     for path, value in explicit_values.items():
-        set_path(new_mc, path, value)
+        set_path(new_dashboard, path, value)
     merged_models[NORMAL_PROFILE] = new_normal
-    merged_models[DASHBOARD_PROFILE] = new_mc
+    merged_models[DASHBOARD_PROFILE] = new_dashboard
     return merged_models, explicit_paths
 
 
@@ -920,7 +920,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._overrides: dict[str, dict[str, Any]] = {}
         self._models: dict[str, dict[str, Any]] = {}
         self._initial_models: dict[str, dict[str, Any]] = {}
-        self._mc_explicit_paths: set[tuple[str, ...]] = set()
+        self._dashboard_explicit_paths: set[tuple[str, ...]] = set()
         self._reload_sources_from_disk()
         self._profile = NORMAL_PROFILE
         self._view = VIEW_ALL
@@ -961,7 +961,7 @@ class DefaultSettingsEditor(QMainWindow):
         )
         layout.addWidget(self.title_bar)
         subtitle = QLabel(
-            "Edit every canonical fresh-install/reset value. Normal writes the authoritative base; MC stores only its differences. Current user profiles are not modified."
+            "Edit every canonical fresh-install/reset value. Normal writes the authoritative base; Dashboard stores only its differences. Current user profiles are not modified."
         )
         subtitle.setObjectName("defaultsFoundrySubtitle")
         subtitle.setWordWrap(True)
@@ -981,7 +981,7 @@ class DefaultSettingsEditor(QMainWindow):
             self.profile_combo.addItem(PROFILE_LABELS[profile], profile)
         self.profile_combo.setMinimumWidth(210)
         self.profile_combo.setToolTip(
-            "Normal changes rewrite the canonical base. MC changes are stored only when they differ from the resolved Normal value."
+            "Normal changes rewrite the canonical base. Dashboard changes are stored only when they differ from the resolved Normal value."
         )
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         controls.addWidget(self.profile_combo)
@@ -1015,7 +1015,7 @@ class DefaultSettingsEditor(QMainWindow):
         controls.addWidget(self.search_edit, stretch=1)
         self.changed_only_check = QCheckBox("Changed Only")
         self.changed_only_check.setToolTip(
-            "Show only unsaved edits; in the MC view, also every value MC changes from Normal."
+            "Show only unsaved edits; in the Dashboard view, also every value Dashboard changes from Normal."
         )
         self.changed_only_check.toggled.connect(self._on_changed_only_toggled)
         controls.addWidget(self.changed_only_check)
@@ -1142,7 +1142,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._overrides = load_profile_overrides(self._overrides_path)
         self._models = build_profile_models(self._base, self._overrides)
         self._initial_models = deepcopy(self._models)
-        self._mc_explicit_paths = leaf_paths(self._overrides.get(DASHBOARD_PROFILE, {}))
+        self._dashboard_explicit_paths = leaf_paths(self._overrides.get(DASHBOARD_PROFILE, {}))
 
     def _reload_tree(self) -> None:
         self._building_tree = True
@@ -1280,11 +1280,11 @@ class DefaultSettingsEditor(QMainWindow):
         if self._profile == NORMAL_PROFILE:
             old_normal = get_path(self._models[NORMAL_PROFILE], path)
             set_path(self._models[NORMAL_PROFILE], path, value)
-            if path not in self._mc_explicit_paths and get_path(self._models[DASHBOARD_PROFILE], path, _MISSING) == old_normal:
+            if path not in self._dashboard_explicit_paths and get_path(self._models[DASHBOARD_PROFILE], path, _MISSING) == old_normal:
                 set_path(self._models[DASHBOARD_PROFILE], path, value)
         else:
             set_path(self._models[DASHBOARD_PROFILE], path, value)
-            self._mc_explicit_paths.add(path)
+            self._dashboard_explicit_paths.add(path)
         self._building_tree = True
         try:
             parent = item.parent()
@@ -1373,11 +1373,11 @@ class DefaultSettingsEditor(QMainWindow):
                     sorted(set(imported.skipped_paths) | set(schema_filtered.skipped_paths))
                 ),
             )
-            self._models, self._mc_explicit_paths = merge_imported_profile(
+            self._models, self._dashboard_explicit_paths = merge_imported_profile(
                 self._models,
                 self._profile,
                 imported.settings,
-                self._mc_explicit_paths,
+                self._dashboard_explicit_paths,
             )
         except Exception as exc:
             QMessageBox.critical(self, "Defaults Import Failed", str(exc))
@@ -1497,7 +1497,7 @@ class DefaultSettingsEditor(QMainWindow):
             self._set_status(
                 output.splitlines()[-1]
                 if output
-                else "Canonical Normal defaults and MC differences saved and validated."
+                else "Canonical Normal defaults and Dashboard differences saved and validated."
             )
         finally:
             QApplication.restoreOverrideCursor()

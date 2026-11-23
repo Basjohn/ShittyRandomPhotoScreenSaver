@@ -11,7 +11,7 @@ from __future__ import annotations
 PROFILE_DEFAULT_OVERRIDES = {'Screensaver': {},
  'Dashboard': {'display': {'show_on_monitors': [2]},
                     'input': {'interaction_mode': True},
-                    'mc': {'always_on_top': True},
+                    'dashboard': {'always_on_top': True},
                     'widgets': {'clock': {'monitor': 'ALL'},
                                 'clock2': {'monitor': 2},
                                 'clock3': {'monitor': 'ALL'},

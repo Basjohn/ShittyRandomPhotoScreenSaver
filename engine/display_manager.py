@@ -957,12 +957,12 @@ class DisplayManager(QObject):
 
         use_splash = dashboard_window_splash_admitted()
         if self.settings_manager is not None:
-            always_on_top = self.settings_manager.get_bool("mc.always_on_top")
+            always_on_top = self.settings_manager.get_bool("dashboard.always_on_top")
         else:
             from core.settings.default_contract import DASHBOARD_PROFILE, require_canonical_default
 
             always_on_top = bool(
-                require_canonical_default("mc.always_on_top", DASHBOARD_PROFILE)
+                require_canonical_default("dashboard.always_on_top", DASHBOARD_PROFILE)
             )
         return QuickWindowPolicy(
             role=(
