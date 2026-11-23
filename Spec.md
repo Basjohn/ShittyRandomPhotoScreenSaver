@@ -1008,6 +1008,26 @@ Slide adds no effect-local timer, clock, worker or resource owner; true Perspect
 
 ## Lifecycle
 
+**Planned cross-profile Settings lifecycle supersession (operator, 23 Nov 2026; NOT
+IMPLEMENTED):** `Current_Plan.md` item 1B.8 and
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md` L0-L7
+admit transactional, non-teardown Settings on Standard/MC/diagnostic and eventual SMP
+**after M4 Theme unification, Theme Studio and Concrete Rain**. Read-only open/close
+retains the healthy graphics generation; settings changes use minimal owner-scoped
+transactions; truly visually discontinuous but safe changes use compositor fade-out/
+commit/fresh-frame/fade-in **second-last**; full display teardown is **last resort**
+under existing destruction guarantees, not a default. Whole-family disables still
+retire the family and all callbacks/resources; temporary Settings/Visualizers parking
+must satisfy zero-work dormancy and first-frame fencing. Windows Winlogon/secure or
+unknown desktop may not acquire an interactive Settings/Studio session or new HWND;
+retain the safe saver exit and account/browser handoff. A SettingsManager/source
+of truth and QWidget UI remain; no Qt Quick rewrite is a prerequisite.
+
+**Until that independent milestone's acceptance**, the existing full-stop Settings
+path and its fatal-on-failed-barrier rule below remain the **implemented** contract.
+This planned change is not permission to weaken resource ownership or to start SMP.
+## Lifecycle
+
 Old generation loses admission before replacement gains authority; generation 0 is valid. GPU resources are
 created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping
 as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation owner.
