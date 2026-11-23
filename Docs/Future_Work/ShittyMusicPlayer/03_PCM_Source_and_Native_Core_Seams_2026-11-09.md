@@ -40,9 +40,9 @@ instantiating an SMP decoder, audio service or desktop host now.
 
 - [ ] SMP docked and pop-out Visualizers reuse the **one** native QRhi render core and packet ABI after P3, with one active rendering host, shared mode catalogue and one logical worker. The core is a general SRPSS custom-renderer, not owned by the screensaver product entry point.
 - [ ] The native SMP audio engine shares build/extension, trace, ownership and performance conventions with the QRhi Native Core, **not** its render thread, GPU device, event loop, lifetime or failure domain. GPU device loss, Settings teardown, hidden or destroyed Visualizer and display rehosting cannot interrupt audible playback.
-- [ ] P3 additionally ports **transitions, image presenter and background custom nodes**, not just modes. This permits the MC/Standard display composer to run one QRhi backend and keeps SMP free to use its own native desktop host without a duplicate GL/Vulkan renderer.
+- [ ] P3 additionally ports **transitions, image presenter and background custom nodes**, not just modes. This permits the Dashboard/Standard display composer to run one QRhi backend and keeps SMP free to use its own native desktop host without a duplicate GL/Vulkan renderer.
 - [ ] One Qt Quick backend per window; no raw-GL Visualizer in a Vulkan window. OpenGL remains a selectable QRhi backend after pixel-parity migration. Keep full UI material/Qt Quick controls on their existing owners; they are not reimplemented as custom draw calls.
-- [ ] Keep a clean render-admission lifecycle for independent SMP desktop host and SRPSS/MC display windows: mapping quiescence before unmap, native reader ownership, no two frame acknowledgers, no second DSP clock. Closing the SMP pop-out must never retire application-owned playback.
+- [ ] Keep a clean render-admission lifecycle for independent SMP desktop host and SRPSS/Dashboard display windows: mapping quiescence before unmap, native reader ownership, no two frame acknowledgers, no second DSP clock. Closing the SMP pop-out must never retire application-owned playback.
 
 ## 5. Milestone/acceptance insertion into plan 02
 

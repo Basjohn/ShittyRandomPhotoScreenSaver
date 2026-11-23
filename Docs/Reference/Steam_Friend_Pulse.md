@@ -56,7 +56,7 @@ account-private persistence stores opaque friend fingerprints rather than presen
 requests a directed Steam chat with public-profile fallback. Each friend also has one small three-dot action menu offering
 View Profile, Start Chat, Copy Steam ID, and View Game in Store when a current AppID exists. The popup is retained once per
 card, revalidates the current row in Python and uses the shared pointer-suppression seam. No Join Game item is shown because
-PlayerSummaries proves only an AppID, not a joinable lobby/server/connect token. In interactive MC/diagnostic runs the
+PlayerSummaries proves only an AppID, not a joinable lobby/server/connect token. In interactive Dashboard/diagnostic runs the
 action router tries the Steam client; normal screensaver runs send approved HTTPS profile/Store targets through the
 existing secure URL helper. The abandoned FriendMessages/unread experiment is not product architecture: no unread source,
 message rows/menu, second Steam session, QR auth or message backoff traffic remains.
@@ -179,7 +179,7 @@ network refresh merely to change pixels.
 - the Python model revalidates the current visible row and owner map before forwarding an action;
 - the per-friend menu offers only currently truthful actions: Profile, Chat, Copy Steam ID and Store when an AppID exists;
 - Join Game remains absent until an admitted source provides a current joinable lobby/server/connect target;
-- interactive MC/diagnostic runs try `steam://friends/message/<id>` or `steam://store/<appid>` and use the HTTPS
+- interactive Dashboard/diagnostic runs try `steam://friends/message/<id>` or `steam://store/<appid>` and use the HTTPS
   profile/Store route when Qt rejects the protocol;
 - normal screensaver runs send only the HTTPS profile/Store route through the existing secure helper and request the
   ordinary saver exit exactly once after successful handoff; if the helper cannot accept it, the action fails closed

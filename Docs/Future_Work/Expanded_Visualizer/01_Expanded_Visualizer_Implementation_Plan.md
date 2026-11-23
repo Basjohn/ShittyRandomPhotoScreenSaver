@@ -1,4 +1,4 @@
-# 01 | Expanded Visualizer: SRPSS / MC Implementation Plan
+# 01 | Expanded Visualizer: SRPSS / Dashboard Implementation Plan
 
 **Prepared:** 2026-11-05. **Live tracked document since 2026-11-07** (extracted from the plans zip, which was never  
 tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c` with the  
@@ -21,7 +21,7 @@ extraction preceded admission. Later 3D work still follows the active `Current_P
 Bubble, Neon Lake (`shockwave_grid`) and Waveform Ribbon, each by one descriptor flag. Waveform Ribbon is already over
 budget under game load at the card (41-44 fps); its full-display figures are recorded at M6 against §0.7 (its
 live-tick cut is in flight on another branch); the flag carries no perf gate.  
-**Products:** existing Standard SRPSS and existing Media Center (MC) sharing the current Quick scene. No additional screensaver window, no product fork.  
+**Products:** existing Standard SRPSS and existing Dashboard sharing the current Quick scene. No additional screensaver window, no product fork.
 **Companion:** `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md` begins after this plan's acceptance and reuses its proven presentation **semantics**, not the screensaver's physical window manager.
 
 **Later Settings lifecycle direction (23 Nov, post-acceptance only):**
@@ -231,7 +231,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 | Mode and preset changes have distinct semantic paths | `engine/display_manager.py::_request_quick_visualizer_mode/_request_quick_visualizer_preset_change`; `Docs/Reference/Visualizer_Reference.md` | Capability checks and expansion transfer must wrap canonical mode transitions, never replace them. |
 | Universal glyph chrome and local visualizer glyphs already exist | `rendering/quick/qml/WidgetHoverEditGlyphs.qml`; `VisualizerPresentation.qml`; `OverlayWidget.qml` | Reuse the input admission/theme/hover/tooltip semantics and avoid overlapping reset/preset/transfer controls. The expand glyph is a distinct semantic action, **not** an Edit glyph. |
 | Mode-owned preset change writes the whole normalized Visualizer child | `core/settings/settings_manager.py::replace_visualizer_runtime_preset_state` | New expanded intent MUST survive the normalization/atomic replacement; exclude it from mode/Custom payload and regression-test the exact transaction. |
-| Profile settings are distinct but non-settings data root shared | `core/settings/json_store.py::determine_storage_path`; `core/settings/storage_paths.py`; `Docs/Contracts.md` | Standard and MC may have independent expansion preferences. No sidecar state file or new profile resolver. |
+| Profile settings are distinct but non-settings data root shared | `core/settings/json_store.py::determine_storage_path`; `core/settings/storage_paths.py`; `Docs/Contracts.md` | Standard and Dashboard may have independent expansion preferences. No sidecar state file or new profile resolver. |
 
 **Binding review first:** `Spec.md`, `Docs/Contracts.md`, `Docs/Guardrails/Performance_Optimization_Contract.md`, `Docs/Guardrails/Visualizer_Presentation.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`, `Docs/Guides/Visualizer_Change_Checklist.md`, `Docs/Reference/Visualizer_Reference.md`, `Docs/Reference/Scene3D_Resources.md`, `Docs/Reference/Extruded_Bubble/*`, `Docs/TestSuite.md`, and exact historical bug lessons R-69 / R-71 / R-87 / native Qt retirement. Documentation is contract authority, but source may reveal an unimplemented contract; never silently weaken it to pass a test.
 
@@ -497,7 +497,7 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 **Milestone 1 | Capability + persistence + pure takeover state machine**
 
 - [x] Add registry capability default false; EB true only. Disabled/unregistered mode cannot force expansion.
-- [x] Add canonical default/model/normalization for persisted intent. Test preset and Custom replacement transaction preserving field/other widget subtree; reset/import/export/migration/MC profile isolation.
+- [x] Add canonical default/model/normalization for persisted intent. Test preset and Custom replacement transaction preserving field/other widget subtree; reset/import/export/migration/Dashboard profile isolation.
 - [x] Implement pure event/action reducer for enter/exit/mode/monitor/Settings/Edit/topology with generation and idempotency rules; no GL or extra resource owners.
 - [ ] **Gate 1:** all pure tests pass including stale/duplicate input and immediate accept/reject permutations; no modules eagerly imported from dormant modes.
 
@@ -515,7 +515,7 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   by `mode_activation` and opted in. The fifth §B2 predicate, expanded-effective, is the reducer's. Events carry the
   resolved `mode_capable` as a fact, so the reducer stays registry-free and tests can use a synthetic second capable
   mode (as M5 asks).
-- *Intent.* `widgets.spotify_visualizer.expanded_display_requested`: canonical default (both profiles, no MC
+- *Intent.* `widgets.spotify_visualizer.expanded_display_requested`: canonical default (both profiles, no Dashboard
   override), model field, and `normalize_expanded_display_requested` (bools, 0/1 and the usual spellings; anything
   else falls back to the canonical default, never `bool(value)`). It has no mode prefix, so preset payloads and the
   Custom snapshot exclude it by construction: no preset repair fill, and the completeness guard is unaffected. No
@@ -1578,7 +1578,7 @@ Plan test assets under `tests/` / `tools/`, align with `Docs/TestSuite.md` and c
 | Proposed focused test/harness | What it must prove | Failure is blocking? |
 | --- | --- | --- |
 | `test_visualizer_expansion_capability.py` | Registry opt-in EB only; disabled/unregistered mode inert; mode change policy and no import of dormant modes | Yes |
-| `test_visualizer_expansion_persistence.py` | Normal/MC isolation, defaults, SST import/export/reset, mode-presets and Custom normalization across runtime transaction, no layout-slot corruption | Yes |
+| `test_visualizer_expansion_persistence.py` | Normal/Dashboard isolation, defaults, SST import/export/reset, mode-presets and Custom normalization across runtime transaction, no layout-slot corruption | Yes |
 | `test_visualizer_expansion_reducer.py` | Ordered state transitions, idempotence, stale generation/activation reject, duplicate glyph, Edit cancel, topology/target failure rollback | Yes |
 | `test_visualizer_expansion_geometry.py` | Exact display logical viewport, DPR conversion, aspect/camera and original rect restoration, clip/shell correctness, no unrequested settings writes | Yes |
 | `test_visualizer_expansion_qml_native.py` | Real retained glyph hit/tooltip/fade, no action under menu/Edit, double/middle clicks unchanged, no HUD/OSD overlap or binding warnings | Yes |

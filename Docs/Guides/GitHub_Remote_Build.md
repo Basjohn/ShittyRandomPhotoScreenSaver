@@ -1,7 +1,7 @@
 # GitHub Remote builds (Build Runner's third tab)
 
-The two expensive Windows builds, **Standard + Diagnostic** (`SRPSS.scr`, one compile, also published as
-`SRPSS_Diagnostic.scr`) and **Media Center** (`SRPSS_Media_Center.exe` and its one-dir payload), can compile on
+The two expensive Windows builds, **Screensaver + Diagnostic** (`SRPSS_Screensaver.scr`, one compile, also published as
+`SRPSS_Screensaver_Diagnostic.scr`) and **Dashboard** (`SRPSS_Dashboard.exe` and its one-dir payload), can compile on
 GitHub's free Windows runners instead of this machine. Build Runner sends each one to GitHub, follows it, downloads
 the result, validates it, puts it into `release\` exactly where a local build would, and can then compile the
 installers locally. Nothing is virtualised or compiled locally for the remote products: no WSL, Docker or Hyper-V.
@@ -31,9 +31,9 @@ native core and the P1 harness) have their own workflow on the same contract (se
 3. Read the pre-flight line. It names exactly what GitHub will build: `GitHub builds origin/main @ 1a2b3c4d: <subject>`.
    It warns when your local HEAD is not that commit (unpushed commits) or when you have uncommitted changes, which
    are not part of the remote build.
-4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. **Reddit Helper (local)** is
+4. Tick **Screensaver + Diagnostic (GitHub)**, **Dashboard (GitHub)** or both. **Reddit Helper (local)** is
    pre-selected when its fingerprint says it is stale, and the two installers are pre-selected as on the venv tab;
-   optionally tick **Linux (GitHub runner)**, **Linux Media Center (GitHub runner)**, or both.
+   optionally tick **Linux Screensaver (GitHub runner)**, **Linux Dashboard (GitHub runner)**, or both.
 5. **Start Selected.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
    current step, and a **GitHub run** link opens the run in your browser. Each selected Linux profile also starts
@@ -56,7 +56,7 @@ products stay published; an interrupted download keeps the previous payload.
 Headless (for scripts, or the lead when the operator asks for a build):
 
 ```
-python tools/github_remote_build.py run --target standard --target media_center
+python tools/github_remote_build.py run --target screensaver --target dashboard
 ```
 
 Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner tab.
@@ -90,13 +90,13 @@ still belongs to Build Runner.
   is dispatched (re-run pre-flight by switching tabs). The runner checks out that exact SHA, verifies it, and
   refuses to describe any other.
 - **The build itself.** The runner runs the canonical worker (`scripts/venv/build_nuitka.ps1` or
-  `scripts/venv/build_nuitka_mc_onedir.ps1`) with all of its own checks: defaults authority, QML source contract,
+  `scripts/venv/build_nuitka_dashboard_onedir.ps1`) with all of its own checks: defaults authority, QML source contract,
   QRC regeneration, product assets, runtime dependencies, the frozen module/source audit, the onefile payload and
   shader contracts, and its publication step. Nothing is skipped or weakened for remote builds.
 - **The download** (into `build\github_remote\<token>\<product>\` first). `remote_build_manifest.json` must name the
   requested product, commit, version (read from that commit's `versioning.py`) and run token. Every payload and
   report file must match its recorded size and SHA-256; no unlisted file may be present; the diagnostic copy must
-  be the same binary as `SRPSS.scr`; the primary binary's Windows product version must equal the version.
+  be the same binary as `SRPSS_Screensaver.scr`; the primary binary's Windows product version must equal the version.
 - **The native core it carries** (N2.1). Each product run first runs the native workflow for the same commit and
   token (the job `native`; a core that does not compile or fails its import check fails the product run). The build
   job validates that artifact against its checkout and places it in `release\native_module` with its own manifest
@@ -106,7 +106,7 @@ still belongs to Build Runner.
   the product). Locally the download is refused unless the carried core's manifest names this commit, version, token,
   source, the commit's pinned Qt and shader sources, lists exactly the files the product publishes in
   `release\native_module`, and the probe report says `ok` and `frozen`. Nothing in the product imports the core yet.
-- **Publishing.** Only then are `release\screensaver` + `release\diagnostic` (Standard) or `release\media_center`,
+- **Publishing.** Only then are `release\screensaver` + `release\diagnostic` (Screensaver) or `release\dashboard`,
   and with either `release\native_module`, swapped in. If a swap fails (for example a running `.scr` locks the folder,
   or a Python process holds the native core) the previous payload is restored. A failed run, download or validation
   never touches `release\`.
@@ -115,12 +115,12 @@ still belongs to Build Runner.
 
 | What | Where |
 | --- | --- |
-| Standard + Diagnostic | `release\screensaver\SRPSS.scr`, `release\diagnostic\SRPSS_Diagnostic.scr` |
-| Media Center | `release\media_center\` (onedir, `SRPSS_Media_Center.exe`) |
+| Screensaver + Diagnostic | `release\screensaver\SRPSS_Screensaver.scr`, `release\diagnostic\SRPSS_Screensaver_Diagnostic.scr` |
+| Dashboard | `release\dashboard\` (onedir, `SRPSS_Dashboard.exe`) |
 | The native core either product carries | `release\native_module\` (`_srpss_native_core.pyd` and its `remote_build_manifest.json`); the frozen probe's report `logs\native_core_frozen_probe_<token>.json` |
-| Installers (local) | `release\installers\Setup_SRPSS.exe`, `release\installers\Setup_SRPSS_Media_Center.exe` |
+| Installers (local) | `release\installers\Setup_SRPSS_Screensaver.exe`, `release\installers\Setup_SRPSS_Dashboard.exe` |
 | Runner log per product | `logs\build_runner_<product>_<token>.log` (Log link: dispatch, run URL, status, validation; the failed steps' log tail on failure) |
-| Worker reports from the runner | `logs\build_nuitka[_mc_onedir]_{,report_,footprint_,frozen_audit_}<token>.*` |
+| Worker reports from the runner | `logs\build_nuitka[_dashboard_onedir]_{,report_,footprint_,frozen_audit_}<token>.*` |
 | Evidence bundle | `logs\build_evidence_<product>_*.zip` (Evidence ZIP link; same bundle as a local build) |
 | The run on GitHub | the row's **GitHub run** link (artifacts expire after 3 days; failure logs after 7) |
 
@@ -133,7 +133,7 @@ whatever `release\` holds (operator, 8 Nov: "It's supposed to be local, github h
 this run's GitHub products are published when those are selected, and straight away when they are not (for example
 after an earlier GitHub run or a headless `tools/github_remote_build.py run`). Like the venv tab, an installer is
 compiled even when its product's build failed in the same run: it packages the previous payload, which a failed
-retrieval leaves in place. The Standard installer packages `release\reddit_helper` as it is: select **Reddit Helper
+retrieval leaves in place. The Screensaver installer packages `release\reddit_helper` as it is: select **Reddit Helper
 (local)** when its badge says rebuild.
 
 ## The native core module (job `native_module`)
@@ -234,8 +234,8 @@ changes with the version, so the next run fetches the new SDK. Older entries sta
 - GitHub builds pushed commits only. Uncommitted work needs a commit and push first (the operator's local build covers it; the lead never builds locally).
 - The runner's toolchain is GitHub's `windows-2025` image (Visual Studio 2022 MSVC) with Python 3.14 from
   `actions/setup-python`, not this machine's Build Tools; the requirement pins and Nuitka version are identical.
-- The Linux Media Center artifact uses `srpss-linux-mc` and publishes `SRPSS-<version>-linux-mc-x86_64.tar.gz`;
-  Linux Screensaver retains `srpss-linux` and `SRPSS-<version>-linux-x86_64.tar.gz`. Both are smoke-tested in Xvfb;
+- The Linux Dashboard artifact uses `srpss-linux-dashboard` and publishes `SRPSS-<version>-linux-dashboard-x86_64.tar.gz`;
+  Linux Screensaver uses `srpss-linux-screensaver` and `SRPSS-<version>-linux-screensaver-x86_64.tar.gz`. Both are smoke-tested in Xvfb;
   a full frozen build on GitHub and physical Linux acceptance are still required after this change.
 - The repository is public: its Actions minutes on standard runners are free, and run logs and artifacts are
   visible to signed-in GitHub users until they expire (3 days; failure logs 7).

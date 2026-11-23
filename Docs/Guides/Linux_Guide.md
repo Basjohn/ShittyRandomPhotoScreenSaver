@@ -16,18 +16,18 @@ Open Linux work and known gaps: [`Linux_Plan.md`](../../Linux_Plan.md).
 ## 2. Install a built product
 
 ```bash
-tar xzf SRPSS-<version>-linux-x86_64.tar.gz
-SRPSS-<version>-linux-x86_64/install.sh          # per user; nothing needs root
-srpss /c                                          # Settings (also in the app menu)
-srpss /s                                          # the saver itself
+tar xzf SRPSS-<version>-linux-screensaver-x86_64.tar.gz
+SRPSS-<version>-linux-screensaver-x86_64/install.sh          # per user; nothing needs root
+srpss-screensaver /c                                          # Settings (also in the app menu)
+srpss-screensaver /s                                          # the saver itself
 ```
 
-`install.sh` puts the program in `~/.local/opt/srpss`, links `~/.local/bin/srpss`, adds two menu entries and
+`install.sh` puts the program in `~/.local/opt/srpss-screensaver`, links `~/.local/bin/srpss-screensaver`, adds two menu entries and
 replaces the curated presets, themes and sounds in `~/.local/share/SRPSS` (the counterpart of the Windows
 installer's ProgramData step). `install.sh --uninstall` removes all of that and keeps your settings.
 
-Release builds write no log by default. To enable the main log, create `srpss.logging.cfg` containing `1`
-next to the installed `srpss` binary; logs then go to `~/.local/opt/srpss/logs`.
+Release builds write no log by default. To enable the main log, create `srpss-screensaver.logging.cfg` containing `1`
+next to the installed `srpss-screensaver` binary; logs then go to `~/.local/opt/srpss-screensaver/logs`.
 
 ## 3. Use it as a screensaver
 
@@ -36,9 +36,9 @@ mouse or keyboard input as on Windows:
 
 | Session | Add to the session's autostart |
 | --- | --- |
-| X11 (most desktops, i3, Openbox) | `xset s 600` and `xss-lock -- srpss /s &` |
-| Wayland: sway, niri, river | `swayidle -w timeout 600 'srpss /s'` |
-| Wayland: Hyprland | a `hypridle` listener with `on-timeout = srpss /s` |
+| X11 (most desktops, i3, Openbox) | `xset s 600` and `xss-lock -- srpss-screensaver /s &` |
+| Wayland: sway, niri, river | `swayidle -w timeout 600 'srpss-screensaver /s'` |
+| Wayland: Hyprland | a `hypridle` listener with `on-timeout = srpss-screensaver /s` |
 
 GNOME and KDE lock screens are separate and keep working. `/p` (preview inside the Windows screensaver
 dialog) does not exist on Linux.
@@ -90,9 +90,9 @@ On Linux:
 ```bash
 scripts/linux/setup.sh --system-deps --build
 scripts/linux/build.sh                             # default screensaver, unchanged
-scripts/linux/build.sh --profile mc                # interactive MC, main_mc.py entry point
-.venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-x86_64
-.venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-mc-x86_64
+scripts/linux/build.sh --profile dashboard                # interactive Dashboard, main_dashboard.py entry point
+.venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-screensaver-x86_64
+.venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-<version>-linux-dashboard-x86_64
 ```
 
 The build reads its Nuitka declarations and Qt size exclusions from the Windows build scripts (comments
@@ -100,19 +100,19 @@ skipped), so new Windows includes reach Linux automatically; `tests/test_build_l
 Windows too and fails if any declaration stops being read. A local build takes about an hour on four cores.
 
 From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget install GitHub.cli` then
-`gh auth login`): the GitHub Remote tab's optional **Linux (GitHub runner)** and **Linux Media Center (GitHub runner)** jobs, or directly
+`gh auth login`): the GitHub Remote tab's optional **Linux Screensaver (GitHub runner)** and **Linux Dashboard (GitHub runner)** jobs, or directly
 
 ```powershell
 .\scripts\linux\build_from_windows.ps1                 # default screensaver
-.\scripts\linux\build_from_windows.ps1 -Profile mc     # interactive Media Center
+.\scripts\linux\build_from_windows.ps1 -Profile dashboard     # interactive Dashboard
 ```
 
 Both run `.github/workflows/linux-build.yml` on a GitHub Ubuntu 22.04 runner (build, smoke test) and download
-the distinct tarballs into `release\linux` (`SRPSS-<version>-linux-x86_64.tar.gz` and
-`SRPSS-<version>-linux-mc-x86_64.tar.gz`). Both Linux builds can run concurrently with Windows jobs;
-there is no local Linux compiler. On Linux the MC installer uses `~/.local/opt/srpss-mc` and
-`~/.local/bin/srpss-mc` with its own desktop entries, leaving the screensaver install intact.
-Both profiles share curated presets/themes but keep separate settings (`SRPSS` versus `SRPSS_MC`).
+the distinct tarballs into `release\linux` (`SRPSS-<version>-linux-screensaver-x86_64.tar.gz` and
+`SRPSS-<version>-linux-dashboard-x86_64.tar.gz`). Both Linux builds can run concurrently with Windows jobs;
+there is no local Linux compiler. On Linux the Dashboard installer uses `~/.local/opt/srpss-dashboard` and
+`~/.local/bin/srpss-dashboard` with its own desktop entries, leaving the screensaver install intact.
+Both profiles share curated presets/themes but keep separate settings (`SRPSS` versus `SRPSS_Dashboard`).
 The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
 one and is the only dispatch that sends the workflow's `commit`/`token` inputs, so a branch whose workflow predates
 them still dispatches without it; the Build Runner's GitHub Remote tab passes the commit its pre-flight fixed).

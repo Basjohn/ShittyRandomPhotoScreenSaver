@@ -4,7 +4,7 @@ Canonical guidance for defaults, reset behavior, snapshots, import safety and ru
 
 ## Sources of truth
 
-Canonical defaults: `core/settings/default_settings.py`; MC differences:
+Canonical defaults: `core/settings/default_settings.py`; Dashboard differences:
 `core/settings/default_profile_overrides.py`; normalization/preserve-on-reset: `core/settings/defaults.py`;
 generated snapshot/SST artifacts are derived; persistent profile store is `JsonSettingsStore` through
 `SettingsManager`. `core/settings/default_contract.py` is the lightweight read seam for code that must
@@ -13,13 +13,13 @@ owns structured-root repair membership; `core/settings/defaults_authority_audit.
 anti-fragmentation audit.
 
 Regenerate derived artifacts with project tooling rather than hand-editing. Normal/Screensaver defaults are
-base authority; MC is base plus compact differences.
+base authority; Dashboard is base plus compact differences.
 
 
 ## Canonical-default authority rules
 
 A user-facing product default exists in exactly one place: `core/settings/default_settings.py` (plus the
-small MC differential where behavior truly differs). UI builders, previews, registries, runtime recovery,
+small Dashboard differential where behavior truly differs). UI builders, previews, registries, runtime recovery,
 tools and tests may **project or validate** that authority; they do not own a second literal.
 
 Forbidden patterns include:
@@ -87,7 +87,7 @@ The reviewed standard/Screensaver baseline is intentionally conservative about s
 - Settings theme: `Default Dark [Single] [Glass]`; Widget Theme remains linked to `default_dark`;
 - all canonical Settings bucket state starts collapsed; sparse bucket persistence begins with no remembered open identity;
 - every ordinary/Visualizer widget monitor route in the standard profile starts on **Display 1**; changing a route does not change that widget's `enabled` state;
-- MC is a deliberate profile exception and preserves its established monitor routes through `default_profile_overrides.py` (including existing Display-2 and `ALL` routes);
+- Dashboard is a deliberate profile exception and preserves its established monitor routes through `default_profile_overrides.py` (including existing Display-2 and `ALL` routes);
 - Weather remains enabled with blank location (`""`), leaving location discovery/onboarding user-specific rather than baking a city into product defaults;
 - Gmail remains enabled and starts on Display 1;
 - Spotify Visualizer remains enabled and starts in **Bubble**; its existing Media/now-playing admission keeps it dormant when there is nothing to visualize. **Voxel Sphere** is a standard registered mode and is present in the canonical enabled-mode pool; Extruded Spectrum and Shockwave Grid remain default-disabled choices rather than hidden product exceptions;
@@ -160,7 +160,7 @@ frozen-build packaging visibility.
 
 ## 5.0.0 installer reset/import compatibility
 
-For the 5.0.0 compatibility boundary, the Standard and MC installer `resetsettings` task defaults ON. A selected reset must remove both the current `settings_v2.json` snapshot and that profile's pre-JSON Qt `QSettings` registry tree; deleting JSON alone is not a reset because first launch can import the legacy registry state again. Diagnostic deliberately remains opt-in because it consumes the ordinary Screensaver profile.
+For the 5.0.0 compatibility boundary, the Standard and Dashboard installer `resetsettings` task defaults ON. A selected reset must remove both the current `settings_v2.json` snapshot and that profile's pre-JSON Qt `QSettings` registry tree; deleting JSON alone is not a reset because first launch can import the legacy registry state again. Diagnostic deliberately remains opt-in because it consumes the ordinary Screensaver profile.
 
 If reset is not selected, valid legacy state is intentionally migrated, canonical missing leaves are filled, known aliases/schema are normalized, and validation repairs known invalid values. Malformed JSON or a non-mapping snapshot is treated as a load failure and regenerates canonical defaults. A syntactically valid historical value outside known migration/validation rules can survive by design, so v5's default-checked installer reset is the safe compatibility baseline rather than a substitute for ongoing schema validation.
 
@@ -213,8 +213,8 @@ values first and its subsections sorted by label (a transition's own section rea
 `blockspin` as 3D Block Spins). **By Transition** gathers each registered transition into one row, named and sorted
 as in Settings, whose value reads On/Off, Random Pool and its duration; opening it shows Activated, In Random Pool,
 Duration and every value of its own section (`TransitionDescriptor.settings_section`), and **All Transitions** holds
-the shared ones. Both views edit the same paths. **Changed Only** shows just the unsaved edits (in the MC view also
-every MC difference); a matching section in a search shows everything inside it.
+the shared ones. Both views edit the same paths. **Changed Only** shows just the unsaved edits (in the Dashboard view also
+every Dashboard difference); a matching section in a search shows everything inside it.
 
 ## Visualizer / CUSTOM defaults
 

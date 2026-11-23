@@ -2,7 +2,7 @@
 
 **Approved planning direction, 16 November 2026; scheduling clarified 23 Nov.** This is a bounded two-layer
 appearance architecture, not a universal third-party skin engine or a change to the current runtime. **Current
-M3 material work, M4 unified Appearance Theme and the Theme Studio are independently valuable Standard/MC
+M3 material work, M4 unified Appearance Theme and the Theme Studio are independently valuable Standard/Dashboard
 work that stays active** in Current Plan 1B.8. The scoped ZIP-skin runtime, SMP-specific panes/previews
 and the skin-authoring expansion at M10 remain deferred with SMP plan 02 §8.2B until **after Melt Pool,
 Concrete Rain, a substantial QoL phase and explicit operator readmission** (Future_Work §2.5).
@@ -13,14 +13,14 @@ Concrete Rain, a substantial QoL phase and explicit operator readmission** (Futu
 
 **Skin (optional):** a bounded, explicit overlay of supported roles, state-dependent glyph/button artwork, custom PNG/SVG shells/masks, shapes and motion for an admitted presentation. It can override almost any supported semantic for that target, but cannot introduce new commands, arbitrary executable QML/JS/Python, shaders, audio/Visualizer ownership or saved layout mutations. Every component without skin support remains fully themeable. Removing a skin restores the resolved theme and user family settings.
 
-**Initial supported targets:** `smp_full`, `smp_compact`, and separately admitted `ordinary_media` using the SAME existing Media component. A skin advertises its targets; the user enables each supported target. Only their intersection activates a skin. Ordinary Media defaults OFF on Standard and MC even when SMP is playing. Do not turn every Gmail, Clock, Reddit, Steam or Settings component into an arbitrary image/mask skin surface in advance. Adding such a target later requires a genuine consumer and a measured bounded implementation, not a new generic renderer.
+**Initial supported targets:** `smp_full`, `smp_compact`, and separately admitted `ordinary_media` using the SAME existing Media component. A skin advertises its targets; the user enables each supported target. Only their intersection activates a skin. Ordinary Media defaults OFF on Standard and Dashboard even when SMP is playing. Do not turn every Gmail, Clock, Reddit, Steam or Settings component into an arbitrary image/mask skin surface in advance. Adding such a target later requires a genuine consumer and a measured bounded implementation, not a new generic renderer.
 
 ## 2. Timing and ownership
 
 - **Current Plan 1B.8 M3 / 1.7b:** measured material-aware border ring with unchanged shared backdrop, Flat/Normal pixel fallback, DPR and corner proof.
 - **Current Plan 1B.8 M4, pre-SMP:** unify Settings and Widget catalogue/theme selection into one authored semantic authority. Theme-authored face/border transparency bias (-1..1 with neutral 0), face/border material, border thickness and four-corner curvature including concentric inner contour are first-class and independently scoped. Existing user Style Overrides apply *relative* to authored baselines; a neutral user override inherits them. No double material density or faux glass.
 - **SMP M0/M1:** consume the already unified theme; build the minimal `.srskin` format, safe loader, appearance-context lookup and one demonstration on actual pane/Media QML. Do NOT build a giant skin framework or the whole Studio.
-- **SMP M7:** prove full/compact styling in Standard/MC compositor and standalone player, the optional user-enabled ordinary Media target, unchanged unrelated widgets and Settings, accessibility, mixed DPI, lifecycle and no playback/Visualizer restart.
+- **SMP M7:** prove full/compact styling in Standard/Dashboard compositor and standalone player, the optional user-enabled ordinary Media target, unchanged unrelated widgets and Settings, accessibility, mixed DPI, lifecycle and no playback/Visualizer restart.
 - **Theme Studio, current-product scope (operator, 21/23 Nov):** after the native core, the flip and M4, independently of SMP M0: the visual editor of the unified theme over the production renderer (Current Plan 1B.8, "Theme Studio"). No SMP skin or pane implementation is necessary.
 - **SMP M10, after M9 release:** the same Studio gains skin authoring and the SMP Full/Compact previews over the production skin loader. It is an authoring milestone, NOT a second runtime theme migration, a second Studio or a player-release prerequisite.
 

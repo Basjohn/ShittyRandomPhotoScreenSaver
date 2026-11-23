@@ -66,11 +66,11 @@ or startup sweep exists. These checks are optimistic, not a cross-process filesy
 or preset is deleted.
 
 A missing shared ProgramData tree may be bootstrapped once from validated bundled files. A failed bootstrap is loud
-and creates no empty replacement authority. Existing SCR/Diagnostic/MC shared catalogues are read directly, without
+and creates no empty replacement authority. Existing SCR/Diagnostic/Dashboard shared catalogues are read directly, without
 startup reconciliation or deletion. Onefile payloads include the preset directory through the normal data-directory
 bundle; they do not get an independent inventory.
 
-The two Inno installers retain their established explicit clean replacement of shipped ProgramData data and the MC
+The two Inno installers retain their established explicit clean replacement of shipped ProgramData data and the Dashboard
 application tree. This installer policy is separate from runtime/import ownership and is unchanged by manifest
 retirement. Build Foundry validates source JSON without writing it. `tools/regenerate_visualizer_shipped_presets.py`
 explicitly refreshes the release mirror; `--check`/`--dry-run` compare directory entries and bytes without writes.

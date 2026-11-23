@@ -33,7 +33,7 @@ prepositions lowercase, short tags in ALL CAPS, user data (paths, URLs, addresse
   (`core/windows/monitor_resolution.py`), never Qt's rounded logical size. Leaving the page (and Finish) with exactly
   one display selected routes every widget the saver could not show onto it (`route_widgets_to_single_monitor`:
   numbered routes elsewhere move; `ALL` stays; authored restore routes follow).
-- Interaction: Media Center builds keep interaction on, so the screensaver-only choice is greyed with a tooltip.
+- Interaction: Dashboard builds keep interaction on, so the screensaver-only choice is greyed with a tooltip.
 - Widget Setup (large buckets) includes Clocks: the shared analogue/digital face and a timezone per enabled clock.
   Choosing a face clears per-display face overrides so the choice shows everywhere.
 - Large buckets are `build_bucket_toggle(..., large=True)`: the theme QSS keys a quarter-larger geometry on the
@@ -245,7 +245,7 @@ The implemented feature is operator-accepted. Use the following checklist only i
 - [ ] Skip from the header with unsaved changes: Keep Changes, Discard Changes (theme reverts), Stay In Setup;
 - [ ] nothing is saved before Finish (close Settings mid-way and reopen);
 - [ ] Welcome → Import Settings? by category (an import finishes the wizard);
-- [ ] Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
+- [ ] Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on Dashboard;
 - [ ] Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
   Gmail notification sound + Test;
 - [ ] Hide This From Now On (wizard) / Hide Guided Setup From Now On (Quick Start) → old no-source popup;
@@ -264,7 +264,7 @@ The implemented feature is operator-accepted. Use the following checklist only i
 - [ ] Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
   Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Layout in view; Apply shows the
   move on the saver; Discard drops it. In Guided Setup's Arrange step the same popup appears on Back and on Next;
-- [ ] Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the MC Settings launch), from
+- [ ] Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the Dashboard Settings launch), from
   Settings opened on the running saver, and from a saver launch that opened Settings for missing sources: each saves
   and starts (or resumes) the saver with the new settings; Finish only saves;
 - [ ] Runtime Edit on first run or offline (Weather still loading): Save without touching Weather; once data arrives,

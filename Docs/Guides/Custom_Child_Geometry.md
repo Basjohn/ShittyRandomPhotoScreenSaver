@@ -107,7 +107,7 @@ Save/Cancel/slots round-trip the same shared `size_payload.child_geometry` carri
 
 ### Persistence / Settings SSOT
 
-Child geometry does **not** get a new file, database or family-local Settings key. It rides inside the existing canonical `widgets.custom_layout` structured root persisted by `SettingsManager` to the profile `settings_v2.json` (`%APPDATA%\SRPSS\settings_v2.json` for the normal Screensaver profile; the MC profile uses its existing `SRPSS_MC` sibling). Each display/widget/geometry-variant CUSTOM entry already owns a `size_payload`; normalized child factors live under `size_payload.child_geometry`. The existing `custom_layout_restore` root continues to own authored route restoration metadata. This keeps one persisted Settings authority and lets Save/Cancel/layout slots/cross-display hydration use the same CUSTOM contract rather than inventing a second child-geometry store.
+Child geometry does **not** get a new file, database or family-local Settings key. It rides inside the existing canonical `widgets.custom_layout` structured root persisted by `SettingsManager` to the profile `settings_v2.json` (`%APPDATA%\SRPSS\settings_v2.json` for the normal Screensaver profile; the Dashboard profile uses its existing `SRPSS_Dashboard` sibling). Each display/widget/geometry-variant CUSTOM entry already owns a `size_payload`; normalized child factors live under `size_payload.child_geometry`. The existing `custom_layout_restore` root continues to own authored route restoration metadata. This keeps one persisted Settings authority and lets Save/Cancel/layout slots/cross-display hydration use the same CUSTOM contract rather than inventing a second child-geometry store.
 
 ## 5. Reflow / overflow contract
 

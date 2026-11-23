@@ -53,7 +53,7 @@ Related records that bind the design:
    delays or gates readiness or the coordinated reveal.
 4. **Mixed DPR and multi-display.** One owner per display scene, sized from that display's own render target; no
    cross-display sharing.
-5. **Secure desktop / helper / MC.** Same scene code; no native window calls, no DWM, no AccentPolicy.
+5. **Secure desktop / helper / Dashboard.** Same scene code; no native window calls, no DWM, no AccentPolicy.
 6. **Visualizer freshness.** The Visualizer's GL content is never read back; nothing runs per Visualizer frame.
 7. **Dormancy.** With every card Normal for the whole generation, the owner, its item, its render node and every
    card-side material item do not exist. Once some surface used a material in a generation and the last one goes

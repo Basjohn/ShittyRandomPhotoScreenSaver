@@ -610,7 +610,7 @@ High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `
 `test_qtquick_monitor_wake_reconcile.py` protects the event-driven topology contract, including replacement after binding loss despite identical final screen facts. `test_widget_monitor_bindings.py` and the real family-binder/Arrange tests protect physical assignment through renumbering, return, Settings edits and restart; restore/slot/import tests protect persisted intent. Installed dual-display wake/topology validation is already recorded in the relevant Historical Bug; do not reintroduce a debounce/poller merely because a future test fixture is easier that way.
 
 `test_saver_physical_selection.py` crosses real Settings, DisplayManager admission, Display tab, onboarding and Arrange seams:
-fixed physical choices survive disappearance/reorder/restart; ALL/NONE, MC repair, unresolved migration, explicit reassignment,
+fixed physical choices survive disappearance/reorder/restart; ALL/NONE, Dashboard repair, unresolved migration, explicit reassignment,
 atomic import/bulk authoring and silent writes stay coherent. `test_display_selection_lifecycle.py` proves empty admission keeps
 topology detection alive without Quick allocation, image/provider/retry/rotation work or a stale replacement watchdog; cold
 source work is deferred until a selected return. Requested-window construction failure remains distinct. Together with the
@@ -824,7 +824,7 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 - `tests/test_visualizer_content_scale_floor.py` — R-181: three real Runtime Edit sessions (a 2D card mode and a framed
   3D one, from the registry) and four Settings Arrange sessions each shrink the card as far as allowed, then a side drag
   grows it; the content scale (pixels per world unit) stays at the absolute minimum (before the fix: 1.0 -> 0.4 -> 0.16
-  -> the pixel floor). The load repair (`SettingsManager.validate_and_repair`, Standard and Media Center) lifts every
+  -> the pixel floor). The load repair (`SettingsManager.validate_and_repair`, Standard and Dashboard) lifts every
   stored planar/legacy-`default` card entry below it in the live CUSTOM map and in layout slots, keeping the card and
   the world's aspect; legal, freeform, retired-profile and unjudgeable entries stay bit-identical and a second load
   repairs nothing. Values derive from the canonical minimum and world;
@@ -1017,7 +1017,7 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   menu once, on release, at the release point; a drag pans through the one capture owner with no menu; press on the
   card and release off it; the wallpaper, a mode that cannot pan, Alt-right and Edit keep the menu on press; a second
   right press with the menu open; double-right still enters Edit; focus loss, mode edge, input close and display loss
-  release the capture; Media Center's forced interaction; end to end on the production card, the Studio's pan
+  release the capture; Dashboard's forced interaction; end to end on the production card, the Studio's pan
   direction and one save on release, and a stale gesture never saving another view.
 - Plan 1B.12 (full-display glyphs relative to the Visualizer's display: Up here, up-left / up-right to the
   neighbours) is covered in `tests/test_display_neighbours.py` (the arrangement rule: rows of one to three from each
@@ -1392,7 +1392,7 @@ High-value permanent guards include:
   `tests/test_visualizer_engine_frozen_spawn.py`: the worker factory pickles by name, and a spawn from a parent whose
   `__main__` is `main.py` (the child runs `main.py`'s module level first, as the Nuitka child runs it as
   `__parents_main__`) reaches `visualizer_worker_main`'s message loop with no QtGui, QtWidgets, QtQuick or QtQml
-  loaded (by `sys.modules` and by the child's mapped Qt DLLs); an image worker spawned from `main.py` or `main_mc.py`
+  loaded (by `sys.modules` and by the child's mapped Qt DLLs); an image worker spawned from `main.py` or `main_dashboard.py`
   maps no Qt GUI DLL; the entry modules executed as `__parents_main__` import no Qt, engine or Settings, and under any
   other name import all of it (checkpoint audit 10, A10-M1; the pre-fix `main.py` fails 5; the frozen run itself is
   the operator's).
@@ -1558,7 +1558,7 @@ round-trip the new enum without retaining a second setting. The mechanism and me
 ### 6.9 Build/package evidence
 
 `tests/test_build_layout.py` protects canonical publication, QRC regeneration/inclusion and the current-build evidence
-contract. Standard, Diagnostic and Media Center workers must request a Nuitka XML report and write one compact
+contract. Standard, Diagnostic and Dashboard workers must request a Nuitka XML report and write one compact
 footprint JSON after publication. The JSON records artifact/published bytes, file count, top-level buckets, largest
 files and QRC source-vs-generated-binary-pack sizes; the `.rcc` bytes are the deployed Qt resource representation and
 generated Python resource modules are explicitly excluded from product workers. The report files live directly under `logs/`, so ordinary LOGZIP capture includes
@@ -1567,7 +1567,7 @@ payload, not source-directory-name suspicion. `test_build_layout.py` also pins t
 and the shared dead-family exclusion surface so a new QML namespace cannot silently ship against a stale prune.
 `test_installer_contract.py` protects the two self-contained Inno 6.7.2+ dark installer contracts, Build Foundry
 Inno 7/6 discovery, pre-compile stale-output retirement, transparent-ICO Setup/Uninstall branding, retired-BMP boundary,
-QRC-owned-image boundary, ICO-first solid-compression ordering and MC single-payload-copy rule. These are static packaging bars; successful Inno 7.1 compilation and eyes-on
+QRC-owned-image boundary, ICO-first solid-compression ordering and Dashboard single-payload-copy rule. These are static packaging bars; successful Inno 7.1 compilation and eyes-on
 installed wizard/DPI behavior remain physical/operator evidence when that seam changes.
 
 `tests/test_godzip_foundry_core.py` owns the GODZIP transfer-safety contract: manifest/hash/debris semantics, reversible apply,

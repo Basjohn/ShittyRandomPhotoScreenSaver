@@ -1,4 +1,4 @@
-# 02 | ShittyMusicPlayer: MC-First Implementation Plan
+# 02 | ShittyMusicPlayer: Dashboard-First Implementation Plan
 
 **Prepared:** 2026-11-05. **Live tracked document since 2026-11-07** (extracted from the plans zip, which was never  
 tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c` with the  
@@ -17,10 +17,10 @@ theme/material M3/M4 and the standalone Theme Studio stay on the live current-pr
 **Entry gates (revised 23 Nov 2026):** the native core's flip (`Current_Plan.md` item 8b, NF),
 Melt Pool, Concrete Rain, a substantial current-product QoL phase and renewed operator authorisation
 all precede SMP M0. NF alone is insufficient. Waveform Ribbon and the Expanded Visualizer are accepted and are no longer gates (its display-takeover and dormant-resource contracts are needed by M6, not by M1-M5); the prerequisite phases in §0A.1 still land before the milestone each precedes.
-**First visible implementation:** **Library + Playlists**, two independently placeable/resizable/movable MC panes that are **ONE widget entry** and ONE feature/capability in Settings. **Not** a playback-only stub followed by the library later.  
-**Pre-profile gate:** deliver **Expanded Media in MC**, reusing the earlier display-takeover semantics, before creating a standalone SMP build/profile.  
-**Products:** existing SRPSS/MC repository, then a third SMP desktop launcher/profile; exactly one canonical visualizer implementation shared with both. No separate repository/fork.  
-**Proposal basis:** the proposal `Proposal.md` and its recovered `MusicBee_SRPSS_Concept_2026-09-24.png` (not in the tree; they shipped in the proposal zip and are design references only). The operator restored the full-player mock on 11 Nov 2026 with added Library/Playlist notes: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` and a material example (`references/` is ignored by git); every annotation is transcribed, mapped to this plan's sections and extended with the lead's UX proposals in `04_Full_Player_Mock_2026-11-11.md`, which is the design reference from now on. This plan supersedes its *implementation order* wherever the original proposed Playback before Library/Playlist and adds an MC Expanded Media gate before product separation. It does not overwrite the original visual concept, which remains a design reference.
+**First visible implementation:** **Library + Playlists**, two independently placeable/resizable/movable Dashboard panes that are **ONE widget entry** and ONE feature/capability in Settings. **Not** a playback-only stub followed by the library later.
+**Pre-profile gate:** deliver **Expanded Media in Dashboard**, reusing the earlier display-takeover semantics, before creating a standalone SMP build/profile.
+**Products:** existing SRPSS/Dashboard repository, then a third SMP desktop launcher/profile; exactly one canonical visualizer implementation shared with both. No separate repository/fork.
+**Proposal basis:** the proposal `Proposal.md` and its recovered `MusicBee_SRPSS_Concept_2026-09-24.png` (not in the tree; they shipped in the proposal zip and are design references only). The operator restored the full-player mock on 11 Nov 2026 with added Library/Playlist notes: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` and a material example (`references/` is ignored by git); every annotation is transcribed, mapped to this plan's sections and extended with the lead's UX proposals in `04_Full_Player_Mock_2026-11-11.md`, which is the design reference from now on. This plan supersedes its *implementation order* wherever the original proposed Playback before Library/Playlist and adds an Dashboard Expanded Media gate before product separation. It does not overwrite the original visual concept, which remains a design reference.
 
 ## 0A. Prerequisites, the `--smp` gate, phase ladder, owners and budgets (7 Nov review)
 
@@ -39,7 +39,7 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 ### 0A.2 The `--smp` gate (operator: "Gate SMP/Library/Playlist behind --smp until production ready and feature rich")
 
 - [ ] **Mechanism:** `main.py`'s known-flag list (`parse_screensaver_args`, `main.py:254` on 11 Nov 2026) gains `--smp`; a side-effect-free
-  predicate `core/smp.py::is_smp_enabled()` (beside `core/mc.py::is_mc_build()`, same style: entry point, profile
+  predicate `core/smp.py::is_smp_enabled()` (beside `core/dashboard.py::is_dashboard_build()`, same style: entry point, profile
   or flag, no `SettingsManager` construction) answers True when the flag is present or the process is the SMP
   profile/entry point (M7). No environment variable, no settings key: the gate is a launch decision.
 - [ ] **What it gates:** the `music_workspace` family's availability in `core/settings/widget_family_catalog.py`
@@ -47,10 +47,10 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
   import); the SMP Settings tab descriptor's `available()` (§14); the internal `smp` Media provider; the SMTC
   publisher; the SMP desktop host entry point. With the gate off, every one of these is unreachable and
   `test_smp_cross_product_dormancy.py` proves zero cost.
-- [ ] **What it never gates:** existing Standard/MC behaviour, defaults, presets or layouts. A profile that saved
+- [ ] **What it never gates:** existing Standard/Dashboard behaviour, defaults, presets or layouts. A profile that saved
   `widgets.music_workspace.*` while gated-on keeps the values when gated-off (inert, not deleted).
 - [ ] **Lifting it:** at **Gate M9** (usable standalone player, codecs measured, library migrations proven, no
-  contract weakened) the gate flips to default-on for MC and the SMP profile; Standard SRPSS stays without SMP
+  contract weakened) the gate flips to default-on for Dashboard and the SMP profile; Standard SRPSS stays without SMP
   unless the operator decides otherwise. The flag remains as an explicit opt-in until then and is removed, not
   inverted, afterwards.
 
@@ -60,23 +60,23 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 | --- | --- | --- | --- |
 | **P1** AC-01 | Waveform accepted; `Current_Plan.md` admits P1 | AC-01 regression bar green for every existing tab; CONFIG-mode helper manager single | lead |
 | **P2** AC-03 | P1 merged | AC-03 regression bar green; Settings open/close keeps a stub service; `Spec.md` → Lifecycle records the teardown-failure rule | lead |
-| **M0** audit and baseline | P1, P2 merged; NF, Melt Pool, Concrete Rain and substantial QoL accepted; operator explicitly readmits plan 02 | source SHA and changed contracts inventoried; two-pane fake-family integration tests written; Standard+MC idle import/service/thread/widget counts recorded | lead |
+| **M0** audit and baseline | P1, P2 merged; NF, Melt Pool, Concrete Rain and substantial QoL accepted; operator explicitly readmits plan 02 | source SHA and changed contracts inventoried; two-pane fake-family integration tests written; Standard+Dashboard idle import/service/thread/widget counts recorded | lead |
 | **M1** `music_workspace` family, two panes + theme foundation | M0; `--smp` gate built | two rectangles moved onto different monitors and restored; one Settings row/family; semantic appearance/motion resolver (section 8.2A) consumed by both empty panes from first paint, with sharp/round and nested-corner proof; dormancy/QML tests green | agent |
 | **M2** indexed library + editable playlists | M1; P2 | 5,000 real tracks indexed responsively; 50,000-track indexed search/filter/sort and 250,000-track scalability evidence; transactional edits, FTS5, WAL concurrency and migration tests; no audio file altered | lead |
 | **M3** native audio engine, playback service, queue, PCM source | M2; P4 | one native C++ decoder-to-WASAPI playback path, codec/gapless/exclusive/DSP gates measured (§13); playback survives pane close, Settings teardown and mode switch; one Visualizer DSP lane; PCM-to-audible latency calibrated; `tools/music_backend_native_smoke.py` report | lead + operator listen |
 | **M4** library UX, metadata, art, groups | M3 | three-membership limit under concurrent writes; favourites survive rescans; art cache bounded (bytes); tag-edit corpus undamaged | agent |
 | **M5** internal Media provider + outbound SMTC | M4 | SMP plays while Media shows Spotify; exactly one media-key recipient; own session excluded from GSMTC reading | agent |
-| **M6** Expanded Media in MC | M5; plan 01 accepted | cross-feature tests (EB expanded <-> Media expanded) green; two-display visual acceptance | operator |
+| **M6** Expanded Media in Dashboard | M5; plan 01 accepted | cross-feature tests (EB expanded <-> Media expanded) green; two-display visual acceptance | operator |
 | **M7** SMP profile and desktop host | M6; P3 | snapping, taskbar, focus, Alt+Tab, mixed DPI, hotplug; same audio/visualizer state across compact/full/immersive; no wallpaper engine constructed; §16 rearrangement bar | operator |
 | **M8** live Settings policy | M7; P5 | repeated Settings/mode/Pop Out/SMTC/close cycles keep media state; Qt/COM/DB/GL counts bounded | agent |
-| **M9** release | M8 | 4-run soaks; concurrent MC/SMP DB; build payload reachability; `--smp` lifted (§0A.2) | operator |
+| **M9** release | M8 | 4-run soaks; concurrent Dashboard/SMP DB; build payload reachability; `--smp` lifted (§0A.2) | operator |
 | **M10** Theme & Skin Studio | M9 accepted | the pre-SMP Theme Studio (Current Plan 1B.8) extended to target-scoped SMP ZIP skins; real preview, asset/glyph authoring and verified export (document 05) | lead + operator |
 
 ### 0A.4 SSOT owners
 
 | Thing | Owner | Never |
 | --- | --- | --- |
-| product identity (Standard / MC / SMP; `--smp`) | `core/mc.py` + `core/smp.py` predicates, resolved from the entry point/profile/flag | a settings key, an env var, a second resolver |
+| product identity (Standard / Dashboard / SMP; `--smp`) | `core/dashboard.py` + `core/smp.py` predicates, resolved from the entry point/profile/flag | a settings key, an env var, a second resolver |
 | `music_workspace` family, two member ids | `core/settings/widget_family_catalog.py` + `rendering/widget_descriptors.py` | a second capability, a third pane identity without operator authorisation |
 | `widgets.music_workspace.*` (enabled, per-pane visible/monitor/position, appearance) | canonical defaults + `SettingsManager`, profile-scoped | the library DB, a sidecar |
 | library, playlists, favourites, groups, art cache index | `LibraryRepository` (SQLite in the shared non-settings data root), application-service tier (P2) | `settings_v2.json`, tags, QML |
@@ -86,13 +86,13 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 | Media provider kind (`external_gsmtc` / `internal_service`) | `core/media/provider_registry.py` typed descriptor | an AUMID spoof |
 | SMP Settings tab and pills | the tab registry descriptor (P1), §14 | per-tab if/elif chains |
 | icon and artwork precedence | §15 (`images/SMP.ico`; `core/media` artwork resolver) | per-widget copies |
-| pane and panel arrangement | MC: the ordinary CUSTOM owner and layout slots; SMP host: one dock/split layout model with semantic slots (§16) | pixel rects alone |
+| pane and panel arrangement | Dashboard: the ordinary CUSTOM owner and layout slots; SMP host: one dock/split layout model with semantic slots (§16) | pixel rects alone |
 
 ### 0A.5 Dormancy: nothing costs anything when SMP is off
 
 Prove at every milestone (`test_smp_cross_product_dormancy.py`) and record in the handoff:
 
-- gate off (Standard, MC without `--smp`): zero new modules on the common Quick import and on Settings open (import
+- gate off (Standard, Dashboard without `--smp`): zero new modules on the common Quick import and on Settings open (import
   scan); zero new QObjects, threads, COM objects, SQLite handles, audio devices, SMTC sessions; `overhead_baseline`
   counts identical; the family absent from the catalog's available set.
 - gate on but family OFF: the catalog row exists; no `LibraryRepository`, no DB open, no scan thread, no
@@ -108,19 +108,19 @@ Prove at every milestone (`test_smp_cross_product_dormancy.py`) and record in th
 transactional Live Settings is now approved as independent current-product
 post-M4/Theme Studio/post-Concrete-Rain QoL work, **before SMP admission**:
 `Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`.
-Earlier assumptions below that Standard/MC must always perform full Settings
+Earlier assumptions below that Standard/Dashboard must always perform full Settings
 teardown and SMP alone introduces the live Settings window are **historical
 baseline statements**, superseded for the eventual accepted product policy.
 **Do not erase SMP M8:** it still owns live-safe playback, output-device,
 library, queue, SMTC and rollback semantics plus the binding SMP
 Visualizer-park/Media-audible requirement. Prior to completion, original
-Standard/MC full teardown remains implemented. This note does not admit
+Standard/Dashboard full teardown remains implemented. This note does not admit
 any SMP source work.
 
 ### 0A.6 Lifecycle contracts
 
 - Service lifetime (P2): created on the first lease, retired at terminal `cleanup`; display generations lease and
-  release; a stale generation's lease cannot command the service; Settings teardown (MC) leaves it playing.
+  release; a stale generation's lease cannot command the service; Settings teardown (Dashboard) leaves it playing.
 - Exactly one `PlaybackService`, one `QueueController`, one command queue (manual, media keys, SMTC inbound,
   Media widget are adapters); command completion is observed, never assumed.
 - Decoded PCM is captured once at the media owner boundary with device-latency-calibrated timestamps and enters the
@@ -129,8 +129,8 @@ any SMP source work.
 - Pop Out / dock (M7): mutually exclusive render hosts of the one owner; context-local GL resources rebuild on the
   destination after the source root is fenced and destroyed; no interval with two live renderers.
 - DB: worker-thread-owned connections, one writer policy, WAL, bounded busy timeout, backups before migrations,
-  multi-process (MC + SMP) write policy tested before M7.
-- Settings (M8): SRPSS/MC keep full teardown; SMP's live Settings is a separate application policy with reversible /
+  multi-process (Dashboard + SMP) write policy tested before M7.
+- Settings (M8): SRPSS/Dashboard keep full teardown; SMP's live Settings is a separate application policy with reversible /
   controlled / deferred / restart classes per setting (§9); late callbacks from closed Settings fail closed.
 - [ ] **Visualizer during live Settings (operator, 7 Nov, binding):** with SMP's live Settings the Media widget and
   playback stay visible and playing, and the Visualizer will usually have been on. While Settings is open the
@@ -146,12 +146,12 @@ any SMP source work.
     tolerance);
   - a negative control: the Visualizer left ticking while Settings is open fails the dormancy check.
 
-  Lead's opinion on MC builds: MC would benefit from live Settings, because today every Settings visit tears down
-  and rebuilds the whole runtime, which is slow and stops the Media widget. It is harder there than in SMP: MC's
-  display runtime is the screensaver/media-centre presentation itself, so live Settings means the AC-03 service tier
+  Lead's opinion on Dashboard builds: Dashboard would benefit from live Settings, because today every Settings visit tears down
+  and rebuilds the whole runtime, which is slow and stops the Media widget. It is harder there than in SMP: Dashboard's
+  display runtime is the Screensaver or Dashboard presentation itself, so live Settings means the AC-03 service tier
   plus a per-setting reapply class for every display, widget and transition setting, not only for SMP's own groups.
-  Recommend building it in SMP first (M8), then deciding on MC from SMP's measured reapply coverage, rather than
-  making it an MC prerequisite.
+  Recommend building it in SMP first (M8), then deciding on Dashboard from SMP's measured reapply coverage, rather than
+  making it an Dashboard prerequisite.
 
 ### 0A.7 Performance budgets
 
@@ -174,7 +174,7 @@ any SMP source work.
 | --- | --- | --- | --- |
 | Native real-time playback underruns or blocks on Python, decoder, render or GUI | medium | high | event-driven WASAPI engine; preallocated bounded PCM buffers; decode ahead on separate native workers; callback no GIL, allocation, I/O or blocking locks; underrun/latency counters and §13 soaks |
 | Native codec/DLL, license or packaging drift | medium | high | pin audited FFmpeg native libraries and license configuration; decode fixture corpus; deterministic frozen-build dependency/payload checks; narrow replaceable decoder seam |
-| two writers on the shared DB (MC + SMP) | medium | high | one write policy, WAL, lock tests before M7 |
+| two writers on the shared DB (Dashboard + SMP) | medium | high | one write policy, WAL, lock tests before M7 |
 | playback dies with Settings teardown | certain without P2 | high | P2 before M2 |
 | SMP tab bloats Settings or copies the hidden-owner pattern | medium | medium | P1 registry; §14 pills; no hidden QWidgets |
 | artwork writes into the user's music folders | medium | high (user data) | §15: opt-in, default off, never overwrite, provenance sidecar |
@@ -189,17 +189,17 @@ Source inspected from `Basjohn/ShittyRandomPhotoScreenSaver` default `main` on 2
 
 | Existing authority | Observed behaviour | Allowed extension / risk |
 | --- | --- | --- |
-| `Spec.md`; `Docs/Contracts.md`; `rendering/quick/runtime.py` | Retained Qt Quick/GL presentation, no `QQuickWidget`, one accelerated display surface in SRPSS/MC | MC panes use existing Quick display; SMP native desktop host may own a separate top-level window, but never change screensaver physical rule. |
+| `Spec.md`; `Docs/Contracts.md`; `rendering/quick/runtime.py` | Retained Qt Quick/GL presentation, no `QQuickWidget`, one accelerated display surface in SRPSS/Dashboard | Dashboard panes use existing Quick display; SMP native desktop host may own a separate top-level window, but never change screensaver physical rule. |
 | `rendering/widget_runtime_manager.py`; `rendering/quick/widgets/family_binder.py`; `rendering/quick/display_presenter.py` | Family activation -> per-member admission -> presentation/neutral service; binder maps one `widget_id` to one retained presentation | One Settings *feature entry* may own two member IDs/geometry roots. Must extend descriptors/Settings navigation consistently; **do not** cram two independent desktop rectangles into one retained card. |
 | `core/settings/widget_family_catalog.py`; `rendering/widget_descriptors.py` | Family membership/admission distinct from per-widget enabled | Register **one `music_workspace` family**, with exactly two presentation member identities. Independent pane visibility/rect/monitor is not a second capability. |
-| `core/settings/settings_manager.py`; `core/settings/defaults.py`; `default_settings.py`; `default_profile_overrides.py` | One canonical SettingsManager; Normal + MC defaults; applied values and lazy settings construction | One `widgets.music_workspace` schema/Settings section; one canonical default for each field; store DB content *outside* settings. No copied `SMPSettingsManager`. |
-| `core/settings/json_store.py::determine_storage_path`; `core/settings/storage_paths.py` | Normal/MC settings separate; canonical non-settings data root shared. Unknown profile names isolated. | SMP will require explicit canonical profile **and defaults resolver updates**; simply adding a third folder mapping is insufficient. Keep test `StorageRoot` isolation. |
-| `main_mc.py`; `main.py`; `core/mc.py`; `core/build_profile.py` | MC delegates to shared main and forces Interaction; diagnostic identity is a separate build flavour | Initial workspace and playback live behind MC admission. Later define host/profile/flavour separately, without filename-sniff fallback or new environment variable. |
-| `engine/engine_handlers.py::on_settings_requested` | MC/SRPSS Settings triggers complete engine stop, Qt destruction barrier, and display replacement | A long-lived music service **must be owned above** the MC display generation if playback should survive Settings. Do not weaken screensaver barriers. |
+| `core/settings/settings_manager.py`; `core/settings/defaults.py`; `default_settings.py`; `default_profile_overrides.py` | One canonical SettingsManager; Normal + Dashboard defaults; applied values and lazy settings construction | One `widgets.music_workspace` schema/Settings section; one canonical default for each field; store DB content *outside* settings. No copied `SMPSettingsManager`. |
+| `core/settings/json_store.py::determine_storage_path`; `core/settings/storage_paths.py` | Normal/Dashboard settings separate; canonical non-settings data root shared. Unknown profile names isolated. | SMP will require explicit canonical profile **and defaults resolver updates**; simply adding a third folder mapping is insufficient. Keep test `StorageRoot` isolation. |
+| `main_dashboard.py`; `main.py`; `core/dashboard.py`; `core/build_profile.py` | Dashboard delegates to shared main and forces Interaction; diagnostic identity is a separate build flavour | Initial workspace and playback live behind Dashboard admission. Later define host/profile/flavour separately, without filename-sniff fallback or new environment variable. |
+| `engine/engine_handlers.py::on_settings_requested` | Dashboard/SRPSS Settings triggers complete engine stop, Qt destruction barrier, and display replacement | A long-lived music service **must be owned above** the Dashboard display generation if playback should survive Settings. Do not weaken screensaver barriers. |
 | `widgets/media_runtime.py`; `core/media/media_controller.py`; `core/media/provider_registry.py` | Shared generation-scoped Media/GSMTC **reader**, event-driven observation, serial command lane; provider registry represents **external** GSMTC sessions | Internal SMP provider must be a typed *in-process* adapter. Do not spoof GSMTC or make Media selection control player lifetime. |
 | `widgets/spotify_visualizer/*`; `core/settings/visualizer_mode_registry.py` | Exactly one shared authored logical clock, DSP lane, immutable frame/snapshot bridge, mode-owned settings | SMP output PCM must adapt to the existing source boundary; no second BeatEngine or mode-specific copy. |
-| `rendering/quick/qml/MediaPresentation.qml`; `rendering/quick/widgets/media.py` | Rich retained Media styling, external app-volume accessory, uniform whole-card transform | MC Expanded Media needs responsive **large-screen reflow**, not merely scaling the small card to monitor width. Small/expanded views share state and semantic style. |
-| `rendering/quick/qml/DisplayScene.qml` | OSD, context menu, visualizer, ordinary families have explicit layering | MC expanded media uses the first plan's safe display takeover. No new native overlays inside MC. |
+| `rendering/quick/qml/MediaPresentation.qml`; `rendering/quick/widgets/media.py` | Rich retained Media styling, external app-volume accessory, uniform whole-card transform | Dashboard Expanded Media needs responsive **large-screen reflow**, not merely scaling the small card to monitor width. Small/expanded views share state and semantic style. |
+| `rendering/quick/qml/DisplayScene.qml` | OSD, context menu, visualizer, ordinary families have explicit layering | Dashboard expanded media uses the first plan's safe display takeover. No new native overlays inside Dashboard. |
 | `Docs/Guardrails/Visualizer_Presentation.md`; BTF; Performance Optimization Contract | Source freshness, authored reactivity, renderer/Qt retirement outrank FPS optimizations | Never change DSP/fidelity to compensate for player's decode or GUI load. |
 
 **Must read on admission:** `Docs/00_PROJECT_OVERVIEW.md`, `Spec.md`, `Docs/Contracts.md`, `Docs/TestSuite.md`, `Current_Plan.md`, `Docs/Guardrails.md`, `Docs/Guardrails/Performance_Optimization_Contract.md`, `Docs/Guardrails/Visualizer_Presentation.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`, `Docs/Guides/10_WIDGET_GUIDELINES.md`, `Docs/Guides/Visualizer_Change_Checklist.md`, `Docs/Architecture/Settings_Bucket_Persistence_Contract.md`, `Docs/Reference/Visualizer_Reference.md`, `Docs/Reference/Guided_Setup.md`, and the *accepted* Expanded Visualizer reference/contract created under Plan 01.
@@ -207,15 +207,15 @@ Source inspected from `Basjohn/ShittyRandomPhotoScreenSaver` default `main` on 2
 ## 1. Product invariants (not negotiable)
 
 - [ ] Same repository, same mode registry, same preset/catalogue, same controller/logical/FFT/source freshness semantics, same shared Quick implementation for compatible visualizers. No SMP-specific shader/mode fork, no second Qt theme engine, no parallel player-specific visualizer Settings builders.
-- [ ] Standard SRPSS when the player feature is disabled has zero new decoder/DB/SMTC/PCM worker/device/session cost, zero imported SMP implementation tree on common Quick/module import, and no new QML scene object activation. MC without music-workspace/player admission is equally dormant.
+- [ ] Standard SRPSS when the player feature is disabled has zero new decoder/DB/SMTC/PCM worker/device/session cost, zero imported SMP implementation tree on common Quick/module import, and no new QML scene object activation. Dashboard without music-workspace/player admission is equally dormant.
 - [ ] Shared library/playlist/database state is not ordinary widget lifetime. Hide or close either pane, enter Expanded Media, open Settings, switch visualizer modes or pop out a renderer without stopping playback, clearing queue, closing shared DB mid-write or losing metadata.
 - [ ] One playback service and one queue authority per process that explicitly activates it. No dual command ownership via Media, playlist pane, SMTC or external GSMTC. These are control adapters to the service.
 - [ ] Audio output and visualizer analysis are distinct: actual audio can play with no visualizer; external-provider Media can be selected while SMP keeps playing; source choice is explicit and never feeds an internal track both through decoded PCM and WASAPI simultaneously.
 - [ ] Metadata scanning/editing is bounded, cancellable and off GUI/render/audio-critical lanes. No auto rewriting tags, modifying artwork inside sound files or auto deleting duplicates. User groups/favorites persist in the library database, not in genre/comment metadata or `settings_v2.json`.
 - [ ] **One widget entry / two independent panes:** one family activation and one grouped Settings entry, two separate retained presentation identities/rectangles, separate optional visibility, independent route/position/size, one shared library state model. Moving one pane never drags/reanchors the other by hidden coupling.
-- [ ] Existing Settings semantics and complete runtime teardown remain unchanged for SRPSS and initially MC. SMP's later live Settings is a **new application policy**, not a dismantling of SRPSS's lifetime contract.
+- [ ] Existing Settings semantics and complete runtime teardown remain unchanged for SRPSS and initially Dashboard. SMP's later live Settings is a **new application policy**, not a dismantling of SRPSS's lifetime contract.
 - [ ] New optional Qt/WinRT/metadata/library imports are lazy. Registry/Settings metadata itself remains pure and side-effect-free; no COM, SQLite open, audio device or network at import time.
-- [ ] Screensaver/MC one-QQuickWindow-per-display contract remains. SMP native host and optional Pop Out must own their own bounded windows, but never permit two active renderers for the one visualizer or two analysis clocks.
+- [ ] Screensaver/Dashboard one-QQuickWindow-per-display contract remains. SMP native host and optional Pop Out must own their own bounded windows, but never permit two active renderers for the one visualizer or two analysis clocks.
 - [ ] Operator mutable presets are immutable only as **ownership boundaries**, not as data snapshots: never pin current preset values as test oracle. Tests use synthetic owned fixtures and BTF/replay performance oracles.
 - [ ] No podcasts. Optional lyrics start local embedded/.lrc only. MusicBrainz/Cover Art Archive and optional matching are opt-in and rights-conscious; audio format support is measured and disclosed, not promised as universal.
 - [ ] No product build/installer or GitHub Actions automatically run by an agent. Tests are local, focused and project-venv isolated. PowerShell examples remain one line, no environment-variable configuration; deliver source changes as full files and work artifacts as ZIPs.
@@ -223,11 +223,11 @@ Source inspected from `Basjohn/ShittyRandomPhotoScreenSaver` default `main` on 2
 ## 2. Target ownership map (one application, many presentations)
 
 ```text
-SRPSS Standard / MC / future SMP entry point (profile + host selection)
+SRPSS Standard / Dashboard / future SMP entry point (profile + host selection)
   |  canonical SettingsManager/defaults/schema/repair (profile-scoped)
   |  canonical capability catalog + lazy registry (no service startup)
   |
-  +-- MusicWorkspace feature activation [MC, SMP only]
+  +-- MusicWorkspace feature activation [Dashboard, SMP only]
   |     +-- Application MusicLibraryOwner (shared DB/index/search/metadata/art)
   |     +-- MusicWorkspaceDisplayAdapter (display-local, no DB ownership)
   |            +-- music_library pane [its own rect/edit/route/visibility]
@@ -242,12 +242,12 @@ SRPSS Standard / MC / future SMP entry point (profile + host selection)
   |     +-- internal Media provider adapter (existing Media widget can opt in)
   |
   +-- one canonical Visualizer controller -> one logical clock/DSP -> one current render host
-  |     +-- MC selected display Quick scene (existing)
+  |     +-- Dashboard selected display Quick scene (existing)
   |     +-- SMP docked Visualizer OR SMP popout native Quick host (never both active)
   |
   +-- ExpandedPresentation policy, reused semantics
-        +-- EB Expanded Visualizer in SRPSS/MC (Plan 01)
-        +-- MC Expanded Media (new milestone below)
+        +-- EB Expanded Visualizer in SRPSS/Dashboard (Plan 01)
+        +-- Dashboard Expanded Media (new milestone below)
         +-- SMP immersive music display (its own desktop host)
 ```
 
@@ -278,12 +278,12 @@ widgets.music_workspace:
 **Critical integration audit:** `rendering.widget_descriptors`, `core.settings.widget_family_catalog`, `capability_activation`, `WidgetRuntimeManager`, display route filtering, Settings SETUP, CUSTOM three-slot load/save/undo, stored geometry normalization, pane-specific close/restore, Guided Setup and `Docs/Contracts.md` must agree. If this one-Settings-entry mapping is simpler with current canonical `widgets.music_library` / `widgets.music_playlists` children, that is acceptable **only if** the UI groups them as ONE feature and there is exactly one capability/master authoring authority; never silently create a second widget Settings entry. Define canonical mapping once and test it through both schema and retained Quick projection.
 
 - [ ] One Settings row **Library & Playlists**, not two separate widget rows; page offers Library and Playlists subsections/toggles plus their shared controls. One family activation button and one master ordinary enable. Both pane toggles can be independently changed without toggling the family.
-- [ ] One selected default arrangement can show both panes on MC or just one, but selection is operator editable and route-aware. Independent rectangles are real, not fake columns inside one unmovable card. Each pane can live on a different participating display if the operator places it there.
+- [ ] One selected default arrangement can show both panes on Dashboard or just one, but selection is operator editable and route-aware. Independent rectangles are real, not fake columns inside one unmovable card. Each pane can live on a different participating display if the operator places it there.
 - [ ] Parent pane geometric intent uses existing anchor/margin and CUSTOM rect/slot semantics; child roles are declared stable across data updates. Library track rows and playlist items are **not** new draggable top-level widget identities.
 - [ ] Each pane can be independently moved, resized, hidden/closed/restored. Dragging the library does not move playlist; resizing playlist does not reflow library except through intentionally selected global automatic stack policy. Preset/click/edit semantics remain coherent across separate displays.
 - [ ] When a pane is hidden, release only its per-display view/adapters; retain one database/index owner when another pane or active playback needs it. Master family OFF retires both panes, but application-owned playback can continue if active.
 - [ ] When both panes hidden and no playback/library background jobs are authorized, the library owner can close/idle connections; avoid persistent IO threads solely for a toolbar label.
-- [ ] In SMP desktop host these same pane IDs are separate dockable/splittable regions, not SRPSS CUSTOM editor impersonations. MC uses current retained scene/edit mechanisms.
+- [ ] In SMP desktop host these same pane IDs are separate dockable/splittable regions, not SRPSS CUSTOM editor impersonations. Dashboard uses current retained scene/edit mechanisms.
 - [ ] Test display transfer, monitor off/return, mixed DPI, saved layout slot, theme, double click, selected Edit mapping, disabled family and Settings restart. No saved rect disappears because its pane is hidden.
 
 ### 3.2 Initial working UI with no music engine yet
@@ -313,16 +313,16 @@ entry with the pane, not a second widget (§4.1; mock R10).
 - [ ] **Mandatory FTS5:** verify the shipped SQLite's FTS5 at M0, with one maintained index over searchable title/artist/album and selected metadata. Define case/accent/Unicode and prefix search behaviour. Incrementally maintain/rebuild it on ingest, edit, delete, restore and migration; FTS is derived, not canonical metadata. Add trigram substring indexing only if a real substring-search use case justifies write/disk overhead.
 - [ ] **Browse/sort indexes:** design actual SQL query shapes for artists/albums/genres/favourites/groups/playlist membership, availability, recent plays and each offered sort. Use selective composite/covering indexes based on realistic predicates; deterministic `track_id` tie-breakers. Record `EXPLAIN QUERY PLAN` and index size on representative data rather than multiplying speculative indexes for every column combination.
 - [ ] **Virtualised reads:** repository workers return immutable, bounded pages/row revisions to QML. No per-delegate SQL, filesystem stat, tag parser or image decode. Stable keyset pagination on indexed sort keys where applicable, not deep `OFFSET`; refresh changed rows/affected ranges rather than resetting the entire 50k list. Artwork thumbnails use a separate bounded byte-LRU cache.
-- [ ] **Single-writer transactions:** enable foreign keys on every connection; worker-owned SQLite connections with WAL, finite busy timeout, bounded retries and short commits. WAL enables readers alongside **one** writer, not concurrent writes; MC and SMP must coordinate through transaction locks or a single proved cross-process writer policy. Publish one coherent revision only after commit; broadcast/reconcile other-process changes without GUI blocking or constant polling. Make DB-only favourite/rating/group/playlist reorder and bulk tag-overlay edits fast, validated and rollbackable.
+- [ ] **Single-writer transactions:** enable foreign keys on every connection; worker-owned SQLite connections with WAL, finite busy timeout, bounded retries and short commits. WAL enables readers alongside **one** writer, not concurrent writes; Dashboard and SMP must coordinate through transaction locks or a single proved cross-process writer policy. Publish one coherent revision only after commit; broadcast/reconcile other-process changes without GUI blocking or constant polling. Make DB-only favourite/rating/group/playlist reorder and bulk tag-overlay edits fast, validated and rollbackable.
 - [ ] **Metadata edit semantics:** distinguish source tags, user-controlled library-only overrides and effective display metadata. DB edits are transactional; writing tags back into media is an explicit, separately recoverable filesystem job with a durable intent/result journal, file identity recheck, backup/temp-file policy where safe, post-write reparse and user-visible conflict/failure. Never claim a SQLite commit and media-file rewrite are atomically one transaction; rescans must not erase unresolved overrides.
 - [ ] **Stable identity and bounded scanning:** recognise verified renames/moves with persisted file identifiers and selective fingerprints, escalate to expensive hashing only on ambiguity, never merge different recordings based on title/duration. Journal scan progress and failures, batch inserts/index updates, honour cancellation, yield to interactive reads and writes; explicit roots, no surprise whole-drive scans, symlink cycles or unbounded directory walks.
 - [ ] **Safe migrations and recovery:** versioned schema/migration ledger, foreign-key/integrity checks, backup-before-destructive migration, restore round-trip and FTS rebuild. Use SQLite online backup or `VACUUM INTO` with a compatible version, not a blind copy of a live WAL `.db` alone. Bound/checkpoint WAL growth when readers stay open. Keep missing tracks and user associations until explicit clean-up.
-- [ ] **Evidence at M2:** real 5k-folder scan and representative 50k/250k fixtures with Unicode, duplicate-looking tracks, missing/network paths, multi-valued tags and edited albums; prove query/edit budgets under simultaneous scan, cold/warm use and two separate MC/SMP processes. DB and generated fixture reads/writes, WAL, FTS/indexes and backups all live under the dedicated `D:\Temp\SRPSS\SMP_Library_Tests\<run-id>` root; log actual HDD/SSD media and avoid filling the drive. Never auto-fallback to the repo SSD. Do not move SQL to the native audio engine or render thread.
+- [ ] **Evidence at M2:** real 5k-folder scan and representative 50k/250k fixtures with Unicode, duplicate-looking tracks, missing/network paths, multi-valued tags and edited albums; prove query/edit budgets under simultaneous scan, cold/warm use and two separate Dashboard/SMP processes. DB and generated fixture reads/writes, WAL, FTS/indexes and backups all live under the dedicated `D:\Temp\SRPSS\SMP_Library_Tests\<run-id>` root; log actual HDD/SSD media and avoid filling the drive. Never auto-fallback to the repo SSD. Do not move SQL to the native audio engine or render thread.
 - [ ] Track identity must survive safe rename/move where deterministically recognised; path alone is not the identity. Avoid false merges when same title/duration exists in two recordings. Rescan has conflict policy and only updates authoritative fields after a verified identity match.
 - [ ] Select paths/root folders explicitly; avoid scanning entire drives, system directories, removable/network drives unexpectedly. Prevent symlink cycles, out-of-root traversal, duplicate roots and unbounded recursive directory work.
 - [ ] Discovery/parsing/index work is cancellable and bounded; no UI thread blocking, no per-delegate file stat/decoder, no filesystem polling. Scans may be triggered by user action or an opt-in scheduled change worker with a single authority, not dozens of watch timers.
 - [ ] Asset validation: path containment, media format detection, filename surrogate/Unicode, missing file, permission error, odd tags, corrupt/truncated audio and very large directories. No unexplained silent skip; record per-file errors compactly.
-- [ ] Cross-process MC/SMP compatibility: DB shared; no two independent writers racing. Need an explicit multi-process test and backup/restore proof before separate SMP entry point is admitted. DB must not be a hidden settings JSON mirror.
+- [ ] Cross-process Dashboard/SMP compatibility: DB shared; no two independent writers racing. Need an explicit multi-process test and backup/restore proof before separate SMP entry point is admitted. DB must not be a hidden settings JSON mirror.
 
 ## 4. Playback phase, only after Library/Playlist model acceptance
 
@@ -346,7 +346,7 @@ Define small interfaces first (illustrative, not new business superclasses): `Pl
 - [ ] Decoded PCM is captured **once** and timestamped at the media owner boundary, not by a second WASAPI loopback of SMP playback. Calibrate decoder buffer timestamps to audible output with device latency measurements; a PCM signal being emitted is not proof speaker sound played then.
 - [ ] Feed the **existing** BeatEngine/analysis worker via a single selected source descriptor and its one-in-flight + newest-pending rule. Preserve floor/ramp, freshness, pauses, silence and all mode numerical reactivity. Avoid a new per-song FFT or visualizer-specific gain overlay.
 - [ ] Stream/player device switching is an explicit, retryable service transaction. Preserve queue and intended playback position when possible, but do not promise sample-exact continuation if the backend cannot guarantee it.
-- [ ] Define service lifetime above the MC display graph, with an app-level owner and explicit shutdown path. Opening MC Settings may retire all Quick display roots; player keeps playing if the operator has actually started it. Do not hold a retired QML model or generation-owned signal/worker as a surrogate player owner.
+- [ ] Define service lifetime above the Dashboard display graph, with an app-level owner and explicit shutdown path. Opening Dashboard Settings may retire all Quick display roots; player keeps playing if the operator has actually started it. Do not hold a retired QML model or generation-owned signal/worker as a surrogate player owner.
 - [ ] Presentation adapters subscribe to latest revision; stale track/artwork/seek commands rejected by generation or item identity. The library/playlists UI may disappear/reappear without restarting audio or resending a duplicate command.
 - [ ] Queue order is independent from library sort/filter and playlist order. A playback queue can be made from a playlist snapshot, then independently re-ordered without silently rewriting the saved playlist. Repeat one/all, shuffle with stable history, previous, seek and end-of-queue have exact tests.
 - [ ] Manual user command and Windows media-key ingress share one command queue; command completion/error is observed, not assumed on worker submission. Replaying a click should not double-advance a track.
@@ -375,7 +375,7 @@ Current `core/media/provider_registry.py` encodes explicit external Windows GSMT
 
 - [ ] Favorites: durable boolean on canonical track ID, heart in Library/Playlist/Media details, cached filter; rescan/rename never erases it. No silent tag write.
 - [ ] Named personal groups: unlimited **catalogue** entries, but at most **three distinct memberships per track**. Transaction/DB enforcement (not UI-only). Group rename/reorder/delete; right-click Add to group / Create group / Remove, bulk-add bounded transaction; clear error upon fourth membership. Group is a dynamic collection/query, not an ordered playlist.
-- [ ] Explicit DB constraint (foreign keys + unique track/group; trigger or transaction-level enforced maximum with multi-writer tests). Concurrent MC/SMP attempts to add fourth membership cannot slip through.
+- [ ] Explicit DB constraint (foreign keys + unique track/group; trigger or transaction-level enforced maximum with multi-writer tests). Concurrent Dashboard/SMP attempts to add fourth membership cannot slip through.
 - [ ] Browse **All / Artists / Genres / Favorites / Groups**, with dense list and cached artwork grid; selection and keyboard navigation stable across category switches. Display group mosaics, accurate counts, search, sorting and drill-down. No synchronous high-resolution art decode in GUI delegates.
 - [ ] Build 'Play group', 'Queue group', and 'Save as playlist' as explicit snapshot/queue operations. A group's playlist export must not silently sever future dynamic membership semantics; label snapshot vs dynamic clearly.
 - [ ] **One filter owner, two entry glyphs (full-player mock R7, R8):** the favourites filter above and the library
@@ -422,13 +422,13 @@ Metadata and cover-art parsing are independent of the native playback engine; us
 
 ## 6. Windows playback media session: outbound vs inbound
 
-- [ ] SMP's Windows **SMTC publisher** is an output adapter to player service, independent of existing **GSMTC reader**. Explore `ISystemMediaTransportControlsInterop::GetForWindow` on the real MC/desktop HWND; test actual Python/WinRT availability and frozen dependencies before promising compatibility.
+- [ ] SMP's Windows **SMTC publisher** is an output adapter to player service, independent of existing **GSMTC reader**. Explore `ISystemMediaTransportControlsInterop::GetForWindow` on the real Dashboard/desktop HWND; test actual Python/WinRT availability and frozen dependencies before promising compatibility.
 - [ ] Publish track/artist/album/artwork, playing/paused/stopped, position, duration, capabilities; receive Windows play/pause/skip/seek into the **single** service command owner. Generation-fence every callback, unsubscribe at shutdown.
 - [ ] Mark the player's published AUMID/session as owned; exclude it from *external* source discovery while keeping internal `smp` Media adapter functional. No self-reading feedback or global blanket browser exclusion.
 - [ ] Playback never depends on an SMTC consumer: if OS integration fails, local player/queue/visualizer keep working and report that optional integration unavailable.
 - [ ] Test Media keys while selected external player remains active; no doubled global keys, no program hijacking another provider's session, no duplicate notification/OSD.
 
-## 7. MC Expanded Media: **complete before SMP profile separation**
+## 7. Dashboard Expanded Media: **complete before SMP profile separation**
 
 This is a **new hard milestone** added by the operator. It reuses Plan 01's display-local takeover, background admission, widget lease and OSD contracts, but renders media-first content rather than a display-wide EB simulation. It is **not the SMP desktop host** and does **not require the later visualizer Pop Out**.
 
@@ -451,11 +451,11 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 
 - [ ] Use the first plan's per-display wallpaper/transition admission receipt and widget fade/dormancy. Another display keeps unaffected transitions and widget services; one expanded Media doesn't globally deactivate visualizers or other providers.
 - [ ] Preserve existing Media model/commands/service; switching mini↔expanded is retained presentation policy, not a new GSMTC controller or media query lane.
-- [ ] Persist expanded-media intent in the canonical MC settings, **not inside a media provider selection or visualizer mode preset**; restore only on eligible startup/Settings/monitor readiness. Ordinary Media widget geometry remains untouched.
+- [ ] Persist expanded-media intent in the canonical Dashboard settings, **not inside a media provider selection or visualizer mode preset**; restore only on eligible startup/Settings/monitor readiness. Ordinary Media widget geometry remains untouched.
 - [ ] Handle Edit Save/Cancel, media source changes, two-display swap/target hotplug, repeated Settings open/close, no-source/error state, actual mixed DPI/screen sizes, input menu overlays and terminal retirement.
 - [ ] Run **cross-feature** tests: EB expanded -> Media expanded, Media expanded -> EB expanded, either -> ordinary; no double hidden-widget scope or missing service leases, preserved single visualizer owner and image-batch accounting.
 - [ ] Compare GPU/CPU/GUI frame-age with mini and collapsed baseline; no second renderer, no hidden full-size card still painting behind. Use native Quick QML tests and real two-display review at the final acceptance gate.
-- [ ] **Gate:** MC Expanded Media is accepted as independently useful, reversible and consistent with current themes/hit-testing. Only then begin third-profile separation.
+- [ ] **Gate:** Dashboard Expanded Media is accepted as independently useful, reversible and consistent with current themes/hit-testing. Only then begin third-profile separation.
 
 ## 8. Standalone SMP product: native host, not a renamed screensaver
 
@@ -463,7 +463,7 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 
 - [ ] Introduce explicit SMP profile resolver/identity through existing side-effect-free startup policy. Update `core/settings/storage_paths.py` canonical data-root set, `core/settings/json_store.py::determine_storage_path` explicit settings directory mapping, **and** `core/settings/defaults.py::_resolve_profile` / `get_default_settings` plus canonical raw defaults/override lookup. Otherwise SMP silently receives Normal defaults or isolated test-profile storage.
 - [ ] Settings profile, runtime host and frozen build flavour are three independent axes. New entrypoint calls shared core initialisation/service registration but **never** starts/screensaver engine just to paint a music library. No `--dev` env special case, no separate defaults file hardcoded by UI, no duplicate SettingsManager.
-- [ ] Shared non-settings data root contains DB/artwork/theme/preset stores intentionally common to MC/SMP, with atomic multi-process writes; separate SMP settings directory holds player-window position, pane arrangement, source preference, output device, display target, playlist selection and app theme/layout choices as decided. Keep Standard and MC existing paths and defaults untouched.
+- [ ] Shared non-settings data root contains DB/artwork/theme/preset stores intentionally common to Dashboard/SMP, with atomic multi-process writes; separate SMP settings directory holds player-window position, pane arrangement, source preference, output device, display target, playlist selection and app theme/layout choices as decided. Keep Standard and Dashboard existing paths and defaults untouched.
 - [ ] Profile-aware defaults/repair/reset/export/import are explicit; test unseen/inactive settings retain values through other profiles. Isolated `StorageRoot` tests cannot open real user DB or credentials.
 - [ ] SMP runtime imports no image-saver source workers, wallpaper transitions, screen capture, monitor stagger, screensaver screens or subreddit/mail/Steam families merely for shared registry/Settings UI. Package reachability audits confirm excluded code only where truly absent; keep the required Qt Quick/rendering substrate and explicitly package the pinned native audio engine, FFmpeg decoder libraries and WASAPI integration without importing Qt Multimedia for playback.
 - [ ] Build Foundry/Runner/installer definitions are updated **only after** runtime tests pass. Operator alone runs Nuitka/Inno builds and supplies physical evidence; code editing agents must not invoke product builds.
@@ -472,7 +472,7 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 
 - [ ] Normal Windows focusable, taskbar-capable, snappable, resizable/minimizable/maximizable desktop top-level host; choose an ordinary native `QQuickWindow`-based presentation boundary and audit platform/window flags. Not the existing screensaver's topmost multi-display compositor.
 - [ ] Visual reference: recovered MusicBee-like charcoal/slate design with restrained accent, but **live canonical visualizer replaces the LEFT Artist Pictures pane**, artwork and details remain in lower-right Track Information, central music library and right queue/playlist; persistent transport, seek/volume. Remove Podcasts navigation.
-- [ ] The two MC music-workspace pane identities become independent dock/split areas, still under **one logical Library & Playlists feature**. Desktop user manipulates normal resizable splitter/docking controls, not global SRPSS CUSTOM Edit, while preserving shared pane models/theme colours and profile-local placement.
+- [ ] The two Dashboard music-workspace pane identities become independent dock/split areas, still under **one logical Library & Playlists feature**. Desktop user manipulates normal resizable splitter/docking controls, not global SRPSS CUSTOM Edit, while preserving shared pane models/theme colours and profile-local placement.
 - [ ] All pane arrangements are bounded and DPI-aware; restore by semantic slots and normalized geometric intent rather than only last pixel rectangle. Handle 125/150/200% DPR, maximized/compact modes, missing monitor and small window; clip safely instead of placing a child offscreen.
 - [ ] **Compact player** is a normal desktop window using the existing Media widget semantic model/style; **Full desktop** is Library/Playlist/Visualizer composition; **Immersive** uses the admitted expanded visualizer/media concepts within SMP's own host. Compact↔full↔immersive must not reset audio, queue, SMTC or visualizer logical clock.
 - [ ] Theme and preset controls reuse canonical sources, and Settings is reorganized by the later presentation descriptor without hiding important visualizer detail. No second renderer or separate mode preset implementation.
@@ -482,7 +482,7 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
   moved, resized (X, Y and XY) and swapped. SMP Edit is its own owner over its own record (the section tree of §16A),
   beside the existing Edit modes and never inside them: it is not the global SRPSS CUSTOM Edit (so the bullet above
   stands), and it is built from the same handles, guides, snapping, lock glyph and commit / cancel transaction (so
-  the mock's "existing Edit handlers" stands too). Existing Edit modes must not break: in the screensaver and MC
+  the mock's "existing Edit handlers" stands too). Existing Edit modes must not break: in the screensaver and Dashboard
   builds, which carry the compositor and full SMP functionality together, the two live side by side, one edit
   session per window, neither record touched by the other's session.
 - [ ] **Small mode and Full mode (operator, 11 Nov 2026):** Small mode is the Media widget as it is now; on the
@@ -490,15 +490,15 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
   and its children adjustable behind the lock glyph (the "Compact player" above). Its Up arrow switches to Full
   mode, the mock's layout (the "Full desktop" above). Full mode defaults to full screen but can be adjusted like a
   normal window, and its sections scale their spacing and sizing with it: §16A's section tree is the layout at
-  every window size, not only in full screen. On the screensaver and MC builds neither mode needs to leave the
+  every window size, not only in full screen. On the screensaver and Dashboard builds neither mode needs to leave the
   compositor: Small mode is the Media widget where it is today and Full mode is a display-wide presentation on one
   display, as the fullscreen Visualizer is (document 04 sections 8.2, 8.3 and 8.7: one implementation, two hosts).
 - [ ] **Arrange's SMP section (operator, 11 Nov 2026):** Arrange gains a section for SMP in which the Full mode
   section tree is rearranged with Arrange's precision; it is the main section of Arrange on the SMP profile build.
   It edits the same record through the same owner as SMP Edit, under the Edit / Arrange parity rule (document 04
   section 8.6); Arrange's existing sections are unchanged.
-- [ ] **Three builds from profiles (operator, 11 Nov 2026):** the screensaver build, the MC build and the SMP build
-  come from profiles as the first two do today. The screensaver and MC builds have full SMP functionality together
+- [ ] **Three builds from profiles (operator, 11 Nov 2026):** the screensaver build, the Dashboard build and the SMP build
+  come from profiles as the first two do today. The screensaver and Dashboard builds have full SMP functionality together
   with the compositor; only the SMP profile build has no compositor (no transitions, no image presenter, no widgets
   that are not the Visualizer or media related), as §8.1 already requires of its runtime imports.
 - [ ] **Left pane edges (full-player mock R4):** the left pane's edges are adjustable in X, Y and XY (a corner moves
@@ -526,9 +526,9 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 
 - [ ] **M0/M1 minimal contract:** one typed manifest, stable skin ID, Full/Compact variants, per-component supported-target declarations and state-to-asset mapping; validated ZIP import and bundled safe SVG/PNG handling with bounded decode/cache, safe fallback and zero dormant work. Use a working folder in the eventual Studio, export a reproducible ZIP for installation and sharing. Keep saved user section layouts separate from skin art. M1 demonstrates one sample on real QML, not an elaborate universal skin engine.
 - [ ] **Activation is the intersection of two approvals:** a skin manifest declares which target(s) it can style; the user explicitly opts each supported target in. Start ONLY with `smp_full` and `smp_compact`; admit `ordinary_media` as a cheap third target because SMP Compact reuses the same real Media component, but require explicit separate skin support and user enablement. Never infer a skin from the media provider or SMP being installed/running. All other widgets and Settings stay globally themeable but NOT independently skinnable until a genuine consumer justifies the separate work. No universal arbitrary-widget shell/skin contract in M0-M10.
-- [ ] **Themes tab placement:** after pre-SMP unification, offer one Appearance Theme selector and a **Skins** subpage with preview, skin choice, Inherit/Coordinated/Independent colour/material inheritance and a small `Apply To` list. List only known target IDs from the component registry, not a fixed duplicate widget list. Unsupported targets are shown disabled with an explanation if useful; no permanent per-widget live skin-toggle glyphs. In Standard/MC, ordinary Media is **OFF** by default. Profile-specific enablement and skin choice cannot rewrite the globally selected theme or another profile's appearance.
+- [ ] **Themes tab placement:** after pre-SMP unification, offer one Appearance Theme selector and a **Skins** subpage with preview, skin choice, Inherit/Coordinated/Independent colour/material inheritance and a small `Apply To` list. List only known target IDs from the component registry, not a fixed duplicate widget list. Unsupported targets are shown disabled with an explanation if useful; no permanent per-widget live skin-toggle glyphs. In Standard/Dashboard, ordinary Media is **OFF** by default. Profile-specific enablement and skin choice cannot rewrite the globally selected theme or another profile's appearance.
 - [ ] **Shared Media ownership:** ordinary Media always uses its global theme/family overrides unless `ordinary_media` is explicitly enabled for a skin that declares it. SMP Compact is the actual same Media component with `smp_compact` appearance context in the compositor or desktop host, never a duplicate playback/Media widget. Skin art replaces only drawing, not keyboard input, command bindings, tooltips, Edit/lock gesture, hitbox/accessibility, service lifetime or other providers.
-- [ ] **M7 visual proof:** a genuinely different Full section-shell and Compact Media shell under one skin, optional separately enabled ordinary Media in Standard/MC, unchanged unrelated widgets and Settings, correct clipping/masks and states at mixed DPR, accent inheritance or independent styling, no extra background capture and no media/queue/Visualizer restart on changes.
+- [ ] **M7 visual proof:** a genuinely different Full section-shell and Compact Media shell under one skin, optional separately enabled ordinary Media in Standard/Dashboard, unchanged unrelated widgets and Settings, correct clipping/masks and states at mixed DPR, accent inheritance or independent styling, no extra background capture and no media/queue/Visualizer restart on changes.
 - [ ] **M10 after M9:** full **Theme & Skin Studio** with real native Settings/Qt Quick/Media/Full/Compact previews, visual semantic and material-border editing, drag/drop SVG/PNG, glyph/button state previews, shell/shape/mask and animation authoring, inherited-value inspector, direct manipulation, gesture undo/redo, Save/Cancel and deterministic ZIP export/reimport through production validation. M10 extends the pre-SMP Theme Studio (Current Plan 1B.8, operator 21 Nov) to the SMP skins and previews; it does not migrate theme engines again or build a second Studio. Do not hold SMP release for the Studio.
 
 Exact packaging, migration, permissions and proof: `Docs/Future_Work/ShittyMusicPlayer/05_Theme_Skin_Studio.md`.
@@ -541,7 +541,7 @@ Exact packaging, migration, permissions and proof: `Docs/Future_Work/ShittyMusic
   presentations of the same pane. Lyrics stay bound by §5.2's local-first, later-milestone rule, and whether Lyrics and
   Artist Collage belong to the first full-player milestone is an open operator question
   (`04_Full_Player_Mock_2026-11-11.md` section 6).
-- [ ] The glyph is a **square outline containing outward diagonal arrow** (not the ↗ Expand glyph), with tooltip `POP OUT VISUALIZER`. It moves the *one* visualizer into a separate **always-on-top** desktop window. MC does not need it for product acceptance; a focused MC test shell is allowed only if it proves a difficult window-transfer contract and is not shipped as a new feature.
+- [ ] The glyph is a **square outline containing outward diagonal arrow** (not the ↗ Expand glyph), with tooltip `POP OUT VISUALIZER`. It moves the *one* visualizer into a separate **always-on-top** desktop window. Dashboard does not need it for product acceptance; a focused Dashboard test shell is allowed only if it proves a difficult window-transfer contract and is not shipped as a new feature.
 - [ ] Exactly one live logical controller/DSP source and one currently active GL visualizer renderer. Desktop dock and popout are **mutually exclusive rendering hosts**. Rehosting between separate `QQuickWindow` GL contexts can require releasing/recreating *context-local GPU resources*; don't assume reparenting a QSGRenderNode or QQuickItem across contexts is free/safe. Fence old root destruction, then construct/attach destination with current immutable presentation/source state. No double active renderer interval.
 - [ ] Preserve selected mode, preset, camera semantic view, wallpaper/scene environment policy where applicable, activation epoch/source freshness and authored state; renderer-only context objects may rebuild without restarting playback or analysis.
 - [ ] Pop-out always-on-top is user-toggleable and must behave sanely when an unrelated game enters fullscreen, when Alt+Tab/taskbar focus changes and when target monitor is unplugged. Closing should re-dock to exactly the saved slot or safe fallback if parent layout was removed.
@@ -549,7 +549,7 @@ Exact packaging, migration, permissions and proof: `Docs/Future_Work/ShittyMusic
 
 ### 8.4 SMP-only toasts
 
-- [ ] Track/playback notifications from player events, not media polling. Only SMP desktop product admits them; SRPSS/MC inherit no new toast window.
+- [ ] Track/playback notifications from player events, not media polling. Only SMP desktop product admits them; SRPSS/Dashboard inherit no new toast window.
 - [ ] For exact *active display* placement, use one bounded monitor-aware non-activating application overlay with native Windows work-area/foreground resolution. OS toasts are not guaranteed display-selectable. Fallback/quiet-mode if foreground monitor unavailable. No permanent overlays over games, no focus theft, no more than one bounded toast generation.
 - [ ] Theme/media semantics, event-driven show/hide, deduped events, click-through when hidden; suppress duplicate Windows SMTC notifications or immersive HUD when applicable.
 
@@ -566,10 +566,10 @@ The secure desktop restriction remains binding on every product profile.
 
 ## 9. Player-oriented Settings: preserve SRPSS dormancy, add safe live policy
 
-**Do not rewrite SRPSS's `on_settings_requested` to keep windows alive.** MC can continue to use full stop/replacement while player service survives above display generations; native SMP may introduce a separate Settings window over its live player host.
+**Do not rewrite SRPSS's `on_settings_requested` to keep windows alive.** Dashboard can continue to use full stop/replacement while player service survives above display generations; native SMP may introduce a separate Settings window over its live player host.
 
 - [ ] One `SettingsManager`/canonical schemas/preset and theme authorities. Three axes: application profile eligibility, Settings navigation/presentation descriptor, setting-specific live/recreate/defer policy. UI cannot declare a low-level unsafe change live.
-- [ ] SMP Settings priority: Playback/Audio, Library/Playlists, Visualizers (same detailed mode builders), Appearance/themes, windows/immersive and integrations, Advanced. Screensaver/MC current tab order remains unchanged unless operator chooses otherwise.
+- [ ] SMP Settings priority: Playback/Audio, Library/Playlists, Visualizers (same detailed mode builders), Appearance/themes, windows/immersive and integrations, Advanced. Screensaver/Dashboard current tab order remains unchanged unless operator chooses otherwise.
 - [ ] Lazy Settings body admission: disabled/inactive family tab does not import backend, create QObject or mutate settings by merely opening dialog. Use current lazy body invalidation/`shiboken6.isValid` contract on retirement.
 - [ ] **Reversible live:** style, color, supported arrangement and volume; explicit source resolver and current model. **Controlled service transaction:** output device, active queue operations and folder indexing; commit/discard handling includes irreversible external side effects. **Deferred:** renderer backend/major Qt host rebuild requiring exact resource shutdown. **App restart:** packaging-level change only with clear notice.
 - [ ] Do not confuse `SettingsUndo` 30-gesture memory list with a durable Save/Cancel transaction. Define a scoped preview buffer, original committed values, preview side-effects, Commit, Cancel and rollback for the specific controllable settings. Native file edits / external network calls / library scan cannot claim magical rollback of side effects.
@@ -582,12 +582,12 @@ The secure desktop restriction remains binding on every product profile.
 
 - [ ] Previous Waveform + Expanded Visualizer acceptance recorded. `Current_Plan.md` updated **only by operator authorisation**; source SHA and changed contracts inventoried.
 - [ ] Diagram widget registry/member admission, Settings UI row/Custom geometry/slot and generation lifetime. Write representative two-pane fake-family integration tests first; confirm no hidden second capability.
-- [ ] Design DB isolation/backup/identity/concurrency, pin SQLite/FTS5 capability and realistic M2 query shapes, plus player lifetime above MC display barrier. Define the versioned semantic SMP appearance and motion roles (section 8.2A) before pane QML is authored. Baseline Standard+MC idle import/service/thread/widget counts and existing external Media/Visualizer replay.
+- [ ] Design DB isolation/backup/identity/concurrency, pin SQLite/FTS5 capability and realistic M2 query shapes, plus player lifetime above Dashboard display barrier. Define the versioned semantic SMP appearance and motion roles (section 8.2A) before pane QML is authored. Baseline Standard+Dashboard idle import/service/thread/widget counts and existing external Media/Visualizer replay.
 - [ ] **Gate M0:** no undocumented changes to shared physical/lifecycle contract. Implementation sequence locked below.
 
 **M1 | MusicWorkspace capability + independent Library/Playlist panes [FIRST FEATURE]**
 
-- [ ] One `Library & Playlists` Settings entry, two independently routed/resized/movable QML panes; master capability and ordinary on/off, pane visibility, proper CUSTOM and MC profile persistence.
+- [ ] One `Library & Playlists` Settings entry, two independently routed/resized/movable QML panes; master capability and ordinary on/off, pane visibility, proper CUSTOM and Dashboard profile persistence.
 - [ ] No decoder/output/player backend yet. Empty-state pane UI and same-generation icon/theme/hitbox/native Quick geometry tests. Render both panes through section 8.2A semantic styles and Studio-derived motion tokens from first paint, including zero-radius, nested radii and disabled-motion proof; no hard-coded one-off QML skin. No import startup of music backend from family registry alone.
 - [ ] **Gate M1:** two distinct rectangles can be moved onto different monitors and restored; only one Settings row/family and one neutral library ownership authority. Other widgets/visualizer unchanged.
 
@@ -601,7 +601,7 @@ The secure desktop restriction remains binding on every product profile.
 
 - [ ] Permanent native C++ decoder/PCM/DSP/WASAPI engine brought up through measured M3 slices (shared PCM -> FFmpeg formats -> gapless queue -> exclusive output -> DSP -> calibrated analysis tap); ordered queue, seek/device/repeat/shuffle, latest-source freshness and exactly-once retirement. Library/playlist actions now play/queue through one `PlaybackService`, with no Qt Multimedia player in any phase.
 - [ ] Native callback isolation proven (no Python/GIL, Qt, QRhi or decoder dependency while servicing a hardware buffer); real-device underrun counters, source-format and exclusive-mode rejection/recovery evidence. No second visualizer DSP or SMP-specific rendering engine.
-- [ ] Player continues through pane close, MC Settings full display teardown/recreation, EB mode switching and source/monitor routing. External WASAPI unaffected.
+- [ ] Player continues through pane close, Dashboard Settings full display teardown/recreation, EB mode switching and source/monitor routing. External WASAPI unaffected.
 - [ ] **Gate M3:** real local codecs/seek and source timing measured; no double DSP, playback restart, orphan worker/device or stale callback.
 
 **M4 | Full Library UX / metadata / art / favorites / three-group contract**
@@ -615,29 +615,29 @@ The secure desktop restriction remains binding on every product profile.
 - [ ] Add explicit in-process `smp` Media provider, external providers remain available, source selector chooses one analysis owner. Outbound SMTC on real HWND; own session filtered from external GSMTC reading.
 - [ ] **Gate M5:** SMP plays while Media displays Spotify, library commands target SMP, Windows key handler has exactly one recipient, no feedback loops/stale sessions.
 
-**M6 | Expanded Media in MC [MANDATORY PRE-PROFILE]**
+**M6 | Expanded Media in Dashboard [MANDATORY PRE-PROFILE]**
 
 - [ ] ↗/↙ glyph, responsive full-display media layout, artwork/controls/source truth, optional canonical visualizer, takeover transitions/widgets/OSD/HUD policy reused from accepted EB expansion.
 - [ ] Mutual exclusion between visualizer expansion and media expansion, preserved saved mini layout, other-display operation and Settings/monitor/EDIT lifecycle.
-- [ ] **Gate M6:** real installed MC two-display visual acceptance + native/focused tests; no second player or controller. **Do not create SMP profile until M6 accepted.**
+- [ ] **Gate M6:** real installed Dashboard two-display visual acceptance + native/focused tests; no second player or controller. **Do not create SMP profile until M6 accepted.**
 
 **M7 | Explicit SMP settings profile and native desktop host**
 
-- [ ] Update all canonical profile/default/storage selectors and build/startup identity, preserving existing Standard+MC. Construct native desktop `QQuickWindow`, independent Library+Playlist panes, left live visualizer, lower-right artwork and compact/full/immersive.
+- [ ] Update all canonical profile/default/storage selectors and build/startup identity, preserving existing Standard+Dashboard. Construct native desktop `QQuickWindow`, independent Library+Playlist panes, left live visualizer, lower-right artwork and compact/full/immersive.
 - [ ] Add SMP-only Pop Out as an independent **optional post-host** subgate; if renderer rehost cannot be proven, leave Pop Out disabled rather than fork renderer. Add safe active-display toasts only after host lifetime proven.
 - [ ] **Gate M7:** snaps, taskbar, focus, Alt+Tab, mixed DPI/hotplug, same audio/visualizer state across desktop modes; no SRPSS wallpaper engine constructed and no extra rendered visualizer.
 
 **M8 | Settings lifecycle adaptation and full cross-product regression**
 
-- [ ] Presentation-descriptor Settings priorities and reversible live changes; service/device reconfigure and renderer deferred rebuild; full SRPSS/MC barriers untouched.
+- [ ] Presentation-descriptor Settings priorities and reversible live changes; service/device reconfigure and renderer deferred rebuild; full SRPSS/Dashboard barriers untouched.
 - [ ] **Gate M8:** repeated Settings/desktop mode/Pop Out/SMTC/window close cycles preserve media state and bounded Qt/COM/DB/GL resources; no hidden writes.
 
 **M9 | Release/product acceptance**
 
-- [ ] Standard and MC source tests, SMP native tests, 4-run cold/warm/Settings/stop soaks, library migrations/backups, real hardware codecs, GPU load and idle footprint; test isolated and shared MC/SMP concurrent DB.
-- [ ] Source-proven build payload reachability report and explicit dependency pins. Operator alone runs frozen SMP/MC/Standard builds and Inno installers; review actual Nuitka reports for added Qt/FFmpeg/metadata payload.
+- [ ] Standard and Dashboard source tests, SMP native tests, 4-run cold/warm/Settings/stop soaks, library migrations/backups, real hardware codecs, GPU load and idle footprint; test isolated and shared Dashboard/SMP concurrent DB.
+- [ ] Source-proven build payload reachability report and explicit dependency pins. Operator alone runs frozen SMP/Dashboard/Standard builds and Inno installers; review actual Nuitka reports for added Qt/FFmpeg/metadata payload.
 - [ ] Update `Spec.md`, focused Docs/Reference and Docs/Contracts for actually accepted new owners, plus `Docs/TestSuite.md` and user-facing README. Do not keep stale parallel proposal assertions as destination authority.
-- [ ] **Gate M9:** usable standalone player, no screensaver/MC contracts weakened, no two visualizer implementations, zero unverified performance/codec claims.
+- [ ] **Gate M9:** usable standalone player, no screensaver/Dashboard contracts weakened, no two visualizer implementations, zero unverified performance/codec claims.
 
 ## 11. Automated test/verification matrix (names below are PLANNED)
 
@@ -661,11 +661,11 @@ New tests must assert behaviour, native retained paint and actual DB/lifetime tr
 | `tools/music_smtc_windows_smoke.py` | Real HWND/SMTC publication/media keys/metadata/timeline, exactly one handler, proper unsubscribe | M5 |
 | `test_mc_expanded_media_policy.py` | ↗/↙ semantics, screen reflow, `EB expanded` mutual exclusion, takeover account/lease/OSD & restore | M6 |
 | `test_mc_expanded_media_qml_native.py` | Source labels, control hitboxes/OSD priority, large/portrait/DPR geometry, no stale QML | M6 |
-| `test_smp_profile_defaults.py` | Explicit third-profile default/settings/data-root + test isolation, reset/import/export, no Normal/MC corruption | M7 |
+| `test_smp_profile_defaults.py` | Explicit third-profile default/settings/data-root + test isolation, reset/import/export, no Normal/Dashboard corruption | M7 |
 | `test_smp_desktop_hosts.py` | Compact/full/immersive focus/snapping geometry model, separate panes, no screensaver engine; one GL visualizer host | M7 |
 | `test_smp_popout_transfer.py` | Separate QQuickWindow lifetime, context-local resource recreation, never two current renderers, clean re-dock/Alt+Tab/hotplug | M7 optional |
 | `test_smp_live_settings.py` | Preview/Cancel/Apply side-effects, no hidden tab instantiation, continued music, resource fence, scoped rollback | M8 |
-| `test_smp_cross_product_dormancy.py` | Fresh Standard/MC import startup: zero SMP backend/DB/audio SMTC work; repeated generations/resources bounded | Every milestone |
+| `test_smp_cross_product_dormancy.py` | Fresh Standard/Dashboard import startup: zero SMP backend/DB/audio SMTC work; repeated generations/resources bounded | Every milestone |
 | `tools/visualizer_live_check.py` + accepted replay/BTF | Active-gaming/source/render frame freshness and gold reactivity with SMP PCM and external WASAPI | M3/M6/M9 |
 
 **Operator-only physical items, minimized:** a small number of *irreducible* Windows outcomes: visually approving real expanded Media and SMP desktop/Pop Out layout; verifying actual sound/seek across devices and codecs when an automated hardware probe is not sufficient; checking Windows snapping, native SMTC keys and foreground toast behaviour. Most geometry, integrity, background work, provider arbitration and restart/save/restore must already be automated. Operator only runs frozen product/installer builds upon explicit choice. Document measured failures instead of asking for repeated exploratory manual tests.
@@ -687,8 +687,8 @@ New tests must assert behaviour, native retained paint and actual DB/lifetime tr
 
 - **Native audio engine is a decided architecture, not a trial:** M3 goes directly to native C++ decoding orchestration, PCM/DSP and WASAPI output behind `PlaybackService`. Evidence gates select implementation details (buffer period, device policy, codec support, DSP kernels) but cannot silently replace this with a temporary Qt Multimedia player. The decoder dependency remains replaceable; do not create a second Visualizer DSP/clock or bind real-time output to the GPU core.
 - **Library identity:** decide rename/move fingerprint reconciliation on real file fixtures before migration. Don't guess from filename alone.
-- **Wallpaper suspension:** if Plan 01 accepted only a narrower no-effect background contract, MC Expanded Media inherits that exact accepted behaviour. It cannot promise stronger suspension without an additional E0/E1 proof.
-- **Database sharing:** isolated test roots and one multi-process write policy required before MC and SMP concurrent access. Shared root != uncontrolled shared mutable service object.
+- **Wallpaper suspension:** if Plan 01 accepted only a narrower no-effect background contract, Dashboard Expanded Media inherits that exact accepted behaviour. It cannot promise stronger suspension without an additional E0/E1 proof.
+- **Database sharing:** isolated test roots and one multi-process write policy required before Dashboard and SMP concurrent access. Shared root != uncontrolled shared mutable service object.
 - **Expanded Media layouts:** should be responsive scene layout using existing Media data; naive uniform scale is explicitly insufficient for a large readable transport UI.
 - **Pop Out:** context-bound visualizer resource migration is difficult and optional for initial SMP unless tested cleanly; it is **not** a reason to ship second active renderers.
 - **Live Settings:** accept only operations with demonstrably reversible owner effects; keep other changes controlled/deferred. Existing SRPSS full-retire policy remains untouched.
@@ -759,7 +759,7 @@ already have in the plans for what to hide when running an SMP only build and ho
   `pill_of(view_state)` returning the remembered pill, and
   `available(profile) = is_smp_enabled() and music_workspace family activated` (the "Library Widget ON" condition
   reads the family activation in `capability_activation`, not the pane's visibility). Position: after Widgets in
-  MC; first in the SMP profile (§9 priority order). The tab is absent (not hidden) when unavailable, and the
+  Dashboard; first in the SMP profile (§9 priority order). The tab is absent (not hidden) when unavailable, and the
   remembered tab index maps through keys, so its absence never shifts another tab.
 - [ ] **Pills (one open editing path, Steam-style buckets inside each, closed by default, one open per level):**
   `Playback` (device, mode, buffers, fades, crossfade, resume), `Audio` (ReplayGain, EQ, dither, resampler, the
@@ -822,7 +822,7 @@ every widget anywhere on any display with saved slots. SMP gets both, with one l
   (play/seek/volume), the search/filter bar, the status/audio-path readout, toasts (placement only, SMP profile). The
   browse-mode sidebar (All / Artists / Genres / Favourites / Groups) is a region of the library pane, not a separate
   identity.
-- [ ] **In MC:** the two workspace panes are ordinary CUSTOM widgets (M1): move, resize, per-display route, saved
+- [ ] **In Dashboard:** the two workspace panes are ordinary CUSTOM widgets (M1): move, resize, per-display route, saved
   layout slots, Arrange, Edit-only keyboard controls, reset, exactly like every other family. Expanded Media (M6)
   collapses to the saved layout.
 - [ ] **In the SMP host (M7):** one dock/split layout model with semantic slots (left/centre/right/bottom, nested
@@ -844,12 +844,12 @@ every widget anywhere on any display with saved slots. SMP gets both, with one l
   host" box above (tabbed stacks, floating panels) is wider than the operator's description needs and stays
   unadmitted unless asked for; nothing floats in Full mode except the Visualizer's Pop Out (§8.3). The lead's
   remaining proposals for the mock are in document 04 section 4 and are not part of this plan until accepted.
-- [ ] **One model, not two:** pane identities, visibility and rects are the same canonical values whether MC's
+- [ ] **One model, not two:** pane identities, visibility and rects are the same canonical values whether Dashboard's
   CUSTOM or the SMP host edits them (profile-scoped geometry, shared identities); the dock model is a different
   editor over the same per-pane intent, not a second persistence authority.
 - [ ] **Regression bar:** `test_smp_desktop_hosts.py` moves every identity in the inventory to every slot, floats
   and re-docks it, switches layouts and monitors, and asserts rects restore to the byte, no identity is lost, audio
-  state is untouched and the one Visualizer renderer stays single; MC's parity harness covers the two panes.
+  state is untouched and the one Visualizer renderer stays single; Dashboard's parity harness covers the two panes.
 
 ### 16A. SMP fullscreen arrangement (operator, 7 Nov 2026; lead's design proposal)
 
@@ -897,7 +897,7 @@ remembered", and the Visualizer's own Expanded state is never decided by a prese
 
 **Editing and persistence:**
 - **Arrange:** SMP fullscreen gets its own Arrange: section outlines and labels, edge handles, drag-to-swap, and a
-  per-section menu (change content, split horizontally/vertically, remove). Like MC Edit, it edits a draft; Save
+  per-section menu (change content, split horizontally/vertically, remove). Like Dashboard Edit, it edits a draft; Save
   commits and Esc/Cancel restores the saved tree.
 - **Built-in starts:** 3–4 layouts, e.g. Visualizer Stage (Visualizer large, Transport bottom, Queue right),
   Library, Now Playing (Artwork + Track Information + Visualizer), Minimal (Visualizer + Transport).
@@ -906,7 +906,7 @@ remembered", and the Visualizer's own Expanded state is never decided by a prese
   slots. Per-aspect-class variants (16:9, 21:9, portrait) are optional later; normalised ratios cover most cases.
 
 **Settings → Layout gets two pills: Widgets and SMP.**
-- MC builds show both and auto-select the one that matters now: SMP when SMP is fullscreen or was last edited, else
+- Dashboard builds show both and auto-select the one that matters now: SMP when SMP is fullscreen or was last edited, else
   Widgets.
 - SMP builds show only SMP's Arrange for its fullscreen elements.
 - The pills follow the existing Settings bucket/pill patterns (one open at a time, short names).
@@ -919,4 +919,4 @@ remembered", and the Visualizer's own Expanded state is never decided by a prese
 - Folding at small sizes is deterministic and reversible.
 - Swaps never restart audio, the queue or the visualizer clock.
 
-**Final acceptance statement:**If MC offers two independently movable/resizable Library and Playlist panes under one widget entry, playback survives those views and Settings, Media/visualizer remain independently source-selectable, MC Expanded Media works before profile separation, and a later SMP native window reuses the shared library/player/visualizer state with intact dormancy and strict SRPSS contracts, the roadmap has achieved its goal without throwing away the existing architecture.
+**Final acceptance statement:**If Dashboard offers two independently movable/resizable Library and Playlist panes under one widget entry, playback survives those views and Settings, Media/visualizer remain independently source-selectable, Dashboard Expanded Media works before profile separation, and a later SMP native window reuses the shared library/player/visualizer state with intact dormancy and strict SRPSS contracts, the roadmap has achieved its goal without throwing away the existing architecture.

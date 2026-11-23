@@ -132,7 +132,7 @@ reconstructed or deleted. Prior planning ZIPs were superseded by the tracked doc
 
 - SMP remains a **separate build/profile in the same SRPSS repository**, not a new repository or a runtime
   profile-switching service. Its future library, playlist and playback work begins at M0/M1 in the original
-  MC-first sequence, with the two panes as one feature; `--smp` remains an opt-in until accepted Gate M9.
+  Dashboard-first sequence, with the two panes as one feature; `--smp` remains an opt-in until accepted Gate M9.
   The exact order of Library/Playlists, playback, Expanded Media, dock/host, live Settings and release is
   already specified in plan 02 and is not reopened by this deferral.
 - **Native audio from the first real audio slice** (operator, 16 Nov): M3 is one C++ SMP audio engine,
@@ -145,7 +145,7 @@ reconstructed or deleted. Prior planning ZIPs were superseded by the tracked doc
   full sharp-to-pill/inner-junction geometry and reusable Qt Quick Studio hover/bounce motion with
   reduced-motion policy. M0/M1 later adds safe opt-in target-scoped `.srskin` ZIP support. M2 retains
   SQLite/FTS5, virtualised indexed views and measured 50k/250k-track concurrency, recovery and migration,
-  without a custom database core (plan 02 §3.3 / §8.2A). The standalone SMP and MC/library presentation
+  without a custom database core (plan 02 §3.3 / §8.2A). The standalone SMP and Dashboard/library presentation
   share the existing native renderer, not a duplicate.
 - **Existing current-product theme/material work stays active, independently of SMP:** `Current_Plan.md`
   1B.8 M3 material border, Context Menu/Now Playing/seeking surfaces and M4 **Unified Appearance Theme**;
@@ -180,7 +180,7 @@ honour these invariants. The native core already establishes its future host bou
 **Other graphics plan:** `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`
 records the already accepted fullscreen Visualizer architecture, its 4K budgets and original
 backend triggers. It is not a new SMP-phase prerequisite. SMP plan 02 still requires Expanded Media
-in MC before the standalone SMP profile once SMP work is explicitly admitted.
+in Dashboard before the standalone SMP profile once SMP work is explicitly admitted.
 
 ### Remaining non-code organization
 

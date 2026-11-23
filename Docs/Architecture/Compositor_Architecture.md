@@ -359,7 +359,7 @@ never a catch-up). Pure wall-time functions (Auto Rotate pose, shader time) simp
 
 **Interactions.** A generation built while off (topology rebuild, Settings return) inherits the state: new units suspend
 their pacer, the Visualizer owner parks before `start`, and `engine.start()` leaves rotation waiting. Exit while off
-retires normally (`stop()` releases a parked loop). MC (windowed) and the secure-desktop run use the same engine path.
+retires normally (`stop()` releases a parked loop). Dashboard (windowed) and the secure-desktop run use the same engine path.
 
 **Limit.** Windows exposes the console (session) display state, not per-monitor power. A monitor switched off at its own
 button over DisplayPort usually leaves the topology and already pauses through binding loss; an HDMI panel switched off at

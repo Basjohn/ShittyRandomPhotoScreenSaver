@@ -173,7 +173,7 @@ it never touches Qt Quick or another mode.
 **D5.1 The core does not know Qt Quick's frame; a host adapter does.** The core is a C++ library that renders
 into targets it owns and hands its results out as textures. A *host* gives it a device, a place to record this
 frame's commands and the frame edge; nothing in a mode, a transition or a primitive names a `QQuickWindow`, a
-scene-graph type or Qt Quick's render target. Hosts: the Qt Quick window (the saver, MC and both SMP hosts, which
+scene-graph type or Qt Quick's render target. Hosts: the Qt Quick window (the saver, Dashboard and both SMP hosts, which
 are all Qt Quick windows); the hidden host (parity, capture and release-media tools, the Studio's preview); and,
 reserved and not built, a host where the core owns the swapchain and presents by itself (the escalation of
 8 Nov). Because only the adapter touches Qt, that escalation, a second window kind for SMP and a Qt upgrade each
@@ -418,7 +418,7 @@ its pass, so on the native core the source must change. Everything a card sees s
    already a core texture, so nothing is read back. Gate: at most 0.3 ms at the overlap sizes that occur, and
    the lead's review of the look. The Visualizer card's *own* material keeps showing the wallpaper: its glass is
    behind its content, which is correct for a framed card.
-8. **SMP.** In the compositor host (saver and MC builds) the backdrop is this one: the core's own background layer
+8. **SMP.** In the compositor host (saver and Dashboard builds) the backdrop is this one: the core's own background layer
    through the same pyramid and card shader. In the SMP build's desktop window the material shows the desktop behind
    the window (operator, 12 Nov 2026: "Artwork Backdrop if running MC or Screensaver Profile/Builds. Desktop when
    running dedicated SMP builds. Material is meant to show what is behind, and that is the consistent way to it.").

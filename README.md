@@ -84,7 +84,7 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 - **Separate themes:** Customizable Settings themes and widget themes, including Windows (vista but shut the fuck up about it) glass/acrylic-inspired presentation and configurable card styling.
 - **Accessibility/display options:** Background brightness dimming and pixel shifting, alongside display and interaction controls.
 - **Interaction Mode:** Keep the saver open while interacting with widgets. Normal cursor movement needn't exit it; `Ctrl` can temporarily expose the interaction halo when needed.
-- **Media Center (MC) builds:** Designed especially for keeping the display running as an interactive, always-on dashboard.
+- **Dashboard:** An interactive, always-on display for your widgets and visualizers.
 
 <img width="40%" alt="GuidedWidgets" src="https://github.com/user-attachments/assets/21b4ac58-50ee-42dd-a80f-4247c34c9197" />
 
@@ -230,7 +230,7 @@ Curated Visualizer presets and your authored preset files are separate. **Back u
 
 - **Normal screensaver mode:** Ordinary mouse movement or clicks exit the saver. Hold `Ctrl` to reveal the temporary interaction halo so you can operate supported overlays without exiting.
 - **Interaction Mode:** Ordinary pointer movement and clicks stay inside SRPSS. External-link actions can hand off to the desktop and close the saver cleanly. `Esc` and the context menu remain explicit exit paths. `Q` is no longer an exit binding; framed Extruded Bubble reserves it for camera yaw-left.
-- **Media Center builds:** Interaction Mode is enabled by design. You can select one or more displays and leave SRPSS running as a widget dashboard.
+- **Dashboard:** Interaction Mode is enabled by design. You can select one or more displays and leave SRPSS running as a widget dashboard.
 
 While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 

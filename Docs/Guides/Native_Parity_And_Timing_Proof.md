@@ -175,7 +175,7 @@ An offline replay steps at a fixed dt, so it never shows a stall, a sync point, 
 measures the real process:
 
 - **The live run:** `tools/visualizer_live_check.py --mode <id> --preset <n> --seconds 90 --load none` drives the
-  invisible MC saver on recorded music, on Display 1. It gives frame-time median and p90, late frames, and Tick dt
+  invisible Dashboard saver on recorded music, on Display 1. It gives frame-time median and p90, late frames, and Tick dt
   gaps. It is compared against the pre-flip baseline with `tools/preflip_pack.py --compare`
   (`tools/baselines/preflip/`). The `--usage` sampler's cost is part of the live shape (compare its collect_ms against
   the stored baselines).
