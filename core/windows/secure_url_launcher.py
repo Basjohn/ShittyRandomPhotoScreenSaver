@@ -18,7 +18,7 @@ from core.logging.logger import get_logger
 from core.steam.links import SteamLinkTarget
 from core.windows import reddit_helper_bridge
 from core.windows import reddit_helper_runtime
-from core.mc import is_mc_build
+from core.dashboard import is_dashboard_build
 
 logger = get_logger(__name__)
 
@@ -31,7 +31,7 @@ def _runs_on_user_desktop() -> bool:
     helper), so links open directly there too.
     """
 
-    return bool(is_mc_build() or is_diagnostic_build() or not platform_paths.IS_WINDOWS)
+    return bool(is_dashboard_build() or is_diagnostic_build() or not platform_paths.IS_WINDOWS)
 
 
 def open_steam_target(

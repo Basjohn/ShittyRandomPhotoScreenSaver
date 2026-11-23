@@ -211,6 +211,6 @@ def refresh_shipped_visualizer_presets(repo_root: Path | None = None) -> dict[st
     """Explicit source-to-release copy; never rewrite source preset artwork."""
     root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
     source = root / 'presets' / 'visualizer_modes'
-    release = root / 'release' / 'media_center' / 'presets' / 'visualizer_modes'
+    release = root / 'release' / 'dashboard' / 'presets' / 'visualizer_modes'
     entries = replace_curated_visualizer_preset_tree(source, release)
     return {'source_root': source, 'release_root': release, 'entries': entries, 'entry_count': len(entries)}

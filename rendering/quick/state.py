@@ -18,8 +18,8 @@ class QuickWindowRole(str, Enum):
     """Native top-level role selected by the product runtime."""
 
     SCREENSAVER = "screensaver"
-    MEDIA_CENTER_SPLASH = "media-center-splash"
-    MEDIA_CENTER_TOOL = "media-center-tool"
+    DASHBOARD_SPLASH = "dashboard-splash"
+    DASHBOARD_TOOL = "dashboard-tool"
 
 
 class QuickRuntimePhase(str, Enum):
@@ -67,7 +67,7 @@ class QuickWindowPolicy:
 
     def flags(self) -> Qt.WindowType:
         flags = Qt.WindowType.FramelessWindowHint
-        if self.role is QuickWindowRole.MEDIA_CENTER_TOOL:
+        if self.role is QuickWindowRole.DASHBOARD_TOOL:
             flags |= Qt.WindowType.Tool
         else:
             # Standard runtime and the MC splash policy both preserve the

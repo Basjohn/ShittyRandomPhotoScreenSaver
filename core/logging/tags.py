@@ -145,7 +145,7 @@ TAG_SPOTIFY_VOL = "[SPOTIFY_VOL]"
 """Spotify volume control - routed to screensaver_spotify_vol.log"""
 
 TAG_MC = "[MC]"
-"""Media Center mode operations."""
+"""Dashboard mode operations."""
 
 TAG_SHADOW = "[SHADOW]"
 """Shadow rendering operations."""

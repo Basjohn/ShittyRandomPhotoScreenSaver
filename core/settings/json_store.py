@@ -421,19 +421,60 @@ class JsonSettingsStore:
 def determine_storage_path(app_name: str, *, base_dir: Path | None = None) -> Path:
     """Compute the canonical storage path for the given application profile.
 
-    Only the two canonical profiles ("Screensaver" and "Screensaver_MC") map to
-    the well-known SRPSS / SRPSS_MC directories. Any other app_name (e.g. test
+    Only the two canonical profiles ("Screensaver" and "Dashboard") map to
+    the well-known SRPSS / SRPSS_Dashboard directories. Any other app_name (e.g. test
     UUIDs) is placed in an isolated subdirectory so it can never contaminate the
     production settings file.
     """
     if base_dir is None:
         base_dir = _default_appdata_dir()
-    _CANONICAL = {"Screensaver": "SRPSS", "Screensaver_MC": "SRPSS_MC"}
+    _CANONICAL = {"Screensaver": "SRPSS", "Dashboard": "SRPSS_Dashboard"}
+    if app_name == "Dashboard":
+        _migrate_dashboard_directory(base_dir)
     folder = _CANONICAL.get(app_name)
     if folder is None:
         # Non-production profile — isolate under SRPSS_profiles/<app_name>
         folder = f"SRPSS_profiles/{app_name}"
     return (base_dir / folder / "settings_v2.json").resolve()
+
+
+def _migrate_dashboard_directory(base_dir: Path) -> None:
+    """Move the whole former profile once, without replacing a destination."""
+    source = base_dir / "SRPSS_MC"
+    destination = base_dir / "SRPSS_Dashboard"
+    if not source.exists():
+        return
+    if destination.exists():
+        logger.warning("Dashboard settings migration skipped: both %s and %s exist; using Dashboard", source, destination)
+        return
+    try:
+        if os.name == "nt":
+            # Windows rename fails if the destination appears concurrently.
+            os.rename(source, destination)
+        else:
+            # Linux renameat2 with RENAME_NOREPLACE protects even an empty destination.
+            import ctypes
+            import errno
+            libc = ctypes.CDLL(None, use_errno=True)
+            rename = libc.renameat2
+            rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+            rename.restype = ctypes.c_int
+            if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1):
+                error = ctypes.get_errno()
+                raise OSError(error, os.strerror(error), str(source), str(destination))
+    except FileExistsError:
+        logger.warning("Dashboard settings migration conflict: %s already exists; using Dashboard", destination)
+    except FileNotFoundError:
+        if destination.exists() and not source.exists():
+            logger.info("Dashboard settings migration completed by another process: %s", destination)
+        else:
+            logger.exception("Dashboard settings migration failed from %s to %s", source, destination)
+            raise
+    except Exception:
+        logger.exception("Dashboard settings migration failed from %s to %s", source, destination)
+        raise
+    else:
+        logger.info("Migrated Dashboard settings from %s to %s", source, destination)
 
 
 _STORE_REGISTRY_LOCK = threading.RLock()
@@ -512,3 +553,4 @@ def _flatten_section(prefix: str, mapping: Mapping[str, Any]) -> Iterator[Tuple[
             yield from _flatten_section(dotted, value)
         else:
             yield dotted, value
+

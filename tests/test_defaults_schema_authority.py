@@ -78,8 +78,8 @@ def test_real_persisted_fallbacks_are_canonical_product_defaults() -> None:
         "PROFILE_DEFAULT_OVERRIDES",
     )
     assert "mc" not in defaults
-    assert "always_on_top" in overrides["Screensaver_MC"]["mc"]
-    assert isinstance(overrides["Screensaver_MC"]["mc"]["always_on_top"], bool)
+    assert "always_on_top" in overrides["Dashboard"]["mc"]
+    assert isinstance(overrides["Dashboard"]["mc"]["always_on_top"], bool)
 
 
 def test_runtime_history_and_settings_session_state_are_not_product_defaults() -> None:
@@ -415,7 +415,7 @@ def test_dead_transition_precompute_worker_is_removed() -> None:
     assert "transition" not in defaults["workers"]
     assert "transition" not in snapshot["workers"]
     assert "workers.transition.enabled" not in json.dumps(build_sst_defaults_document("Screensaver"))
-    assert "workers.transition.enabled" not in json.dumps(build_sst_defaults_document("Screensaver_MC"))
+    assert "workers.transition.enabled" not in json.dumps(build_sst_defaults_document("Dashboard"))
     # NOTE: the caller-dead widgets/spotify_visualizer/renderers island (and
     # rendering/image_processor.py) are proven to have no production importer, but
     # both are still entangled in mixed test files that also cover live behaviour.
@@ -600,8 +600,8 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
     from core.settings.defaults import get_default_settings
 
     normal = get_default_settings("Screensaver")
-    mc = get_default_settings("Screensaver_MC")
-    overlay = PROFILE_DEFAULT_OVERRIDES["Screensaver_MC"]
+    mc = get_default_settings("Dashboard")
+    overlay = PROFILE_DEFAULT_OVERRIDES["Dashboard"]
 
     def collect_diff(left: object, right: object, prefix: str = "") -> dict[str, tuple[object, object]]:
         if isinstance(left, dict) and isinstance(right, dict):

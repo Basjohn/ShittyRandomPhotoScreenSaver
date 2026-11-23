@@ -18,7 +18,7 @@ Admissions:
   **implicitly** enables the switch telemetry too.
 * ``--profile-cpu`` — wrap the CONFIG or RUN session in ``cProfile`` and write
   ``screensaver_config.pstats`` / ``screensaver_run.pstats`` to the log directory.
-* ``--mc-window-flags=splash`` — hardware-ingress harnesses only: give the Media
+* ``--dashboard-window-flags=splash`` — hardware-ingress harnesses only: give the Media
   Center window the splash top-level role instead of the tool role.
 * ``--log-dir=<path>`` — harness log-root redirect: the logger writes its files
   under ``<path>`` (a scratch folder) so the operator's own logs stay untouched.
@@ -84,7 +84,7 @@ class ExperimentFlags:
     abc_layout_slot: str | None = None
     abc_exclude_seconds: float | None = None
     profile_cpu: bool = False
-    mc_window_splash: bool = False
+    dashboard_window_splash: bool = False
     log_dir: str | None = None
     # The Visualizer's process path: None follows the platform default (the engine worker on every platform), True is
     # ``--viz-engine-worker``, False ``--viz-in-process`` (tests and tools state their path the same way).
@@ -160,7 +160,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     abc_layout_slot: str | None = None
     abc_exclude_seconds: float | None = None
     profile_cpu = False
-    mc_window_splash = False
+    dashboard_window_splash = False
     log_dir: str | None = None
     visualizer_engine_worker: bool | None = None
     in_process_chosen = False
@@ -192,8 +192,8 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         if arg == "--profile-cpu":
             profile_cpu = True
             continue
-        if arg.startswith("--mc-window-flags="):
-            mc_window_splash = arg.split("=", 1)[1].strip().lower() == "splash"
+        if arg.startswith("--dashboard-window-flags="):
+            dashboard_window_splash = arg.split("=", 1)[1].strip().lower() == "splash"
             continue
         if arg.startswith("--log-dir="):
             log_dir = arg.split("=", 1)[1].strip() or None
@@ -240,7 +240,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         abc_layout_slot=abc_layout_slot,
         abc_exclude_seconds=abc_exclude_seconds,
         profile_cpu=profile_cpu,
-        mc_window_splash=mc_window_splash,
+        dashboard_window_splash=dashboard_window_splash,
         log_dir=log_dir,
         visualizer_engine_worker=visualizer_engine_worker,
         only_display=only_display,
@@ -267,7 +267,7 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
             or arg == "--viz-engine-worker"
             or arg == "--viz-in-process"
             or arg == "--profile-cpu"
-            or arg.startswith("--mc-window-flags=")
+            or arg.startswith("--dashboard-window-flags=")
             or arg.startswith("--log-dir=")
             or arg.startswith("--abc-drive=")
             or arg.startswith("--abc-layout-slot=")
@@ -325,9 +325,9 @@ def profile_cpu_admitted() -> bool:
     return active_experiment_flags().profile_cpu
 
 
-def mc_window_splash_admitted() -> bool:
-    """True when ``--mc-window-flags=splash`` selected the splash Media Center role."""
-    return active_experiment_flags().mc_window_splash
+def dashboard_window_splash_admitted() -> bool:
+    """True when ``--dashboard-window-flags=splash`` selected the splash Dashboard role."""
+    return active_experiment_flags().dashboard_window_splash
 
 
 def visualizer_switch_telemetry_admitted() -> bool:
@@ -387,7 +387,7 @@ __all__ = [
     "abc_layout_slot",
     "abc_exclude_seconds",
     "profile_cpu_admitted",
-    "mc_window_splash_admitted",
+    "dashboard_window_splash_admitted",
     "visualizer_switch_telemetry_admitted",
     "visualizer_engine_worker_platform_default",
     "visualizer_engine_worker_admitted",

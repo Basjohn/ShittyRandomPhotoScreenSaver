@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import core.settings.defaults as defaults_module
-from core.settings.default_contract import MC_PROFILE, get_canonical_default
+from core.settings.default_contract import DASHBOARD_PROFILE, get_canonical_default
 from core.settings.defaults import get_default_setting, get_default_settings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +26,7 @@ def test_resolved_defaults_are_built_once_per_profile(monkeypatch) -> None:
     try:
         for _ in range(3):
             get_default_settings()
-            get_default_settings(MC_PROFILE)
+            get_default_settings(DASHBOARD_PROFILE)
             get_default_setting("transitions")
             get_default_setting("widgets.spotify_visualizer")
         assert len(calls) == 2
@@ -55,8 +55,8 @@ def test_resolved_lookup_matches_full_tree_and_profiles() -> None:
     assert get_default_setting("display.hw_accel") == full["display"]["hw_accel"]
     # Non-visualizer sections are identical to the raw editable authority.
     assert get_default_setting("transitions") == get_canonical_default("transitions")
-    mc = get_default_settings(MC_PROFILE)
-    assert get_default_setting("widgets", MC_PROFILE) == mc["widgets"]
+    mc = get_default_settings(DASHBOARD_PROFILE)
+    assert get_default_setting("widgets", DASHBOARD_PROFILE) == mc["widgets"]
 
     assert get_default_setting("widgets.no_such_widget", missing=None) is None
     with pytest.raises(KeyError):

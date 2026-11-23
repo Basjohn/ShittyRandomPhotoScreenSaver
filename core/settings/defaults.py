@@ -25,7 +25,7 @@ from functools import lru_cache
 from .default_settings import DEFAULT_SETTINGS
 from .default_profile_overrides import PROFILE_DEFAULT_OVERRIDES
 from .default_contract import (
-    MC_PROFILE,
+    DASHBOARD_PROFILE,
     MISSING_DEFAULT,
     NORMAL_PROFILE,
     get_canonical_default,
@@ -100,7 +100,7 @@ def _resolved_defaults_readonly(profile: str) -> Dict[str, Any]:
 
 
 def _resolve_profile(application: str | None) -> str:
-    return MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
+    return DASHBOARD_PROFILE if application == DASHBOARD_PROFILE else NORMAL_PROFILE
 
 
 def get_default_settings(application: str | None = None) -> Dict[str, Any]:

@@ -6,11 +6,11 @@ of computing paths with ``tempfile.gettempdir()`` or ``%APPDATA%``.
 
 Storage rule (2026-10-24): settings are per profile; everything else is
 shared. ``core.settings.json_store.determine_storage_path`` owns the
-per-profile settings directory (``SRPSS`` or ``SRPSS_MC``: ``settings_v2.json``,
+per-profile settings directory (``SRPSS`` or ``SRPSS_Dashboard``: ``settings_v2.json``,
 ``backups/``, ``banned_images/``). Both canonical profiles resolve their data
 root here to the one shared ``SRPSS`` folder::
 
-    %APPDATA%/SRPSS/            (data root for Screensaver and Screensaver_MC)
+    %APPDATA%/SRPSS/            (data root for Screensaver and Dashboard)
     ├── cache/
     │   ├── feeds/
     │   ├── reddit/
@@ -54,7 +54,7 @@ ProfileRef = Union[str, StorageRoot, None]
 # their *settings* folders differ (json_store.determine_storage_path).
 # ---------------------------------------------------------------------------
 _SHARED_DATA_FOLDER = "SRPSS"
-_CANONICAL_PROFILES = frozenset({"Screensaver", "Screensaver_MC"})
+_CANONICAL_PROFILES = frozenset({"Screensaver", "Dashboard"})
 _DEFAULT_PROFILE = "Screensaver"
 
 # Module-level cache so repeated calls don't re-resolve
@@ -67,7 +67,7 @@ def detect_current_profile(default: str = "Screensaver") -> str:
 
     Returns:
         "Screensaver" for the normal build.
-        "Screensaver_MC" for Media Center / MC builds.
+        "Dashboard" for Dashboard builds.
 
     This must be side-effect free. Do not instantiate SettingsManager here.
     """
@@ -81,14 +81,11 @@ def detect_current_profile(default: str = "Screensaver") -> str:
         probe = f"{argv0} {main_file}"
 
         if (
-            "srpss mc" in probe
-            or "srpss_mc" in probe
-            or "srpss media center" in probe
-            or "srpss_media_center" in probe
-            or "main_mc.py" in probe
-            or Path(argv0).name in {"srpss-mc", "srpss-mc.exe"}
+            "srpss_dashboard" in probe
+            or "main_dashboard.py" in probe
+            or Path(argv0).name in {"srpss-dashboard", "srpss-dashboard.exe"}
         ):
-            return "Screensaver_MC"
+            return "Dashboard"
     except Exception:
         pass
 

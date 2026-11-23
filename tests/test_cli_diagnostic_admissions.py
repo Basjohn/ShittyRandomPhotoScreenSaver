@@ -1,6 +1,6 @@
 """CLI admissions that replaced the retired SRPSS_* environment gates.
 
-``--profile-cpu``, ``--mc-window-flags=splash`` and ``--log-dir=<path>`` are parsed once from
+``--profile-cpu``, ``--dashboard-window-flags=splash`` and ``--log-dir=<path>`` are parsed once from
 argv by ``core/diagnostics/experiment_flags.py``. These tests pin the parse, the mode-detection
 strip (so a diagnostic token never becomes the RUN/CONFIG argument), and the two consumers that
 used to read the environment: the logger's log root and the Media Center window role.
@@ -25,37 +25,37 @@ def _reset_active_flags():
 def test_new_admissions_default_to_off():
     flags = ef.parse_experiment_flags(["main.py", "/s", "--debug"])
     assert flags.profile_cpu is False
-    assert flags.mc_window_splash is False
+    assert flags.dashboard_window_splash is False
     assert flags.log_dir is None
 
 
 def test_new_admissions_parse_from_argv():
     flags = ef.parse_experiment_flags(
-        ["main.py", "--profile-cpu", "--mc-window-flags=splash", r"--log-dir=C:\scratch dir\logs", "/s"]
+        ["main.py", "--profile-cpu", "--dashboard-window-flags=splash", r"--log-dir=C:\scratch dir\logs", "/s"]
     )
     assert flags.profile_cpu is True
-    assert flags.mc_window_splash is True
+    assert flags.dashboard_window_splash is True
     assert flags.log_dir == r"C:\scratch dir\logs"
 
 
 def test_default_window_flags_value_and_empty_log_dir_admit_nothing():
-    flags = ef.parse_experiment_flags(["main.py", "--mc-window-flags=default", "--log-dir="])
-    assert flags.mc_window_splash is False
+    flags = ef.parse_experiment_flags(["main.py", "--dashboard-window-flags=default", "--log-dir="])
+    assert flags.dashboard_window_splash is False
     assert flags.log_dir is None
 
 
 def test_new_admission_tokens_are_stripped_from_mode_detection():
-    argv = ["main.py", "--profile-cpu", "--mc-window-flags=splash", "--log-dir=x", "/s"]
+    argv = ["main.py", "--profile-cpu", "--dashboard-window-flags=splash", "--log-dir=x", "/s"]
     assert set(ef.experiment_flag_tokens(argv)) == {
         "--profile-cpu",
-        "--mc-window-flags=splash",
+        "--dashboard-window-flags=splash",
         "--log-dir=x",
     }
 
 
 def test_parse_screensaver_args_ignores_new_admissions(monkeypatch):
     monkeypatch.setattr(
-        main.sys, "argv", ["main.py", "--log-dir=x", "--profile-cpu", "--mc-window-flags=splash", "/c"]
+        main.sys, "argv", ["main.py", "--log-dir=x", "--profile-cpu", "--dashboard-window-flags=splash", "/c"]
     )
     mode, preview_hwnd = main.parse_screensaver_args()
     assert mode is main.ScreensaverMode.CONFIG
@@ -75,12 +75,12 @@ def test_a_bare_vulkan_launch_runs_the_saver_and_godzip_foundry_offers_it(monkey
 
 def test_inactive_admissions_read_disabled_until_startup_activates_them():
     assert ef.profile_cpu_admitted() is False
-    assert ef.mc_window_splash_admitted() is False
+    assert ef.dashboard_window_splash_admitted() is False
     ef.activate_experiment_flags(
-        ef.parse_experiment_flags(["main.py", "--profile-cpu", "--mc-window-flags=splash"])
+        ef.parse_experiment_flags(["main.py", "--profile-cpu", "--dashboard-window-flags=splash"])
     )
     assert ef.profile_cpu_admitted() is True
-    assert ef.mc_window_splash_admitted() is True
+    assert ef.dashboard_window_splash_admitted() is True
 
 
 def test_log_dir_redirect_binds_the_log_root_and_fresh_start_clears_only_it(monkeypatch, tmp_path):
@@ -123,15 +123,15 @@ def test_mc_window_role_follows_the_cli_admission(monkeypatch, splash):
     from rendering.quick.state import QuickWindowRole
     from tests._display_manager_doubles import bare_display_manager
 
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
-    argv = ["main_mc.py", "/s"] + (["--mc-window-flags=splash"] if splash else [])
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: True)
+    argv = ["main_dashboard.py", "/s"] + (["--dashboard-window-flags=splash"] if splash else [])
     ef.activate_experiment_flags(ef.parse_experiment_flags(argv))
     manager = bare_display_manager(settings_manager=None)
 
     policy = manager._quick_window_policy()
 
     assert policy.role is (
-        QuickWindowRole.MEDIA_CENTER_SPLASH if splash else QuickWindowRole.MEDIA_CENTER_TOOL
+        QuickWindowRole.DASHBOARD_SPLASH if splash else QuickWindowRole.DASHBOARD_TOOL
     )
 
 
@@ -139,8 +139,8 @@ def test_mc_window_role_ignores_the_retired_environment_variable(monkeypatch):
     from rendering.quick.state import QuickWindowRole
     from tests._display_manager_doubles import bare_display_manager
 
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: True)
     monkeypatch.setenv("SRPSS_MC_WINDOW_FLAGS", "splash")
     manager = bare_display_manager(settings_manager=None)
 
-    assert manager._quick_window_policy().role is QuickWindowRole.MEDIA_CENTER_TOOL
+    assert manager._quick_window_policy().role is QuickWindowRole.DASHBOARD_TOOL

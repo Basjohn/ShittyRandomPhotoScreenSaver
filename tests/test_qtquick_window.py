@@ -234,7 +234,7 @@ def test_window_policy_keeps_native_roles_explicit():
     standard = QuickWindowPolicy().flags()
     secondary = QuickWindowPolicy(accepts_focus=False).flags()
     tool = QuickWindowPolicy(
-        role=QuickWindowRole.MEDIA_CENTER_TOOL,
+        role=QuickWindowRole.DASHBOARD_TOOL,
         always_on_top=False,
     ).flags()
 

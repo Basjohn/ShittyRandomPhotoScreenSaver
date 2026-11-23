@@ -11,13 +11,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
-from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE
+from core.settings.default_contract import DASHBOARD_PROFILE, NORMAL_PROFILE
 from core.settings.defaults import get_default_settings
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 
-_SST_PROFILES = (NORMAL_PROFILE, MC_PROFILE)
+_SST_PROFILES = (NORMAL_PROFILE, DASHBOARD_PROFILE)
 _SST_SETTINGS_VERSION = 2
 _SST_SNAPSHOT_VERSION = 1
 _SST_DEFAULTS_METADATA = {

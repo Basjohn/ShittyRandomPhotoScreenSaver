@@ -30,7 +30,7 @@ class TestApplicationNameDetection:
         # Mock sys.argv to simulate MC build
         original_argv = sys.argv
         try:
-            sys.argv = ["main_mc.py"]
+            sys.argv = ["main_dashboard.py"]
             
             import core.settings.settings_manager as settings_module
 
@@ -43,7 +43,7 @@ class TestApplicationNameDetection:
             
             # Should detect MC build from argv
             app_name = settings.get_application_name()
-            assert app_name == "Screensaver_MC"
+            assert app_name == "Dashboard"
         finally:
             sys.argv = original_argv
     
@@ -51,10 +51,10 @@ class TestApplicationNameDetection:
         """Test explicit MC application name."""
         from core.settings.settings_manager import SettingsManager
         
-        settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
+        settings = SettingsManager(application="Dashboard", storage_base_dir=tmp_path)
         app_name = settings.get_application_name()
         
-        assert app_name == "Screensaver_MC"
+        assert app_name == "Dashboard"
 
 
 class TestProfileIsolation:
@@ -65,10 +65,10 @@ class TestProfileIsolation:
         from core.settings.settings_manager import SettingsManager
 
         settings1 = SettingsManager(application="Screensaver", storage_base_dir=tmp_path)
-        settings2 = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
+        settings2 = SettingsManager(application="Dashboard", storage_base_dir=tmp_path)
 
         assert settings1.get_application_name() == "Screensaver"
-        assert settings2.get_application_name() == "Screensaver_MC"
+        assert settings2.get_application_name() == "Dashboard"
         assert settings1.get_storage_path() != settings2.get_storage_path()
         assert settings1.get_storage_path().name == "settings_v2.json"
         assert settings2.get_storage_path().name == "settings_v2.json"
@@ -96,8 +96,8 @@ class TestMCDefaults:
         from core.settings.default_contract import require_canonical_default
         from core.settings.settings_manager import SettingsManager
 
-        settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
-        expected = bool(require_canonical_default("mc.always_on_top", "Screensaver_MC"))
+        settings = SettingsManager(application="Dashboard", storage_base_dir=tmp_path)
+        expected = bool(require_canonical_default("mc.always_on_top", "Dashboard"))
 
         assert settings.get_bool("mc.always_on_top", not expected) is expected
 

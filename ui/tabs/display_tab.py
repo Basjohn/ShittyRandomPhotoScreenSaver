@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
-from core.mc import effective_interaction_mode, interaction_mode_forced
+from core.dashboard import effective_interaction_mode, interaction_mode_forced
 from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import InputSettings
@@ -376,7 +376,7 @@ class DisplayTab(QWidget):
         if self._is_mc_profile:
             self.interaction_mode_check.setEnabled(False)
             self.interaction_mode_check.setToolTip(
-                "Media Center builds keep Interaction Mode always enabled."
+                "Dashboard builds keep Interaction Mode always enabled."
             )
         self.interaction_mode_check.stateChanged.connect(self._save_settings)
         interaction_mode_row.addWidget(self.interaction_mode_check)

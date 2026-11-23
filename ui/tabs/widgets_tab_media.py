@@ -1113,7 +1113,7 @@ def load_visualizer_settings(
     # Runtime applies curated presets before constructing the visualizer.  The
     # Settings controls must display that same authoritative state; otherwise
     # Move To Custom snapshots stale underlying values that were never active
-    # in runtime (observed in the 2026-08-08 main_mc evidence).
+    # in runtime (observed in the 2026-08-08 main_dashboard evidence).
     resolved_spotify_vis_config = apply_preset_to_config(
         active_vis_mode,
         active_preset_index,

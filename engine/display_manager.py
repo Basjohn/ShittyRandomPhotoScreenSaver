@@ -949,32 +949,32 @@ class DisplayManager(QObject):
     def _quick_window_policy(self) -> QuickWindowPolicy:
         """Resolve the production top-level role without importing QWidget policy."""
 
-        from core.mc import is_mc_build
+        from core.dashboard import is_dashboard_build
 
-        if not is_mc_build():
+        if not is_dashboard_build():
             return QuickWindowPolicy()
-        from core.diagnostics.experiment_flags import mc_window_splash_admitted
+        from core.diagnostics.experiment_flags import dashboard_window_splash_admitted
 
-        use_splash = mc_window_splash_admitted()
+        use_splash = dashboard_window_splash_admitted()
         if self.settings_manager is not None:
             always_on_top = self.settings_manager.get_bool("mc.always_on_top")
         else:
-            from core.settings.default_contract import MC_PROFILE, require_canonical_default
+            from core.settings.default_contract import DASHBOARD_PROFILE, require_canonical_default
 
             always_on_top = bool(
-                require_canonical_default("mc.always_on_top", MC_PROFILE)
+                require_canonical_default("mc.always_on_top", DASHBOARD_PROFILE)
             )
         return QuickWindowPolicy(
             role=(
-                QuickWindowRole.MEDIA_CENTER_SPLASH
+                QuickWindowRole.DASHBOARD_SPLASH
                 if use_splash
-                else QuickWindowRole.MEDIA_CENTER_TOOL
+                else QuickWindowRole.DASHBOARD_TOOL
             ),
             always_on_top=always_on_top,
         )
 
     def _interaction_mode_enabled(self) -> bool:
-        from core.mc import effective_interaction_mode
+        from core.dashboard import effective_interaction_mode
 
         manager = self.settings_manager
         return effective_interaction_mode(manager is not None and manager.get_bool("input.interaction_mode"))
@@ -1711,7 +1711,7 @@ class DisplayManager(QObject):
     def _refresh_quick_context_menu(self, unit: QuickDisplayUnit) -> None:
         """Refresh one retained menu from current product authorities."""
 
-        from core.mc import interaction_mode_forced
+        from core.dashboard import interaction_mode_forced
         from core.settings.settings_manager import SettingsManager
 
         transitions, current, random_enabled, random_selectable = (
@@ -1943,7 +1943,7 @@ class DisplayManager(QObject):
                 self._refresh_all_quick_context_menus()
                 return True
             if action == "toggle_interaction":
-                from core.mc import effective_interaction_mode
+                from core.dashboard import effective_interaction_mode
 
                 persisted = effective_interaction_mode(enabled)
                 settings.set("input.interaction_mode", persisted)
@@ -4180,10 +4180,10 @@ class DisplayManager(QObject):
                 return False
             from core.build_profile import is_diagnostic_build
             from core.gmail.gmail_deeplinks import gmail_inbox_url
-            from core.mc import is_mc_build
+            from core.dashboard import is_dashboard_build
             from core.windows.secure_url_launcher import open_url
 
-            interactive = bool(is_mc_build() or is_diagnostic_build())
+            interactive = bool(is_dashboard_build() or is_diagnostic_build())
             opened = bool(open_url(
                 gmail_inbox_url(),
                 prefer_direct=interactive,
@@ -4203,9 +4203,9 @@ class DisplayManager(QObject):
             ):
                 return
             from core.build_profile import is_diagnostic_build
-            from core.mc import is_mc_build
+            from core.dashboard import is_dashboard_build
 
-            if not (is_mc_build() or is_diagnostic_build()):
+            if not (is_dashboard_build() or is_diagnostic_build()):
                 manager._on_exit_requested()
 
         return default_ordinary_family_adapters(
@@ -4407,14 +4407,14 @@ class DisplayManager(QObject):
             return False
 
         from core.build_profile import is_diagnostic_build
-        from core.mc import is_mc_build
+        from core.dashboard import is_dashboard_build
         from core.windows.secure_url_launcher import open_url
 
         from core.widget_product_actions import (
             dispatch_reddit_url_product_action,
         )
 
-        interactive = bool(is_mc_build() or is_diagnostic_build())
+        interactive = bool(is_dashboard_build() or is_diagnostic_build())
 
         def _open(target: str) -> bool:
             return bool(
@@ -4461,11 +4461,11 @@ class DisplayManager(QObject):
             return False
 
         from core.build_profile import is_diagnostic_build
-        from core.mc import is_mc_build
+        from core.dashboard import is_dashboard_build
         from core.windows.secure_url_launcher import open_url
         from core.widget_product_actions import dispatch_feed_url_product_action
 
-        interactive = bool(is_mc_build() or is_diagnostic_build())
+        interactive = bool(is_dashboard_build() or is_diagnostic_build())
 
         def _open(target: str) -> bool:
             return bool(
@@ -4515,7 +4515,7 @@ class DisplayManager(QObject):
             return False
 
         from core.build_profile import is_diagnostic_build
-        from core.mc import is_mc_build
+        from core.dashboard import is_dashboard_build
         from core.steam.links import (
             friend_message_target,
             friend_profile_target,
@@ -4618,7 +4618,7 @@ class DisplayManager(QObject):
             )
             return False
 
-        interactive = bool(is_mc_build() or is_diagnostic_build())
+        interactive = bool(is_dashboard_build() or is_diagnostic_build())
         opened = dispatch_steam_link_product_action(
             target,
             opener=lambda resolved: bool(
@@ -6285,8 +6285,8 @@ class DisplayManager(QObject):
 
         logger.info("[REDDIT] Deferred URL flush started (count=%d)", len(urls))
 
-        from core.mc import is_mc_build
-        if is_mc_build():
+        from core.dashboard import is_dashboard_build
+        if is_dashboard_build():
             for url in urls:
                 try:
                     opened = QDesktopServices.openUrl(QUrl(url))

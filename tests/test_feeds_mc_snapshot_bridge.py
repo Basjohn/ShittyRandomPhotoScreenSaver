@@ -111,3 +111,12 @@ def test_default_feed_store_adopts_from_its_own_base(tmp_path, monkeypatch) -> N
         assert not any(explicit.root.iterdir())
     finally:
         storage_paths.reset_module_cache()
+
+
+def test_migrated_dashboard_profile_feed_snapshots_reach_shared_root(tmp_path):
+    dashboard = tmp_path / 'SRPSS_Dashboard'
+    _write(dashboard / 'cache' / 'feeds' / 'news.json', 'offline', 100.0)
+    shared = tmp_path / 'SRPSS' / 'cache' / 'feeds'
+    shared.mkdir(parents=True)
+    mc_snapshot_bridge.adopt_canonical_mc_feed_snapshots_once(shared)
+    assert (shared / 'news.json').read_text() == 'offline'

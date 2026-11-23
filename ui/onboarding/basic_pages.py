@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 from ui.widgets.continuous_border import OutlinedListWidget
 from core.sources.folder_paths import contains_folder, display_folder_path, without_folder
 from core.sources.readiness import has_image_sources
-from ui.onboarding.state import is_media_center_profile
+from ui.onboarding.state import is_dashboard_profile
 from sources.rss.pools import read_pool_selection, write_pool_selection, WallpaperPoolSelection, online_source_count
 from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, silence_check, text_label, SILENCE_TEXT, font_with_point_delta
 from ui.tabs.online_source_rows import build_online_source_list, refresh_online_source_list, selected_feed_url
@@ -17,7 +17,7 @@ from ui.settings_theme_runtime import get_active_settings_theme
 from ui.styled_popup import StyledPopup
 
 
-MC_INTERACTION_TOOLTIP = "Media Center builds keep Interaction Mode always enabled."
+MC_INTERACTION_TOOLTIP = "Dashboard builds keep Interaction Mode always enabled."
 
 
 class WelcomePage(Page):
@@ -441,7 +441,7 @@ class InteractionPage(Page):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("Look, or interact?", heading=True))
         self.body.addWidget(text_label("Use widgets to open stories and control media. On the screensaver, external links use SRPSS's secure handoff and may close the saver. Hold Ctrl for temporary interaction when it is off."))
-        self.media_center = is_media_center_profile(settings)
+        self.dashboard = is_dashboard_profile(settings)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         for enabled, title, detail in (
@@ -453,8 +453,8 @@ class InteractionPage(Page):
             choice.toggled.connect(lambda checked, value=enabled: checked and self.settings.set("input.interaction_mode", value))
             self.group.addButton(choice, int(enabled))
             self.body.addWidget(choice)
-        if self.media_center:
-            # MC builds keep Interaction Mode always on (engine and Display tab agree).
+        if self.dashboard:
+            # Dashboard builds keep Interaction Mode always on (engine and Display tab agree).
             screensaver = self.group.button(0)
             screensaver.setEnabled(False)
             screensaver.setToolTip(MC_INTERACTION_TOOLTIP)
@@ -486,7 +486,7 @@ class InteractionPage(Page):
         self.refresh()
 
     def _interaction_on(self):
-        from core.mc import effective_interaction_mode
+        from core.dashboard import effective_interaction_mode
         return effective_interaction_mode(self.settings.get("input.interaction_mode"))
 
     def _borderless_on(self) -> bool:

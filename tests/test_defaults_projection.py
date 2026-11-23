@@ -7,7 +7,7 @@ from typing import Any, Mapping
 
 import pytest
 
-from core.settings.defaults import MC_PROFILE, NORMAL_PROFILE, get_profile_default_overrides
+from core.settings.defaults import DASHBOARD_PROFILE, NORMAL_PROFILE, get_profile_default_overrides
 from core.settings.defaults_snapshot_builder import (
     build_sst_defaults_document,
     build_sst_defaults_snapshot,
@@ -47,7 +47,7 @@ def _normalize_runtime_representations(snapshot: Mapping[str, Any]) -> dict[str,
     return normalized
 
 
-_PROFILES = (NORMAL_PROFILE, MC_PROFILE)
+_PROFILES = (NORMAL_PROFILE, DASHBOARD_PROFILE)
 
 
 def _load_outputs() -> dict[str, dict[str, Any]]:
@@ -74,12 +74,12 @@ def test_sst_projection_is_deterministic_and_profile_canonical() -> None:
 def test_mc_sst_delta_is_exactly_the_canonical_profile_override() -> None:
     generated = _load_outputs()
     normal = _flatten_leaves(generated[NORMAL_PROFILE]["snapshot"])
-    mc = _flatten_leaves(generated[MC_PROFILE]["snapshot"])
+    mc = _flatten_leaves(generated[DASHBOARD_PROFILE]["snapshot"])
     actual_delta = {
         key for key in normal.keys() | mc.keys() if normal.get(key) != mc.get(key)
     }
     override_delta = set(
-        _flatten_leaves(get_profile_default_overrides()[MC_PROFILE])
+        _flatten_leaves(get_profile_default_overrides()[DASHBOARD_PROFILE])
     )
 
     assert actual_delta == override_delta
@@ -105,7 +105,7 @@ def test_sst_projection_never_opens_or_rewrites_installed_settings(
     assert installed_settings.read_bytes() == sentinel
 
 
-@pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
+@pytest.mark.parametrize("application", [NORMAL_PROFILE, DASHBOARD_PROFILE])
 @pytest.mark.parametrize("selection", [None, [2]], ids=["canonical", "numbered"])
 def test_sst_projection_import_matches_fresh_profile_reset(
     application: str,

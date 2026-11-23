@@ -26,12 +26,12 @@ from core.settings.defaults_authority_audit import audit_defaults_authority
 def private_field_issues() -> list[str]:
     """Credential-shaped keys in any profile's canonical defaults projection."""
 
-    from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE
+    from core.settings.default_contract import DASHBOARD_PROFILE, NORMAL_PROFILE
     from core.settings.defaults_snapshot_builder import build_sst_defaults_snapshot
     from tools.defaults_foundry_core import validate_no_private_fields
 
     issues = []
-    for profile in (NORMAL_PROFILE, MC_PROFILE):
+    for profile in (NORMAL_PROFILE, DASHBOARD_PROFILE):
         try:
             validate_no_private_fields(build_sst_defaults_snapshot(profile), label=f"{profile} canonical defaults")
         except ValueError as exc:

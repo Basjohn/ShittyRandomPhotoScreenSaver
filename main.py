@@ -451,12 +451,12 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
         )
         return False
     try:
-        from core.mc import is_mc_build
+        from core.dashboard import is_dashboard_build
         from core.windows.reddit_helper_installer import _log_helper_event
         from core.windows import reddit_helper_runtime
 
         script_mode = bool(is_script_mode())
-        mc_mode = bool(is_mc_build())
+        mc_mode = bool(is_dashboard_build())
         if script_mode or mc_mode:
             _log_helper_event(
                 "session helper skipped "
@@ -1096,8 +1096,8 @@ def main(*, entrypoint: str = "main"):
     
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()
-    if entrypoint_token == "main_mc":
-        entrypoint_name = "main_mc"
+    if entrypoint_token == "main_dashboard":
+        entrypoint_name = "main_dashboard"
     elif entrypoint_token == "main_diagnostic" or diagnostic_build:
         entrypoint_name = "main_diagnostic"
     else:

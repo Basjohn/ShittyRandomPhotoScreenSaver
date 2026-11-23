@@ -92,16 +92,18 @@ def adopt_canonical_mc_feed_snapshots_once(shared_feed_dir: Path) -> None:
         data_root = shared_feed_dir.parent.parent
         if shared_feed_dir.name != "feeds" or data_root.name != "SRPSS":
             return
-        mc_profile_dir = data_root.parent / "SRPSS_MC"
-        source = mc_profile_dir / "cache" / "feeds"
-        if not source.is_dir():
-            _rmdir_if_empty(mc_profile_dir / "steam")
-            return
-        result = adopt_mc_feed_snapshots(source, shared_feed_dir)
-        _rmdir_if_empty(mc_profile_dir / "cache")
-        _rmdir_if_empty(mc_profile_dir / "steam")
-        logger.info(
-            "[FEEDS][MC_BRIDGE] Adopted MC Feeds snapshots moved=%d replaced=%d "
-            "discarded_older=%d failed=%d",
-            result.moved, result.replaced, result.discarded_older, result.failed,
-        )
+        # The Dashboard settings migration may already have moved the old
+        # profile directory; conflicts can leave the old one in place too.
+        for profile_dir in (data_root.parent / "SRPSS_MC", data_root.parent / "SRPSS_Dashboard"):
+            source = profile_dir / "cache" / "feeds"
+            if not source.is_dir():
+                _rmdir_if_empty(profile_dir / "steam")
+                continue
+            result = adopt_mc_feed_snapshots(source, shared_feed_dir)
+            _rmdir_if_empty(profile_dir / "cache")
+            _rmdir_if_empty(profile_dir / "steam")
+            logger.info(
+                "[FEEDS][MC_BRIDGE] Adopted legacy Feeds snapshots moved=%d replaced=%d "
+                "discarded_older=%d failed=%d",
+                result.moved, result.replaced, result.discarded_older, result.failed,
+            )

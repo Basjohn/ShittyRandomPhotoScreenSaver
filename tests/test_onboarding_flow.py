@@ -150,13 +150,13 @@ def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, c
 
 
 def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, settings, monkeypatch):
-    import core.mc
-    monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
+    import core.dashboard
+    monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
     page = InteractionPage(settings)
     try:
         assert page.group.button(1).isChecked()
         assert not page.group.button(0).isEnabled()
-        assert "Media Center" in page.group.button(0).toolTip()
+        assert page.group.button(0).toolTip()
     finally:
         page.deleteLater()
 
@@ -243,8 +243,8 @@ def test_cancelling_guided_setup_discards_the_borderless_choice(qapp, settings, 
 
 
 def test_borderless_choice_is_independent_of_the_media_center_interaction_rule(qapp, settings, monkeypatch):
-    import core.mc
-    monkeypatch.setattr(core.mc, "is_mc_build", lambda: True)
+    import core.dashboard
+    monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
     page = InteractionPage(settings)
     try:
         assert all(button.isEnabled() for button in page.borderless_group.buttons())

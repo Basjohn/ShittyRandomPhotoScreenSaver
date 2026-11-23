@@ -2849,7 +2849,7 @@ def setup_logging(
         studio_trace: Enables the Visualizer Studio lifecycle sidecar (``screensaver_studio.log``); its
             INFO [STUDIO] lines also stay in the main log.
         diagnostic_build: Forces bounded logging into the dedicated per-user
-            diagnostic directory. Ordinary and Media Center release entry
+            diagnostic directory. Ordinary and Dashboard release entry
             points never set this flag.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED
