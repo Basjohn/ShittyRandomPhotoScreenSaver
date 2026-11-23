@@ -56,15 +56,15 @@ delay before Extruded Bubble measurements or port work. Resume the native sequen
 - [ ] Dashboard release validation: build both products on GitHub Windows and Linux runners. Check the exact
   source SHA, frozen native-module probe, product manifests, executable/archive names and Linux smoke receipts.
   Verify an upgrade from a legacy profile using a disposable copy.
-- [ ] Perceived response delay: use `logs/evidence_chest/logs077d6cc043.zip` and recorded-input tooling to reproduce
-  the sustained delay during playback. Compare fullscreen launch with later expansion, using the same music and
-  authored controls. Keep the playback ramp. The hidden worker runs on two recordings found no fullscreen-start
-  phase difference at 10 ms resolution. The saved receipts and rerunnable probes are in
-  `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/20261123_paired_worker/` and the supplied
-  trace analysis is in the sibling `20261123_operator_trace/`. They cover delivery, passage and shell draw inputs.
-  Next automate PCM-aligned, native-size pixel radius tracking on a steady visible shell, then compare against a
-  recent good runtime on the same settings. Check any measured delay against R-171 and R-248 before changing the
-  owner. Prove the fix on both startup routes and make the measured failure a regression guard before port work.
+- [~] **Awaiting Logs: perceived EB response delay during sustained playback.** The supplied
+  `logs/evidence_chest/logs077d6cc043.zip` records frame delivery but lacks an independent audio-output clock.
+  Matched PCM, actual hidden D1 render snapshots, native-size shell pixels and the Realtek loopback crossover
+  did not reproduce a persistent fullscreen-start shift. Keep the playback ramp and R-219 optics.
+  Next use the failing take to align independently timestamped output PCM with callback blocks, EB target
+  and native shell radii, and swaps on both startup routes. Compare against a latency-good take under the
+  same profile. Land a fix and a regression guard only once that comparison fails on current source.
+  Replay probes and controls are under `.artifacts/evidence/visualizers/extruded_bubble/fullscreen_start_latency/`
+  and `response_pixel_radius/20261123_live_d1_cold_124/REPORT.md` in the main checkout.
 
 **Order (lead and operator, 17 Nov):**
 1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
