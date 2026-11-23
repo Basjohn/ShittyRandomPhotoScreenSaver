@@ -13,9 +13,12 @@ configuration transactions, explicit capability retirement, a rare targeted
 fade (second-last resort) and full verified generation teardown (last resort).
 One architecture is intended for Standard/MC/diagnostic and eventual SMP.
 All existing resource/Qt ownership, retained host and display-generation guards
-remain hard gates. **Winlogon/secure/unknown desktop must never receive an
-interactive Settings or new floating Studio window**; existing saver/input/URL
-handoff paths stay authoritative. This paragraph does not supersede the
+remain hard gates. **Winlogon/secure/unknown desktop retains the current accepted saver
+Settings request and exit/handoff policy**: do not add unauthorized live
+Settings/Studio HWNDs or foreground changes, but do not suppress a
+previously supported Settings action without verifying that policy.
+Account/browser/credential flows retain their existing strict
+interactive-Default checks. This paragraph does not supersede the
 currently implemented full-stop Settings lifecycle until accepted.
 
 | Concern | Destination owner |
