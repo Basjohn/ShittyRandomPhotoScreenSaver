@@ -78,10 +78,10 @@ def test_jedi_player_has_hard_two_slot_cap_and_no_recurring_owner() -> None:
 def test_jedi_resource_is_explicit_in_every_build_family_and_installer() -> None:
     for relative in (
         "scripts/venv/build_nuitka.ps1",
-        "scripts/venv/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_dashboard_onedir.ps1",
         "tools/build_layout.ps1",
         "tools/build_runner.py",
-        "scripts/SRPSS_Installer.iss",
-        "scripts/SRPSS_MediaCenter_Installer.iss",
+        "scripts/SRPSS_Screensaver_Installer.iss",
+        "scripts/SRPSS_Dashboard_Installer.iss",
     ):
         assert "jedimodeyall.mp3" in _text(relative), relative

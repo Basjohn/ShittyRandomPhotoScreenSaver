@@ -1,4 +1,4 @@
-"""Smoke-test an installed frozen Linux screensaver or MC build without enabling release logging.
+"""Smoke-test an installed frozen Linux screensaver or Dashboard build without enabling release logging.
 
 Runs the actual installed binary on isolated Xvfb, verifies that Mesa exposes the
 required GL 4.6 Core context, and proves that a materially detailed scene appears
@@ -90,8 +90,8 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1:
         raise SystemExit(__doc__)
     product = Path(argv[0]).resolve()
-    binary = "srpss-mc" if "-linux-mc-" in product.name else "srpss"
-    app_profile = "Screensaver_MC" if binary == "srpss-mc" else "Screensaver"
+    binary = "srpss-dashboard" if "-linux-dashboard-" in product.name else "srpss-screensaver"
+    app_profile = "Dashboard" if binary == "srpss-dashboard" else "Screensaver"
     if not (product / binary).is_file() or not (product / "install.sh").is_file():
         return _fail(f"{product} lacks expected {binary} or install.sh")
 

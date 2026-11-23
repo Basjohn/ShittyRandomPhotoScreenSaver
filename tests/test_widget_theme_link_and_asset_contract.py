@@ -105,12 +105,12 @@ def test_frozen_theme_root_uses_same_programdata_srpss_asset_root_as_presets(mon
 
 
 def test_installers_seed_and_clean_replace_programdata_theme_tree() -> None:
-    normal = _text(ROOT / "scripts" / "SRPSS_Installer.iss")
-    media_center = _text(ROOT / "scripts" / "SRPSS_MediaCenter_Installer.iss")
+    normal = _text(ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss")
+    dashboard = _text(ROOT / "scripts" / "SRPSS_Dashboard_Installer.iss")
 
     assert 'Source: ".\\..\\themes\\*"; DestDir: "{commonappdata}\\SRPSS\\themes"' in normal
     assert 'Name: "{commonappdata}\\SRPSS\\themes"' in normal
     assert 'Type: filesandordirs; Name: "{commonappdata}\\SRPSS\\themes"' in normal
 
-    assert 'Source: "..\\release\\media_center\\themes\\*"; DestDir: "{commonappdata}\\SRPSS\\themes"' in media_center
-    assert 'Type: filesandordirs; Name: "{commonappdata}\\SRPSS\\themes"' in media_center
+    assert 'Source: "..\\release\\dashboard\\themes\\*"; DestDir: "{commonappdata}\\SRPSS\\themes"' in dashboard
+    assert 'Type: filesandordirs; Name: "{commonappdata}\\SRPSS\\themes"' in dashboard

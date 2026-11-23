@@ -119,7 +119,7 @@ def test_cache_maintenance_targets_the_data_root_not_the_settings_folder(real_pr
 
     class _McSettings:
         def get_storage_root(self):
-            return None  # Production manager, e.g. Screensaver_MC with settings in SRPSS_MC.
+            return None  # Production manager, e.g. Dashboard with settings in SRPSS_MC.
 
     assert _cache_data_root(SimpleNamespace(_settings=_McSettings())) == (real_profile / "SRPSS").resolve()
     assert _cache_data_root(SimpleNamespace(_settings=isolated_settings)) == (

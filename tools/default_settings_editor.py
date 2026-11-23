@@ -52,7 +52,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from core.settings.defaults import (  # noqa: E402
-    MC_PROFILE,
+    DASHBOARD_PROFILE,
     NORMAL_PROFILE,
     PRESERVE_ON_RESET,
     merge_default_overrides,
@@ -86,7 +86,7 @@ PROFILE_OVERRIDES_PATH = REPO_ROOT / "core" / "settings" / "default_profile_over
 DEFAULTS_CHECK_SCRIPT = REPO_ROOT / "tools" / "check_defaults_authority.py"
 PROFILE_LABELS = {
     NORMAL_PROFILE: "Normal / Screensaver",
-    MC_PROFILE: "Media Center / MC",
+    DASHBOARD_PROFILE: "Dashboard",
 }
 
 PATH_ROLE = int(Qt.ItemDataRole.UserRole) + 1
@@ -104,7 +104,7 @@ _PROFILE_MODULE_HEADER = '''"""Profile-specific canonical default overrides.
 
 This small data module is written by ``tools/default_settings_editor.py``.
 Normal defaults live directly in ``default_settings.py``. Only MC differences
-apply on top for the ``Screensaver_MC`` profile. Stable profile names keep
+apply on top for the ``Dashboard`` profile. Stable profile names keep
 exports and runtime reset behavior on the same source.
 """
 from __future__ import annotations
@@ -218,7 +218,7 @@ _SECTION_DESCRIPTIONS = {
     "accessibility": "accessibility and display-protection behavior",
     "display": "image presentation and rendering behavior",
     "input": "interaction and pointer behavior",
-    "mc": "Media Center window behavior",
+    "mc": "Dashboard window behavior",
     "queue": "image queue behavior",
     "scene3d": "3D detail tiers for 3D transitions and Visualizers",
     "sources": "local and feed source selection",
@@ -233,7 +233,7 @@ _SECTION_DESCRIPTIONS = {
 def _profile_payload(overrides: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         NORMAL_PROFILE: deepcopy(dict(overrides.get(NORMAL_PROFILE, {}))),
-        MC_PROFILE: deepcopy(dict(overrides.get(MC_PROFILE, {}))),
+        DASHBOARD_PROFILE: deepcopy(dict(overrides.get(DASHBOARD_PROFILE, {}))),
     }
 
 
@@ -327,8 +327,8 @@ def build_profile_models(
     overrides: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
     normal = merge_default_overrides(base, overrides.get(NORMAL_PROFILE, {}))
-    mc = merge_default_overrides(normal, overrides.get(MC_PROFILE, {}))
-    return {NORMAL_PROFILE: normal, MC_PROFILE: mc}
+    mc = merge_default_overrides(normal, overrides.get(DASHBOARD_PROFILE, {}))
+    return {NORMAL_PROFILE: normal, DASHBOARD_PROFILE: mc}
 
 
 def build_profile_overrides(
@@ -336,10 +336,10 @@ def build_profile_overrides(
     models: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     normal = dict(models[NORMAL_PROFILE])
-    mc = dict(models[MC_PROFILE])
+    mc = dict(models[DASHBOARD_PROFILE])
     return {
         NORMAL_PROFILE: {},
-        MC_PROFILE: deep_difference(normal, mc),
+        DASHBOARD_PROFILE: deep_difference(normal, mc),
     }
 
 
@@ -492,19 +492,19 @@ def merge_imported_profile(
     """Merge imported settings while preserving MC's explicit inheritance breaks."""
     merged_models = {
         NORMAL_PROFILE: deepcopy(dict(models[NORMAL_PROFILE])),
-        MC_PROFILE: deepcopy(dict(models[MC_PROFILE])),
+        DASHBOARD_PROFILE: deepcopy(dict(models[DASHBOARD_PROFILE])),
     }
     explicit_paths = set(mc_explicit_paths)
 
-    if profile == MC_PROFILE:
-        merged_models[MC_PROFILE] = merge_default_overrides(
-            merged_models[MC_PROFILE],
+    if profile == DASHBOARD_PROFILE:
+        merged_models[DASHBOARD_PROFILE] = merge_default_overrides(
+            merged_models[DASHBOARD_PROFILE],
             imported,
         )
         explicit_paths.update(leaf_paths(imported))
         return merged_models, explicit_paths
 
-    old_mc = merged_models[MC_PROFILE]
+    old_mc = merged_models[DASHBOARD_PROFILE]
     explicit_values = {
         path: deepcopy(get_path(old_mc, path))
         for path in explicit_paths
@@ -515,7 +515,7 @@ def merge_imported_profile(
     for path, value in explicit_values.items():
         set_path(new_mc, path, value)
     merged_models[NORMAL_PROFILE] = new_normal
-    merged_models[MC_PROFILE] = new_mc
+    merged_models[DASHBOARD_PROFILE] = new_mc
     return merged_models, explicit_paths
 
 
@@ -977,7 +977,7 @@ class DefaultSettingsEditor(QMainWindow):
         profile_label = QLabel("Build Profile")
         controls.addWidget(profile_label)
         self.profile_combo = QComboBox()
-        for profile in (NORMAL_PROFILE, MC_PROFILE):
+        for profile in (NORMAL_PROFILE, DASHBOARD_PROFILE):
             self.profile_combo.addItem(PROFILE_LABELS[profile], profile)
         self.profile_combo.setMinimumWidth(210)
         self.profile_combo.setToolTip(
@@ -1124,7 +1124,7 @@ class DefaultSettingsEditor(QMainWindow):
         current = get_path(self._models[self._profile], path, _MISSING)
         if current != get_path(self._initial_models[self._profile], path, _MISSING):
             return True
-        return self._profile == MC_PROFILE and self._origin_for(path) == "MC override"
+        return self._profile == DASHBOARD_PROFILE and self._origin_for(path) == "Dashboard override"
 
     def _origin_for(self, path: tuple[str, ...]) -> str:
         if self._profile == NORMAL_PROFILE:
@@ -1134,7 +1134,7 @@ class DefaultSettingsEditor(QMainWindow):
                 != get_path(self._models[NORMAL_PROFILE], path, _MISSING)
                 else "Canonical Base"
             )
-        return "MC override" if get_path(self._models[NORMAL_PROFILE], path, _MISSING) != get_path(self._models[MC_PROFILE], path) else "Inherited"
+        return "Dashboard override" if get_path(self._models[NORMAL_PROFILE], path, _MISSING) != get_path(self._models[DASHBOARD_PROFILE], path) else "Inherited"
 
     def _reload_sources_from_disk(self) -> None:
         self._source_settings = load_default_settings_source(self._base_path)
@@ -1142,7 +1142,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._overrides = load_profile_overrides(self._overrides_path)
         self._models = build_profile_models(self._base, self._overrides)
         self._initial_models = deepcopy(self._models)
-        self._mc_explicit_paths = leaf_paths(self._overrides.get(MC_PROFILE, {}))
+        self._mc_explicit_paths = leaf_paths(self._overrides.get(DASHBOARD_PROFILE, {}))
 
     def _reload_tree(self) -> None:
         self._building_tree = True
@@ -1280,10 +1280,10 @@ class DefaultSettingsEditor(QMainWindow):
         if self._profile == NORMAL_PROFILE:
             old_normal = get_path(self._models[NORMAL_PROFILE], path)
             set_path(self._models[NORMAL_PROFILE], path, value)
-            if path not in self._mc_explicit_paths and get_path(self._models[MC_PROFILE], path, _MISSING) == old_normal:
-                set_path(self._models[MC_PROFILE], path, value)
+            if path not in self._mc_explicit_paths and get_path(self._models[DASHBOARD_PROFILE], path, _MISSING) == old_normal:
+                set_path(self._models[DASHBOARD_PROFILE], path, value)
         else:
-            set_path(self._models[MC_PROFILE], path, value)
+            set_path(self._models[DASHBOARD_PROFILE], path, value)
             self._mc_explicit_paths.add(path)
         self._building_tree = True
         try:
@@ -1394,12 +1394,12 @@ class DefaultSettingsEditor(QMainWindow):
 
     def _preflight_models(self) -> None:
         validate_model_schema_unchanged(self._base, self._models[NORMAL_PROFILE])
-        validate_model_schema_unchanged(self._initial_models[MC_PROFILE], self._models[MC_PROFILE])
+        validate_model_schema_unchanged(self._initial_models[DASHBOARD_PROFILE], self._models[DASHBOARD_PROFILE])
         validate_no_private_fields(self._models[NORMAL_PROFILE], label="Normal defaults")
-        validate_no_private_fields(self._models[MC_PROFILE], label="MC defaults")
+        validate_no_private_fields(self._models[DASHBOARD_PROFILE], label="Dashboard defaults")
         validate_no_absolute_machine_paths(self._base, self._models[NORMAL_PROFILE])
-        validate_no_absolute_machine_paths(self._initial_models[MC_PROFILE], self._models[MC_PROFILE])
-        for profile in (NORMAL_PROFILE, MC_PROFILE):
+        validate_no_absolute_machine_paths(self._initial_models[DASHBOARD_PROFILE], self._models[DASHBOARD_PROFILE])
+        for profile in (NORMAL_PROFILE, DASHBOARD_PROFILE):
             widgets = self._models[profile].get("widgets")
             if not isinstance(widgets, Mapping):
                 continue
@@ -1487,7 +1487,7 @@ class DefaultSettingsEditor(QMainWindow):
                 message += f"\n\nThe restored sources also fail validation: {rollback_error}"
             QMessageBox.critical(self, "Defaults Not Saved", message)
             self._set_status(
-                "Save failed; canonical base, MC overrides, and undo were restored."
+                "Save failed; canonical base, Dashboard overrides, and undo were restored."
                 if rollback_error is None
                 else "Save failed; source files were restored, but they also fail validation."
             )
@@ -1536,7 +1536,7 @@ class DefaultSettingsEditor(QMainWindow):
                 message += f"\n\nThe restored sources also fail validation: {rollback_error}"
             QMessageBox.critical(self, "Undo Failed", message)
             self._set_status(
-                "Undo failed; current canonical base and MC overrides were restored."
+                "Undo failed; current canonical base and Dashboard overrides were restored."
                 if rollback_error is None
                 else "Undo failed; current sources were restored, but they also fail validation."
             )

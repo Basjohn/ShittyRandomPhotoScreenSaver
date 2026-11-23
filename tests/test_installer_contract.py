@@ -7,8 +7,8 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-STANDARD = SCRIPTS / "SRPSS_Installer.iss"
-MEDIA_CENTER = SCRIPTS / "SRPSS_MediaCenter_Installer.iss"
+STANDARD = SCRIPTS / "SRPSS_Screensaver_Installer.iss"
+MEDIA_CENTER = SCRIPTS / "SRPSS_Dashboard_Installer.iss"
 BUILD_RUNNER = ROOT / "tools" / "build_runner.py"
 
 
@@ -48,8 +48,8 @@ def test_transparent_png_is_compile_time_wizard_brand_asset() -> None:
 
 def test_installer_compile_cannot_leave_stale_success_artifact() -> None:
     for path, expected_output in (
-        (STANDARD, "Setup_SRPSS.exe"),
-        (MEDIA_CENTER, "Setup_SRPSS_Media_Center.exe"),
+        (STANDARD, "Setup_SRPSS_Screensaver.exe"),
+        (MEDIA_CENTER, "Setup_SRPSS_Dashboard.exe"),
     ):
         source = _text(path)
         assert "DeleteFileNow" in source
@@ -57,17 +57,17 @@ def test_installer_compile_cannot_leave_stale_success_artifact() -> None:
         assert source.index("DeleteFileNow") < source.index("#if Ver < EncodeVer(6, 7, 2)")
 
 
-def test_standard_installer_does_not_resurrect_qrc_owned_provider_images() -> None:
+def test_screensaver_installer_does_not_resurrect_qrc_owned_provider_images() -> None:
     source = _text(STANDARD)
     assert "icons8-musicbee-96.png" not in source
     assert r"\images" not in source
     assert "assets.qrc is the runtime authority" in source
 
 
-def test_media_center_wildcard_is_the_single_app_payload_copy() -> None:
+def test_dashboard_wildcard_is_the_single_app_payload_copy() -> None:
     source = _text(MEDIA_CENTER)
-    wildcard = r'Source: "..\release\media_center\*"; DestDir: "{app}"'
-    explicit_exe = r'Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"'
+    wildcard = r'Source: "..\release\dashboard\*"; DestDir: "{app}"'
+    explicit_exe = r'Source: "..\release\dashboard\SRPSS_Dashboard.exe"; DestDir: "{app}"'
     assert wildcard in source
     assert explicit_exe not in source
 
@@ -142,13 +142,13 @@ def test_legacy_python_qrc_fallback_is_retired() -> None:
     assert "importlib" not in registration
     assert "_source_fallback" not in registration
 
-def test_standard_installer_cleans_cached_onefile_payload_without_wildcarding_system32() -> None:
+def test_screensaver_installer_cleans_cached_onefile_payload_without_wildcarding_system32() -> None:
     source = _text(STANDARD)
     onefile_cleanup = 'Type: filesandordirs; Name: "{localappdata}\\SRPSS\\onefile"'
 
     assert source.count(onefile_cleanup) == 2  # upgrade + uninstall
     assert 'Type: filesandordirs; Name: "{sys}' not in source
     assert 'Name: "{sys}\\*"' not in source
-    assert 'Name: "{sys}\\SRPSS.scr"' not in source
-    assert 'Source: ".\\..\\release\\screensaver\\SRPSS.scr"; DestDir: "{sys}"' in source
+    assert 'Name: "{sys}\\SRPSS_Screensaver.scr"' not in source
+    assert 'Source: ".\\..\\release\\screensaver\\SRPSS_Screensaver.scr"; DestDir: "{sys}"' in source
 

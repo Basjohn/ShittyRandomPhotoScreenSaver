@@ -1,7 +1,7 @@
 """Validate or regenerate repo-local shipped visualizer preset artifacts.
 
 Source of truth is ``presets/visualizer_modes``.  Generated artifacts are the
-the Media Center release mirror.  ``--check`` and
+the Dashboard release mirror.  ``--check`` and
 ``--dry-run`` are deliberately read-only so operators/CI can prove parity
 without mutating curated preset files or release artifacts.
 """
@@ -32,7 +32,7 @@ def audit_repo_shipped_visualizer_preset_artifacts(
 
     root = Path(repo_root) if repo_root is not None else REPO_ROOT
     source_root = root / "presets" / "visualizer_modes"
-    release_root = root / "release" / "media_center" / "presets" / "visualizer_modes"
+    release_root = root / "release" / "dashboard" / "presets" / "visualizer_modes"
 
     if not source_root.exists() or not source_root.is_dir():
         return (f"missing authoritative source tree: {source_root}",)

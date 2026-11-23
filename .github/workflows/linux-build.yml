@@ -13,7 +13,7 @@
 #
 # Built on Ubuntu 22.04 so the binary runs on glibc >= 2.35 distributions.
 name: Linux build
-run-name: Linux ${{ (inputs.profile == 'mc' || startsWith(github.ref, 'refs/tags/linux-build/mc-')) && 'MC' || 'Screensaver' }} ${{ inputs.token || github.ref_name }}
+run-name: Linux ${{ (inputs.profile == 'dashboard' || startsWith(github.ref, 'refs/tags/linux-build/dashboard-')) && 'Dashboard' || 'Screensaver' }} ${{ inputs.token || github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -35,7 +35,7 @@ on:
         default: screensaver
         options:
           - screensaver
-          - mc
+          - dashboard
   push:
     tags:
       - "linux-build/*"
@@ -48,7 +48,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      BUILD_PROFILE: ${{ (inputs.profile == 'mc' || startsWith(github.ref, 'refs/tags/linux-build/mc-')) && 'mc' || 'screensaver' }}
+      BUILD_PROFILE: ${{ (inputs.profile == 'dashboard' || startsWith(github.ref, 'refs/tags/linux-build/dashboard-')) && 'dashboard' || 'screensaver' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -85,17 +85,17 @@ jobs:
       - name: Smoke test (Xvfb, Settings + saver)
         run: |
           sudo apt-get install -y -q xvfb mesa-utils libgl1-mesa-dri
-          if [[ "$BUILD_PROFILE" == "mc" ]]; then
-            products=(release/linux/SRPSS-*-linux-mc-x86_64)
+          if [[ "$BUILD_PROFILE" == "dashboard" ]]; then
+            products=(release/linux/SRPSS-*-linux-dashboard-x86_64)
           else
-            products=(release/linux/SRPSS-*-linux-x86_64)
+            products=(release/linux/SRPSS-*-linux-screensaver-x86_64)
           fi
           [[ ${#products[@]} == 1 && -d "${products[0]}" ]] || { echo "Expected one $BUILD_PROFILE product"; exit 1; }
           .venv-linux/bin/python tools/linux_smoke_dist.py "${products[0]}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BUILD_PROFILE == 'mc' && 'srpss-linux-mc' || 'srpss-linux' }}
-          path: ${{ env.BUILD_PROFILE == 'mc' && 'release/linux/SRPSS-*-linux-mc-x86_64.tar.gz' || 'release/linux/SRPSS-*-linux-x86_64.tar.gz' }}
+          name: ${{ env.BUILD_PROFILE == 'dashboard' && 'srpss-linux-dashboard' || 'srpss-linux-screensaver' }}
+          path: ${{ env.BUILD_PROFILE == 'dashboard' && 'release/linux/SRPSS-*-linux-dashboard-x86_64.tar.gz' || 'release/linux/SRPSS-*-linux-screensaver-x86_64.tar.gz' }}
           if-no-files-found: error
           retention-days: 14

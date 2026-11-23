@@ -1,8 +1,8 @@
 """GitHub Remote builds of the two Windows Nuitka products (Build Runner's GitHub Remote tab).
 
-The Standard (+ Diagnostic) and Media Center builds run on GitHub-hosted Windows runners
+The Screensaver (+ Diagnostic) and Dashboard builds run on GitHub-hosted Windows runners
 (``.github/workflows/windows-build.yml``), each through its canonical worker (``scripts/venv/build_nuitka.ps1``,
-``scripts/venv/build_nuitka_mc_onedir.ps1``) with every audit, contract and publication step it runs locally, on
+``scripts/venv/build_nuitka_dashboard_onedir.ps1``) with every audit, contract and publication step it runs locally, on
 exactly one pushed commit. This module owns the remote contract on both sides:
 
 * on the runner, ``manifest`` records what was built: target, commit, version, run token, and the size and SHA-256
@@ -28,7 +28,7 @@ says it loaded frozen.
 
 Nothing here compiles anything locally. Docs/Guides/GitHub_Remote_Build.md is the operator guide.
 
-    python tools/github_remote_build.py run --target standard --target media_center
+    python tools/github_remote_build.py run --target screensaver --target dashboard
     python tools/github_remote_build.py recover --target native_module --commit FULL_SHA --token RUN_TOKEN
     python tools/github_remote_build.py manifest ...   (the workflow's own step)
 """
@@ -166,10 +166,10 @@ def _product(key: str, own_dirs: tuple[str, ...], primary: str, companions: tupl
 
 TARGETS: dict[str, RemoteTarget] = {
     # One compile publishes the screensaver and the same binary as the diagnostic flavour (core/build_profile.py).
-    "standard": _product(
-        "standard", ("screensaver", "diagnostic"), "screensaver/SRPSS.scr", ("diagnostic/SRPSS_Diagnostic.scr",),
+    "screensaver": _product(
+        "screensaver", ("screensaver", "diagnostic"), "screensaver/SRPSS_Screensaver.scr", ("diagnostic/SRPSS_Screensaver_Diagnostic.scr",),
     ),
-    "media_center": _product("media_center", ("media_center",), "media_center/SRPSS_Media_Center.exe"),
+    "dashboard": _product("dashboard", ("dashboard",), "dashboard/SRPSS_Dashboard.exe"),
 }
 ALL_TARGETS: dict[str, RemoteTarget] = {**TARGETS, **MODULE_TARGETS}
 SHADERS_DIR = "shaders"

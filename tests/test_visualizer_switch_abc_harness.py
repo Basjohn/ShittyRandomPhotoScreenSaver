@@ -49,10 +49,10 @@ def test_line_epoch_parses_seconds_and_millis_formats():
 
 
 def test_split_run_command_preserves_unquoted_windows_backslashes():
-    raw = r"C:\Python311\pythonw.exe main_mc.py --usage --viz --perf --life"
+    raw = r"C:\Python311\pythonw.exe main_dashboard.py --usage --viz --perf --life"
     assert h._split_run_command(raw, windows=True) == [
         r"C:\Python311\pythonw.exe",
-        "main_mc.py",
+        "main_dashboard.py",
         "--usage",
         "--viz",
         "--perf",
@@ -61,10 +61,10 @@ def test_split_run_command_preserves_unquoted_windows_backslashes():
 
 
 def test_split_run_command_preserves_quoted_windows_path_with_spaces():
-    raw = r'"C:\Program Files\Python311\python.exe" main_mc.py --perf'
+    raw = r'"C:\Program Files\Python311\python.exe" main_dashboard.py --perf'
     assert h._split_run_command(raw, windows=True) == [
         r"C:\Program Files\Python311\python.exe",
-        "main_mc.py",
+        "main_dashboard.py",
         "--perf",
     ]
 

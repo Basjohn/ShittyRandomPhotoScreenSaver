@@ -124,7 +124,7 @@ def test_a_report_without_any_qtcore_import_trigger_cannot_pass_the_qt_weight_ch
 def test_verify_receipt_identifies_specific_compiled_file(tmp_path):
     root = _repo(tmp_path)
     report = _report(tmp_path)
-    exe = tmp_path / "SRPSS.scr"
+    exe = tmp_path / "SRPSS_Screensaver.scr"
     exe.write_bytes(b"compiled sample")
     receipt = tmp_path / "receipt.json"
     result = main([
@@ -141,11 +141,11 @@ def test_verify_receipt_identifies_specific_compiled_file(tmp_path):
 
 def test_workers_fail_closed_and_onefile_cache_does_not_reuse_stale_snapshot():
     root = Path(__file__).resolve().parents[1]
-    standard = (root / "scripts/venv/build_nuitka.ps1").read_text(encoding="utf-8")
-    mc = (root / "scripts/venv/build_nuitka_mc_onedir.ps1").read_text(encoding="utf-8")
-    assert "$OnefileCacheName/$SourceFingerprint" in standard
-    assert "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/$OnefileCacheName" in standard
-    for worker in (standard, mc):
+    screensaver = (root / "scripts/venv/build_nuitka.ps1").read_text(encoding="utf-8")
+    mc = (root / "scripts/venv/build_nuitka_dashboard_onedir.ps1").read_text(encoding="utf-8")
+    assert "$OnefileCacheName/$SourceFingerprint" in screensaver
+    assert "--onefile-tempdir-spec={CACHE_DIR}/SRPSS/$OnefileCacheName" in screensaver
+    for worker in (screensaver, mc):
         assert "frozen_build_audit.py" in worker
         assert "fingerprint --root $Root" in worker
         assert "verify --root $Root --report $NuitkaReportFile" in worker

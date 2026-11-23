@@ -180,7 +180,7 @@ class TestRedditHelperRuntime:
 
         launches: list[list[str]] = []
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
@@ -214,7 +214,7 @@ class TestRedditHelperRuntime:
         launches: list[list[str]] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
@@ -234,7 +234,7 @@ class TestRedditHelperRuntime:
         from core.windows import reddit_helper_runtime as runtime
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime, "is_helper_healthy", lambda: False)
         monkeypatch.setattr(runtime, "reap_stale_helper", lambda: False)
         monkeypatch.setattr(runtime, "_recent_launch_attempt", lambda: False)
@@ -250,7 +250,7 @@ class TestRedditHelperRuntime:
         from core.windows import reddit_helper_runtime as runtime
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime, "is_helper_healthy", lambda: True)
         monkeypatch.setattr(runtime, "read_helper_heartbeat", lambda: {"owner_pid": 4242})
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
@@ -273,7 +273,7 @@ class TestRedditHelperRuntime:
         from core.windows import reddit_helper_runtime as runtime
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: True)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: True)
 
         assert runtime.ensure_helper_runtime(source="mc") is False
 
@@ -306,7 +306,7 @@ class TestRedditHelperRuntime:
         terminations: list[int] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
@@ -338,7 +338,7 @@ class TestRedditHelperRuntime:
         launches: list[list[str]] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
@@ -368,7 +368,7 @@ class TestRedditHelperRuntime:
         task_runs: list[str] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: True)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
@@ -395,7 +395,7 @@ class TestRedditHelperRuntime:
         launches: list[list[str]] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_dashboard_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
         monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
         monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)

@@ -7,7 +7,7 @@ Offline harnesses time a renderer or a logical tick on its own. They cannot show
 Qt's threaded render loop holding the GUI thread in its sync request while the previous frame renders (which made EB
 draw a revision ~20 ms old, 2026-10-31), or the render and GUI threads stalling behind the logical thread's GIL-held
 Python (every GL call hands the GIL over; while the logical tick runs, the render thread gets about one call through
-per 5 ms switch interval). This runs the real ``main_mc.py`` and reports that whole chain, so a new or changed mode
+per 5 ms switch interval). This runs the real ``main_dashboard.py`` and reports that whole chain, so a new or changed mode
 meets it before the operator does.
 
 * **Display safety:** the saver runs from a COPY of ``%APPDATA%\\SRPSS`` (mode, preset and ``--set`` overrides are
@@ -41,7 +41,7 @@ meets it before the operator does.
 * **Output** goes to ``.artifacts/evidence/visualizers/<mode>/live_check/<YYYYMMDD>_<label>/``
   (``tools/artifact_paths.py``; an explicit ``--out`` inside the repository must follow that layout). The profile
   copy lives only while the run needs it: at the end of every run, failures included, its settings are kept beside
-  the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_mc.json`` (``SRPSS_MC``) and the
+  the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_dashboard.json`` (``SRPSS_Dashboard``) and the
   ``profile/`` copy (Steam image cache, backups, encrypted credentials) is deleted.
 * **Report** (``summary.json`` and a table, steady window only: startup and teardown are reported apart): logical
   tick time and its share of its thread's time, revisions/s, the age chain (publish -> sync -> render -> swap, the
@@ -671,7 +671,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     isolate_profile_paths(out)
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
     # ``display``: the product's RUN flag naming one screen (the saver's logs number them), so a run measures one size.
-    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
+    sys.argv = [str(ROOT / "main_dashboard.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
                 *(["--noupdates"] if no_updates else []), *(["--only-display", str(display)] if display is not None
                                                            else []), *app_args, "/s"]
     phases.production_startup()
@@ -680,7 +680,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         from tools.d1_run import apply_settings
 
         try:
-            applied = apply_settings(list(settings), application="Screensaver_MC")
+            applied = apply_settings(list(settings), application="Dashboard")
         except (KeyError, ValueError, RuntimeError) as exc:
             (out / "settings_refused.txt").write_text(str(exc), encoding="utf-8")
             print(f"REFUSED setting: {exc}", file=sys.stderr)
@@ -726,7 +726,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     with stack:
-        runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
+        runpy.run_path(str(ROOT / "main_dashboard.py"), run_name="__main__")
 
 
 # -- parent: profile, load, guard, report -------------------------------------------------------------------------
@@ -820,14 +820,14 @@ def _kill_tree(pid: int) -> None:
 
 
 def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides: dict, *, appdata_root=None,
-                     settings_folder: str = "SRPSS_MC") -> Path:
-    """Copy MC's settings profile (``SRPSS_MC``) and the shared data root (``SRPSS``); edit only the copy.
+                     settings_folder: str = "SRPSS_Dashboard") -> Path:
+    """Copy MC's settings profile (``SRPSS_Dashboard``) and the shared data root (``SRPSS``); edit only the copy.
 
     ``settings_folder`` is the profile whose Visualizer is set (``SRPSS`` for the ordinary saver, ``tools/d1_run.py``
     ``--entry main``); ``mode=None`` copies without touching the Visualizer.
     """
     appdata = Path(os.environ["APPDATA"]) if appdata_root is None else Path(appdata_root)
-    for name in ("SRPSS", "SRPSS_MC"):
+    for name in ("SRPSS", "SRPSS_Dashboard"):
         shutil.copytree(appdata / name, out / "profile" / name)
     if mode is None:
         return out / "profile"
@@ -856,7 +856,7 @@ def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides:
 
 
 # The profile folders' settings, kept beside the results once the copy is deleted.
-RUN_SETTINGS = (("SRPSS", "run_settings_v2.json"), ("SRPSS_MC", "run_settings_v2_mc.json"))
+RUN_SETTINGS = (("SRPSS", "run_settings_v2.json"), ("SRPSS_Dashboard", "run_settings_v2_dashboard.json"))
 
 
 def retire_profile_copy(out: Path) -> list[Path]:

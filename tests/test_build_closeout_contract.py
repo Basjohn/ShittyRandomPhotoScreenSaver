@@ -32,7 +32,7 @@ def test_build_families_explicitly_carry_current_quick_runtime_dependencies() ->
     forbidden = ("rendering.gl_compositor_pkg",)
     for relative in (
         "scripts/venv/build_nuitka.ps1",
-        "scripts/venv/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_dashboard_onedir.ps1",
     ):
         source = _text(relative)
         for declaration in required:
@@ -70,17 +70,17 @@ def test_diagnostic_frozen_presets_use_shared_curated_authority() -> None:
 
 
 def test_installers_offer_profile_scoped_settings_reset() -> None:
-    standard = _text("scripts/SRPSS_Installer.iss")
-    media_center = _text("scripts/SRPSS_MediaCenter_Installer.iss")
+    screensaver = _text("scripts/SRPSS_Screensaver_Installer.iss")
+    dashboard = _text("scripts/SRPSS_Dashboard_Installer.iss")
 
-    for source in (standard, media_center):
+    for source in (screensaver, dashboard):
         assert 'Name: "resetsettings"' in source
         assert 'Description: "Revert Settings To Defaults"' in source
 
     # EXACT-VALUE INVARIANT: after the one-release 5.0.0 migration window, the
     # destructive reset remains available but opt-in in every installer. Change
     # this only with an explicit installer migration/reset policy decision.
-    for source in (standard, media_center):
+    for source in (screensaver, dashboard):
         reset_task = next(
             line.strip()
             for line in source.splitlines()
@@ -88,30 +88,28 @@ def test_installers_offer_profile_scoped_settings_reset() -> None:
         )
         assert "Flags: unchecked" in reset_task
 
-    assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in standard
-    assert '{userappdata}\\SRPSS_MC\\settings_v2.json"; Tasks: resetsettings' in media_center
+    assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in screensaver
+    for appdata in ("SRPSS_Dashboard", "SRPSS_MC"):
+        assert f'{{userappdata}}\\{appdata}\\settings_v2.json"; Tasks: resetsettings' in dashboard
 
-    # Reset stays surgical even after the migration hardened it: exactly one file
-    # deletion (settings_v2.json) plus exactly one legacy QSettings registry key
-    # clear (so pre-JSON values cannot be re-imported) -- never a broad
-    # APPDATA/cache/credential wipe.
-    for source in (standard, media_center):
+    # A reset clears only that profile’s settings snapshots and QSettings keys.
+    for source, profiles in ((screensaver, 1), (dashboard, 2)):
         reset_lines = [
             line.strip() for line in source.splitlines() if "Tasks: resetsettings" in line
         ]
         file_lines = [line for line in reset_lines if line.startswith("Type: files;")]
         registry_lines = [line for line in reset_lines if line.startswith("Root: HKCU;")]
-        assert len(file_lines) == 1, reset_lines
-        assert file_lines[0].endswith('settings_v2.json"; Tasks: resetsettings')
-        assert len(registry_lines) == 1, reset_lines
-        assert "Flags: deletekey" in registry_lines[0]
-        assert len(reset_lines) == 2, reset_lines
+        assert len(file_lines) == profiles, reset_lines
+        assert all(line.endswith('settings_v2.json"; Tasks: resetsettings') for line in file_lines)
+        assert len(registry_lines) == profiles, reset_lines
+        assert all("Flags: deletekey" in line for line in registry_lines)
+        assert len(reset_lines) == profiles * 2, reset_lines
 
 
 def test_legacy_nuitka_entrypoints_delegate_only_to_canonical_workers() -> None:
     for legacy, worker in (
         ("scripts/build_nuitka.ps1", "venv\\build_nuitka.ps1"),
-        ("scripts/build_nuitka_mc_onedir.ps1", "venv\\build_nuitka_mc_onedir.ps1"),
+        ("scripts/build_nuitka_dashboard_onedir.ps1", "venv\\build_nuitka_dashboard_onedir.ps1"),
     ):
         source = _text(legacy)
         assert worker in source

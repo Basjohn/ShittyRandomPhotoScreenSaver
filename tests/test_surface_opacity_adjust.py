@@ -361,8 +361,8 @@ def test_widget_override_is_projected_at_the_family_style_seam():
 
 
 def test_both_settings_profiles_admit_new_overrides_through_canonical_defaults():
-    from core.settings.default_contract import get_canonical_default, NORMAL_PROFILE, MC_PROFILE
-    for profile in (NORMAL_PROFILE, MC_PROFILE):
+    from core.settings.default_contract import get_canonical_default, NORMAL_PROFILE, DASHBOARD_PROFILE
+    for profile in (NORMAL_PROFILE, DASHBOARD_PROFILE):
         for target in ("settings", "widget"):
             value = get_canonical_default(f"widgets.global.{target}_opacity_adjust", profile)
             assert admit_opacity_adjust(value) == value

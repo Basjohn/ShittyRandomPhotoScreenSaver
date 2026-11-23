@@ -13,7 +13,7 @@ def source(path: str) -> str:
 
 
 def test_installers_replace_themes_and_presets_only_when_respective_default_checked_task_selected() -> None:
-    for path in ("scripts/SRPSS_Installer.iss", "scripts/SRPSS_MediaCenter_Installer.iss"):
+    for path in ("scripts/SRPSS_Screensaver_Installer.iss", "scripts/SRPSS_Dashboard_Installer.iss"):
         installer = source(path)
         tasks = installer.split("[Tasks]", 1)[1].split("[Files]", 1)[0]
         files = installer.split("[Files]", 1)[1].split("[Dirs]", 1)[0]
@@ -25,7 +25,7 @@ def test_installers_replace_themes_and_presets_only_when_respective_default_chec
             assert "Description:" in task_line
             assert any(folder in l and f"Tasks: {task}" in l for l in files.splitlines())
             assert any(folder in l and f"Tasks: {task}" in l for l in deletes.splitlines())
-        if path.endswith("SRPSS_Installer.iss"):
+        if path.endswith("SRPSS_Screensaver_Installer.iss"):
             # Frozen executable extraction is independent from asset-preservation tasks.
             assert r'Type: filesandordirs; Name: "{localappdata}\SRPSS\onefile"' in deletes
 
@@ -122,7 +122,7 @@ def test_linux_installers_have_independent_opt_outs_with_replacement_as_default(
     import tempfile
     from tools.linux_build import install_script
 
-    for profile, executable in (("screensaver", "srpss"), ("mc", "srpss-mc")):
+    for profile, executable in (("screensaver", "srpss-screensaver"), ("dashboard", "srpss-dashboard")):
         script = install_script(profile)
         assert f'APP="{executable}"' in script
         assert 'REPLACE_THEMES=1' in script

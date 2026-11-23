@@ -5,7 +5,7 @@ scripts/venv/build_nuitka.ps1. Do not reintroduce global Python builds.
 [CmdletBinding()]
 param(
     [string]$EntryPoint = 'main.py',
-    [string]$AppName = 'SRPSS',
+    [string]$AppName = 'SRPSS_Screensaver',
     [switch]$Console,
     [switch]$KeepExe
 )

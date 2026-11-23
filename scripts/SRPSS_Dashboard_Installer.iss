@@ -1,18 +1,18 @@
-; Inno Setup script for SRPSS - Media Center (MC onedir build)
+; Inno Setup script for SRPSS - Dashboard (onedir build)
 ; Builds an installer that packages the entire onedir payload (Nuitka
 ; --standalone output) and offers optional shortcuts + run-after option.
 ;
 ; Usage:
-;   1) Run scripts/build_nuitka_mc_onedir.ps1 to produce:
-;        release\media_center\SRPSS_Media_Center.exe
-;        release\media_center\*
+;   1) Run scripts/build_nuitka_dashboard_onedir.ps1 to produce:
+;        release\dashboard\SRPSS_Dashboard.exe
+;        release\dashboard\*
 ;   2) Compile this ISS script in Inno Setup. Output installer will copy
-;      every file under release\media_center into {app}.
+;      every file under release\dashboard into {app}.
 ;
 
 ; Remove yesterday's installer before compiler-version/style validation.
 ; A failed compile must never leave stale Setup_*.exe looking current.
-#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS_Media_Center.exe')
+#expr DeleteFileNow(AddBackslash(SourcePath) + '..\release\installers\Setup_SRPSS_Dashboard.exe')
 
 ; Installer styling/background directives require Inno Setup 6.7.2+; 7.x remains supported.
 #if Ver < EncodeVer(6, 7, 2)
@@ -21,19 +21,21 @@
 
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
-AppName=SRPSS - Media Center
+AppName=SRPSS - Dashboard
 AppVersion=5.1.4
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppUpdatesURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
+; Keep the established install directory for upgrades.
 DefaultDirName={localappdata}\SRPSS Media Center
-DefaultGroupName=SRPSS - Media Center
+DefaultGroupName=SRPSS - Dashboard
+UsePreviousGroup=no
 PrivilegesRequired=admin
 DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir=..\release\installers
-OutputBaseFilename=Setup_SRPSS_Media_Center
+OutputBaseFilename=Setup_SRPSS_Dashboard
 Compression=lzma
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
@@ -70,34 +72,34 @@ Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-inst
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Copy everything inside the Nuitka onedir output into {app}. This wildcard
-; already includes SRPSS_Media_Center.exe; do not duplicate the EXE below.
-Source: "..\release\media_center\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
-; Keep one packaged copy inside the MC install so visualizer imports can
+; already includes SRPSS_Dashboard.exe; do not duplicate the EXE below.
+Source: "..\release\dashboard\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
+; Keep one packaged copy inside the Dashboard install so visualizer imports can
 ; still restore from bundled assets even though runtime loading now uses the
 ; shared ProgramData tree.
-Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\dashboard\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Active curated preset tree shared with SCR/NORMAL builds.
-Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacevispresets
+Source: "..\release\dashboard\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacevispresets
 ; Active curated Settings + Widget theme tree shared with SCR/NORMAL builds.
-Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacethemes
-Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
-Source: "..\release\media_center\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+Source: "..\release\dashboard\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacethemes
+Source: "..\release\dashboard\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+Source: "..\release\dashboard\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [Dirs]
 ; Shared operator-authored data, never the executable/helper installation tree.
 Name: "{commonappdata}\SRPSS\presets\visualizer_modes"; Permissions: users-modify
 
 [Registry]
-; When the 5.0.0 migration-reset task is selected, delete the pre-JSON MC QSettings tree too.
-; Deleting only settings_v2.json would otherwise let first launch re-import these legacy values.
+; Clear both keys when reset is selected, including values imported by previous versions.
+Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Dashboard"; Flags: deletekey; Tasks: resetsettings
 Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver_MC"; Flags: deletekey; Tasks: resetsettings
 
 [Icons]
-Name: "{group}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: startmenu
-Name: "{userdesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: desktop
+Name: "{group}\SRPSS - Dashboard"; Filename: "{app}\SRPSS_Dashboard.exe"; Tasks: startmenu
+Name: "{userdesktop}\SRPSS - Dashboard"; Filename: "{app}\SRPSS_Dashboard.exe"; Tasks: desktop
 
 [Run]
-Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Center"; Flags: nowait postinstall skipifsilent; Tasks: runafter
+Filename: "{app}\SRPSS_Dashboard.exe"; Description: "Launch SRPSS - Dashboard"; Flags: nowait postinstall skipifsilent; Tasks: runafter
 
 [UninstallDelete]
 ; Ensure the install directory is removed on uninstall (default behavior), but
@@ -105,8 +107,13 @@ Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Cen
 Type: filesandordirs; Name: "{app}"
 
 [InstallDelete]
-; 5.0.0 migration-reset task for the Media Center profile only.
+; Reset both Dashboard settings paths so migration cannot restore a reset snapshot.
+Type: files; Name: "{userappdata}\SRPSS_Dashboard\settings_v2.json"; Tasks: resetsettings
 Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettings
+
+; Remove shortcuts that target the superseded executable.
+Type: files; Name: "{userdesktop}\SRPSS - Media Center.lnk"
+Type: files; Name: "{userprograms}\SRPSS - Media Center\SRPSS - Media Center.lnk"
 
 ; CurStepChanged clean-replaces the entire installer-owned {app} payload while
 ; preserving only Inno's unins* bookkeeping files. Keep shared mutable/catalogue

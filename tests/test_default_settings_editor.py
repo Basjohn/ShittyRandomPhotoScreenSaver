@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QDialog, QFontComboBox
 
 from core.settings.default_contract import require_canonical_default
 from core.settings.defaults import (
-    MC_PROFILE,
+    DASHBOARD_PROFILE,
     NORMAL_PROFILE,
     get_base_default_settings,
     get_default_settings,
@@ -48,10 +48,10 @@ def test_profile_defaults_resolve_normal_and_mc_without_mutating_base() -> None:
     base = get_base_default_settings()
     base_before = deepcopy(base)
     normal = get_default_settings(NORMAL_PROFILE)
-    mc = get_default_settings(MC_PROFILE)
+    mc = get_default_settings(DASHBOARD_PROFILE)
 
     assert base == base_before
-    for profile, resolved in ((NORMAL_PROFILE, normal), (MC_PROFILE, mc)):
+    for profile, resolved in ((NORMAL_PROFILE, normal), (DASHBOARD_PROFILE, mc)):
         for key in (
             "display.show_on_monitors",
             "input.interaction_mode",
@@ -68,17 +68,17 @@ def test_editor_model_discovers_new_settings_and_compacts_profile_differences(tm
     base = {"display": {"mode": "fill"}, "widgets": {"new_card": {"enabled": False, "levels": [1, 2]}}}
     overrides = {
         NORMAL_PROFILE: {"widgets": {"new_card": {"enabled": True}}},
-        MC_PROFILE: {"display": {"mode": "fit"}},
+        DASHBOARD_PROFILE: {"display": {"mode": "fit"}},
     }
     models = build_profile_models(base, overrides)
     paths = {path for path, _value in iter_leaf_settings(models[NORMAL_PROFILE])}
 
     assert ("widgets", "new_card", "levels") in paths
     assert models[NORMAL_PROFILE]["widgets"]["new_card"]["enabled"] is True
-    assert models[MC_PROFILE]["display"]["mode"] == "fit"
+    assert models[DASHBOARD_PROFILE]["display"]["mode"] == "fit"
     assert build_profile_overrides(base, models) == {
         NORMAL_PROFILE: {},
-        MC_PROFILE: {"display": {"mode": "fit"}},
+        DASHBOARD_PROFILE: {"display": {"mode": "fit"}},
     }
 
     path = tmp_path / "default_profile_overrides.py"
@@ -94,7 +94,7 @@ def test_editor_model_discovers_new_settings_and_compacts_profile_differences(tm
 def test_editor_transactional_save_and_single_level_undo(qt_app, tmp_path) -> None:
     base_path = _copy_base_source(tmp_path)
     original_base_source = base_path.read_text(encoding="utf-8")
-    overrides = {NORMAL_PROFILE: {}, MC_PROFILE: {}}
+    overrides = {NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}
     overrides_path = tmp_path / "default_profile_overrides.py"
     undo_path = tmp_path / "undo.json"
     original_source = render_profile_overrides_module(overrides)
@@ -113,14 +113,14 @@ def test_editor_transactional_save_and_single_level_undo(qt_app, tmp_path) -> No
 
         path = ("widgets", "achievement_pulse", "square_artwork_size")
         set_path(editor._models[NORMAL_PROFILE], path, 155)
-        set_path(editor._models[MC_PROFILE], path, 155)
+        set_path(editor._models[DASHBOARD_PROFILE], path, 155)
         editor._save_and_validate()
 
         saved = load_profile_overrides(overrides_path)
         canonical = editable_base_settings(load_default_settings_source(base_path))
         assert canonical["widgets"]["achievement_pulse"]["square_artwork_size"] == 155
         assert saved[NORMAL_PROFILE] == {}
-        assert saved[MC_PROFILE] == {}
+        assert saved[DASHBOARD_PROFILE] == {}
         assert read_undo_record(undo_path) == original_source
         assert read_undo_sources(undo_path) == (original_base_source, original_source)
 
@@ -139,9 +139,9 @@ def test_failed_save_restores_previous_undo_source_and_artifacts(qt_app, tmp_pat
     base_source_before = base_path.read_text(encoding="utf-8")
     overrides_path = tmp_path / "default_profile_overrides.py"
     undo_path = tmp_path / "undo.json"
-    source_before = render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}})
+    source_before = render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}})
     previous_source = render_profile_overrides_module(
-        {NORMAL_PROFILE: {"timing": {"update_interval": 321}}, MC_PROFILE: {}}
+        {NORMAL_PROFILE: {"timing": {"update_interval": 321}}, DASHBOARD_PROFILE: {}}
     )
     overrides_path.write_text(source_before, encoding="utf-8")
     write_undo_record(previous_source, undo_path)
@@ -163,7 +163,7 @@ def test_failed_save_restores_previous_undo_source_and_artifacts(qt_app, tmp_pat
     try:
         path = ("widgets", "achievement_pulse", "square_artwork_size")
         set_path(editor._models[NORMAL_PROFILE], path, 155)
-        set_path(editor._models[MC_PROFILE], path, 155)
+        set_path(editor._models[DASHBOARD_PROFILE], path, 155)
         editor._save_and_validate()
 
         assert base_path.read_text(encoding="utf-8") == base_source_before
@@ -183,9 +183,9 @@ def test_failed_undo_restores_current_source_and_artifacts(qt_app, tmp_path, mon
     base_path.write_text(current_base_source, encoding="utf-8")
     overrides_path = tmp_path / "default_profile_overrides.py"
     undo_path = tmp_path / "undo.json"
-    original_source = render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}})
+    original_source = render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}})
     current_source = render_profile_overrides_module(
-        {NORMAL_PROFILE: {"timing": {"update_interval": 321}}, MC_PROFILE: {}}
+        {NORMAL_PROFILE: {"timing": {"update_interval": 321}}, DASHBOARD_PROFILE: {}}
     )
     overrides_path.write_text(current_source, encoding="utf-8")
     write_undo_record(
@@ -306,7 +306,7 @@ def test_normal_snapshot_import_preserves_explicit_mc_differences() -> None:
             "timing": {"interval": 60},
             "widgets": {"clock": {"font_family": "Inter"}},
         },
-        MC_PROFILE: {
+        DASHBOARD_PROFILE: {
             "timing": {"interval": 180},
             "widgets": {"clock": {"font_family": "Inter"}},
         },
@@ -323,9 +323,9 @@ def test_normal_snapshot_import_preserves_explicit_mc_differences() -> None:
     )
 
     assert merged[NORMAL_PROFILE]["timing"]["interval"] == 77
-    assert merged[MC_PROFILE]["timing"]["interval"] == 180
+    assert merged[DASHBOARD_PROFILE]["timing"]["interval"] == 180
     assert merged[NORMAL_PROFILE]["widgets"]["clock"]["font_family"] == "Jost"
-    assert merged[MC_PROFILE]["widgets"]["clock"]["font_family"] == "Jost"
+    assert merged[DASHBOARD_PROFILE]["widgets"]["clock"]["font_family"] == "Jost"
     assert explicit == {("timing", "interval")}
 
 
@@ -333,7 +333,7 @@ def test_editor_uses_alpha_swatch_and_font_delegate_editors(qt_app, tmp_path) ->
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
     overrides_path.write_text(
-        render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}),
+        render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}),
         encoding="utf-8",
     )
     editor = DefaultSettingsEditor(
@@ -370,7 +370,7 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
     overrides_path.write_text(
-        render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}),
+        render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}),
         encoding="utf-8",
     )
     regenerated: list[bool] = []
@@ -444,7 +444,7 @@ def test_editor_children_are_owned_by_qt_not_python(qt_app, tmp_path) -> None:
 
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
-    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}), encoding="utf-8")
     editor = DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
                                    undo_path=tmp_path / "undo.json", validate=lambda: "")
 
@@ -474,7 +474,7 @@ def test_editor_children_are_owned_by_qt_not_python(qt_app, tmp_path) -> None:
 def _plain_editor(tmp_path) -> DefaultSettingsEditor:
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
-    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}), encoding="utf-8")
     return DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
                                  undo_path=tmp_path / "undo.json", validate=lambda: "")
 
@@ -534,7 +534,7 @@ def test_by_transition_view_gathers_each_transitions_settings_and_edits_in_place
 
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
-    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, DASHBOARD_PROFILE: {}}), encoding="utf-8")
     editor = DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
                                    undo_path=tmp_path / "undo.json", validate=lambda: "")
     keep_off_screen(editor)

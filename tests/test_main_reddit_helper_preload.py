@@ -43,7 +43,7 @@ def test_schedule_runtime_reddit_helper_session_starts_keepalive(monkeypatch):
 
     monkeypatch.setattr(main, "is_script_mode", lambda: False)
     monkeypatch.setattr(main, "is_diagnostic_build", lambda: False)
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         "core.windows.reddit_helper_installer._log_helper_event",
         lambda msg: breadcrumb_calls.append(msg),
@@ -83,7 +83,7 @@ def test_schedule_runtime_reddit_helper_session_skips_script_mode(monkeypatch):
 
     monkeypatch.setattr(main, "is_script_mode", lambda: True)
     monkeypatch.setattr(main, "is_diagnostic_build", lambda: False)
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         "core.windows.reddit_helper_installer._log_helper_event",
         lambda msg: breadcrumb_calls.append(msg),
@@ -107,7 +107,7 @@ def test_schedule_runtime_reddit_helper_session_skips_diagnostic_build(monkeypat
 
     monkeypatch.setattr(main, "is_script_mode", lambda: False)
     monkeypatch.setattr(main, "is_diagnostic_build", lambda: True)
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         "core.windows.reddit_helper_installer._log_helper_event",
         lambda _msg: helper_calls.append("breadcrumb"),
@@ -147,7 +147,7 @@ def test_schedule_runtime_reddit_helper_session_skips_without_thread_manager(mon
 
     monkeypatch.setattr(main, "is_script_mode", lambda: False)
     monkeypatch.setattr(main, "is_diagnostic_build", lambda: False)
-    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         "core.windows.reddit_helper_installer._log_helper_event",
         lambda msg: breadcrumb_calls.append(msg),

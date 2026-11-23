@@ -82,7 +82,7 @@ def test_executable_icon_resource_fallback(qt_app):
 def test_main_and_studio_read_the_one_owner():
     """No product module but the owner names the icon file; ``main.py`` and the Studio window read the owner."""
     pattern = re.compile(r"SRPSS\.ico")
-    product = [REPO / "main.py", REPO / "main_mc.py", REPO / "main_diagnostic.py"]
+    product = [REPO / "main.py", REPO / "main_dashboard.py", REPO / "main_diagnostic.py"]
     for folder in ("core", "engine", "rendering", "ui", "widgets"):
         product.extend((REPO / folder).rglob("*.py"))
     owner = (REPO / "ui" / "app_icon.py").resolve()

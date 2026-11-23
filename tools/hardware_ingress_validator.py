@@ -209,7 +209,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
     prep: Dict[str, Any] = {}
 
     try:
-        proc, launch_io = _launch_runtime("mc", appdata_root, log_dir, args.mc_window_flags)
+        proc, launch_io = _launch_runtime("dashboard", appdata_root, log_dir, args.dashboard_window_flags)
         target_pid = int(proc.pid)
         target = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target is None:
@@ -332,13 +332,13 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "timestamp": ts, "scenario": args.scenario,
             "profile_mode": args.profile_mode, "profile_status": profile_status,
-            "focus_policy": args.focus_policy, "mc_window_flags": args.mc_window_flags,
+            "focus_policy": args.focus_policy, "dashboard_window_flags": args.dashboard_window_flags,
             "observe_seconds": args.observe_seconds, "response_timeout_s": args.response_timeout_s,
             "target_pid": target_pid, "target_hwnd": target.hwnd,
             "target_window": target.to_dict(),
             "target_native_styles": _native_window_styles(target.hwnd),
             "focus_ok": focus_ok,
-            "runtime_contract": _evaluate_runtime_contract("mc", target, log_file),
+            "runtime_contract": _evaluate_runtime_contract("dashboard", target, log_file),
             "log_file": str(log_file), "verbose_log_file": str(vlog) if vlog else None,
             "output_dir": str(out_dir), "keyboard_events": key_events,
             "phases": [p.__dict__ for p in phases],
@@ -381,7 +381,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hardware ingress validator for U-05.")
     parser.add_argument("--profile-mode", choices=("isolated", "live", "mirrored"), default="mirrored")
     parser.add_argument("--focus-policy", choices=("strict", "realistic"), default="realistic")
-    parser.add_argument("--mc-window-flags", choices=("default", "splash"), default="default")
+    parser.add_argument("--dashboard-window-flags", choices=("default", "splash"), default="default")
     parser.add_argument("--scenario", choices=("focused_idle", "focused_clicked", "manual_focus", "focus_transition"), default="focus_transition")
     parser.add_argument("--observe-seconds", type=float, default=12.0)
     parser.add_argument("--response-timeout-s", type=float, default=2.5)

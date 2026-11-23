@@ -13,7 +13,7 @@ def source(path: str) -> str:
 def test_one_interpreter_and_compiler_authority() -> None:
     for path in (
         "scripts/venv/build_nuitka.ps1",
-        "scripts/venv/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_dashboard_onedir.ps1",
         "scripts/venv/build_reddit_helper.ps1",
     ):
         text = source(path)
@@ -23,7 +23,7 @@ def test_one_interpreter_and_compiler_authority() -> None:
         assert 'python314_runtime.ps1' in text
     for path in (
         "scripts/venv/build_nuitka.ps1",
-        "scripts/venv/build_nuitka_mc_onedir.ps1",
+        "scripts/venv/build_nuitka_dashboard_onedir.ps1",
         "scripts/build_qtquick_smoke.ps1",
     ):
         text = source(path)
@@ -31,7 +31,7 @@ def test_one_interpreter_and_compiler_authority() -> None:
         assert '--mingw64' not in text
     for legacy, target in (
         ("scripts/build_nuitka.ps1", "venv\\build_nuitka.ps1"),
-        ("scripts/build_nuitka_mc_onedir.ps1", "venv\\build_nuitka_mc_onedir.ps1"),
+        ("scripts/build_nuitka_dashboard_onedir.ps1", "venv\\build_nuitka_dashboard_onedir.ps1"),
         ("scripts/build_reddit_helper.ps1", "venv\\build_reddit_helper.ps1"),
     ):
         text = source(legacy)
@@ -83,7 +83,7 @@ def test_foundry_and_build_runner_do_not_launch_global_python():
 
 def test_normal_and_venv_mode_temp_build_paths_still_distinct():
     for parent, worker in (('scripts/build_nuitka.ps1', 'scripts/venv/build_nuitka.ps1'),
-                           ('scripts/build_nuitka_mc_onedir.ps1', 'scripts/venv/build_nuitka_mc_onedir.ps1'),
+                           ('scripts/build_nuitka_dashboard_onedir.ps1', 'scripts/venv/build_nuitka_dashboard_onedir.ps1'),
                            ('scripts/build_reddit_helper.ps1', 'scripts/venv/build_reddit_helper.ps1')):
         assert '-BuildWorkspace normal' in source(parent)
         assert '$BuildWorkspace = "venv"' in source(worker)

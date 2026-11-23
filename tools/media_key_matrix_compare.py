@@ -133,7 +133,7 @@ def _write_summary(path: Path, run_rows: List[Dict[str, Any]], scenarios: List[s
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Compare media-key matrix runs across focus policies.")
-    p.add_argument("--launch", choices=("mc", "run"), default="mc")
+    p.add_argument("--launch", choices=("dashboard", "run"), default="dashboard")
     p.add_argument("--profile-mode", choices=("isolated", "live", "mirrored"), default="mirrored")
     p.add_argument("--policies", default="strict,realistic")
     p.add_argument("--scenarios", default="focused_idle,focused_clicked")

@@ -4,15 +4,14 @@ Usage:
     python tools/build_runner.py
     python tools/build_runner.py --mode venv
     python tools/build_runner.py --mode github
-    python tools/build_runner.py --mode github --run [--select standard media_center ...]
+    python tools/build_runner.py --mode github --run [--select screensaver dashboard ...]
     python tools/build_runner.py --mode github --run --select native_module     (the product's native core)
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
 their existing ownership: normal mode uses ``scripts/*.ps1`` and venv mode uses
 ``scripts/venv/*.ps1``. Both modes compile the canonical installers in
-``scripts/``. GitHub Remote runs the venv workers of the Standard and Media
-Center builds on GitHub-hosted Windows runners (``tools/github_remote_build.py``,
+``scripts/``. GitHub Remote runs the venv workers of the Screensaver and Dashboard builds on GitHub-hosted Windows runners (``tools/github_remote_build.py``,
 ``.github/workflows/windows-build.yml``), downloads and validates their payloads,
 and compiles the installers locally (Docs/Guides/GitHub_Remote_Build.md).
 """
@@ -67,7 +66,7 @@ LOG_DIR = REPO_ROOT / "logs"
 RELEASE_DIR = REPO_ROOT / "release"
 CANONICAL_SCRIPTS_DIR = REPO_ROOT / "scripts"
 VENV_SCRIPTS_DIR = CANONICAL_SCRIPTS_DIR / "venv"
-QRC_RUNTIME_JOB_KEYS = frozenset({"standard", "media_center"})
+QRC_RUNTIME_JOB_KEYS = frozenset({"screensaver", "dashboard"})
 
 
 def _build_runner_data_dir() -> Path:
@@ -271,7 +270,7 @@ class Job:
     output_dir: Path
     expected_artifact: Path
     default_selected: bool = True
-    # Further files the same job publishes (the Standard build's diagnostic copy).
+    # Further files the same job publishes (the Screensaver build's diagnostic copy).
     companion_artifacts: tuple[Path, ...] = ()
 
     @property
@@ -819,23 +818,23 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
     installers_dir = release_dir / "installers"
     return (
         Job(
-            "standard",
-            "Standard + Diagnostic",
+            "screensaver",
+            "Screensaver + Diagnostic",
             "powershell",
             worker_dir / "build_nuitka.ps1",
             release_dir / "screensaver",
-            release_dir / "screensaver" / "SRPSS.scr",
-            # One compile: the worker publishes the same binary as SRPSS_Diagnostic.scr, whose
+            release_dir / "screensaver" / "SRPSS_Screensaver.scr",
+            # One compile: the worker publishes the same binary as SRPSS_Screensaver_Diagnostic.scr, whose
             # name selects the diagnostic flavour (core/build_profile.py).
-            companion_artifacts=(release_dir / "diagnostic" / "SRPSS_Diagnostic.scr",),
+            companion_artifacts=(release_dir / "diagnostic" / "SRPSS_Screensaver_Diagnostic.scr",),
         ),
         Job(
-            "media_center",
-            "Media Center",
+            "dashboard",
+            "Dashboard",
             "powershell",
-            worker_dir / "build_nuitka_mc_onedir.ps1",
-            release_dir / "media_center",
-            release_dir / "media_center" / "SRPSS_Media_Center.exe",
+            worker_dir / "build_nuitka_dashboard_onedir.ps1",
+            release_dir / "dashboard",
+            release_dir / "dashboard" / "SRPSS_Dashboard.exe",
         ),
         Job(
             "reddit_helper",
@@ -846,30 +845,30 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             release_dir / "reddit_helper" / "SRPSS_RedditHelper.exe",
         ),
         Job(
-            "standard_installer",
-            "Standard Installer",
+            "screensaver_installer",
+            "Screensaver Installer",
             "inno",
-            scripts_dir / "SRPSS_Installer.iss",
+            scripts_dir / "SRPSS_Screensaver_Installer.iss",
             installers_dir,
-            installers_dir / "Setup_SRPSS.exe",
+            installers_dir / "Setup_SRPSS_Screensaver.exe",
         ),
         Job(
-            "media_center_installer",
-            "Media Center Installer",
+            "dashboard_installer",
+            "Dashboard Installer",
             "inno",
-            scripts_dir / "SRPSS_MediaCenter_Installer.iss",
+            scripts_dir / "SRPSS_Dashboard_Installer.iss",
             installers_dir,
-            installers_dir / "Setup_SRPSS_Media_Center.exe",
+            installers_dir / "Setup_SRPSS_Dashboard.exe",
         ),
         # Optional: builds on a GitHub Ubuntu runner through the GitHub CLI (no WSL,
         # Hyper-V or Docker) and downloads the tarball (Docs/Guides/Linux_Guide.md §7).
         Job(
-            "linux",
-            "Linux (GitHub runner)",
+            "linux_screensaver",
+            "Linux Screensaver (GitHub runner)",
             "powershell",
             scripts_dir / "linux" / "build_from_windows.ps1",
             release_dir / "linux",
-            release_dir / "linux" / f"SRPSS-{APP_VERSION}-linux-x86_64.tar.gz",
+            release_dir / "linux" / f"SRPSS-{APP_VERSION}-linux-screensaver-x86_64.tar.gz",
             default_selected=False,
         ),
     )
@@ -880,7 +879,7 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     and the installers stay local and are the venv mode's own jobs, unchanged: an installer compiles whatever
     ``release/`` holds, exactly as on the venv tab (operator, 8 Nov: "It's supposed to be local, github has no say"),
     after this run's GitHub products are published when they are selected. The optional Linux screensaver and
-    GitHub-only Linux Media Center jobs each use the same ``scripts/linux/build_from_windows.ps1`` with a separate
+    GitHub-only Linux Dashboard jobs each use the same ``scripts/linux/build_from_windows.ps1`` with a separate
     profile, artifact and GitHub run, on the pre-flight's pinned commit (``_job_arguments``).
 
     The native modules compile on GitHub through their one workflow (``native-module.yml``, Current_Plan.md item 8b)
@@ -904,19 +903,19 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
         for target in remote.MODULE_TARGETS.values()
     )
     return (
-        replace(by_key["standard"], name="Standard + Diagnostic (GitHub)", kind="github", script=workflow),
-        replace(by_key["media_center"], name="Media Center (GitHub)", kind="github", script=workflow),
+        replace(by_key["screensaver"], name="Screensaver + Diagnostic (GitHub)", kind="github", script=workflow),
+        replace(by_key["dashboard"], name="Dashboard (GitHub)", kind="github", script=workflow),
         replace(by_key["reddit_helper"], name="Reddit Helper (local)"),
-        replace(by_key["standard_installer"], name="Standard Installer (local)"),
-        replace(by_key["media_center_installer"], name="Media Center Installer (local)"),
-        by_key["linux"],
+        replace(by_key["screensaver_installer"], name="Screensaver Installer (local)"),
+        replace(by_key["dashboard_installer"], name="Dashboard Installer (local)"),
+        by_key["linux_screensaver"],
         Job(
-            "linux_mc",
-            "Linux Media Center (GitHub runner)",
+            "linux_dashboard",
+            "Linux Dashboard (GitHub runner)",
             "powershell",
             repo_root / "scripts" / "linux" / "build_from_windows.ps1",
             repo_root / "release" / "linux",
-            repo_root / "release" / "linux" / f"SRPSS-{APP_VERSION}-linux-mc-x86_64.tar.gz",
+            repo_root / "release" / "linux" / f"SRPSS-{APP_VERSION}-linux-dashboard-x86_64.tar.gz",
             default_selected=False,
         ),
         *native_jobs,
@@ -926,8 +925,8 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
 def _job_arguments(job: Job, preflight: PreflightResult) -> list[str]:
     """Worker arguments a job takes from the pre-flight: the Linux build on GitHub Remote builds the pinned commit."""
     commit = preflight.remote_commit
-    if job.key in {"linux", "linux_mc"}:
-        arguments = ["-Profile", "mc"] if job.key == "linux_mc" else []
+    if job.key in {"linux_screensaver", "linux_dashboard"}:
+        arguments = ["-Profile", "dashboard"] if job.key == "linux_dashboard" else []
         if commit is not None:
             arguments += ["-Branch", str(commit.branch), "-Commit", str(commit.sha)]
         return arguments
@@ -1040,7 +1039,7 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
     from tools import github_remote_build as remote
 
     # The Linux build is a GitHub run too (its worker follows it): the same CLI, sign-in, policy and commit apply.
-    remote_jobs = {job.key for job in jobs if job.kind == "github" or job.key in {"linux", "linux_mc"}}
+    remote_jobs = {job.key for job in jobs if job.kind == "github" or job.key in {"linux_screensaver", "linux_dashboard"}}
     native_keys = {job.key for job in jobs if job.key in remote.MODULE_TARGETS}
     if shutil.which("gh") is None:
         result.errors.append("GitHub Remote: GitHub CLI (gh) not found; winget install GitHub.cli, then gh auth login")
@@ -1218,7 +1217,7 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT, *, iscc_override:
     if mode == "github":
         _github_preflight(result, jobs, repo_root)
 
-    linux_jobs = {job.key for job in jobs if job.key in {"linux", "linux_mc"}}
+    linux_jobs = {job.key for job in jobs if job.key in {"linux_screensaver", "linux_dashboard"}}
     if linux_jobs and shutil.which("gh") is None:
         result.unavailable_jobs.update(linux_jobs)
         result.warnings.append("Linux GitHub builds: GitHub CLI (gh) not found; winget install GitHub.cli")
@@ -1380,7 +1379,7 @@ def helper_input_paths(
         repo_root / "helpers" / "reddit_helper_worker.py",
         repo_root / "core" / "constants" / "timing.py",
         repo_root / "core" / "logging" / "logger.py",
-        repo_root / "core" / "mc.py",
+        repo_root / "core" / "dashboard.py",
         repo_root / "core" / "windows" / "browser_window_routing.py",
         # The magnet admission rule is shared with the saver side.
         repo_root / "core" / "feeds" / "__init__.py",
@@ -1763,7 +1762,7 @@ def run_job(
             log_handle.write(footer.encode("utf-8", errors="replace"))
         if aborted:
             detail = "Aborted by operator"
-            if job.key in {"linux", "linux_mc"}:
+            if job.key in {"linux_screensaver", "linux_dashboard"}:
                 cleanup = _stop_linux_github_run(log_path)
                 if cleanup:
                     detail += f"; {cleanup}"
@@ -2519,8 +2518,8 @@ class BuildRunnerApp:
         tk.Label(
             body,
             text=(
-                "Build Normal or repo-root-venv artifacts using one Python 3.14 toolchain, or build Standard and "
-                "Media Center on GitHub and download them (GitHub Remote). Local workers stay sequential so build "
+                "Build Normal or repo-root-venv artifacts using one Python 3.14 toolchain, or build Screensaver and "
+                "Dashboard on GitHub and download them (GitHub Remote). Local workers stay sequential so build "
                 "products cannot collide. Installer-only selections package the existing canonical release payload."
             ),
             bg=COLORS["root"],
@@ -3375,7 +3374,7 @@ class BuildRunnerApp:
                 results[job.key] = result
                 self._events.put(("job_done", job.key, result))
 
-            for linux_key in ("linux", "linux_mc"):
+            for linux_key in ("linux_screensaver", "linux_dashboard"):
                 if linux_key not in selected or linux_key not in by_key:
                     continue
                 linux_owner = process_owner.dependent()
@@ -3422,7 +3421,7 @@ class BuildRunnerApp:
                     between=local_helper,
                 )
             local_helper()
-            for key in ("standard_installer", "media_center_installer"):
+            for key in ("screensaver_installer", "dashboard_installer"):
                 if key not in selected:
                     continue
                 job = by_key[key]
@@ -3767,8 +3766,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--select",
         nargs="+",
         metavar="JOB",
-        help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer "
-             "linux linux_mc native_module)",
+        help="with --run: job keys (screensaver dashboard reddit_helper screensaver_installer dashboard_installer "
+             "linux_screensaver linux_dashboard native_module)",
     )
     parser.add_argument(
         "--iscc",

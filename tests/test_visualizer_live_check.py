@@ -100,7 +100,7 @@ def test_a_finished_run_keeps_its_settings_and_deletes_the_profile_copy(monkeypa
     code, out = _run_live_check(monkeypatch, tmp_path, 0, report)
     assert code == 0 and seen["profile_during_report"]
     assert not (out / "profile").exists(), "the profile copy outlived the run"
-    mc = json.loads((out / "run_settings_v2_mc.json").read_text())
+    mc = json.loads((out / "run_settings_v2_dashboard.json").read_text())
     assert mc["snapshot"]["widgets"]["spotify_visualizer"]["mode"] == "bubble"
     assert json.loads((out / "run_settings_v2.json").read_text()) == {"shared": True}
 
@@ -109,7 +109,7 @@ def test_a_failed_run_still_deletes_the_profile_copy(monkeypatch, tmp_path):
     outcome, out = _run_live_check(monkeypatch, tmp_path, 1)
     assert isinstance(outcome, RuntimeError) and "Live runner exited 1" in str(outcome)
     assert not (out / "profile").exists(), "a failed run left the profile copy behind"
-    assert (out / "run_settings_v2_mc.json").is_file()
+    assert (out / "run_settings_v2_dashboard.json").is_file()
 
 
 # -- the age chain on the engine-worker path (native core P2 gate 3 preparation) ----------------------------------

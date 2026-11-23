@@ -27,8 +27,8 @@ from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = ROOT / "logs"
-ENTRYPOINTS = {name: ROOT / name for name in ("main_mc.py", "main.py")}
-DEFAULT_ENTRYPOINT = "main_mc.py"
+ENTRYPOINTS = {name: ROOT / name for name in ("main_dashboard.py", "main.py")}
+DEFAULT_ENTRYPOINT = "main_dashboard.py"
 SAFE_FLAGS = {
     "--debug", "-d", "--verbose", "-v", "--perf", "--usage",
     "--handle-attribution", "--viz", "--geo", "--life", "--cache",

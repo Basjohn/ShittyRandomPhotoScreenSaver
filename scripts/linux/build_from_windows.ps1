@@ -5,8 +5,8 @@
 .DESCRIPTION
     The build runs on a GitHub-hosted Ubuntu runner (.github/workflows/linux-build.yml);
     this script triggers it for a pushed branch, follows it, and downloads the
-    resulting profile-specific tarball into -OutDir. -Profile mc builds main_mc.py; the
-    default -Profile screensaver remains unchanged.
+    resulting profile-specific tarball into -OutDir. -Profile dashboard builds main_dashboard.py; the
+    default -Profile screensaver builds main.py.
 
     Requirements: the GitHub CLI (`winget install GitHub.cli`, then `gh auth login`)
     and the branch pushed to GitHub. Nothing is built or virtualised locally.
@@ -34,7 +34,7 @@
 .EXAMPLE
     .\scripts\linux\build_from_windows.ps1 -Branch main -Commit 0123456789abcdef0123456789abcdef01234567
 .EXAMPLE
-    .\scripts\linux\build_from_windows.ps1 -Profile mc
+    .\scripts\linux\build_from_windows.ps1 -Profile dashboard
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +42,7 @@ param(
     [ValidateSet('Auto', 'Dispatch', 'Tag')][string]$Mode = 'Auto',
     [string]$OutDir = '',
     [string]$Commit = '',
-    [ValidateSet('screensaver', 'mc')][string]$Profile = 'screensaver'
+    [ValidateSet('screensaver', 'dashboard')][string]$Profile = 'screensaver'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,38 +86,40 @@ try {
     }
 
     # GitHub Actions builds the pushed commit, not the locally edited files driving this launcher.
-    # In particular an MC-tag against an old Linux workflow silently builds the screensaver,
-    # succeeds, and uploads only srpss-linux. Check both remote-commit owners *before* any push/dispatch.
-    if ($Profile -eq 'mc') {
-        $sourceWorkflow = (& git show "$($remoteSha):.github/workflows/linux-build.yml" 2>$null | Out-String)
-        $workflowReadExit = $LASTEXITCODE
-        $sourceBuilder = (& git show "$($remoteSha):tools/linux_build.py" 2>$null | Out-String)
-        $builderReadExit = $LASTEXITCODE
-        $hasMcWorkflow = ($workflowReadExit -eq 0 -and
-            $sourceWorkflow.Contains('refs/tags/linux-build/mc-') -and
-            $sourceWorkflow.Contains('--profile "$BUILD_PROFILE"') -and
-            $sourceWorkflow.Contains('srpss-linux-mc'))
-        $hasMcBuilder = ($builderReadExit -eq 0 -and
-            $sourceBuilder.Contains('main_mc.py') -and
-            $sourceBuilder.Contains('--profile') -and
-            $sourceBuilder.Contains('PROFILES'))
-        if (-not $hasMcWorkflow -or -not $hasMcBuilder) {
-            throw "[LINUX-BUILD] MC unavailable at pushed commit $remoteSha (branch $Branch): the GitHub workflow or Linux Nuitka builder there lacks MC support. Commit and push the Linux MC implementation, then rerun GitHub Remote against the NEW pushed SHA. A temporary tag cannot turn the old screensaver workflow into an MC build. No workflow was started."
-        }
-        Write-Host "[LINUX-BUILD] Pinned GitHub commit has the MC-capable workflow and builder: $remoteSha"
+    # An older workflow can accept a build tag and publish an artifact with obsolete product naming.
+    # Verify the pinned workflow and builder before pushing a tag or dispatching a run.
+    $artifact = if ($Profile -eq 'dashboard') { 'srpss-linux-dashboard' } else { 'srpss-linux-screensaver' }
+    $pattern = if ($Profile -eq 'dashboard') { 'SRPSS-*-linux-dashboard-x86_64.tar.gz' } else { 'SRPSS-*-linux-screensaver-x86_64.tar.gz' }
+    $entrypoint = if ($Profile -eq 'dashboard') { 'main_dashboard.py' } else { 'main.py' }
+    $sourceWorkflow = (& git show "$($remoteSha):.github/workflows/linux-build.yml" 2>$null | Out-String)
+    $workflowReadExit = $LASTEXITCODE
+    $sourceBuilder = (& git show "$($remoteSha):tools/linux_build.py" 2>$null | Out-String)
+    $builderReadExit = $LASTEXITCODE
+    $hasProductWorkflow = ($workflowReadExit -eq 0 -and
+        $sourceWorkflow.Contains('refs/tags/linux-build/dashboard-') -and
+        $sourceWorkflow.Contains('--profile "$BUILD_PROFILE"') -and
+        $sourceWorkflow.Contains($artifact) -and $sourceWorkflow.Contains($pattern))
+    $hasProductBuilder = ($builderReadExit -eq 0 -and
+        $sourceBuilder.Contains($entrypoint) -and
+        $sourceBuilder.Contains("srpss-$Profile") -and
+        $sourceBuilder.Contains('--profile') -and
+        $sourceBuilder.Contains('PROFILES'))
+    if (-not $hasProductWorkflow -or -not $hasProductBuilder) {
+        throw "[LINUX-BUILD] Product '$Profile' unavailable at pushed commit $remoteSha (branch $Branch). Push the updated Linux workflow and builder, then rerun against that commit. No workflow was started."
     }
+    Write-Host "[LINUX-BUILD] Pinned GitHub commit has the $Profile workflow and builder: $remoteSha"
 
     if ($Mode -eq 'Auto') {
         & gh workflow view $Workflow *> $null
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "[LINUX-BUILD] $Workflow is not registered on the default branch yet; using a temporary linux-build/* tag."
             $Mode = 'Tag'
-        } elseif ($Profile -eq 'mc') {
+        } elseif ($Profile -eq 'dashboard') {
             # GitHub's workflow_dispatch input contract is versioned by the workflow already on the default branch.
-            # Until MC's input is merged, tag the pinned SHA so the branch's workflow can build MC on its own.
+            # Until Dashboard's input is merged, tag the pinned SHA so the branch's workflow can build Dashboard on its own.
             $defaultWorkflow = (& git show 'origin/main:.github/workflows/linux-build.yml' 2>$null | Out-String)
-            if ($LASTEXITCODE -ne 0 -or $defaultWorkflow -notmatch '(?m)^\s+profile:\s*$') {
-                Write-Host '[LINUX-BUILD] Default workflow has no MC input yet; using the profile-specific tag route.'
+            if ($LASTEXITCODE -ne 0 -or $defaultWorkflow -notmatch '(?m)^[ \t]+- dashboard[ \t]*\r?$') {
+                Write-Host '[LINUX-BUILD] Default workflow has no dashboard profile yet; using the profile-specific tag route.'
                 $Mode = 'Tag'
             } else {
                 $Mode = 'Dispatch'
@@ -133,11 +135,11 @@ try {
     if ($Mode -eq 'Dispatch') {
         $dispatchArgs = @('workflow', 'run', $Workflow, '--ref', $Branch)
         if ($Commit) {
-            # Pinned, uniquely identified dispatch: no ambiguity when Standard and MC build concurrently.
+            # Pinned, uniquely identified dispatch: no ambiguity when Screensaver and Dashboard build concurrently.
             $token = 'srpss-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Profile
             $dispatchArgs += @('-f', "commit=$remoteSha", '-f', "token=$token")
         }
-        if ($Profile -eq 'mc') { $dispatchArgs += @('-f', 'profile=mc') }
+        if ($Profile -eq 'dashboard') { $dispatchArgs += @('-f', 'profile=dashboard') }
         if ($token) {
             Write-Host "[LINUX-BUILD] Dispatching $Workflow on $Branch at $remoteSha (run token $token)"
         } else {
@@ -146,9 +148,9 @@ try {
         Invoke-Checked gh $dispatchArgs | Out-Null
         $runEvent = 'workflow_dispatch'
     } else {
-        # Existing linux-build/* trigger also accepts mc- prefixed tag names, including before workflow merge.
+        # Existing linux-build/* trigger also accepts dashboard- prefixed tag names, including before workflow merge.
         $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 6)
-        $tag = 'linux-build/' + $(if ($Profile -eq 'mc') { 'mc-' } else { '' }) + $stamp
+        $tag = 'linux-build/' + $(if ($Profile -eq 'dashboard') { 'dashboard-' } else { '' }) + $stamp
         Write-Host "[LINUX-BUILD] Pushing temporary tag $tag at origin/$Branch ($remoteSha)"
         Invoke-Checked git @('push', 'origin', "$($remoteSha):refs/tags/$tag") | Out-Null
         $runEvent = 'push'
@@ -179,8 +181,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Linux build run $runId failed: gh run view $runId --log-failed" }
 
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    $artifact = if ($Profile -eq 'mc') { 'srpss-linux-mc' } else { 'srpss-linux' }
-    $pattern = if ($Profile -eq 'mc') { 'SRPSS-*-linux-mc-x86_64.tar.gz' } else { 'SRPSS-*-linux-x86_64.tar.gz' }
     $staging = Join-Path $OutDir ('.linux-download-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
     try {

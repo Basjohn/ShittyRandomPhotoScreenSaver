@@ -24,7 +24,7 @@ class TestCleanQueueFlow:
 
         manager._thread_manager = _ImmediateThreadManager()
 
-        monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
+        monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: True)
 
         open_calls: list[str] = []
 
@@ -57,7 +57,7 @@ class TestCleanQueueFlow:
         manager = DisplayManager()
         manager._deferred_reddit_urls = ["https://example.com/scr-flush"]
 
-        monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+        monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
 
         class _Bridge:
             def __init__(self) -> None:
@@ -104,7 +104,7 @@ class TestCleanQueueFlow:
         manager = DisplayManager()
         manager._deferred_reddit_urls = ["https://example.com/lost"]
 
-        monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+        monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: False)
         monkeypatch.setattr(
             display_manager_module,
             "reddit_helper_bridge",
@@ -126,7 +126,7 @@ class TestCleanQueueFlow:
         manager._deferred_reddit_urls = []
 
         called = []
-        monkeypatch.setattr("core.mc.is_mc_build", lambda: (called.append(1) or True))
+        monkeypatch.setattr("core.dashboard.is_dashboard_build", lambda: (called.append(1) or True))
 
         manager.flush_deferred_reddit_urls()
 

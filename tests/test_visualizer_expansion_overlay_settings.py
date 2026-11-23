@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE, require_canonical_default
+from core.settings.default_contract import DASHBOARD_PROFILE, NORMAL_PROFILE, require_canonical_default
 from core.settings.defaults import get_default_settings
 from core.settings.fullscreen_overlays import (
     LEGACY_ARTWORK_FACTOR_KEYS,
@@ -89,7 +89,7 @@ def _manager(root: Path) -> SettingsManager:
 # ------------------------------------------------------------------------------------- schema and normaliser
 
 
-@pytest.mark.parametrize("profile", [NORMAL_PROFILE, MC_PROFILE])
+@pytest.mark.parametrize("profile", [NORMAL_PROFILE, DASHBOARD_PROFILE])
 def test_canonical_default_has_the_schema_every_consumer_reads(profile):
     value = require_canonical_default(FULLSCREEN_OVERLAYS_KEY, profile)
     assert isinstance(value["font_family"], str) and value["font_family"].strip()

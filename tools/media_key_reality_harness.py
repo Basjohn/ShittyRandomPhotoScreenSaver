@@ -343,7 +343,7 @@ def _write_report(path: Path, payload: Dict[str, Any]) -> None:
     lines.append(f"- Timestamp: `{payload['timestamp']}`")
     lines.append(f"- Scenario: `{payload['scenario']}`")
     lines.append(f"- Profile mode: `{payload['profile_mode']}`")
-    lines.append(f"- MC window flags: `{payload.get('mc_window_flags', 'default')}`")
+    lines.append(f"- MC window flags: `{payload.get('dashboard_window_flags', 'default')}`")
     lines.append(f"- Observe seconds: `{payload['observe_seconds']}`")
     lines.append(f"- Runtime contract pass: `{bool((payload.get('runtime_contract') or {}).get('passed'))}`")
     lines.append(f"- Focus OK: `{bool(payload.get('focus_ok'))}`")
@@ -407,7 +407,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
     prep: Dict[str, Any] = {}
 
     try:
-        proc, launch_io_handles = _launch_runtime("mc", appdata_root, log_dir, args.mc_window_flags)
+        proc, launch_io_handles = _launch_runtime("dashboard", appdata_root, log_dir, args.dashboard_window_flags)
         target_pid = int(proc.pid)
         target_window = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target_window is None:
@@ -488,7 +488,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
             "profile_mode": args.profile_mode,
             "profile_status": profile_status,
             "focus_policy": args.focus_policy,
-            "mc_window_flags": args.mc_window_flags,
+            "dashboard_window_flags": args.dashboard_window_flags,
             "observe_seconds": args.observe_seconds,
             "target_pid": target_pid,
             "target_hwnd": target_window.hwnd,
@@ -502,7 +502,7 @@ def run_reality_harness(args: argparse.Namespace) -> Dict[str, Any]:
                 for key, value in prep.items()
                 if key not in {"helper_proc", "_helper_proc", "minimized_hwnds"}
             },
-            "runtime_contract": _evaluate_runtime_contract("mc", target_window, log_file),
+            "runtime_contract": _evaluate_runtime_contract("dashboard", target_window, log_file),
             "log_file": str(log_file),
             "verbose_log_file": str(verbose_log_file) if verbose_log_file is not None else None,
             "output_dir": str(out_dir),
@@ -554,7 +554,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="MC physical-key reality harness for U-05.")
     parser.add_argument("--profile-mode", choices=("isolated", "live", "mirrored"), default="mirrored")
     parser.add_argument("--focus-policy", choices=("strict", "realistic"), default="realistic")
-    parser.add_argument("--mc-window-flags", choices=("default", "splash"), default="default")
+    parser.add_argument("--dashboard-window-flags", choices=("default", "splash"), default="default")
     parser.add_argument(
         "--scenario",
         choices=("focused_idle", "focused_clicked", "manual_focus", "focus_transition"),

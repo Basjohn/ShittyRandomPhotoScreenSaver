@@ -14,11 +14,11 @@ class RecoveryCli(FakeCli):
     recover_run = remote.GitHubCli.recover_run
 
     def __init__(self, artifacts, sha, *, visible=True):
-        super().__init__(artifacts, {"standard": [RUNNING, SUCCESS]})
-        self.ids = {f"standard-{TOKEN}": 142}
+        super().__init__(artifacts, {"screensaver": [RUNNING, SUCCESS]})
+        self.ids = {f"screensaver-{TOKEN}": 142}
         self.visible, self.lookups = visible, []
         self.identity = dict(id=142, path=f".github/workflows/{remote.WORKFLOW_FILE}", event="workflow_dispatch",
-                             head_sha=sha, display_title=f"SRPSS standard (standard-{TOKEN})", html_url="url")
+                             head_sha=sha, display_title=f"SRPSS screensaver (screensaver-{TOKEN})", html_url="url")
 
     def dispatch(self, *_):
         raise AssertionError("recovery must never dispatch")
@@ -40,7 +40,7 @@ def recover(tmp_path, monkeypatch, cli, release, *, run_id=None):
     def no_preflight(*_a, **_k):
         raise AssertionError("explicit recovery must not fetch or resolve today's pushed tip")
     monkeypatch.setattr(remote, "resolve_pushed_commit", no_preflight)
-    return remote.run_remote_builds(root, cli, ("standard",), remote.PushedCommit("", sha, "recover", "f" * 40),
+    return remote.run_remote_builds(root, cli, ("screensaver",), remote.PushedCommit("", sha, "recover", "f" * 40),
                                     TOKEN, log_dir=tmp_path / "logs", release_dir=release, cancelled=lambda: False,
                                     emit=lambda *_: None, recover=True, recovery_run_id=run_id,
                                     poll_seconds=0, sleep=lambda _: None)
@@ -55,15 +55,15 @@ def test_late_visibility_reuses_original_run_and_appends_log(tmp_path, monkeypat
     logs.mkdir()
     log = logs / f"build_runner_standard_{TOKEN}.log"
     log.write_text("original dispatch receipt\n", encoding="utf-8")
-    pending = recover(tmp_path, monkeypatch, cli, release)["standard"]
+    pending = recover(tmp_path, monkeypatch, cli, release)["screensaver"]
     assert not pending.ok and "visibility pending" in pending.detail.lower()
     assert f"--commit {sha} --token {TOKEN}" in pending.detail
     assert len(cli.lookups) == 1 and not cli.downloads
     cli.visible = True
-    completed = recover(tmp_path, monkeypatch, cli, release)["standard"]
-    assert completed.ok and cli.downloads == ["standard"]
+    completed = recover(tmp_path, monkeypatch, cli, release)["screensaver"]
+    assert completed.ok and cli.downloads == ["screensaver"]
     assert log.read_text(encoding="utf-8").startswith("original dispatch receipt\n")
-    assert (release / "screensaver/SRPSS.scr").read_bytes() == b"standard-new"
+    assert (release / "screensaver/SRPSS_Screensaver.scr").read_bytes() == b"screensaver-new"
     assert not cli.dispatched
 
 
@@ -74,7 +74,7 @@ def test_known_run_must_match_exact_identity_before_monitor_or_download(tmp_path
     artifacts = _artifacts(tmp_path)
     cli = RecoveryCli(artifacts, _git(tmp_path / "repo", "rev-parse", "HEAD"))
     cli.identity[field] = value
-    result = recover(tmp_path, monkeypatch, cli, _release_with_previous(tmp_path), run_id=142)["standard"]
+    result = recover(tmp_path, monkeypatch, cli, _release_with_previous(tmp_path), run_id=142)["screensaver"]
     assert not result.ok and "identity mismatch" in result.detail
     assert not cli.downloads and not cli.dispatched
     assert all(call[0] == "api" for call in cli.lookups)
@@ -83,33 +83,33 @@ def test_known_run_must_match_exact_identity_before_monitor_or_download(tmp_path
 @pytest.mark.parametrize("field,value", (("commit", "e" * 40), ("token", "20260101_000000_000001")))
 def test_recovered_artifact_uses_canonical_commit_and_token_validation(tmp_path, monkeypatch, field, value):
     artifacts = _artifacts(tmp_path)
-    path = artifacts["standard"] / remote.MANIFEST_NAME
+    path = artifacts["screensaver"] / remote.MANIFEST_NAME
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest[field] = value
     path.write_text(json.dumps(manifest), encoding="utf-8")
     cli = RecoveryCli(artifacts, _git(tmp_path / "repo", "rev-parse", "HEAD"))
     release = _release_with_previous(tmp_path)
-    result = recover(tmp_path, monkeypatch, cli, release, run_id=142)["standard"]
+    result = recover(tmp_path, monkeypatch, cli, release, run_id=142)["screensaver"]
     assert not result.ok and "Retrieval failed" in result.detail
     assert (release / "screensaver/previous.txt").read_text(encoding="utf-8") == "screensaver"
-    assert not (release / "screensaver/SRPSS.scr").exists()
-    assert cli.downloads == ["standard"] and not cli.dispatched
+    assert not (release / "screensaver/SRPSS_Screensaver.scr").exists()
+    assert cli.downloads == ["screensaver"] and not cli.dispatched
 
 
 def test_recovery_does_not_accept_legacy_substring_identity():
     sha = "c" * 40
-    listed = [dict(databaseId=142, displayTitle=f"unrelated (standard-{TOKEN}) suffix", url="url")]
+    listed = [dict(databaseId=142, displayTitle=f"unrelated (screensaver-{TOKEN}) suffix", url="url")]
     cli = remote.GitHubCli(run=lambda args, timeout: subprocess.CompletedProcess(args, 0, json.dumps(listed), ""))
-    assert cli.find_run(f"standard-{TOKEN}") == (142, "url")  # observed legacy discovery accepts the substring
-    assert cli.recover_run("standard", sha, TOKEN) is None
+    assert cli.find_run(f"screensaver-{TOKEN}") == (142, "url")  # observed legacy discovery accepts the substring
+    assert cli.recover_run("screensaver", sha, TOKEN) is None
 
 
 def test_recovery_rejects_ambiguous_exact_titles():
-    title = f"SRPSS standard (standard-{TOKEN})"
+    title = f"SRPSS screensaver (screensaver-{TOKEN})"
     listed = [dict(databaseId=run_id, displayTitle=title) for run_id in (142, 143)]
     cli = remote.GitHubCli(run=lambda args, timeout: subprocess.CompletedProcess(args, 0, json.dumps(listed), ""))
     with pytest.raises(remote.RemoteBuildError, match="ambiguous"):
-        cli.recover_run("standard", "c" * 40, TOKEN)
+        cli.recover_run("screensaver", "c" * 40, TOKEN)
 
 
 def test_native_recovery_requires_its_source_workflow_and_exact_title():
@@ -132,7 +132,7 @@ def test_recovery_cli_preserves_original_identity_without_new_preflight_or_token
     monkeypatch.setattr(remote.signal, "signal", lambda *_: None)
     def run(root, cli, keys, commit, token, **kwargs):
         calls.append((keys, commit.sha, token, kwargs["recover"], kwargs["recovery_run_id"]))
-        return {"standard": SimpleNamespace(ok=True)}
+        return {"screensaver": SimpleNamespace(ok=True)}
     monkeypatch.setattr(remote, "run_remote_builds", run)
-    assert remote.main(["recover", "--target", "standard", "--commit", sha, "--token", TOKEN, "--run-id", "142"]) == 0
-    assert calls == [(("standard",), sha, TOKEN, True, 142)]
+    assert remote.main(["recover", "--target", "screensaver", "--commit", sha, "--token", TOKEN, "--run-id", "142"]) == 0
+    assert calls == [(("screensaver",), sha, TOKEN, True, 142)]

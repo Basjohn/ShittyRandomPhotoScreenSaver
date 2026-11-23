@@ -793,12 +793,12 @@ def main(argv: list[str] | None = None) -> int:
     p_auto.add_argument("--condition", required=True, choices=["A", "B", "C"])
     p_auto.add_argument(
         "--run-cmd",
-        default="python main_mc.py --usage --viz --perf --life",
+        default="python main_dashboard.py --usage --viz --perf --life",
         help=(
             "canonical RUN launch command as ONE quoted string; parsing is "
             "platform-aware so native Windows backslash paths remain intact. "
             "--abc-drive=<condition> and --abc-layout-slot=<slot> are appended. "
-            "main_mc.py injects RUN mode when no explicit screensaver mode is "
+            "main_dashboard.py injects RUN mode when no explicit screensaver mode is "
             "supplied; frozen .scr builds still need their normal '/s'. Default "
             "targets the MC build and includes retained lifecycle detail."
         ),

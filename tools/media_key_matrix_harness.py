@@ -13,7 +13,7 @@ It automates:
 5) JSON + Markdown report output.
 
 Usage examples:
-  python tools/media_key_matrix_harness.py --launch mc
+  python tools/media_key_matrix_harness.py --launch dashboard
   python tools/media_key_matrix_harness.py --launch run
   python tools/media_key_matrix_harness.py --launch none --pid 12345
 """
@@ -520,7 +520,7 @@ def _seed_profile_settings(appdata_root: Path, image_dir: Path) -> None:
     prev_appdata = os.environ.get("APPDATA")
     try:
         os.environ["APPDATA"] = str(appdata_root)
-        mc = SettingsManager(application="Screensaver_MC")
+        mc = SettingsManager(application="Dashboard")
         mc.set("sources.folders", [str(image_dir)])
         mc.set("sources.rss_feeds", [])
         mc.set("input.hard_exit", True)
@@ -544,7 +544,7 @@ def _apply_harness_safety_settings(appdata_root: Path) -> None:
     prev_appdata = os.environ.get("APPDATA")
     try:
         os.environ["APPDATA"] = str(appdata_root)
-        for app in ("Screensaver_MC", "Screensaver"):
+        for app in ("Dashboard", "Screensaver"):
             sm = SettingsManager(application=app)
             sm.set("widgets.reddit.enabled", False)
             sm.set("widgets.reddit.exit_on_click", False)
@@ -601,7 +601,7 @@ def _launch_runtime(
     launch: str,
     appdata_root: Optional[Path],
     log_dir: Path,
-    mc_window_flags: str = "default",
+    dashboard_window_flags: str = "default",
 ) -> tuple[subprocess.Popen[str], List[Any]]:
     # Child-process isolation only: the product learns its log root and window role from
     # command-line arguments, never from SRPSS_* environment variables.
@@ -610,10 +610,10 @@ def _launch_runtime(
         env["APPDATA"] = str(appdata_root)
 
     redirect = [f"--log-dir={log_dir}"]
-    if mc_window_flags != "default":
-        redirect.append(f"--mc-window-flags={mc_window_flags}")
-    if launch == "mc":
-        cmd = [sys.executable, "main_mc.py", "--debug", *redirect, "/s"]
+    if dashboard_window_flags != "default":
+        redirect.append(f"--dashboard-window-flags={dashboard_window_flags}")
+    if launch == "dashboard":
+        cmd = [sys.executable, "main_dashboard.py", "--debug", *redirect, "/s"]
     elif launch == "run":
         cmd = [sys.executable, "main.py", "--debug", *redirect, "/s"]
     else:
@@ -1070,7 +1070,7 @@ def _evaluate_runtime_contract(launch: str, target_window: WindowInfo, log_file:
         if not condition:
             missing.append(name)
 
-    if launch == "mc":
+    if launch == "dashboard":
         _must("target class indicates Qt Tool/Splash MC window", "Tool" in target_window.klass or "Splash" in target_window.klass)
         _must("log has MC window flag mode", "[DISPLAY_WIDGET] MC window flag mode=" in log_text)
         _must("log has display widget creation", "DisplayWidget created for screen" in log_text)
@@ -1270,8 +1270,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Media/input matrix harness for U-05.")
     parser.add_argument(
         "--launch",
-        choices=("mc", "run", "none"),
-        default="mc",
+        choices=("dashboard", "run", "none"),
+        default="dashboard",
         help="Launch runtime variant or attach to existing pid.",
     )
     parser.add_argument(

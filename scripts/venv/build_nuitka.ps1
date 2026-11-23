@@ -1,5 +1,5 @@
 <# 
-Experimental venv build script for standard SRPSS onefile/SCR build.
+Experimental venv build script for screensaver SRPSS onefile/SCR build.
 
 Intended location:
   scripts\venv\build_nuitka.ps1
@@ -17,7 +17,7 @@ Does not touch the legacy scripts in:
 [CmdletBinding()]
 param(
     [string]$EntryPoint = "main.py",
-    [string]$AppName = "SRPSS",
+    [string]$AppName = "SRPSS_Screensaver",
     [switch]$Console,
     [switch]$KeepExe,
     [switch]$ReinstallVenvDeps,
@@ -34,11 +34,11 @@ param(
     [string]$OnefileCacheName = "onefile",
     [string]$ProductNameOverride = "",
     [string]$DescriptionOverride = "",
-    # The Standard build also publishes its binary as release\diagnostic\SRPSS_Diagnostic.scr:
+    # The Screensaver build also publishes its binary as release\diagnostic\SRPSS_Screensaver_Diagnostic.scr:
     # the runtime selects the diagnostic flavour from that file name (core/build_profile.py),
     # so the diagnostic artifact needs no second compile.
     [ValidatePattern('^[A-Za-z0-9_]*$')]
-    [string]$DiagnosticArtifactName = "SRPSS_Diagnostic",
+    [string]$DiagnosticArtifactName = "SRPSS_Screensaver_Diagnostic",
     [ValidatePattern('^[a-z0-9_-]+$')]
     [string]$DiagnosticDistributionName = "diagnostic"
 )
@@ -357,7 +357,7 @@ $EntryPath = Join-Path $Root $EntryPoint
 if (-not (Test-Path $EntryPath)) { throw "Entry point not found: $EntryPath" }
 
 if ($Console) {
-    if ($AppName -eq "SRPSS") { $AppName = "SRPSS_debug" }
+    if ($AppName -eq "SRPSS_Screensaver") { $AppName = "SRPSS_Screensaver_debug" }
 }
 
 $consoleArg = "--windows-console-mode=disable"

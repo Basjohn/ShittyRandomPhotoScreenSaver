@@ -13,12 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 PRODUCT_WORKERS = (
     ROOT / "scripts" / "build_nuitka.ps1",
     ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-    ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
-    ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    ROOT / "scripts" / "build_nuitka_dashboard_onedir.ps1",
+    ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
 )
 CANONICAL_PRODUCT_WORKERS = (
     ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-    ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
 )
 
 
@@ -43,7 +43,7 @@ def test_every_product_nuitka_worker_packages_the_quick_qml_contract():
 
     for old_name, worker_name in (
         ("build_nuitka.ps1", "build_nuitka.ps1"),
-        ("build_nuitka_mc_onedir.ps1", "build_nuitka_mc_onedir.ps1"),
+        ("build_nuitka_dashboard_onedir.ps1", "build_nuitka_dashboard_onedir.ps1"),
     ):
         wrapper = (ROOT / "scripts" / old_name).read_text(encoding="utf-8")
         assert f"'venv\\{worker_name}'" in wrapper
@@ -86,7 +86,7 @@ def test_build_runner_dispatches_every_qml_aware_product_worker():
         job.script
         for mode in ("normal", "venv")
         for job in build_runner.jobs_for_mode(mode, ROOT)
-        if job.key in {"standard", "media_center"}
+        if job.key in {"screensaver", "dashboard"}
     }
 
     assert dispatched == set(PRODUCT_WORKERS)

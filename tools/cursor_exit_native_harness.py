@@ -26,7 +26,7 @@ Exit paths (``--path``; ``all`` runs each once):
 * ``click_blank`` non-interaction mode, left press exit while Qt's press capture is held (blank cursor).
 * ``move_blank`` non-interaction mode, motion beyond the exit threshold.
 * ``stay_hand`` / ``stay_halo``  the runtime retires but the process keeps running (Settings open, Edit exit,
-                 Media Center exit: ``engine_lifecycle.stop(exit_app=False)`` retires the generation the same way).
+                 Dashboard exit: ``engine_lifecycle.stop(exit_app=False)`` retires the generation the same way).
 
 Every path ends in the production retire sequence (``DisplayManager.cleanup``'s ``quiesce()`` then ``retire()``:
 ``QuickDisplayRuntime.quiesce_for_runtime_pause()`` then ``close_runtime()``); process-exit paths then quit the

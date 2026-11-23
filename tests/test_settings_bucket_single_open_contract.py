@@ -98,7 +98,7 @@ def test_runtime_store_default_projection_omits_sparse_bucket_maps() -> None:
     )
     for state_map_name in sparse_maps:
         assert state_map_name in canonical_ui
-    for profile in ("Screensaver", "Screensaver_MC"):
+    for profile in ("Screensaver", "Dashboard"):
         runtime_ui = get_flat_defaults(profile)["ui"]
         for state_map_name in sparse_maps:
             assert state_map_name not in runtime_ui

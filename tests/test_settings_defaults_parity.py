@@ -9,7 +9,7 @@ import pytest
 
 from core.settings.defaults import (
     CANONICAL_DEFAULTS,
-    MC_PROFILE,
+    DASHBOARD_PROFILE,
     NORMAL_PROFILE,
     PRESERVE_ON_RESET,
     get_default_settings,
@@ -103,7 +103,7 @@ class TestDefaultsArtifactParity:
     # generated-vs-canonical parity check no longer has two authorities to compare.
     # The snapshot-vs-builder tests below are the current single-authority parity.
 
-    @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
+    @pytest.mark.parametrize("application", [NORMAL_PROFILE, DASHBOARD_PROFILE])
     def test_profile_snapshot_builder_uses_selected_canonical_defaults(self, application: str):
         snapshot = build_defaults_snapshot(application)
         canonical = get_default_settings(application)

@@ -94,7 +94,7 @@ def test_nuitka_builds_include_binary_qrc_packs():
     """Normal and MC builds ship binary immutable-resource packs as data."""
     scripts = (
         ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
 
     for script in scripts:
@@ -108,7 +108,7 @@ def test_nuitka_builds_include_ui_tabs_package_for_descriptor_loaded_sections():
     """Frozen builds must include dynamically imported WidgetsTab section modules."""
     scripts = (
         ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
 
     for script in scripts:
@@ -120,7 +120,7 @@ def test_builds_package_gmail_notification_sound_and_qt_multimedia():
     """Frozen builds need the default sound file and Qt multimedia plugins."""
     scripts = (
         ROOT / "scripts" / "venv" / "build_nuitka.ps1",
-        ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+        ROOT / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
     )
 
     for script in scripts:
@@ -135,8 +135,8 @@ def test_builds_package_gmail_notification_sound_and_qt_multimedia():
 def test_installers_ship_default_gmail_notification_sound_to_programdata():
     """Both installers should place the default OGG in the shared ProgramData sound folder."""
     scripts = (
-        ROOT / "scripts" / "SRPSS_Installer.iss",
-        ROOT / "scripts" / "SRPSS_MediaCenter_Installer.iss",
+        ROOT / "scripts" / "SRPSS_Screensaver_Installer.iss",
+        ROOT / "scripts" / "SRPSS_Dashboard_Installer.iss",
     )
 
     for script in scripts:

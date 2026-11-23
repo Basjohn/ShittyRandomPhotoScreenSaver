@@ -24,7 +24,7 @@ _SOURCE_SUFFIXES = frozenset({
     ".geom", ".glsl", ".png", ".svg", ".jpg", ".jpeg", ".webp",
     ".ogg", ".mp3", ".ico", ".ttf", ".otf", ".wav", ".xml",
 })
-_ROOT_SOURCES = ("main.py", "main_mc.py", "main_diagnostic.py", "versioning.py", "SRPSS.ico")
+_ROOT_SOURCES = ("main.py", "main_dashboard.py", "main_diagnostic.py", "versioning.py", "SRPSS.ico")
 _REQUIRED_MODULES = frozenset({
     "rendering.quick.context_menu",
     "engine.display_manager",
@@ -59,7 +59,7 @@ def _tracked_sources(root: Path) -> list[Path]:
         p for p in (
             root / "requirements.txt",
             root / "scripts" / "venv" / "build_nuitka.ps1",
-            root / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+            root / "scripts" / "venv" / "build_nuitka_dashboard_onedir.ps1",
             root / "tools" / "build_layout.ps1",
             root / "tools" / "frozen_build_audit.py",
             root / "tools" / "nuitka_worker_qt_plugin.py",

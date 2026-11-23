@@ -62,7 +62,7 @@ def test_a_shipped_clip_decodes_to_valid_native_frames():
 
 def test_both_product_builds_package_the_clips_and_the_studio_shell():
     """Plain data files by path (never the Qt .rcc Settings registers), in both product workers and every gate."""
-    for script in ("build_nuitka.ps1", "build_nuitka_mc_onedir.ps1"):
+    for script in ("build_nuitka.ps1", "build_nuitka_dashboard_onedir.ps1"):
         source = (ROOT / "scripts" / "venv" / script).read_text(encoding="utf-8")
         assert "--include-data-dir=assets/production/studio_clips=assets/production/studio_clips" in source
         assert "--include-data-dir=ui/studio/qml=ui/studio/qml" in source

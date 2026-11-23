@@ -679,8 +679,8 @@ def diff(a: dict[str, Any], b: dict[str, Any], *, top: int = 30) -> str:
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_SAVER_SCRIPTS = ("main.py", "main_mc.py", "main_diagnostic.py")
-_SAVER_EXES = ("srpss.exe", "srpss_diagnostic.exe", "srpss_media_center.exe")
+_SAVER_SCRIPTS = ("main.py", "main_dashboard.py", "main_diagnostic.py")
+_SAVER_EXES = ("srpss_screensaver.exe", "srpss_screensaver_diagnostic.exe", "srpss_dashboard.exe")
 
 
 def _is_srpss_saver(proc: Any) -> bool:

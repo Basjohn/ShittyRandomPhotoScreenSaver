@@ -1546,13 +1546,13 @@ def test_checked_in_appdata_fixture_uses_modern_visualizer_schema():
     assert not retired, f"tests_tmp_appdata fixture still carries retired visualizer keys: {retired}"
 
 
-def test_release_media_center_curated_tree_matches_source_when_complete():
+def test_release_dashboard_curated_tree_matches_source_when_complete():
     root = Path(__file__).resolve().parents[1]
     source_root = root / "presets" / "visualizer_modes"
-    release_root = root / "release" / "media_center" / "presets" / "visualizer_modes"
+    release_root = root / "release" / "dashboard" / "presets" / "visualizer_modes"
 
     if not release_root.exists():
-        pytest.skip("release/media_center preset tree not present in this checkout")
+        pytest.skip("release/dashboard preset tree not present in this checkout")
 
     source_files = sorted(
         path.relative_to(source_root).as_posix()
@@ -1565,7 +1565,7 @@ def test_release_media_center_curated_tree_matches_source_when_complete():
 
     if release_files != source_files:
         pytest.skip(
-            "ignored release/media_center output is stale or incomplete; "
+            "ignored release/dashboard output is stale or incomplete; "
             "the build/package validation owns regenerating and verifying it"
         )
 
@@ -1578,7 +1578,7 @@ def test_release_media_center_curated_tree_matches_source_when_complete():
 
     if mismatched:
         pytest.skip(
-            "ignored release/media_center output contains stale preset payloads: "
+            "ignored release/dashboard output contains stale preset payloads: "
             f"{mismatched}; packaging validation must rebuild/check this output"
         )
 

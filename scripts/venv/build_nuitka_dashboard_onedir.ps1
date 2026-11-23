@@ -1,8 +1,8 @@
 <# 
-Experimental venv build script for SRPSS Media Center one-dir build.
+Experimental venv build script for SRPSS Dashboard one-dir build.
 
 Intended location:
-  scripts\venv\build_nuitka_mc_onedir.ps1
+  scripts\venv\build_nuitka_dashboard_onedir.ps1
 
 Creates/reuses:
   .venv (repo root)
@@ -11,13 +11,13 @@ Uses repo-root:
   requirements.txt
 
 Does not touch the legacy scripts in:
-  scripts\build_nuitka_mc_onedir.ps1
+  scripts\build_nuitka_dashboard_onedir.ps1
 #>
 
 [CmdletBinding()]
 param(
-    [string]$EntryPoint = "main_mc.py",
-    [string]$AppName = "SRPSS_Media_Center",
+    [string]$EntryPoint = "main_dashboard.py",
+    [string]$AppName = "SRPSS_Dashboard",
     [switch]$Console,
     [switch]$ReinstallVenvDeps,
     [ValidateSet("normal", "venv")]
@@ -187,10 +187,10 @@ $VenvDir = Join-Path $Root '.venv'
 $VenvPython = Ensure-ProjectVenv -RepoRoot $Root -ForceReinstallDeps:$ReinstallVenvDeps
 
 $BuildRoot = Join-Path $Root 'build'
-$BuildDir = Join-Path $BuildRoot ("{0}\media_center" -f $BuildWorkspace)
+$BuildDir = Join-Path $BuildRoot ("{0}\dashboard" -f $BuildWorkspace)
 $BuildOutputDir = Join-Path $BuildDir 'output'
 $ReleaseRoot = Join-Path $Root 'release'
-$DistributionDir = Join-Path $ReleaseRoot 'media_center'
+$DistributionDir = Join-Path $ReleaseRoot 'dashboard'
 $LogDir = Join-Path $Root 'logs'
 $BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 # Build Runner passes the same run ID to the worker, its reports and the
@@ -200,9 +200,9 @@ $Timestamp = if ($env:SRPSS_BUILD_RUN_ID -match '^\d{8}_\d{6}_\d{6}$') {
 } else {
     Get-Date -Format "yyyyMMdd_HHmmss_ffffff"
 }
-$LogFile = Join-Path $LogDir ("build_nuitka_mc_onedir_{0}.log" -f $Timestamp)
-$NuitkaReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_report_{0}.xml" -f $Timestamp)
-$FootprintReportFile = Join-Path $LogDir ("build_nuitka_mc_onedir_footprint_{0}.json" -f $Timestamp)
+$LogFile = Join-Path $LogDir ("build_nuitka_dashboard_onedir_{0}.log" -f $Timestamp)
+$NuitkaReportFile = Join-Path $LogDir ("build_nuitka_dashboard_onedir_report_{0}.xml" -f $Timestamp)
+$FootprintReportFile = Join-Path $LogDir ("build_nuitka_dashboard_onedir_footprint_{0}.json" -f $Timestamp)
 
 if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
     throw "Shared build layout helper not found: $BuildLayoutScript"
@@ -279,9 +279,9 @@ Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_mc_onedir_*.log"
-Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_mc_onedir_report_*.xml"
-Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_mc_onedir_footprint_*.json"
+Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_dashboard_onedir_*.log"
+Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_dashboard_onedir_report_*.xml"
+Rotate-Logs -LogDir $LogDir -Filter "build_nuitka_dashboard_onedir_footprint_*.json"
 
 $Icon = $null
 $PreferredIcon = Join-Path $Root 'SRPSS.ico'
@@ -309,8 +309,8 @@ try {
         $parts = $RawInfo -split '\|\|'
         if ($parts.Length -ge 1) { $Version = $parts[0].Trim() }
         if ($parts.Length -ge 2) { $Company = $parts[1].Trim() }
-        if ($parts.Length -ge 3) { $Description = $parts[2].Trim() }
-        if ($parts.Length -ge 4) { $ProductName = ($parts[3].Trim() + " Media Center").Trim() }
+        if ($parts.Length -ge 3) { $Description = ($parts[2].Trim() + " Dashboard").Trim() }
+        if ($parts.Length -ge 4) { $ProductName = ($parts[3].Trim() + " Dashboard").Trim() }
     }
 
     if ($Version) { Write-Host "[BUILD-VENV] Version: $Version" } else { Write-Host "[BUILD-VENV] Version: (unknown)" }
@@ -318,14 +318,14 @@ try {
     Write-Host "[BUILD-VENV] Version/metadata unavailable: $($_.Exception.Message)"
 }
 
-if (-not $ProductName) { $ProductName = "SRPSS - Media Center" }
-if (-not $Description) { $Description = "ShittyRandomPhotoScreenSaver Media Center" }
+if (-not $ProductName) { $ProductName = "SRPSS - Dashboard" }
+if (-not $Description) { $Description = "ShittyRandomPhotoScreenSaver Dashboard" }
 
 $EntryPath = Join-Path $Root $EntryPoint
 if (-not (Test-Path $EntryPath)) { throw "Entry point not found: $EntryPath" }
 
 if ($Console) {
-    if ($AppName -eq "SRPSS_Media_Center") { $AppName = "SRPSS_Media_Center_debug" }
+    if ($AppName -eq "SRPSS_Dashboard") { $AppName = "SRPSS_Dashboard_debug" }
 }
 
 $consoleArg = "--windows-console-mode=disable"
@@ -458,9 +458,9 @@ if (-not $Exe) {
     exit 1
 }
 
-$FrozenReceipt = Join-Path $LogDir ("build_nuitka_mc_onedir_frozen_audit_{0}.json" -f $Timestamp)
+$FrozenReceipt = Join-Path $LogDir ("build_nuitka_dashboard_onedir_frozen_audit_{0}.json" -f $Timestamp)
 & $VenvPython $FrozenAudit verify --root $Root --report $NuitkaReportFile --expected $SourceFingerprint --artifact $Exe.FullName --receipt $FrozenReceipt
-if ($LASTEXITCODE -ne 0) { throw 'Frozen module/source audit failed; refusing to publish an incomplete Media Center build.' }
+if ($LASTEXITCODE -ne 0) { throw 'Frozen module/source audit failed; refusing to publish an incomplete Dashboard build.' }
 
 # Validate the onedir payload against the current source Quick/QML and shader sets.
 try {
@@ -504,19 +504,21 @@ try {
 
     foreach ($legacyPath in @(
         (Join-Path $ReleaseRoot 'main_mc.build'),
-        (Join-Path $ReleaseRoot 'main_mc.dist')
+        (Join-Path $ReleaseRoot 'main_mc.dist'),
+        (Join-Path $ReleaseRoot 'main_dashboard.build'),
+        (Join-Path $ReleaseRoot 'main_dashboard.dist')
     )) {
         Remove-SRPSSLegacyReleasePath -Path $legacyPath -ReleaseRoot $ReleaseRoot
     }
 } catch {
-    Write-Host "[BUILD-VENV] Error: failed to publish Media Center payload - $($_.Exception.Message)"
+    Write-Host "[BUILD-VENV] Error: failed to publish Dashboard payload - $($_.Exception.Message)"
     exit 1
 }
 
 try {
     Write-SRPSSBuildFootprintReport `
         -RepoRoot $Root `
-        -ProductName 'media_center' `
+        -ProductName 'dashboard' `
         -PublishedRoot $DistributionDir `
         -PrimaryArtifact $Exe.FullName `
         -NuitkaReportPath $NuitkaReportFile `
