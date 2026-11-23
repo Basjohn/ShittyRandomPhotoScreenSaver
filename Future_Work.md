@@ -103,6 +103,14 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 ### EB composition-lab clean. Clean up scratch and no longer needed files related to labs unless they explicitly help a future visualizer lab implementation.
 
 
+**Cross-profile Live Settings is already independently admitted in Current Plan 1B.8 as product
+QoL, AFTER M4, Theme Studio and Concrete Rain.** Full implementation design:
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`.
+It establishes the future shared Settings session, live per-owner changes, scoped retire,
+optional masking fade, last-resort full teardown and Winlogon-safe admission. It does NOT
+advance SMP M0: when separately readmitted, SMP M8 consumes this foundation and still
+implements its player-specific audio, queue, library, output-device and SMTC policies.
+
 ### 2.5 SMP: deferred long-term work, not an active milestone (operator, 23 Nov 2026)
 
 **Admission order:** finish the native-core parity/flip, Reactive Liquid / Audio Melt Pool, Concrete Rain and a
