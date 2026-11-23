@@ -1033,8 +1033,10 @@ python native/core/python/compute_pass_check.py --module-dir release/native_modu
     [--apis opengl vulkan] [--rounds facts parity trigger war copy rest steady retire barriers cost] [--label n33_compute]
 # N5.6: Extruded Bubble's core proofs. The compute_bindings round admits the real drift packs together, checks program
 # storage declarations and per-entry bindings independently, and checks clear/copy counts and quiescence on resize.
+# geometry_projection uses the drift projector and authored geometry bytes with the existing D3 arena fixture to
+# check initial residency, repeats, capacity growth, rebase and activation replacement on the native reader.
 python native/core/python/eb_core_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds limits skip readback geometry probe compute_bindings] [--label n56_core]
+    [--apis opengl vulkan] [--rounds limits skip readback geometry probe compute_bindings geometry_projection] [--label n56_core]
 # N3.4 (D17): the shared stages on the harness scenes native/core/python/post_stages/ (eb: Extruded Bubble's shape with
 # transparency, defocus, bloom and the HDR composite; osc: the Oscilloscope's MAX blends and glow; tiles: an opaque scene
 # with glow; solo: a one-attachment owner for the sorted fallback), hidden hosts only: parity (rule (a) against the Python

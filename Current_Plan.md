@@ -833,8 +833,12 @@ the feature (D3D11 is not stated).
       - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on each take.
   - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
     and the source reading for field and resource ownership.
-    - [ ] Publish D3 family geometry under the projected keys before the worker exposes records. Preserve the
-      source epoch through a rebase and exercise resize, retirement and replacement.
+    - [ ] Give the main process ownership of the named D3 mapping. Pass the name and identity to the worker and
+      core. Finish each bank's seqlock write before `PacketMailbox.publish` exposes its key. Reuse a bank only
+      after `consumed_sequence` acknowledges a successor with a different key for that family. Preserve the
+      predecessor on rebase and test a busy two-bank edge, resize, retirement and replacement. The
+      [ABI 45 D3 fixture](.artifacts/evidence/native_core/n5_6/20261123_n56_geometry_projection_checked/report.md)
+      proves the reader with the harness writer.
     - [ ] Pack the native compute step/knot streams. Exercise repeated records, short gaps and the restart edge.
     - [ ] Complete the worker record, the mode program, and its `native_record_identity.MODES` entry with passes,
       read spans, streams and positional members. Prove L frame by frame for each take and graphics key with
