@@ -7,8 +7,9 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 **Operator sequencing, 23 Nov 2026:** finish the Vulkan-native core/flip, Reactive Liquid / Audio Melt Pool,
 Concrete Rain and a substantial operator-reviewed quality-of-life phase **before reconsidering SMP**. SMP is
 deferred in `Future_Work.md` §2.5 and its complete plan 02; nothing starts merely because NF or a native primitive
-lands. Only independently useful current-theme unification, material work and Theme Studio remain active from
-the former SMP prerequisites. Preserve SMP-compatible architecture without allocating SMP implementation work.
+lands. Independent current-product material/theme work, M4 Unified Appearance Theme and Theme Studio stay
+active. **Cross-profile live Settings** is also an admitted **post-Theme-Studio, post-Concrete-Rain QoL**
+milestone, not SMP work. Preserve SMP-compatible architecture without allocating SMP implementation work.
 
 ## 0. Scope and rules
 
@@ -1877,7 +1878,9 @@ meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K bu
   them. The lead judges it on showcase WebPs over bright and dark wallpapers.
 
 **Post-Concrete-Rain sequencing (operator, 23 Nov):** undertake a substantial round of product QoL improvements
-from the remaining current-plan defects and operator priorities. The operator, not an automatically satisfied
+from the remaining current-plan defects and operator priorities. **This phase includes the
+post-M4/Theme Studio cross-profile Live Settings milestone in 1B.8**, without advancing it ahead of
+native/Studio NF, Melt Pool or Concrete Rain. The operator, not an automatically satisfied
 date, phase counter, or a generic "native flip complete" gate, decides when that QoL phase is sufficient to
 consider SMP. No SMP M0-M10, library, audio playback, ZIP skin or desktop-host implementation is active in this
 plan. Its complete deferred implementation order and contracts live at `Future_Work.md` §2.5 and plan 02.
@@ -2008,6 +2011,55 @@ follow-ups with their evidence folders).
   export and import through the production theme loader. It renders through the production theme renderer (no second
   renderer, no per-frame theme parsing) and edits appearance only. SMP M10 later adds skin authoring and the SMP
   Full/Compact previews to this same Studio. Design: `Docs/Future_Work/ShittyMusicPlayer/05_Theme_Skin_Studio.md` §5.
+
+- [ ] **L0-L7 Transactional Live Settings across ALL profiles (operator, 23 Nov; after M4 and Theme Studio,
+  within the substantial post-Concrete-Rain QoL phase):** move from unconditional Settings-open display teardown
+  to **unchanged runtime on open/close**, canonical SettingsManager-driven scoped live updates, correct
+  capability-local retirement when enabling/disabling whole widget/Visualizer/provider features, and
+  bounded re-admission. This is an **approved implementation task**, NOT already implemented and NOT
+  a native-core/Studio/NF/Melt-Pool/Concrete-Rain gate. **One complete technical plan:**
+  `Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md` (phases L0-L7,
+  owner map, impact classification, security, test fixtures, proof and failed alternatives).
+  - [ ] **Preserve all ownership/resource guarantees or improve them.** No R-49 hide-only half-stop,
+    zombie QObject/GL/QRhi resource, unmanaged callback, leak, duplicate Visualizer/beat engine,
+    orphaned provider/capture/COM subscriber, duplicated GUI owner, hidden timer or new Settings render
+    engine. Keep strict lifecycle barriers, exact generation+manager identity, lazy capability admission,
+    zero-work dormancy and documented close/release order. A disabled capability RETIRES; a temporary
+    pause PARKS, with independently composing park reasons and fresh-frame/clock re-entry.
+  - [ ] **Least-disruption hierarchy (hard contract):** (1) no interruption for read-only Settings and
+    safe in-place edits; (2) stage and atomically apply a minimal affected-owner transaction with
+    targeted release/re-admission; (3) only when an otherwise safe substantial visual change would
+    jump, the existing compositor fades **OUT -> commits behind the fade -> validates the new
+    authoritative frame -> fades IN** over the smallest affected region; (4) **last resort**
+    complete engine-owned teardown/rebuild only for proven structural incompatibility, device/context
+    failure or irrecoverable owner state, never as a shortcut. Process-global/backend changes may
+    instead require an explicit application restart. No arbitrary "all Settings changes rebuild" rule.
+  - [ ] **Profiles/desktop:** Standard RUN/CONFIG, MC, diagnostic and eventual SMP consume the
+    SAME architecture, with their real input/security and source/visualizer policies. Windows
+    **Winlogon/secure/unknown desktop is NEVER an interactive Settings or Theme Studio admission**;
+    preserve the existing saver exit/input and verified secure-to-interactive handoff behaviour.
+    Do not block, paint over, steal focus from, delay or interact with Windows lock/login UI;
+    no cross-desktop HWND/shield/browser/credential launch. Treat permissions/desktop identity
+    as a separately tested admission axis, not an inferred profile flag; unknown fails closed.
+    Existing Std/MC runtime behaviour remains as-is until its specific gate passes.
+  - [ ] **Real QWidget Studio integration:** retain current Settings UI and theme/Studio system.
+    Replace the `QDialog.exec()` dependent lifecycle with an explicitly owned asynchronous
+    Settings session; update the existing Studio-over-Settings native hide/reveal/WM_PAINT,
+    application modality, focus and safe wrapper-liveness guarantees. The Session owns real
+    Preview/Apply/Cancel, not a fake rollback via 30-step SettingsUndo. No QML Settings rewrite.
+  - [ ] **Proof/acceptance:** impact-map every existing settings key/side effect; no-change identity
+    preservation, repeated Settings+Edit+Studio+source/mode/capability/monitor cycles, healthy
+    graphics backend and first visible frame, performance p50/p90/p99, CPU/GPU/VRAM, native heap,
+    Python/QObject/QML wrappers, subscriptions/timers/threads/COM, same-profile no-run controls,
+    correct remote/mixed-DPI and secure-desktop negative controls. Existing failure probes R-49,
+    R-53/56/59, R-175, R-22/U-09 and R-80 are essential. Use **synthetic test-owned settings**;
+    never test against mutable operator-authored presets. **Operator acceptance** before replacing
+    the normal policy. Do not delete existing R-175 memory-attribution work just because
+    unnecessary teardown is later reduced.
+  - [ ] **SMP handoff stays deferred:** when SMP is separately admitted its M8 adds player-specific
+    output-device, decoder/queue/library/SMTC live-setting transactions on this shared base;
+    SMP playback/Media survive Settings and its Visualizer parks/resumes to zero active work.
+    This common QoL milestone does not start SMP or remove its existing M8 proofs.
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
