@@ -132,6 +132,15 @@ QT_SDKS: dict[str, QtSdk] = {
         qtdeclarative_sha256="258146e9972fadbc1162cda31c7d7ed7e627f5022b2a848f2edb84d9c2ce27db",
         qtdeclarative_size=199_517_162,
     ),
+    # Qt's MSVC repository .sha256 and mirror metadata checked on 23 Nov 2026.
+    "6.12.1": QtSdk(
+        f"{_QT_ONLINE}/qt6_6121/qt6_6121_msvc2022_64/qt.qt6.6121.win64_msvc2022_64",
+        "6.12.1-0-202611180427", _QT_TAIL_WIN11_MSVC2022, "1.4.341",
+        qtbase_sha256="7e96dac9569f350c4e328be9f4a53ed18175ebfeec3e997cdd16832582ceb71e",
+        qtbase_size=40_457_937,
+        qtdeclarative_sha256="00e0c3b59893fdb19379a50d695a795ba0264c5038c99b6f291f5b42752ebbe1",
+        qtdeclarative_size=199_640_564,
+    ),
 }
 
 
