@@ -1026,8 +1026,6 @@ of truth and QWidget UI remain; no Qt Quick rewrite is a prerequisite.
 **Until that independent milestone's acceptance**, the existing full-stop Settings
 path and its fatal-on-failed-barrier rule below remain the **implemented** contract.
 This planned change is not permission to weaken resource ownership or to start SMP.
-## Lifecycle
-
 Old generation loses admission before replacement gains authority; generation 0 is valid. GPU resources are
 created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping
 as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation owner.
