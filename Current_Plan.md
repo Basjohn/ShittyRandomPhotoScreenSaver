@@ -1995,14 +1995,23 @@ the lead rejects any still or showcase frame that shows one.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
 
-### 1B.10a Extruded Bubble Studio controls
+### 1B.10a Extruded Bubble stream and particle response (after the native port)
 
-- [ ] Extruded Bubble Studio, with the Studio work (operator, 22 Nov):
-  - [ ] Stream Speed becomes one range slider (minimum = speed at least energy, maximum = speed at most energy), replacing
-    the quiet/peak pair, which is harder to use; presets keep their values through the spec owner (repair fill, never
-    pinned); the circular control and range work in the Studio box apply where they fit.
-  - [ ] A MOTION section holding Stream Speed, Drift and possibly Path (decide by what Path controls; operator: "*maybe*
-    PATH"), in the spec owner (`core/settings/visualizer_mode_settings.py`), Settings and Studio alike.
+- [ ] **Investigate the remaining weak speed swing after N5.6** (operator, 23 Nov). Isolate the visible
+  population first. Compare the global stream and shell transport with bead chains, wake fizz, snow
+  and ambient specks on the same recorded passage. Measure each active layer's velocity through quiet and
+  loud input against its own transport owner, then repair the layer that misses the intended swing.
+  - [Log bundle](logs/evidence_chest/logs8acd9d88e9.zip) records the 22:46 Studio edits and preset save.
+    Its Studio and timing logs establish the control path. The visible layer and achieved velocity remain
+    unmeasured. [R-251](Docs/Historical_Bugs/R-251_Extruded_Bubble_Stream_Speed_Range_Was_Attenuated.md) covers
+    the narrower global-stream endpoint repair.
+- [ ] **Finish the Studio motion controls after N5.6.**
+  - [ ] Replace Studio's separate Stream Speed (Quiet) and Stream Speed (Peak) controls with one range
+    slider on the existing range setting. Keep authored values, with no endpoint pinning.
+  - [ ] Add the Motion section for Stream Speed, Drift and, if it belongs there, Path through the
+    existing settings spec owner.
+  - [ ] If the replay isolates microbubble or particle speed, expose that layer's response as a separate
+    Studio option. Bind it to the verified owner and preserve the meaning of the shell Stream Speed range.
 - [~] Themed list scrollbars merged 21 Nov (the product drew the platform's bar too); a real Windows 11 hover in
   1B.14's Settings and Studio box (every Settings tab's scroll area now takes the same owner). The Studio's QML bars
   are 1B.14's.

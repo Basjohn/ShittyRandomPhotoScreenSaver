@@ -1,6 +1,14 @@
 # R-251 | Extruded Bubble attenuated the authored Stream Speed range
 
-**Date:** 23 November 2026. **Status:** source repair with whole-take PCM replay and stepped-input controls.
+**Date:** 23 November 2026. **Status:** global stream endpoint correction verified with held inputs.
+The operator still reports insufficient visible speed swing during playback in the latest run.
+[Post-port follow-up](../../Current_Plan.md#1b10a-extruded-bubble-stream-and-particle-response-after-the-native-port).
+
+The recorded PCM runs showed improved global-stream modulation on heavy and ragdoll. Peak speeds reached
+87.6%, 95.6% and 97.2% of the authored span in the heavy, acoustic and ragdoll takes, respectively.
+Those runs and the held-input controls leave live full swing, individual particle-layer transport and
+Studio controls open. The 22:46 Studio entries in `logs8acd9d88e9.zip` still show separate Peak and Quiet
+controls and a save to the existing range.
 
 ## Symptom
 
