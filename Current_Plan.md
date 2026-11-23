@@ -115,7 +115,8 @@ Bubble follow-ups, then resume the native sequence below. The reported EB respon
   - [ ] Retake the N5.4 Waveform timing row on Display 1 with the repaired native cadence receipt. Keep the raw traces
     and record CPU, RSS and private bytes alongside a native Bubble row under otherwise comparable conditions.
     The 22 Nov `tools/baselines/preflip/n54_native_vulkan.json` run measured render time but lacked valid FPS and swap
-    gaps. Use a quiet local window for the cost comparison.
+    gaps. Short D1 controls verified native counts for both modes on 23 Nov; see `20261123_draw_swap_receipt/d1_checks.json`
+    under `.artifacts/evidence/visualizers/shared/native_viz_timing/`. Use a quiet local window for the cost comparison.
 - [ ] Performance, parked until every port has landed (operator, 21 Nov: no optimising before then unless a port
   performs so poorly it cannot be considered stable, i.e. gaps over 33 ms inside runs, stalls or growth). Found 21 Nov (Jigsaw's GUI tick also about 1.25 ms against 0.5, its piece table packed every frame): inside a run, the saver's CPU on native Vulkan transitions is
   28-36 % of a core (Beam 32.9 %, the four 3D scenes 28-36 %, Jigsaw highest), while GPU render time halves against
@@ -778,14 +779,14 @@ the feature (D3D11 is not stated).
     in tick-to-publish; the tail is heavier (frames over 16.7 ms 27, 39, 27 against 11, 16, 18), all of it after
     rendering ends, not sync or recording. Evidence `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`,
     `.../bubble/live_check/20261121_layer_t_root_cause/figures.txt` (agent aac773583ad93e2ab).
-    - [ ] Root cause, two candidates, neither proved: (1) the PERF HUD's once-a-second text write from a queued
-      `frameSwapped` handler (`_update_perf_hud_on_swap`, `rendering/quick/scene_controller.py`) starting Qt's update
-      timer early; (2) the GPU downclocking under the lighter native load (the A/B adds clock sampling).
+    - [ ] Root cause, two candidates: the PERF HUD starting Qt's update timer on a frame of its own and the GPU
+      downclocking under lighter native load. The HUD coalescing is already in `request_visualizer_present` and has
+      a focused test. Measure the writes that still fall outside a publication on current source and whether they
+      lead the remaining long gaps. The 23 Nov D1 Bubble smoke recorded five such writes in ten (`d1_checks.json`).
       - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
-        back to back, conditions recorded.
-    - [ ] Fix, if proved: with a visualizer active, write the HUD text in `request_visualizer_present` just before
-      `item.update()` so both share one Qt timer (keep writing on swap with none active); separately trim Bubble's
-      per-frame route sync on the GUI thread.
+        back to back, conditions and GPU clock recorded.
+    - [ ] If the proof identifies an owner, correct only the path that still adds delay. Measure Bubble's per-frame
+      GUI sync before considering changes there.
     - [ ] Fix at the owner if it is ours, then three Vulkan runs and three OpenGL controls back to back; accept when
       Vulkan's late frames fall within the control's spread. If it is the driver's or Qt's, record it in D12 and ask
       the operator. Then Bubble's own T tools (its diagnostics guide).
