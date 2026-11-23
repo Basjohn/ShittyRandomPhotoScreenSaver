@@ -4,6 +4,22 @@
 
 ## Physical presentation
 
+**Live Settings is approved future work, not current implementation** (23 Nov):
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`,
+admitted in `Current_Plan.md` 1B.8 after M4 Theme Studio and Concrete Rain.
+The Settings UI remains QWidget with canonical SettingsManager; the *lifetime*
+will become a separate asynchronous, engine-owned SettingsSession with scoped
+configuration transactions, explicit capability retirement, a rare targeted
+fade (second-last resort) and full verified generation teardown (last resort).
+One architecture is intended for Standard/MC/diagnostic and eventual SMP.
+All existing resource/Qt ownership, retained host and display-generation guards
+remain hard gates. **Winlogon/secure/unknown desktop must never receive an
+interactive Settings or new floating Studio window**; existing saver/input/URL
+handoff paths stay authoritative. This paragraph does not supersede the
+currently implemented full-stop Settings lifecycle until accepted.
+
+## Physical presentation
+
 | Concern | Destination owner |
 | --- | --- |
 | one display runtime | `QuickDisplayRuntime` |
