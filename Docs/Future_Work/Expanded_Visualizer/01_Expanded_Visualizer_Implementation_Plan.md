@@ -24,6 +24,16 @@ live-tick cut is in flight on another branch); the flag carries no perf gate.
 **Products:** existing Standard SRPSS and existing Media Center (MC) sharing the current Quick scene. No additional screensaver window, no product fork.  
 **Companion:** `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md` begins after this plan's acceptance and reuses its proven presentation **semantics**, not the screensaver's physical window manager.
 
+**Later Settings lifecycle direction (23 Nov, post-acceptance only):**
+the historical "Settings keeps today's teardown" statements in this
+document describe the original implemented environment, not the desired
+long-term default. The separate `Current_Plan.md` 1B.8
+cross-profile transactional Live Settings milestone follows M4,
+Theme Studio and Concrete Rain, with full design in
+`Docs/Future_Work/Live_Settings_Transactional_Runtime_2026-11-23.md`.
+This does NOT retroactively change Expanded Visualizer implementation
+gates, add a port/NF dependency, or authorise an SMP implementation.
+
 ## 0. Phase ladder, prerequisites, owners and budgets (7 Nov review)
 
 ### 0.1 Prerequisites from the architecture checklist
