@@ -821,10 +821,9 @@ the feature (D3D11 is not stated).
     and `owner_render_parity.py --references-only`. Keep the reference producer at the verified rendering and
     logical revision until the queue finishes. Earlier references are indexed in the
     [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
-    - [ ] Base SCENE (`""`), 60 s of `human_heavy1` at display placement.
-    - [ ] Base SCENE (`""`), 60 s of `ragdoll_quiet_intro_loud_end1` at display placement.
-    - [ ] Base SCENE (`""`), 60 s of `nightsolong_acousticsoft1` at display placement.
-      Reference receipts go in `.artifacts/evidence/native_core/n5_6/20261123_refs_r251_<take>_60/`.
+    - [ ] Base SCENE (`""`), 60 s of `nightsolong_acousticsoft1` at display placement. The
+      [compact reference indexes](.artifacts/evidence/native_core/n5_6/20261123_r251_reference_indexes.zip)
+      identify completed keys and keep the per-frame receipts. The full arrays stay in the reference root.
     - [ ] Run alternate SCENE (`:b`), BEAM emission (`extruded_bubble_emission_geometry=0`), Sunlit Surface
       (`extruded_bubble_light_type=0`), lighting BEAM (`extruded_bubble_lighting_coverage=0`), and base overscan.
       Use the keys from `conventions_identity.mode_runs('extruded_bubble', offers=True)`, frozen settings with
