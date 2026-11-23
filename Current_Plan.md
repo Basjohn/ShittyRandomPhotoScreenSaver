@@ -830,13 +830,14 @@ the feature (D3D11 is not stated).
       - [ ] Display alternate SCENE (`:b`), Sunlit Surface (`extruded_bubble_light_type=0`), and lighting BEAM
         (`extruded_bubble_lighting_coverage=0`) on each take.
       - [ ] Display BEAM emission (`extruded_bubble_emission_geometry=0`) on ragdoll and nightsolong.
-      - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on each take.
+      - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on ragdoll and nightsolong.
   - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
     and the source reading for field and resource ownership.
     - [ ] Give the main process ownership of the named D3 mapping. Pass the name and identity to the worker and
       core. Finish each bank's seqlock write before `PacketMailbox.publish` exposes its key. Reuse a bank only
       after `consumed_sequence` acknowledges a successor with a different key for that family. Preserve the
-      predecessor on rebase and test a busy two-bank edge, resize, retirement and replacement. The
+      predecessor on rebase. If all candidate banks are live, defer publication and keep the projected lineage
+      at its last published revision. Verify that edge, resize, retirement and replacement. The
       [ABI 45 D3 fixture](.artifacts/evidence/native_core/n5_6/20261123_n56_geometry_projection_checked/report.md)
       proves the reader with the harness writer.
     - [ ] Pack the native compute step/knot streams. Exercise repeated records, short gaps and the restart edge.
