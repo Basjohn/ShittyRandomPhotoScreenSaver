@@ -74,9 +74,31 @@ The exact final matrix MUST be derived by scanning all existing settings keys an
 
 ## 5. Secure desktop / Winlogon / screensaver admission (HARD SAFETY GATE)
 
-This project can run as a Windows `.scr` on the **Winlogon/secure desktop**. A cross-profile feature must not hijack, block, delay or visibly disturb lock/login/credential presentation, regardless of how MC behaves. **The ability to retain a healthy renderer is never permission to show an interactive Settings dialog on a protected desktop.**
+The screensaver may run in a Winlogon/secure or other restricted desktop context.
+The new live Settings architecture must **preserve the current saver input, Settings
+request and secure-desktop behaviour exactly**; it must never hijack, block, delay
+or visibly disturb Windows login/lock/credential presentation. **Do not
+invent a new restriction saying all secure-desktop Settings requests are
+forbidden:** first inspect the real old §/s§, §/c§, preview and keyboard
+routes, because a previously supported, explicitly admitted Settings
+interaction must not be silently removed. Equally, a healthy retained
+renderer is **not** permission to create any *additional* interactive
+Settings/Studio HWND or perform an action that the original secure route
+did not permit. If the old route uses stop/exit and an interactive-user
+handoff, retain it there until a safe replacement is independently proven.
 
-- The application must distinguish Standard `/s` saver, `/c` configuration, `/p` preview, MC windowed and diagnostic contexts, and future SMP; **profile != desktop security authority**. Reuse `core/windows/desktop_context.py::is_interactive_user_desktop` for an explicit fail-closed check (Winlogon or unknown -> not interactive). No new environment-variable or process-name inference. Where Windows forbids a requested UI action on that desktop, retain the prior safe saver exit/controlled handoff path; no new top-level Settings/Theme Studio/window, HWND shield, mouse grab, blocking modal loop or taskbar/foreground promotion in Winlogon just because the generic live-controller would ordinarily do so.
+- Distinguish Standard §/s§ saver, §/c§ configuration, §/p§ preview, MC, diagnostic and
+  future SMP **AND** the actual desktop separately. §core/windows/desktop_context.py::
+  is_interactive_user_desktop§ answers whether **account/browser/credential-only**
+  operations are permitted on interactive Default; Winlogon and unknown remain
+  denied for those operations. **Do not misuse this account permission predicate
+  as an invented blanket denial of the existing Settings request.** Audit the
+  current allowed saver Settings route and retain precisely its pre-existing
+  admission/exit behavior under real secure desktop conditions. New live
+  dialog behavior on such a desktop requires *additional* real validation,
+  and if it cannot be proved, follow the old safe route. No env/process-name
+  inference, extra top-level HWND, shield, mouse grab, modal event pump or
+  foreground/taskbar promotion that could disturb Winlogon.
 - Preserve canonical saver input/exit rules, secure URL handoff, Gmail/Steam account/browsers, credentials, system lock/unlock and session changes. Do not run a browser, OAuth, shell open, helper child or credential flow on Winlogon. Account-only UI remains restricted to proven interactive Default desktop, consistent with `Docs/Contracts.md`; opaque/unknown context fails closed. Do not trust `SESSIONNAME`, presence of Explorer or elapsed time as evidence of safe foreground access.
 - **No Windows display flicker regression:** the historical MC A-01 "security-style placeholder" was caused by HWND teardown on the destination monitor, not by a Winlogon popup. Never conflate the two. Measure original MC window identity and Settings-window focus/placement before/after. No extra shields or blackout windows on untouched monitors.
 - Acceptance matrix: secured saver active/on lock screen and unlock, preview and `/c` config, interactive saver test, interactive MC, multiple desktop sessions, monitor/DPR/refresh changes, RDP/remote session where supported, denied/unknown desktop, app stop while Settings-opening callback is queued. Use real Windows field proof from an interactive operator under appropriate controlled conditions plus fake-desktop tests that assert **NO settings UI/action** admitted on Winlogon. Automated tests may simulate permission denial but may not circumvent a real lock screen.
@@ -94,7 +116,11 @@ This project can run as a Windows `.scr` on the **Winlogon/secure desktop**. A c
 
 **L4 | Rare visual fades and explicit generation fallback.** Implement a bounded, existing-compositor-owned fade OUT -> staged change -> authoritative new frame -> fade IN for the subset genuinely requiring it. Detect and reject out-of-order/repeated requests, target loss mid-fade, scene loss, Settings close during change and device loss; never hang black or double-fade. If targeted recovery cannot prove correctness, fall back only through the existing full-engine destruction barrier on a later GUI turn. Keep the old full-rebuild implementation separately testable; do not create hide-only partial teardown.
 
-**L5 | Standard secure, CONFIG, MC and Diagnostic profiles.** Port the accepted shared controller across all interactive contexts; enforce Winlogon denial and existing `/s` safe exit semantics. Prove Studio-over-Settings, guided setup / no-sources, Settings window native materials, multi-DPI, secure URL restrictions, start/exit, PowerToys/media key requests, remote/lock and focus behavior with actual hardware and compiled builds where needed. Add future SMP as a planned consumer without starting it: M8 expands setting-specific playback, output device, library and SMTC admission, not a second controller.
+**L5 | Standard secure, CONFIG, MC and Diagnostic profiles.** Admit the
+same transactional controller across all applicable profiles, retaining
+existing saver/Winlogon Settings input semantics and the proven §/s§ exit
+or handoff where used; **forbid new unproved secure-desktop interactions**
+rather than blanket-denying old requests. Prove Studio-over-Settings, guided setup / no-sources, Settings window native materials, multi-DPI, secure URL restrictions, start/exit, PowerToys/media key requests, remote/lock and focus behavior with actual hardware and compiled builds where needed. Add future SMP as a planned consumer without starting it: M8 expands setting-specific playback, output device, library and SMTC admission, not a second controller.
 
 **L6 | Soaks, resource accounting, promotion.** Extended MC/Standard/CONFIG repeated no-change, partial change, mode/producer/capability and destructive fallback sequences (minimum baseline-comparable 50 Settings, 50 Edit and 50 mixed interleavings, plus 20+ no-change Settings cycles; long-run soak with sessions and device/display changes). Compare p50/p90/p99 of GUI and render delivery (clean window-local scoring, R-80), GPU VRAM, native heap/private bytes, Python/cyclic wrappers, QObject count, QML components, GL/Vulkan handles, descriptor pools, threads, timers, request queues, source workers, leases, subscriptions, COM connections, display roots and capture instances. **Success means no linear growth beyond bounded, explained caches; no regression from the same-profile original runtime in settled performance or dormancy; no worse ownership certainty.** First frame must be accepted current generation/activation or remain covered; no stale-image flash. Failure cases must emit exact owner/reason, never suppress exceptions and continue with silently corrupted state.
 
@@ -108,11 +134,19 @@ This project can run as a Windows `.scr` on the **Winlogon/secure desktop**. A c
 - Repeated close/open, Studio surface failure, nonmodal Settings focus loss, Settings disappearance, invalid Shiboken wrapper, layered HWND hidden->shown: no crash, no nested-loop ghost, no app-modal focus ping-pong, no repaint deadlock, no permanently invisible settings.
 - Change a backend- or process-global Qt attribute while running: defer/restart and state why; no partial swap to an incompatible API.
 - Park on Settings, also park for display power, then close Settings: still parked until display power resumes. A stale pre-park audio packet cannot become first visible frame; no dt jump.
-- Enqueue a valid Settings action, then change to Winlogon/unknown before dispatch: no forbidden GUI opens; secure routing/fail-closed exit unchanged. Fail any cross-desktop ShellExecute/browser/OAuth or new screensaver foreground window.
+- Enqueue a valid Settings action, then switch to Winlogon/unknown before
+  dispatch: revalidate the **actual permitted original route**; never
+  open an extra unauthorized GUI or silently change the original secure
+  Settings input/exit behavior. Fail any cross-desktop ShellExecute,
+  browser/OAuth or unauthorized new foreground window.
 - Force malformed/unsupported setting or an irreversible side effect then Cancel: refuse unsafe apply, and do not claim rollback of network/disk changes.
 - Collect and compare **synthetic, test-owned** settings snapshots and configuration manifests; no actual authored visualizer preset is an automated test input, pinned key, filename expectation, pixel/screenshot golden, or forced reset.
 - Verify no-change GUI display identity survives 50+ opens; targeted Visualizer family retirement changes exactly its related identity, all siblings remain; fallback destroys old owners once, seals barrier, then constructs replacements once. Check both real GPU backends in the supported matrix.
-- If Winlogon tests cannot be completed, promote only explicitly proven interactive policies, while the existing secure-saver semantics remain unchanged. Never silently weaken the desktop gate to score a test green.
+- If Winlogon tests cannot be completed, promote only proven interactive
+  policies and keep the existing secure saver Settings route/exit contract
+  unchanged. Never silently weaken account/desktop gates to score green,
+  and never disable a previously supported saver Settings action by
+  assuming it was a security problem without evidence.
 
 ## 8. Scope exclusions and unmodified commitments
 
