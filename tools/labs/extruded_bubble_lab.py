@@ -47,6 +47,7 @@ from rendering.gl_programs.extruded_bubble_program import (  # the product's sha
     FULL_VERTEX,
     SPECKS_GLSL,
     BACKDROP_FRAGMENT,
+    PROBE_BACKDROP_FRAGMENT,
     SHAFT_FRAGMENT,
     BLUR_FRAGMENT,
     BUBBLE_VERTEX,
@@ -475,7 +476,7 @@ def population(rng, view_to_world, tan, drift=0.0, wakes=None, wake_strength=0.0
 
 
 def render_variant(capture, resources, target, programs, env, env_fbo, settings, seed):
-    (env_program, backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, particle_program,
+    (env_program, backdrop, probe_backdrop, shell, merged, shaft_program, blur_program, glint_program, ribbon_program, particle_program,
      near_program, near_cluster_program, shaft_tex, shaft_fbo) = programs
     settings = {**effective(settings), **OVERRIDES}
     pitch = math.radians(settings["pitch"])
@@ -659,7 +660,6 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uAperture"), settings.get("aperture", 3.0))
         gl.glUniform1f(u("uPixel"), 2.0 * tan_y / H)
         gl.glUniform1f(u("uPixelSize"), 2.0 * tan_y / H)
-        gl.glUniform1i(u("uEnvironment"), 3)
         gl.glUniform1i(u("uBackground"), 5)
         gl.glUniform2f(u("uTargetSize"), *target.allocation[:2])
         gl.glUniform2f(u("uFrameSize"), W, H)
@@ -723,11 +723,10 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         (gl.glEnablei if blend0 else gl.glDisablei)(gl.GL_BLEND, 0)
 
     def draw_probe_face(face, world_to_face, proj):
-        common(backdrop)
-        gl.glUniformMatrix3fv(gl.glGetUniformLocation(backdrop, "uViewToWorld"), 1, gl.GL_FALSE, world_to_face)
-        gl.glUniform2f(gl.glGetUniformLocation(backdrop, "uTan"), 1.0, 1.0)
-        gl.glUniform1f(gl.glGetUniformLocation(backdrop, "uProbeMode"), 1.0)
-        gl.glUniform2f(gl.glGetUniformLocation(backdrop, "uFrameSize"), PROBE.size, PROBE.size)
+        common(probe_backdrop)
+        gl.glUniformMatrix3fv(gl.glGetUniformLocation(probe_backdrop, "uViewToWorld"), 1, gl.GL_FALSE, world_to_face)
+        gl.glUniform2f(gl.glGetUniformLocation(probe_backdrop, "uTan"), 1.0, 1.0)
+        gl.glUniform1f(gl.glGetUniformLocation(probe_backdrop, "uProbeMode"), 1.0)
         gl.glDisable(gl.GL_BLEND)
         gl.glBindVertexArray(capture.vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
@@ -923,6 +922,7 @@ def main():
 
         # Each product program's pass block by its fragment (N1.6), with what the block starts from.
         blocks = {ENV_FRAGMENT: (ENV_BLOCK, {}), BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
+                  PROBE_BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
                   SHAFT_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
                   BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS), PARTICLE_FRAGMENT: (PARTICLE_BLOCK, {})}
         cleanup.callback(gl.release)
@@ -944,6 +944,7 @@ def main():
         cleanup.callback(target.release)
         programs = (owned_program(ENV_VERTEX, ENV_FRAGMENT, label="lab env"),
                     owned_program(FULL_VERTEX, BACKDROP_FRAGMENT, label="lab backdrop"),
+                    owned_program(FULL_VERTEX, PROBE_BACKDROP_FRAGMENT, label="lab probe backdrop"),
                     owned_program(BUBBLE_VERTEX, BUBBLE_FRAGMENT, label="lab bubbles"),
                     owned_program(CLUSTER_VERTEX, CLUSTER_FRAGMENT, label="lab clusters"),
                     owned_program(FULL_VERTEX, SHAFT_FRAGMENT, label="lab shafts"),

@@ -314,6 +314,40 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
 
 
 @pytest.mark.qt
+def test_probe_faces_and_screen_draw_with_distinct_backdrop_interfaces(target, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.visualizer.implementations import extruded_bubble as implementation
+
+    capture, host = target
+    renderer = implementation.QuickExtrudedBubbleRenderer()
+    host._implementations["extruded_bubble"] = renderer
+    faces = []
+    capture_probe = implementation.SceneProbe.capture
+    draw_arrays = gl.glDrawArrays
+
+    def record_draw(*args):
+        faces.append(int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)))
+        return draw_arrays(*args)
+
+    def observe_probe(probe, draw):
+        def observe_face(*args):
+            with monkeypatch.context() as patch:
+                patch.setattr(gl, "glDrawArrays", record_draw)
+                return draw(*args)
+        return capture_probe(probe, observe_face)
+
+    monkeypatch.setattr(implementation.SceneProbe, "capture", observe_probe)
+    capture.render(host, _snapshot())
+    assert len(faces) == 6 and len(set(faces)) == 1
+    probe = faces[0]
+    screen = renderer._resources.program(*dict(implementation._PROGRAM_ROWS)["backdrop"])
+    assert gl.glGetUniformLocation(probe, "uShafts") == -1
+    assert gl.glGetFragDataLocation(probe, "Emission") == -1
+    assert gl.glGetUniformLocation(screen, "uShafts") >= 0
+    assert gl.glGetFragDataLocation(screen, "Emission") == 1
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize('light_type', ('Sunlit Surface', 'Deep Light'))
 def test_light_strength_scales_glint_proxy_hdr_without_moving_physical_records(target, monkeypatch, light_type):
     from OpenGL import GL as gl

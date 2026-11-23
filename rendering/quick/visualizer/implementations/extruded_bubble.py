@@ -31,7 +31,7 @@ from OpenGL import GL as gl
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
     FULLSCREEN_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
-    SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
+    PROBE_BACKDROP_FRAGMENT, SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
 from rendering.gl_programs.scene3d import _STD140
 from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
@@ -63,6 +63,7 @@ from ..implementation_values import parameter
 
 _PROGRAMS = (
     ("backdrop", FULL_VERTEX, BACKDROP_FRAGMENT),
+    ("probe_backdrop", FULL_VERTEX, PROBE_BACKDROP_FRAGMENT),
     ("shafts", FULL_VERTEX, SHAFT_FRAGMENT),
     ("blur", FULL_VERTEX, BLUR_FRAGMENT),
     ("shells", BUBBLE_VERTEX, BUBBLE_FRAGMENT),
@@ -77,7 +78,8 @@ _PROGRAMS = (
 
 
 # The programs whose values are a pass block (N1.6), by key: each family's one layout.
-_BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
+_BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "probe_backdrop": FULLSCREEN_BLOCK,
+           "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
            "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK, "trails": TRAIL_BLOCK}
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
@@ -362,7 +364,7 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uFanReach": float(knobs.get("fan_reach", 0.6)),
         "uSpecks": 0.0, "uLightPower": float(knobs.get("light_power", 0.0)),
         "uGlintPower": float(knobs.get("glint_power", 0.0)), "uProbeFill": float(knobs.get("probe_fill", 0.0)),
-        "uGlintSharp": float(knobs.get("glint_sharp", 6000.0)), "uProbeMode": 0.0, "uStreak": _floats(streak),
+        "uGlintSharp": float(knobs.get("glint_sharp", 6000.0)), "uStreak": _floats(streak),
         "uSparkle": float(knobs.get("sparkle", 0.0)), "uLightColour": _floats(knobs["light"]),
         "uFilm": float(knobs.get("film", 0.0)), "uFilmRange": _floats(knobs.get("film_range", (250.0, 600.0))),
         "uCrisp": float(knobs.get("crisp", 0.0)), "uAbsorb": _floats(knobs["absorb"]),
@@ -685,9 +687,7 @@ class QuickExtrudedBubbleRenderer:
                                 depth_texture=True, oit=True, hdr=1.0):
             scene_viewport = (frame.viewport[0] - x, frame.viewport[1] - y, frame.viewport[2], frame.viewport[3])
             allocation = self._target.allocation
-            self._uniforms.set(programs["backdrop"], {"uProbeMode": 0.0, "uViewToWorld": _floats(view_to_world),
-                                                      "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS, "uLensShift": shift,
-                                                      "uFrameSize": (float(width), float(height))})
+            self._uniforms.set(programs["backdrop"], {"uLensShift": shift, "uFrameSize": (float(width), float(height))})
             target_size = (float(allocation[0]), float(allocation[1]))
             for key in ("shells", "clusters", "near", "near_clusters", "beads"):
                 self._uniforms.set(programs[key], {"uTargetSize": target_size})
@@ -793,12 +793,11 @@ class QuickExtrudedBubbleRenderer:
 
     def _capture_probe(self, probe: SceneProbe, programs, proxy_count: int, quad_vao: int) -> None:
         """The water and light all round the eye, each bubble's glint added as a bright point."""
-        backdrop, proxies = programs["backdrop"], programs["proxies"]
+        backdrop, proxies = programs["probe_backdrop"], programs["proxies"]
+        self._uniforms.set(backdrop, {"uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0), "uProbeMode": 1.0})
 
         def draw(face, world_to_face, projection):
-            self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face), "uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0),
-                                          "uProbeMode": 1.0,
-                                          "uFrameSize": (float(probe.size), float(probe.size))})
+            self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face)})
             gl.glDisable(gl.GL_BLEND)
             gl.glUseProgram(backdrop)
             gl.glBindVertexArray(quad_vao)

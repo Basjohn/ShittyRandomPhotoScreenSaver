@@ -77,7 +77,7 @@ def sphere_pixels(qt_app, request):
                 else:
                     gl.glUniform1f(loc(name),value)
             gl.glUniform1i(loc('uDiag'),diag)
-            gl.glUniform1i(loc('uProbe'),2);gl.glUniform1i(loc('uBackground'),0);gl.glUniform1i(loc('uEnvironment'),0)
+            gl.glUniform1i(loc('uProbe'),2);gl.glUniform1i(loc('uBackground'),0)
             gl.glUniform3f(loc('uIors'),1.15,2.,1.)
             gl.glUniform2f(loc('uFrameSize'),width,height);gl.glUniform2f(loc('uTargetSize'),width,height)
             gl.glUniform2f(loc('uTan'),*span)
