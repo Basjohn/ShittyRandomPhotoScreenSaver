@@ -17,6 +17,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | Record | Historical classification | Retention |
 | --- | --- | --- |
 | [R-226 / Native harness reused a stale child result](Historical_Bugs/R-226_Native_Harness_Reused_Stale_Child_Result.md) | Silent validation false PASS / repaired with timeout and nonzero-exit controls | Standard |
+| [R-NEW / Extruded Bubble attenuated the authored Stream Speed range](Historical_Bugs/R-NEW_Extruded_Bubble_Stream_Speed_Range_Was_Attenuated.md) | Source repair with fixed-input endpoints and whole-take PCM controls | Standard |
 | [R-182 / Installed preset files lacked ordinary-user Modify permission](Historical_Bugs/R-182_Installed_Preset_Files_Lacked_User_Modify_Permission.md) | Installer source repair / ordinary-user installation validation open | Standard |
 | [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](Historical_Bugs/R-02_Reddit_Helper_Link_Handoff.md) | Archived investigation | **STRONG** |
 | [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](Historical_Bugs/R-03_Sine_Idle_Paused_Motion.md) | Archived investigation | Standard |

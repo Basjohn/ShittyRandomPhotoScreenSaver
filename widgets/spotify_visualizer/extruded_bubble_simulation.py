@@ -55,6 +55,8 @@ FADE_OUT_SECONDS = 0.9     # the mode's fade-out: a bubble's, and a drift layer 
 _FADE_OUT = FADE_OUT_SECONDS
 _CHAIN_FADE_IN = 0.35       # free-chain opacity only; preserve the existing logical-level release
 _CHAIN_DRIVE_ATTACK, _CHAIN_DRIVE_RELEASE = 1.5, 3.0  # the chain drive follows phrases, not beats
+_STREAM_DRIVE_MIDPOINT = 0.68  # fixed midpoint of the combined stream body signal
+_STREAM_SPEED_ATTACK = 0.22    # seconds, with a continuous rise even on a full-energy step
 _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
 # Contact separation: a bounced (or popped) pair moves apart along its contact normal with a decaying
 # separation velocity, and any remaining overlap is corrected within about a tenth of a second.
@@ -270,6 +272,14 @@ def _passage_curve(intensity: float) -> float:
     passage a little past the middle, the quietest music near the quiet handle, the loudest at the loud one."""
     value = max(0.0, min(1.0, float(intensity)))
     return value * value * (3.0 - 2.0 * value)
+
+
+def _stream_drive(intensity: float) -> float:
+    """Spread the musical middle of the fixed body scale without flattening either end."""
+    value = max(0.0, min(1.0, intensity))
+    rise = (value / _STREAM_DRIVE_MIDPOINT) ** 5
+    rest = ((1.0 - value) / (1.0 - _STREAM_DRIVE_MIDPOINT)) ** 5
+    return rise / (rise + rest)
 
 
 def _shown_radius(bubble) -> float:
@@ -668,7 +678,7 @@ class ExtrudedBubbleSimulation:
         self._body_small_envelope = _follow(self._body_small_envelope,
             _soft_top((0.18 * small_body + (6.0 + 2.0 * sustain) * small_change) * (0.7 + 0.6 * passage)),
             dt, 0.06 * soft, body_release)
-        # Counts describe passage occupancy. Flow/light/emission must still express
+        # Counts describe passage occupancy. Motion phase, light and emission must still express
         # changing vocals while that occupancy is held high by bass. Reuse the
         # existing clean small-body envelope; no second band read or response clock.
         # The passage part is the large lane's held body (same fixed-scale knee), eased
@@ -709,38 +719,23 @@ class ExtrudedBubbleSimulation:
         self._shimmer += dt * (idle_rate * rest_motion_boost + 0.6 * change_drive + 1.4 * self._ray_lift)
         direction = (direction_of(controls.stream_path, WORLD_HALF) if controls.stream_path is not None
                      else stream_vector(*controls.stream_direction))
-        # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
-        low_speed, high_speed = controls.stream_speed
-        # A resting floor (scaled by Idle) keeps the stream, drift and the particles it carries slowly moving in
-        # silence, as 2D Bubble rests at its authored baseline speed; the resting factor alone (idle_rate, ~0.06)
-        # froze them. A floor, never an addition: quiet music is never slower than silence, and ordinary music
-        # (already above it) keeps its full quiet-to-loud contrast.
+        # Idle still carries a slow stream and drift while paused.
         rest_activity = (0.15 + 0.45 * max(0.0, min(1.0, controls.idle))) * rest_motion_boost
         activity = min(1.0, max(idle_rate * rest_motion_boost + 1.6 * level, rest_activity))
-        # Onset and sustained lifts stay inside the authored range: the loud handle is the maximum.
-        # The passage sets where flow sits in each Range; phrase changes and onsets swing it around that.
-        flow_drive = passage * (0.55 + 0.5 * change_drive)    # headroom under the loud handle for the beat surge
-        speed_target = _lerp(controls.stream_speed,
-                             _soft_top(flow_drive * (1.0 + 0.20 * self._flash + 0.10 * sustain))) * activity
-        # The Drift handles are actual quiet/loud field strengths. Reusing
-        # stream's transient activity factor hid the quiet endpoint and kept a
-        # held loud passage below the upper one. Idle slowdown is pause-only.
+        # Drift's base uses the quiet/loud field strengths. Activity only bounds
+        # its transient accent, and idle slowdown applies while paused.
         drift_target = _lerp(controls.drift, passage) * (1.0 if music.playing else rest_activity)
         # Particles have no beat surge: they keep the full passage share.
         emission_target = _soft_top(_lerp(controls.emission, passage * (0.7 + 0.6 * change_drive))
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash * passage)
-        if self._speed is None:
-            self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
-        # Flow accelerates continuously, rather than stepping at a vocal accent;
-        # release into silence retains the long resting transition.
-        self._speed = _follow(self._speed, speed_target, dt, 0.68 * soft, (0.65 + 2.35 * quiet * quiet) * soft)
+        if self._drift is None:
+            self._drift, self._emission = drift_target, emission_target
         self._drift = _follow(self._drift, drift_target, dt, 0.20 * soft, (0.35 + 2.15 * quiet * quiet) * soft)
         emission_release = (0.25 + 1.25 * quiet * quiet) * soft
         self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft,
                                  emission_release + min(0.15, 0.20 * emission_release))
-        # The beat surge: each onset pushes the flow toward its loud handle (never past it) and lets go over about
-        # half a second, so the stream visibly answers the beat. The followers above carry the passage only; they
-        # smooth beats away (speed and drift moved 2-4% with the beats on recorded music, audit 2026-10-25).
+        # A shared beat accent pushes the stream and drift toward their loud handles
+        # and lets go over about half a second.
         # Only onsets that stand out from the recent ones push (music sends ~10 a second: every one pushing held the
         # surge as a constant offset, not pulses).
         if onsets and not music.play_ramping:
@@ -752,10 +747,22 @@ class ExtrudedBubbleSimulation:
         # Eased in over about a tenth of a second: a push, never a step in velocity.
         self._surge = _follow(self._surge, self._surge_target, dt, 0.1, 0.05)
         push = self._surge * (0.25 + 0.75 * passage)
-        speed_live = self._speed + max(0.0, high_speed * activity - self._speed) * push
+        # The stream reads the existing ramped body input before the shared passage follower.
+        # The bass-led body sum keeps vocal and body changes legible inside a held passage.
+        # The beat spends only remaining headroom. Smooth the combined target once, with the
+        # established gentle release into silence. Only paused motion uses the idle factor.
+        if music.playing:
+            drive = _stream_drive(0.70 * music.intensity + 0.30 * min(1.0, body_sum))
+            speed_target = _lerp(controls.stream_speed, drive + (1.0 - drive) * push)
+        else:
+            speed_target = controls.stream_speed[0] * rest_activity
+        if self._speed is None:
+            self._speed = speed_target
+        self._speed = _follow(self._speed, speed_target, dt, _STREAM_SPEED_ATTACK,
+                              0.65 + 2.35 * quiet * quiet)
         drift_live = self._drift + max(0.0, controls.drift[1] * activity - self._drift) * push
         self._drift_shown = drift_live
-        speed = speed_live * WORLD_UNIT
+        speed = self._speed * WORLD_UNIT
         # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
         # change of speed never makes them jump.
         self._travel += speed * dt
