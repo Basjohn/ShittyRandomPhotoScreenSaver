@@ -821,14 +821,24 @@ def _kill_tree(pid: int) -> None:
 
 def _prepare_profile(out: Path, mode: str | None, preset: int | None, overrides: dict, *, appdata_root=None,
                      settings_folder: str = "SRPSS_Dashboard") -> Path:
-    """Copy MC's settings profile (``SRPSS_Dashboard``) and the shared data root (``SRPSS``); edit only the copy.
+    """Copy Dashboard's settings profile (``SRPSS_Dashboard``) and the shared data root (``SRPSS``); edit only the copy.
 
     ``settings_folder`` is the profile whose Visualizer is set (``SRPSS`` for the ordinary saver, ``tools/d1_run.py``
     ``--entry main``); ``mode=None`` copies without touching the Visualizer.
     """
     appdata = Path(os.environ["APPDATA"]) if appdata_root is None else Path(appdata_root)
-    for name in ("SRPSS", "SRPSS_Dashboard"):
-        shutil.copytree(appdata / name, out / "profile" / name)
+    profile = out / "profile"
+    shutil.copytree(appdata / "SRPSS", profile / "SRPSS")
+    for name in ("SRPSS_MC", "SRPSS_Dashboard"):
+        source = appdata / name
+        if source.exists():
+            shutil.copytree(source, profile / name)
+    # Resolve on the disposable copy: the canonical migration owns conflicts
+    # and failures, without ever moving the operator's real directory.
+    from core.settings.json_store import determine_storage_path
+    determine_storage_path("Dashboard", base_dir=profile)
+    if not (profile / "SRPSS_Dashboard").is_dir():
+        raise FileNotFoundError(f"Dashboard settings profile missing in {appdata}")
     if mode is None:
         return out / "profile"
     path = out / "profile" / settings_folder / "settings_v2.json"

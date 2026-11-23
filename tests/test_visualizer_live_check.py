@@ -21,7 +21,7 @@ def test_isolated_profile_overrides_survive_curated_activation_without_editing_p
     source.write_text(before)
     overrides={'waveform_ribbon_mist_enabled':False,'waveform_ribbon_input_gain':.37}
     root=_prepare_profile(tmp_path/'run','waveform_ribbon',1,overrides,appdata_root=appdata)
-    raw=json.loads((root/'SRPSS_MC/settings_v2.json').read_text())['snapshot']['widgets']['spotify_visualizer']
+    raw=json.loads((root/'SRPSS_Dashboard/settings_v2.json').read_text())['snapshot']['widgets']['spotify_visualizer']
     activation=resolve_visualizer_activation_payload(raw,mode='waveform_ribbon')
     assert activation.is_custom
     assert {key:activation.resolved_config[key] for key in overrides}==overrides
@@ -94,7 +94,7 @@ def test_a_finished_run_keeps_its_settings_and_deletes_the_profile_copy(monkeypa
 
     def report(args, out, *rest):
         # The copy exists for the whole run, up to the report.
-        seen["profile_during_report"] = (out / "profile" / "SRPSS_MC" / "settings_v2.json").is_file()
+        seen["profile_during_report"] = (out / "profile" / "SRPSS_Dashboard" / "settings_v2.json").is_file()
         return 0
 
     code, out = _run_live_check(monkeypatch, tmp_path, 0, report)

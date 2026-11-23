@@ -229,7 +229,7 @@ def test_settings_are_written_to_the_copy_through_the_settings_manager_and_read_
                                      ("widgets.spotify_visualizer.expanded_display_requested", True)],
                                     application="Dashboard", storage_base_dir=tmp_path / "copy")
     assert applied["widgets.global.card_border_width_px"]["after"] == 5
-    assert Path(applied["_path"]) == (tmp_path / "copy" / "SRPSS_MC" / "settings_v2.json").resolve()
+    assert Path(applied["_path"]) == (tmp_path / "copy" / "SRPSS_Dashboard" / "settings_v2.json").resolve()
     reopened = SettingsManager(application="Dashboard", storage_base_dir=tmp_path / "copy")
     reopened.load()
     assert reopened.get("widgets.global.card_border_width_px") == 5
@@ -289,9 +289,9 @@ def test_the_main_entry_edits_its_own_profile_and_the_source_is_never_touched(tm
     ordinary = json.loads((root / "SRPSS" / "settings_v2.json").read_text())["snapshot"]["widgets"]
     assert ordinary["spotify_visualizer"]["mode"] == "devcurve"
     assert ordinary["spotify_visualizer"]["preset_devcurve"] == 1
-    assert json.loads((root / "SRPSS_MC" / "settings_v2.json").read_text()) == json.loads(before["SRPSS_MC"])
+    assert json.loads((root / "SRPSS_Dashboard" / "settings_v2.json").read_text()) == json.loads(before["SRPSS_MC"])
     plain = _prepare_profile(tmp_path / "run2", None, None, {}, appdata_root=appdata)
-    assert (plain / "SRPSS_MC" / "settings_v2.json").read_text() == before["SRPSS_MC"]
+    assert (plain / "SRPSS_Dashboard" / "settings_v2.json").read_text() == before["SRPSS_MC"]
     assert {folder: (appdata / folder / "settings_v2.json").read_text() for folder in before} == before
 
 
@@ -605,7 +605,7 @@ def _main(monkeypatch, tmp_path, argv, *, displays=(D0, D1), outcome=None):
     def supervise(command, **kwargs):
         launched.append((command, kwargs))
         out = Path(command[command.index("--out") + 1])
-        launched.append(("profile_during_run", (out / "profile" / "SRPSS_MC" / "settings_v2.json").is_file()))
+        launched.append(("profile_during_run", (out / "profile" / "SRPSS_Dashboard" / "settings_v2.json").is_file()))
         return outcome or {"ended": "exited", "returncode": 1, "violation": None, "pid": 0, "seconds": 0.1}
 
     monkeypatch.setattr(d1_run, "supervise", supervise)
@@ -635,3 +635,4 @@ def test_a_failed_run_still_deletes_the_profile_copy_and_keeps_its_settings(monk
     assert mc["snapshot"]["widgets"]["spotify_visualizer"]["mode"] == "devcurve"
     summary = json.loads((out / "summary.json").read_text())
     assert summary["failures"] and json.loads((out / "plan.json").read_text())["display"]["index"] == 1
+
