@@ -24,6 +24,8 @@ Rounds (each with its control):
   geometry  D3 on a harness writer of geometry_arena.h's layout: one upload a key, the same revision under another
             namespace drawing its own bytes, "@previous" at the swap, a capacity growth, an invalid bank failed once
             with the old drawn, zero residencies after a mode switch and teardown.
+  geometry_projection  the native drift projector's D3 keys and canonical family geometry through that same writer.
+            Repeat, capacity growth, rebase with the previous geometry, and stale activation isolation.
   probe     a cube drawn face by face (through v_uv and through uMatrix), its prefilter, every face and level read back
             against a CPU twin of probe.py's chain, lookups at levels 0, 2 and 3 and across face edges. Controls:
             swapped faces, a per-face box chain, a clamped (non-seamless) read.
@@ -55,7 +57,7 @@ import vk_validation  # noqa: E402
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("limits", "skip", "readback", "geometry", "probe", "compute_bindings")
+ROUNDS = ("limits", "skip", "readback", "geometry", "probe", "compute_bindings", "geometry_projection")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
 OUT: Path | None = None     # the child's evidence folder (set by child)
@@ -725,6 +727,12 @@ class Arena:
                          ns, engine, activation, family, capacity, revision)
         struct.pack_into("<I", self.buf, at, sequence + 2)          # even and advanced: whole
 
+    def write_words(self, bank: int, key_words: tuple[int, ...], payload: bytes) -> None:
+        import struct
+
+        ns, engine, activation, family, revision, capacity = struct.unpack("<QIIIQI", struct.pack("<8I", *key_words))
+        self.write(bank, (ns, engine, activation, family, capacity, revision), payload)
+
     def close(self) -> None:
         self.buf = None
         self.memory.close()
@@ -869,6 +877,146 @@ def round_geometry(core, engine, app, api: str, packs: dict) -> dict:
     checks["second_item_resident"] = facts["second_item_resident"] == 1
     checks["zero_residencies_and_arenas_after_teardown"] = (live.get("geometry_resident") == 0
                                                             and live.get("geometry_arenas") == 0)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+# ------------------------------------------------------------------------------- projected D3 geometry publication
+
+def round_geometry_projection(core, engine, app, api: str, packs: dict) -> dict:
+    """Drive the existing D3 arena fixture with the projected keys and each family's production byte layout."""
+    import hashlib
+    import numpy as np
+    from core.visualizer_engine.extruded_bubble_native_schema import DriftRecordProjector
+    from rendering.native.mode import ComputeBinding, ComputePass, StorageBuffer
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import DriftFamily, FAMILIES, STEP_FLOATS, STEP_INDEX, pack_geometry
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import seeded_random
+    from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
+
+    def frame(serial, revision, prev, born, capacity, tag):
+        row = np.arange(capacity, dtype=np.float64)
+        origin = np.stack((row, row * .125 + tag, row * .25), axis=1)
+        span, phase = row * .0625 + 1., row * .015625
+        ends = origin + np.array((0., 1., 0.))
+        chains = (np.stack((origin, ends), axis=1), span, np.full_like(row, .5), phase)
+        seeds = seeded_random(np.arange(capacity), 11)
+        source = {"chains": chains, "snow": (origin, span, seeds, .5, phase),
+                  "specks": (origin + 4., span, seeds, .5, phase)}
+        families = tuple(DriftFamily(name, revision, prev, born, capacity, pack_geometry(name, source[name]))
+                         for name in FAMILIES)
+        steps = np.zeros((1, STEP_FLOATS), dtype="<f8")
+        steps[0, STEP_INDEX["serial"]] = serial
+        return ExtrudedBubbleFrame(drift_families=families, drift_steps=steps.tobytes())
+
+    passes, buffers = [], []
+    size = GEO_ROWS * 16
+    for i, name in enumerate(FAMILIES):
+        geometry, result = f"{name}_geometry", f"{name}_rows"
+        buffers.extend((Raw({"name": geometry, "geometry": {"family": i, "key": f"{name}_geometry_key"}}),
+                        StorageBuffer(result, 2 * size)))
+        bindings = (ComputeBinding("Current", geometry),
+                    ComputeBinding("Previous", f"{geometry}@previous"),
+                    ComputeBinding("Result", result, access="write"))
+        passes.append(ComputePass(name, packs["geometry.comp"], groups=(1, 1, 1), bindings=bindings))
+
+    entries = tuple((f"{name}_geometry_key", "u32", 8) for name in FAMILIES)
+    projector = DriftRecordProjector(0x12345678ABCDEF01, 4, 7)
+    replacement = DriftRecordProjector(0x12345678ABCDEF01, 4, 8)
+    rev = 0x1ABCDEF000000001
+    initial = frame(1, rev, 0, 1, GEO_ROWS, .25)
+    grown = frame(2, rev, 0, 1, 2 * GEO_ROWS, .25)
+    edited = frame(3, rev + 1, rev, 3, 2 * GEO_ROWS, 8.)
+    newer = frame(1, rev + 1, 0, 1, 2 * GEO_ROWS, 16.)
+    bank_bytes = max(len(family.geometry) for family in grown.drift_families)
+    arena, host = Arena(len(FAMILIES), bank_bytes), _host(core, CARD)
+    checks, facts = {}, {}
+
+    def publish(bank, logical, projection):
+        fields, _ = projection.project(logical)
+        keys = {name: fields[name] for name, _, _ in entries}
+        for i, family in enumerate(logical.drift_families):
+            arena.write_words(bank, keys[f"{family.family}_geometry_key"], family.geometry)
+            payload_at = arena._offset(i, bank) + arena.BANK_HEADER
+            assert bytes(arena.buf[payload_at:payload_at + len(family.geometry)]) == family.geometry
+        return keys, fields
+
+    def make_scene(keys):
+        scene = _streamed(core, engine, host, "geometry", passes, (), {}, entries, keys, buffers=buffers)
+        scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
+        return scene
+
+    def verify(scene, keys, current, previous):
+        scene.draw(1, **keys)
+        readback = scene.storage(app)
+        expected = {f"{a.family}_rows": a.geometry[:size] + b.geometry[:size]
+                    for a, b in zip(current.drift_families, previous.drift_families, strict=True)}
+        return {name: hashlib.sha256(data).hexdigest() for name, data in expected.items()
+                if readback[name][3] == data}
+
+    try:
+        start = _live(core)
+        keys, original = publish(0, initial, projector)
+        scene = make_scene(keys)
+        try:
+            facts["initial_sha256"] = verify(scene, keys, initial, initial)
+            after_initial = _live(core)
+            for _ in range(4):
+                scene.draw(1, **keys)
+            repeat = _live(core)
+            observed = ("geometry_uploads", "geometry_reads_found")
+            facts["initial"] = {name: _delta(after_initial, start, name) for name in observed}
+            facts["repeat"] = {name: _delta(repeat, after_initial, name) for name in observed}
+            checks["initial_keys_read_and_uploaded_once"] = (
+                len(facts["initial_sha256"]) == len(FAMILIES) and all(v == len(FAMILIES) for v in facts["initial"].values()))
+            checks["repeat_does_not_admit_again"] = all(v == 0 for v in facts["repeat"].values())
+
+            keys, growth = publish(1, grown, projector)
+            facts["growth_sha256"] = verify(scene, keys, grown, initial)
+            checks["resize_keeps_epoch_and_changes_key"] = (
+                len(facts["growth_sha256"]) == len(FAMILIES) and all(
+                    growth[f"{family}_epoch"] == original[f"{family}_epoch"]
+                    and growth[f"{family}_geometry_key"] != original[f"{family}_geometry_key"] for family in FAMILIES))
+            for _ in range(3):
+                scene.draw(1, **keys)  # all readers now reference bank 1; bank 0 can be reused in this fixture
+            facts["growth_old_residencies_released"] = _delta(_live(core), repeat, "geometry_released")
+            checks["growth_predecessor_releases_after_the_new_record"] = (
+                facts["growth_old_residencies_released"] == len(FAMILIES))
+            keys, rebase = publish(0, edited, projector)
+            facts["rebase_sha256"] = verify(scene, keys, edited, grown)
+            checks["rebase_uses_the_projected_predecessor"] = (
+                len(facts["rebase_sha256"]) == len(FAMILIES) and all(
+                    rebase[f"{family}_rebase_from_epoch"] == growth[f"{family}_epoch"] != rebase[f"{family}_epoch"]
+                    for family in FAMILIES))
+            facts["rebase_settled_sha256"] = verify(scene, keys, edited, edited)
+            checks["previous_retires_after_the_swap"] = len(facts["rebase_settled_sha256"]) == len(FAMILIES)
+            facts["uploads_through_rebase"] = _delta(_live(core), start, "geometry_uploads")
+            checks["growth_and_rebase_each_upload_one_key_a_family"] = facts["uploads_through_rebase"] == 3 * len(FAMILIES)
+        finally:
+            _close(scene, host, app)
+
+        fresh, _ = publish(0, newer, replacement)
+        stale = make_scene(keys)  # retired activation's full keys; its bank now has the same revision in activation 8
+        try:
+            before = _live(core)
+            for _ in range(3):
+                stale.draw(1, **keys)
+            facts["retired"] = {name: _delta(_live(core), before, name) for name in (
+                "geometry_uploads", "geometry_reads_found", "geometry_waits")}
+            checks["retired_keys_cannot_read_the_replacement_bank"] = (
+                facts["retired"]["geometry_uploads"] == 0 and facts["retired"]["geometry_reads_found"] == 0
+                and facts["retired"]["geometry_waits"] > 0)
+        finally:
+            _close(stale, host, app)
+        current = make_scene(fresh)
+        try:
+            facts["replacement_sha256"] = verify(current, fresh, newer, newer)
+            checks["replacement_activation_reads_its_own_payload"] = len(facts["replacement_sha256"]) == len(FAMILIES)
+        finally:
+            _close(current, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+        arena.close()
+    checks["nothing_resident_after_teardown"] = (_live(core)["geometry_resident"] == start["geometry_resident"])
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -1143,7 +1291,8 @@ def child(args) -> dict:
     engine = QQmlEngine()
     packs = load_packs(out)
     rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry,
-              "probe": round_probe, "compute_bindings": round_compute_bindings}
+              "probe": round_probe, "compute_bindings": round_compute_bindings,
+              "geometry_projection": round_geometry_projection}
     try:
         for name in args.rounds:
             if vulkan:
