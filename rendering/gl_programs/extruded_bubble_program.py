@@ -1047,8 +1047,8 @@ void main() {
             alpha = mix(alpha, coverage * min(1.0, 0.28 + 0.62 * fresnel + 0.5 * spot * uSparkle * spotGain) * vExtra.z
                                * vOpacity, shell);
         }
-        gl_FragDepth = sceneSphereDepth(front, uProjection);
 #ifndef NEAR_LAYER
+        gl_FragDepth = sceneSphereDepth(front, uProjection);
         if (uLitGlass > 0.0) {
             // Lit Glass on micro-glass: each resolvable bead a lit ring with its glint, so a dense stream reads
             // as chains of glass beads catching the light rather than as glitter.
@@ -1065,7 +1065,9 @@ void main() {
     }
     vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
     vec2 centrePx = ndcToUv(clipC.xy / clipC.w) * uFrameSize;
+#ifndef NEAR_LAYER
     gl_FragDepth = sceneSphereDepth(front, uProjection);
+#endif
     float speck = 1.0 - smoothstep(1.0, 2.5, pixels);
     // A bead of a pixel or less is all speck light below: its trace would be thrown away.
     vec4 shaded = speck < 1.0 ? shadeBubble(rayOrigin, ray, vSphere, pixels, soft, front) : vec4(0.0);
@@ -1216,7 +1218,9 @@ void main() {
     float localPixels = r / (uPixelSize * framedPixelDepth(max(-point.z, 0.1)));
     vec4 shaded = shadeBubble(rayOrigin, ray, tangent, localPixels, 0.0, rayOrigin + point);
     if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
+#ifndef NEAR_LAYER
     gl_FragDepth = sceneSphereDepth(point, uProjection);
+#endif
     // The same smooth-min weights as the union surface, not the first member's alpha.
     float distance_ = length(point - s[0].xyz) - s[0].w;
     float opacity = vAlphas[0];
