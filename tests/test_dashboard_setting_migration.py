@@ -14,6 +14,13 @@ def test_old_json_dashboard_setting_promotes_and_persists(tmp_path):
     assert saved['dashboard']['always_on_top'] is False
     assert 'mc' not in saved
 
+    conflict = tmp_path / 'conflict.json'
+    conflict.write_text(json.dumps({'snapshot': {'mc': {'always_on_top': False},
+                                                 'dashboard': {'always_on_top': True}}}), encoding='utf-8')
+    current = JsonSettingsStore(storage_path=conflict, profile='Dashboard')
+    assert current.value('dashboard.always_on_top') is True
+    assert not current.contains('mc.always_on_top')
+
 
 def test_sst_import_promotes_legacy_and_current_value_wins(tmp_path):
     assert normalize_sst_snapshot({'mc': {'always_on_top': False}})['dashboard']['always_on_top'] is False

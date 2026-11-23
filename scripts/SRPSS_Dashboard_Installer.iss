@@ -28,7 +28,8 @@ AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppUpdatesURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 ; Keep the established install directory for upgrades.
-DefaultDirName={localappdata}\SRPSS Media Center
+DefaultDirName={localappdata}\SRPSS Dashboard
+UsePreviousAppDir=yes
 DefaultGroupName=SRPSS - Dashboard
 UsePreviousGroup=no
 PrivilegesRequired=admin
@@ -114,6 +115,7 @@ Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettin
 ; Remove shortcuts that target the superseded executable.
 Type: files; Name: "{userdesktop}\SRPSS - Media Center.lnk"
 Type: files; Name: "{userprograms}\SRPSS - Media Center\SRPSS - Media Center.lnk"
+Type: files; Name: "{commonprograms}\SRPSS - Media Center\SRPSS - Media Center.lnk"
 
 ; CurStepChanged clean-replaces the entire installer-owned {app} payload while
 ; preserving only Inno's unins* bookkeeping files. Keep shared mutable/catalogue

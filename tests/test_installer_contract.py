@@ -70,6 +70,10 @@ def test_dashboard_wildcard_is_the_single_app_payload_copy() -> None:
     explicit_exe = r'Source: "..\release\dashboard\SRPSS_Dashboard.exe"; DestDir: "{app}"'
     assert wildcard in source
     assert explicit_exe not in source
+    assert r'DefaultDirName={localappdata}\SRPSS Dashboard' in source
+    assert 'UsePreviousAppDir=yes' in source
+    for root in ('userprograms', 'commonprograms'):
+        assert f'{{{root}}}\\SRPSS - Media Center\\SRPSS - Media Center.lnk' in source
 
 
 def test_installed_preset_data_is_modifiable_without_granting_binary_write_access() -> None:

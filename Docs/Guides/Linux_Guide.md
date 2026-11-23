@@ -22,12 +22,12 @@ srpss-screensaver /c                                          # Settings (also i
 srpss-screensaver /s                                          # the saver itself
 ```
 
-`install.sh` puts the program in `~/.local/opt/srpss-screensaver`, links `~/.local/bin/srpss-screensaver`, adds two menu entries and
+`install.sh` puts the program in `~/.local/opt/srpss`, links `~/.local/bin/srpss-screensaver`, adds two menu entries and
 replaces the curated presets, themes and sounds in `~/.local/share/SRPSS` (the counterpart of the Windows
 installer's ProgramData step). `install.sh --uninstall` removes all of that and keeps your settings.
 
 Release builds write no log by default. To enable the main log, create `srpss-screensaver.logging.cfg` containing `1`
-next to the installed `srpss-screensaver` binary; logs then go to `~/.local/opt/srpss-screensaver/logs`.
+next to the installed `srpss-screensaver` binary; logs then go to `~/.local/opt/srpss/logs`.
 
 ## 3. Use it as a screensaver
 
@@ -110,8 +110,8 @@ From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI, `winget inst
 Both run `.github/workflows/linux-build.yml` on a GitHub Ubuntu 22.04 runner (build, smoke test) and download
 the distinct tarballs into `release\linux` (`SRPSS-<version>-linux-screensaver-x86_64.tar.gz` and
 `SRPSS-<version>-linux-dashboard-x86_64.tar.gz`). Both Linux builds can run concurrently with Windows jobs;
-there is no local Linux compiler. On Linux the Dashboard installer uses `~/.local/opt/srpss-dashboard` and
-`~/.local/bin/srpss-dashboard` with its own desktop entries, leaving the screensaver install intact.
+there is no local Linux compiler. On Linux the Dashboard installer uses `~/.local/opt/srpss-mc` and
+`~/.local/bin/srpss-dashboard` with its own desktop entries, leaving the screensaver install intact. The `srpss` and `srpss-mc` installation directories retain the earlier product identities so upgrades replace the existing installations; the executable, CLI links, and menu entries use the new product names.
 Both profiles share curated presets/themes but keep separate settings (`SRPSS` versus `SRPSS_Dashboard`).
 The branch must be pushed; GitHub builds the pushed commit (`-Commit <sha>` pins
 one and is the only dispatch that sends the workflow's `commit`/`token` inputs, so a branch whose workflow predates
