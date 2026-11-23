@@ -187,7 +187,7 @@ def test_linux_build_publishes_separate_profile_tarballs_without_interference(tm
     assert (outputs["dashboard"] / "srpss-dashboard").is_file()
 
 
-def test_mc_smoke_seeds_an_available_xvfb_display(monkeypatch, tmp_path: Path) -> None:
+def test_dashboard_smoke_seeds_an_available_xvfb_display(monkeypatch, tmp_path: Path) -> None:
     """Dashboard's display-2 default must not create a falsely headless one-monitor smoke run."""
     from tools import linux_headless as lh
     from core.settings.display_selection import enabled_monitor_numbers

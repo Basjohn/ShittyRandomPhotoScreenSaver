@@ -49,7 +49,7 @@ None open (AC-11 landed 7 Nov: `Docs/Reference/Visualizer_Reference.md` → Live
   the operator's machine) against two real submitters and a two-lane cap; `_ui_diagnostics["delivered_by_generation"]`
   (`:48, 303, 323`) gains an entry per generation and is never pruned; `core/process/workers/base.py:94,171` wakes
   idle IMAGE / IMAGE_PREFETCH workers 10x/s (`POLL_TIMEOUT_S = 0.1`) and `core/process/supervisor.py:281` the listener
-  4x/s, displays off included; `engine/display_manager.py:5923` schedules the one untagged, owner-less lambda (MC
+  4x/s, displays off included; `engine/display_manager.py:5923` schedules the one untagged, owner-less lambda (Dashboard
   Reddit flush). Cancellation note: `_prune_cancelled_single_shot_generation` (`manager.py:125-133`) forgets a
   cancelled generation once its timers drain, and Settings cancels only single-shots (`engine_handlers.py:572`); a
   late single-shot from a closed Settings generation is admitted unless it is parented to the dialog (today they are,

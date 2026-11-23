@@ -5,7 +5,7 @@ import os
 import ui.settings_dialog_cache as cache_module
 
 
-def test_defaults_generation_tracks_canonical_base_and_mc_overlay(
+def test_defaults_generation_tracks_canonical_base_and_dashboard_overlay(
     tmp_path,
     monkeypatch,
 ) -> None:

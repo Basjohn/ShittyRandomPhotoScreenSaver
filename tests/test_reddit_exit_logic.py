@@ -11,8 +11,8 @@ class TestCleanQueueFlow:
     """Test the new clean queue-based URL handling."""
 
     @pytest.mark.qt
-    def test_mc_flush_opens_directly(self, qt_app, monkeypatch):
-        """MC build flush opens URLs via QDesktopServices."""
+    def test_dashboard_flush_opens_directly(self, qt_app, monkeypatch):
+        """Dashboard build flush opens URLs via QDesktopServices."""
         from engine.display_manager import DisplayManager
         manager = DisplayManager()
         manager._deferred_reddit_urls = ["https://example.com/mc-flush"]

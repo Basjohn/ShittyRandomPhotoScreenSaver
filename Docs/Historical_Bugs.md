@@ -6,7 +6,7 @@
 
 **Retention flag:** reports marked `STRONG RETENTION VALUE DOCUMENT` contain particularly hard-won evidence. The marker protects diagnostic reasoning, not an unchangeable design. After archival consolidation, old identifiers may appear in Git history, but removed documents are no longer active navigation targets.
 
-**Known current corrections:** Ban Image is operator-accepted in Standard and MC. Diagnostic frame-trace binaries are restored. Sphere and Shockwave audio paths are physically accepted. Bubble small-radius judder is a deferred watchlist only; dual-display catastrophic slowdown recovered after reboot with unproved OS root cause. Python 3.14 migration focused gates are accepted. R154 terminal-generation display-retirement fix remains dependent on any later physical lifecycle evidence. Do not infer a fresh build or test request from this index.
+**Known current corrections:** Ban Image is operator-accepted in Screensaver and Dashboard. Diagnostic frame-trace binaries are restored. Sphere and Shockwave audio paths are physically accepted. Bubble small-radius judder is a deferred watchlist only; dual-display catastrophic slowdown recovered after reboot with unproved OS root cause. Python 3.14 migration focused gates are accepted. R154 terminal-generation display-retirement fix remains dependent on any later physical lifecycle evidence. Do not infer a fresh build or test request from this index.
 
 ## Consolidated significant incidents
 

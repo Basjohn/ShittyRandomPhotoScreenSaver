@@ -145,7 +145,7 @@ What ours should do better, using what the widget material track has built or is
 - The Visualizer pane is the live Visualizer on the same material, so the window's most vivid element is real.
 - Cost: one backdrop capture shared by all panes of the window, no per-pane blur passes; dormant when the window
   is hidden or minimised.
-- What the material shows (operator, 12 Nov): the artwork backdrop in the saver and MC builds (inside the
+- What the material shows (operator, 12 Nov): the artwork backdrop in the saver and Dashboard builds (inside the
   compositor); the desktop behind the window in the dedicated SMP build ("Material is meant to show what is
   behind"). Routes and fallback: `Docs/Future_Work/Native_Core_P3_Decisions.md` D7 point 8.
 
@@ -161,8 +161,8 @@ What ours should do better, using what the widget material track has built or is
 The operator's clarification, in their order. SMP stays long term: the native core, the existing defects and the
 fullscreen Visualizer come first. It is written down now so that work done before then does not close doors.
 
-- P1. **Three builds from profiles, as the saver and MC build today.** SMP functionality exists in all three: the
-  screensaver build, the MC build and an SMP build. The screensaver and MC builds carry full SMP functionality
+- P1. **Three builds from profiles, as the saver and Dashboard build today.** SMP functionality exists in all three: the
+  screensaver build, the Dashboard build and an SMP build. The screensaver and Dashboard builds carry full SMP functionality
   *along with* the compositor (images, transitions, every widget). Only the SMP profile build comes without the
   compositor: no transitions, no image presenter, no widgets that are not the Visualizer or media related. At
   least two of its media widgets do not exist yet (the Library and the Playlist / Queue of plan 02 section 3).
@@ -175,11 +175,11 @@ fullscreen Visualizer come first. It is written down now so that work done befor
   swaps and x/y adjustments": the controls on top or at the side, the Visualizer as a thin wide strip along the
   bottom, the artwork and artist information top left. "Every 'child' should be intelligently moveable as an
   adjustable 'section'."
-- P5. **Existing Edit modes must not break**, and in the screensaver and MC builds SMP Edit lives side by side
+- P5. **Existing Edit modes must not break**, and in the screensaver and Dashboard builds SMP Edit lives side by side
   with them.
 - P7. **SMP has its own section in Arrange**, "where this can be more easily carried out"; on SMP builds it is
   the main section of Arrange.
-- P8. **On the screensaver and MC builds, Full mode and Small mode do not need to leave the compositor.** Only
+- P8. **On the screensaver and Dashboard builds, Full mode and Small mode do not need to leave the compositor.** Only
   the SMP profile build puts them on the desktop as windows.
 - P6. **Audio and library, eventually:** an equalizer; high-end audio support ("everything from upmixing,
   downmixing to replay gain, device select and so on, audio crossfade too"); "a well indexed growable library
@@ -195,7 +195,7 @@ owners, never a teardown and rebuild: audio, queue position, the system media se
 and history carry across (plan 02 section 8.2 already requires this; Current_Plan 1C.2 makes "retarget before
 rebuild" a standing rule).
 
-**8.2 Small mode is the Media widget's own contract; the host differs by build (P8).** On the screensaver and MC
+**8.2 Small mode is the Media widget's own contract; the host differs by build (P8).** On the screensaver and Dashboard
 builds Small mode *is* the Media widget on the compositor, exactly as today, and never leaves it. On the SMP
 profile build the same component sits in a desktop window, where its outer geometry is always live (edge and
 corner drags, snapping to screen edges, to the work area and to its own last positions) with no Edit mode to
@@ -207,7 +207,7 @@ rules and are adjustable only while the lock glyph is open, so an ordinary drag 
 full screen, maximised or dragged to any size: an internal node is a horizontal or vertical split with a normalised
 ratio; a leaf is a section holding one content. Because the tree stores ratios and never pixels, resizing the
 window scales every section's size and spacing with no reauthoring (P4). Full screen is the default window state
-and is remembered; it is a state of the window, not a different layout system. On the screensaver and MC builds
+and is remembered; it is a state of the window, not a different layout system. On the screensaver and Dashboard builds
 Full mode stays inside the compositor (P8): it is a display-wide presentation on one display, the same kind of
 takeover the fullscreen Visualizer is (plan 01), and its rectangle is that display; the tree, the sections and
 every rule below are the same. Only the host of the rectangle differs.
@@ -251,7 +251,7 @@ P5 true.
   Edit modes already use (the route Fullscreen Visualizer Edit took: its own surface, ordinary Edit's handlers).
   So the three feel the same in the hand, and a fix to a handle fixes all three.
 - *One edit session per surface.* A surface (a compositor display, or the SMP build's window) is in at most
-  one edit mode at a time. On the screensaver and MC builds Full mode is a display-wide presentation inside the
+  one edit mode at a time. On the screensaver and Dashboard builds Full mode is a display-wide presentation inside the
   compositor, so SMP Edit stands to it exactly as Fullscreen Visualizer Edit stands to the expanded Visualizer:
   entered from that presentation, editing only that presentation's record, with ordinary Edit unavailable on
   that display until the presentation collapses and available as ever on the other displays. Entering either
@@ -273,7 +273,7 @@ P5 true.
 **8.7 Profiles decide what is built in, by capability, and so which host SMP uses.** The SMP profile build has no
 compositor capability: the image presenter, transitions, image sources and the non-media widget families are
 absent, and the SMP runtime never imports them (plan 02 section 8.1 already has this; an import-closure test like
-the engine worker's proves it); there Small and Full mode are desktop windows. The screensaver and MC builds have
+the engine worker's proves it); there Small and Full mode are desktop windows. The screensaver and Dashboard builds have
 the compositor capability and the SMP capability together; there Small and Full mode are presentations inside the
 compositor and need no desktop window (P8). The section tree, the section registry, SMP Edit and Arrange's SMP
 section are written once against a small host interface ("give me a rectangle, tell me when it changes, take

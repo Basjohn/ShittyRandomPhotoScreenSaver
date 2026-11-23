@@ -23,11 +23,11 @@ class TestApplicationNameDetection:
         
         assert app_name == "Screensaver"
     
-    def test_mc_detection_from_argv_without_explicit_storage_root(self, tmp_path, monkeypatch):
-        """Test MC detection from sys.argv."""
+    def test_dashboard_detection_from_argv_without_explicit_storage_root(self, tmp_path, monkeypatch):
+        """Test Dashboard detection from sys.argv."""
         import sys
         
-        # Mock sys.argv to simulate MC build
+        # Mock sys.argv to simulate Dashboard build
         original_argv = sys.argv
         try:
             sys.argv = ["main_dashboard.py"]
@@ -41,14 +41,14 @@ class TestApplicationNameDetection:
             )
             settings = settings_module.SettingsManager(application="Screensaver")
             
-            # Should detect MC build from argv
+            # Should detect Dashboard build from argv
             app_name = settings.get_application_name()
             assert app_name == "Dashboard"
         finally:
             sys.argv = original_argv
     
-    def test_explicit_mc_application_name(self, tmp_path):
-        """Test explicit MC application name."""
+    def test_explicit_dashboard_application_name(self, tmp_path):
+        """Test explicit Dashboard application name."""
         from core.settings.settings_manager import SettingsManager
         
         settings = SettingsManager(application="Dashboard", storage_base_dir=tmp_path)
@@ -61,7 +61,7 @@ class TestProfileIsolation:
     """Tests for settings isolation between profiles."""
     
     def test_different_settings_files(self, tmp_path):
-        """Canonical Screensaver and MC profiles must use different JSON stores."""
+        """Canonical Screensaver and Dashboard profiles must use different JSON stores."""
         from core.settings.settings_manager import SettingsManager
 
         settings1 = SettingsManager(application="Screensaver", storage_base_dir=tmp_path)
@@ -89,10 +89,10 @@ class TestProfileIsolation:
 
 
 class TestMCDefaults:
-    """Tests for MC-specific default values."""
+    """Tests for Dashboard-specific default values."""
     
-    def test_mc_always_on_top_default_is_current_profile_contract(self, tmp_path):
-        """The MC profile owns the canonical always-on-top default."""
+    def test_dashboard_always_on_top_default_is_current_profile_contract(self, tmp_path):
+        """The Dashboard profile owns the canonical always-on-top default."""
         from core.settings.default_contract import require_canonical_default
         from core.settings.settings_manager import SettingsManager
 

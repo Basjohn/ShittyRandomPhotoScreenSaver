@@ -119,7 +119,7 @@ def test_log_dir_environment_variable_is_ignored(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("splash", [False, True])
-def test_mc_window_role_follows_the_cli_admission(monkeypatch, splash):
+def test_dashboard_window_role_follows_the_cli_admission(monkeypatch, splash):
     from rendering.quick.state import QuickWindowRole
     from tests._display_manager_doubles import bare_display_manager
 
@@ -135,7 +135,7 @@ def test_mc_window_role_follows_the_cli_admission(monkeypatch, splash):
     )
 
 
-def test_mc_window_role_ignores_the_retired_environment_variable(monkeypatch):
+def test_dashboard_window_role_ignores_the_retired_environment_variable(monkeypatch):
     from rendering.quick.state import QuickWindowRole
     from tests._display_manager_doubles import bare_display_manager
 

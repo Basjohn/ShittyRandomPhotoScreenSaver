@@ -269,7 +269,7 @@ class TestRedditHelperRuntime:
 
         assert runtime.ensure_helper_runtime(source="system") is False
 
-    def test_ensure_helper_runtime_skips_in_mc_build(self, monkeypatch):
+    def test_ensure_helper_runtime_skips_in_dashboard_build(self, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)

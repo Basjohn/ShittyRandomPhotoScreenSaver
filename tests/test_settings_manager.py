@@ -526,7 +526,7 @@ class TestSettingsManagerDefaults:
         result = manager.get("existing.key", 0)
         assert result == 42
 
-    def test_reset_to_defaults_reapplies_mc_profile_overrides(self, tmp_path: Path) -> None:
+    def test_reset_to_defaults_reapplies_dashboard_profile_overrides(self, tmp_path: Path) -> None:
         manager = SettingsManager(
             organization="TestOrg",
             application="Dashboard",
@@ -544,7 +544,7 @@ class TestSettingsManagerDefaults:
             "display.show_on_monitors", DASHBOARD_PROFILE
         )
 
-    def test_fresh_mc_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
+    def test_fresh_dashboard_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
         manager = SettingsManager(
             organization="TestOrg",
             application="Dashboard",

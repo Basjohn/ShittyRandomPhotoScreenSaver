@@ -309,7 +309,7 @@ def test_a_hand_edited_spelling_reads_through_the_typed_model(tmp_path):
     assert manager.get_spotify_visualizer_settings().expanded_display_requested is _canonical()
 
 
-def test_standard_and_mc_profiles_keep_independent_intents(tmp_path):
+def test_standard_and_dashboard_profiles_keep_independent_intents(tmp_path):
     standard = _manager(tmp_path, NORMAL_PROFILE)
     mc = _manager(tmp_path, DASHBOARD_PROFILE)
     assert standard.get_storage_path() != mc.get_storage_path()

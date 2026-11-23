@@ -44,7 +44,7 @@ def _copy_base_source(tmp_path):
     return path
 
 
-def test_profile_defaults_resolve_normal_and_mc_without_mutating_base() -> None:
+def test_profile_defaults_resolve_normal_and_dashboard_without_mutating_base() -> None:
     base = get_base_default_settings()
     base_before = deepcopy(base)
     normal = get_default_settings(NORMAL_PROFILE)
@@ -300,7 +300,7 @@ def test_every_text_setting_tooltip_describes_valid_text_domain() -> None:
     assert "font installed on the target system" in font_tip
 
 
-def test_normal_snapshot_import_preserves_explicit_mc_differences() -> None:
+def test_normal_snapshot_import_preserves_explicit_dashboard_differences() -> None:
     models = {
         NORMAL_PROFILE: {
             "timing": {"interval": 60},

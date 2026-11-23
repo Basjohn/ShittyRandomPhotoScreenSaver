@@ -339,7 +339,7 @@ not trigger its M0.
 
 **Work retained on the live track:** current-product theme/material unification, Context Menu and
 Now Playing surfaces, material borders, and the Appearance Theme Studio after the flip and M4. Those
-improvements are independently valuable to Standard and MC, without importing an SMP library/audio
+improvements are independently valuable to Screensaver and Dashboard, without importing an SMP library/audio
 service, skin ZIP loader, desktop host or extra renderer. Keep Media/Visualizer, Qt Quick Edit and the
 native core host-agnostic for future SMP, but do not build speculative SMP implementations.
 This later scheduling decision does not undo the 23 Nov permission for **new** Vulkan-only mesh-shader modes,

@@ -38,7 +38,7 @@ class TestPathResolution:
         assert d.exists()
         assert d.name == "SRPSS"
 
-    def test_mc_profile_shares_the_data_root_but_keeps_its_settings_folder(self, tmp_base: Path, monkeypatch):
+    def test_dashboard_profile_shares_the_data_root_but_keeps_its_settings_folder(self, tmp_base: Path, monkeypatch):
         from core.settings.json_store import determine_storage_path
 
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
@@ -124,7 +124,7 @@ def test_current_storage_owners_have_no_retired_temp_migration_surface() -> None
     assert "migrate_directory" not in source
 
 
-def test_feed_snapshots_and_artwork_use_the_shared_data_root_under_mc(tmp_path, monkeypatch):
+def test_feed_snapshots_and_artwork_use_the_shared_data_root_under_dashboard(tmp_path, monkeypatch):
     import sys
     from core.feeds.cache import FeedCacheStore
 

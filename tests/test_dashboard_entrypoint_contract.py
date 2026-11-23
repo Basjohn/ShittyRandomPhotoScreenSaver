@@ -25,7 +25,7 @@ def test_main_dashboard_forces_interaction_mode_default(monkeypatch) -> None:
     assert result == 123
 
 
-def test_mc_identity_is_resolved_without_constructing_settings(monkeypatch) -> None:
+def test_dashboard_identity_is_resolved_without_constructing_settings(monkeypatch) -> None:
     import sys
 
     import core.settings.settings_manager as settings_manager

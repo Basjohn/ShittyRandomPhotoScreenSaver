@@ -208,8 +208,8 @@ class TestDisplayTab:
             assert new_tab is not None
             new_tab.deleteLater()
 
-    def test_mc_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path, monkeypatch):
-        """MC profile should present Interaction Mode as locked on."""
+    def test_dashboard_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path, monkeypatch):
+        """Dashboard profile should present Interaction Mode as locked on."""
         import core.dashboard
         monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
         settings = SettingsManager(
@@ -226,8 +226,8 @@ class TestDisplayTab:
 
         tab.deleteLater()
 
-    def test_mc_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path, monkeypatch):
-        """MC profile save path should persist true even if settings were stale."""
+    def test_dashboard_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path, monkeypatch):
+        """Dashboard profile save path should persist true even if settings were stale."""
         import core.dashboard
         monkeypatch.setattr(core.dashboard, "is_dashboard_build", lambda: True)
         settings = SettingsManager(

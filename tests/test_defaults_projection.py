@@ -71,7 +71,7 @@ def test_sst_projection_is_deterministic_and_profile_canonical() -> None:
         assert not walk_private_paths(payload["snapshot"])
 
 
-def test_mc_sst_delta_is_exactly_the_canonical_profile_override() -> None:
+def test_dashboard_sst_delta_is_exactly_the_canonical_profile_override() -> None:
     generated = _load_outputs()
     normal = _flatten_leaves(generated[NORMAL_PROFILE]["snapshot"])
     mc = _flatten_leaves(generated[DASHBOARD_PROFILE]["snapshot"])

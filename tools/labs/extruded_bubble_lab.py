@@ -612,7 +612,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uRayCut"), settings.get("ray_cut", 0.25))
         gl.glUniform1f(u("uShaftScale"), settings.get("shaft_scale", 1.0))
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
-        # Historical recipes describe the accepted BEAM look. MC owns current
+        # Historical recipes describe the accepted BEAM look. Dashboard owns current
         # full-runtime acceptance; these recipes do not silently select SCENE.
         gl.glUniform1f(u("uLightingScene"), 0.0)
         gl.glUniform1f(u("uBeamWidth"), 1.0)

@@ -716,7 +716,7 @@ def open_url(url: str) -> bool:
         raise ShellNotReadyError("user shell not ready")
 
     # Prefer the native Windows shell association path in the helper.
-    # The packaged helper intentionally avoids Qt runtime baggage, while MC
+    # The packaged helper intentionally avoids Qt runtime baggage, while Dashboard
     # already has its own direct QDesktopServices path inside the main app.
     try:
         os.startfile(url)  # type: ignore[attr-defined]

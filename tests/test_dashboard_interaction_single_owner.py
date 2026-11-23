@@ -1,4 +1,4 @@
-"""AC-22: Settings, Guided Setup and the runtime answer "is this the MC build" with the one product predicate.
+"""AC-22: Settings, Guided Setup and the runtime answer "is this the Dashboard build" with the one product predicate.
 
 The "MC forces Interaction Mode on" rule has one owner (``core.dashboard.interaction_mode_forced``); no surface compares the
 store's application name with a literal. The tests decouple the two on purpose (an injected manager whose name says
