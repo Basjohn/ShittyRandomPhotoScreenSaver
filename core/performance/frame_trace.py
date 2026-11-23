@@ -151,6 +151,10 @@ class FrameTraceEvent(IntEnum):
     # the run's program waited for its textures (the destination's upload job on Vulkan: ``waiting_kept``), the frames
     # that were black before ABI 39; auxiliary = the run's id.
     NATIVE_TRANSITION_WAITING_KEPT = 83
+    # An actual native Visualizer content draw and the swap of that same Qt render cycle. Both use the
+    # window's cycle as revision and runtime generation as auxiliary, never a Visualizer logical revision.
+    NATIVE_VISUALIZER_DRAW = 84
+    NATIVE_VISUALIZER_SWAP = 85
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

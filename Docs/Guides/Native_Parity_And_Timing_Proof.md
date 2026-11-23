@@ -254,7 +254,11 @@ decision, recorded with its reason.
     packet ABI, on the recordings);
   - `preflip_pack.py`, `visualizer_live_check.py`, `frame_trace_report.py`, `frame_trace_cadence.py`,
     `cadence_parity.py`;
-  - the per-mode response tools and the Bubble diagnostics.
+  - the per-mode response tools and the Bubble diagnostics;
+  - native Visualizer cadence in `visualizer_live_check.py` uses actual native content draws and their Qt swaps.
+    `--frame-trace` observes the draw counter around Qt's native frame driver. It pairs only a draw and swap in the
+    same display, generation and render cycle. The summary counts both, uses correlated swaps for FPS and
+    within-window gaps, and reserves logical publication-to-swap age for evidence that carries logical revisions.
 - **To build** (`Current_Plan.md`, "Fast long-clip proof" and "Bubble optimisation proof gap"):
   - a profile of the replay's time;
   - layer L for the native record;
@@ -262,11 +266,7 @@ decision, recorded with its reason.
   - a native-only, hash-only compare with `--api opengl|vulkan`;
   - coverage selection with its report;
   - all failing frames recorded, not the first eight;
-  - layer T on native paths: on Vulkan the native core draws inside Qt's frame and writes no Python draw or swap
-    records, so `visualizer_live_check.py` reports `frames_per_s 0` and no render or swap figures (20 Nov, Bubble).
-    It must derive presentation cadence from Qt Quick's frame-cycle events (`quick_before_frame_begin` intervals,
-    lifecycle windows excluded; `tools/quick_frame_cadence.py` computes them today), and per-pass GPU time from
-    `--gpu-pass-timing`;
+  - layer T's native per-pass GPU time from `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
 - **Method proof** (Bubble, 21 Nov): the coverage windows caught input 22, the offer fade frame 337 and the one-level
   shift, every window frame hash-identical to the continuous run's, but missed the one-ulp shader change

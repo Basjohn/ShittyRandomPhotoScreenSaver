@@ -156,23 +156,46 @@ def revision_rate(publishes: list[tuple[int, int]]) -> float | None:
     return round(advance / span, 1) if span > 0 else None
 
 
+def _native_swap_window(native_draws, native_swaps, begin: int, end: int) -> tuple[int, list[float]]:
+    """Count swaps and measure gaps between drawn cycles on each display generation within this window."""
+    by_display = {}
+    for key, swap in native_swaps.items():
+        screen, generation, _cycle = key
+        if begin <= native_draws[key] <= swap < end:
+            by_display.setdefault((screen, generation), []).append(swap)
+    gaps = [(b - a) / 1e6 for times in by_display.values() for a, b in zip(times, times[1:])]
+    return sum(map(len, by_display.values())), gaps
+
+
 def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path: bool = False) -> dict:
     """The steady window's age chain from the frame trace. ``worker_path`` (the engine worker admitted): the publish
     records are the frames the main process took, each at the worker's own publish time (``PacketMailbox`` records them
     from the slot's ``publish_ns``, on the clock every process shares), so revisions/s comes from their revision
     numbering (``revision_rate``), ``publish_records_per_s`` counts them, and the waiting count and newest age at sync see only
-    newer frames that main later took (lower bounds). The rest of the chain reads exactly as in process."""
+    newer frames that main later took (lower bounds). Native draw/swap cycle IDs are separate
+    from logical revision IDs and contribute only draw counts, correlated swap counts and cadence."""
     sys.path.insert(0, str(ROOT))
+    from core.performance.frame_trace import FrameTraceEvent
     from tools.frame_trace_report import HEADER, RECORD, _read_trace_chain
 
     raw, _segments = _read_trace_chain(path)
     events: list[tuple[int, int, int]] = []
     logical: dict[tuple[int, int], int] = {}          # (ts, revision) of a publish -> its logical timestamp (ns)
+    native_draws = {}
+    native_swap_events = []
     for i in range((len(raw) - HEADER.size) // RECORD.size):
-        ts, event, _screen, revision, logical_ns, _aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
+        ts, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)
         events.append((ts, event, revision))
         if event == 1:
             logical[(ts, revision)] = logical_ns
+        elif event == FrameTraceEvent.NATIVE_VISUALIZER_DRAW:
+            native_draws[(screen, aux, revision)] = ts
+        elif event == FrameTraceEvent.NATIVE_VISUALIZER_SWAP:
+            native_swap_events.append((ts, (screen, aux, revision)))
+    native_swaps = {}
+    for ts, key in sorted(native_swap_events):
+        if key in native_draws and native_draws[key] <= ts:
+            native_swaps.setdefault(key, ts)
     events.sort()
     begins = [ts for ts, e, _ in events if e == 62]
     ends = [ts for ts, e, _ in events if e == 63]
@@ -196,6 +219,8 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         waiting.append(pub_times[k][1] - r)
     swaps = [ts for ts, e, _ in steady if e == 6]
     gaps = [(b - a) / 1e6 for a, b in zip(swaps, swaps[1:])]
+    native_swap_count, native_gaps = _native_swap_window(native_draws, native_swaps, start, stop)
+    gaps.extend(native_gaps)
     first_swap: dict[int, int] = {}
     for ts, e, r in steady:
         if e == 6 and r not in first_swap:
@@ -219,6 +244,8 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
             quick_begin = None
     early = [ts for ts, e, _ in events if e == 6 and startup_end <= ts < start]
     early_gaps = [(b - a) / 1e6 for a, b in zip(early, early[1:])]
+    early_native_count, early_native_gaps = _native_swap_window(native_draws, native_swaps, startup_end, start)
+    early_gaps.extend(early_native_gaps)
     steady_publishes = [(ts, r) for ts, e, r in steady if e == 1]
     # The tick's own time: its logical timestamp (the tick's authored now, ``perf_counter``) to its publish, both on
     # the publishing process's clock (in process: main; worker path: the worker's stamp). Async-resolved modes carry
@@ -234,7 +261,9 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "revisions_per_s": revision_rate(steady_publishes) if worker_path else records_per_s,
         "publish_records_per_s": records_per_s,
         "tick_to_publish_ms": _stats(tick),
-        "frames_per_s": round(len(swaps) / seconds, 1),
+        "frames_per_s": round((len(swaps) + native_swap_count) / seconds, 1),
+        "native_visualizer_draws": sum(start <= ts < stop for ts in native_draws.values()),
+        "native_visualizer_swaps": native_swap_count,
         "consumed_age_at_sync_ms": _stats(consumed),
         "newest_age_at_sync_ms": _stats(newest_age),
         # On the worker path main records a publish only for a frame it took, so a newer frame it never took is
@@ -249,7 +278,7 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "swap_gap_ms": _stats(gaps),
         "steady_late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
         "hitches_per_min": round(60.0 * sum(g > 50.0 for g in gaps) / seconds, 2),
-        "post_startup_frames": len(early),
+        "post_startup_frames": len(early) + early_native_count,
         "post_startup_late_pct": round(100.0 * sum(g > LATE_MS for g in early_gaps) / max(len(early_gaps), 1), 1),
         "sync_admissions_per_s": round(sum(1 for _, e, _ in steady if e == 74) / seconds, 1),
     }

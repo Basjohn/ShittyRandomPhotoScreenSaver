@@ -566,6 +566,8 @@ class QuickSceneController(QObject):
         # wallpaper transition, QML animation, or a post-transfer scene must not
         # inherit the last visualizer revision forever.
         self._frame_trace_last_swapped_draw_sequence = 0
+        self._frame_trace_native_baseline: tuple[Any, int] | None = None
+        self._frame_trace_native_draw_cycle = 0
         self._perf_pacer_state_provider: Callable[[], Mapping[str, object]] | None = None
         perf_now_ns = time.perf_counter_ns()
         self._perf_window_started_ns = perf_now_ns
@@ -3671,12 +3673,16 @@ class QuickSceneController(QObject):
             FrameTraceEvent.QUICK_BEFORE_FRAME_BEGIN,
             advance_cycle=True,
         )
+        self._frame_trace_native_baseline = None
+        self._trace_capture_native_baseline()
 
     def _trace_before_synchronizing(self) -> None:
         self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_BEFORE_SYNCHRONIZING)
 
     def _trace_after_synchronizing(self) -> None:
         self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_AFTER_SYNCHRONIZING)
+        # Pick up a source bound between beforeFrameBegin and sync. The native driver draws at beforeRendering.
+        self._trace_capture_native_baseline()
 
     def _trace_before_rendering(self) -> None:
         self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_BEFORE_RENDERING)
@@ -3691,8 +3697,35 @@ class QuickSceneController(QObject):
             FrameTraceEvent.QUICK_AFTER_RENDER_PASS_RECORDING
         )
 
+    def _trace_native_composite(self) -> Any:
+        item = self._visualizer_item
+        route = item.native_route if item is not None else None
+        return route.trace_composite if route is not None else None
+
+    def _trace_capture_native_baseline(self) -> None:
+        composite = self._trace_native_composite()
+        baseline = self._frame_trace_native_baseline
+        if baseline is not None and baseline[0] is composite:
+            return
+        status = composite.content_status() if composite is not None else None
+        self._frame_trace_native_baseline = (composite, status.draws) if status is not None else None
+
     def _trace_after_rendering(self) -> None:
         self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_AFTER_RENDERING)
+        baseline, self._frame_trace_native_baseline = self._frame_trace_native_baseline, None
+        if baseline is None or baseline[0] is not self._trace_native_composite():
+            return
+        composite, before = baseline
+        status = composite.content_status()
+        if status is not None and status.draws > before:
+            self._frame_trace_native_draw_cycle = self._frame_trace_render_cycle_sequence
+            self._trace_render_cycle_boundary(FrameTraceEvent.NATIVE_VISUALIZER_DRAW)
+
+    def _trace_native_visualizer_swap(self) -> None:
+        cycle = self._frame_trace_native_draw_cycle
+        self._frame_trace_native_draw_cycle = 0
+        if cycle > 0 and cycle == self._frame_trace_render_cycle_sequence:
+            self._trace_render_cycle_boundary(FrameTraceEvent.NATIVE_VISUALIZER_SWAP)
 
     def _trace_frame_swapped(self) -> None:
         """Record a swap only for a visualizer draw completed in this frame.
@@ -3708,6 +3741,7 @@ class QuickSceneController(QObject):
         trace = self._frame_trace
         if trace is None:
             return
+        self._trace_native_visualizer_swap()
         draw_sequence, revision, logical_timestamp = (
             self._visualizer_telemetry.trace_last_draw()
         )

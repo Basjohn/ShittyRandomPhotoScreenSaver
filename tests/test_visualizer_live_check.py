@@ -273,3 +273,46 @@ def test_the_pcm_check_is_path_aware_and_fails_closed_on_both_paths():
             waveform_pcm_receipt(phases, recorded=True, worker_path=worker_path)
     # Without a recording nothing is required.
     assert waveform_pcm_receipt({}, recorded=False, worker_path=True)["waveform_pcm_evidence"] is None
+
+
+def test_native_visualizer_receipt_counts_drawn_cycles_and_only_their_swaps(tmp_path):
+    from tools.frame_trace_report import HEADER, MAGIC, RECORD
+    from tools.visualizer_live_check import analyse_trace
+
+    base = 10**12
+    ms = 10**6
+    rows = [
+        (base, 63, -1, -1, 0, 0),                         # Startup finished.
+        (base + 20*ms, 84, 1, 1, 0, 5),
+        (base + 21*ms, 85, 1, 1, 0, 5),                    # Post-startup draw and swap.
+        (base + 2100*ms, 84, 1, 2, 0, 5),
+        (base + 2101*ms, 85, 1, 2, 0, 5),
+        (base + 2102*ms, 85, 1, 2, 0, 5),                  # Duplicate swap is not another frame.
+        (base + 2110*ms, 85, 1, 3, 0, 5),                  # No draw in this cycle.
+        (base + 2113*ms, 84, 1, 4, 0, 5),                  # Draw without a swap.
+        (base + 2114*ms, 85, 0, 4, 0, 5),                  # Same cycle, another screen.
+        (base + 2115*ms, 85, 1, 4, 0, 6),                  # Same screen, another generation.
+        (base + 2116*ms, 81, 1, 4, 0, 12),                 # A native transition tick is not a Visualizer draw.
+        (base + 2117*ms, 99, 1, 4, 0, 5),                 # An unrelated marker is also not a draw.
+        (base + 2128*ms, 84, 1, 5, 0, 5),
+        (base + 2129*ms, 85, 1, 5, 0, 5),
+        (base + 3000*ms, 62, -1, -1, 0, 0),
+    ]
+
+    def report(name, rows):
+        path = tmp_path / name
+        path.write_bytes(HEADER.pack(MAGIC, 1, RECORD.size, 0) + b"".join(RECORD.pack(*row) for row in rows))
+        return analyse_trace(path)
+
+    active = report("native.bin", rows)
+    assert active["frames_per_s"] == 2.0
+    assert active["native_visualizer_draws"] == 3 and active["native_visualizer_swaps"] == 2
+    assert active["swap_gap_ms"] == {"median": 28.0, "p90": 28.0}
+    assert active["steady_late_pct"] == 100
+    assert active["post_startup_frames"] == 1
+    assert active["publish_to_swap_ms"] is None          # Render-cycle numbers are not logical revisions.
+
+    idle = report("idle.bin", [row for row in rows if row[1] != 84])
+    assert idle["frames_per_s"] == idle["post_startup_frames"] == 0
+    assert idle["native_visualizer_draws"] == idle["native_visualizer_swaps"] == 0
+    assert idle["swap_gap_ms"] is None

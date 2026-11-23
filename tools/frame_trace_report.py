@@ -92,6 +92,8 @@ EVENT_NAMES = {
     78: "gpu_frame_time",
     79: "native_route_update_request",
     80: "gui_perf_hud_update",
+    84: "native_visualizer_draw",
+    85: "native_visualizer_swap",
 }
 # The native core's GPU timer (N2.6): auxiliary = GPU nanoseconds, logical_timestamp_ns = the kind
 # (rendering/native/gpu_timing.py GPU_PASS_KINDS; tests/test_native_core_timer.py holds the two equal).
