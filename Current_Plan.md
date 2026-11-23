@@ -452,7 +452,9 @@ automatic successor to NF, item 9 or the first new Visualizer.
   - [ ] **Qt 6.12.1 bump (lead; operator, 20 Nov: bump without asking).** Checked 23 Nov: Qt published the 6.12.1
     SDK and Windows MSVC 2022 repository metadata. PyPI version endpoints for PySide6, PySide6_Addons,
     PySide6_Essentials and shiboken6 still return 404 for 6.12.1. Keep runtime and SDK on 6.12.0 until all four
-    matching Python wheels are on PyPI, then:
+    matching Python wheels are on PyPI.
+    - [ ] Verify the published MSVC 2022 qtbase and qtdeclarative archive sizes and checksums, then stage the
+      6.12.1 SDK fetch entry without activating it. Once every Python wheel is published:
     - [ ] Pick a stage boundary (decision D11): no agent mid-build on `native/core`; agents merged or checkpointed.
     - [ ] Change the four pins in `requirements.txt`, then `pip install -r requirements.txt` with no venv process
       running (locked PySide6 DLLs make pip fail; restore a mixed set at once if it does).
