@@ -4,6 +4,106 @@ import pytest
 from rendering.quick.render.gl_resources import delete_program
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("native_rows", (False, True))
+def test_shaft_blur_and_backdrop_sample_only_odd_content_in_padded_targets(qt_app, native_rows):
+    from OpenGL import GL as gl
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs import extruded_bubble_program as shaders
+    from rendering.gl_programs.conventions import NATIVE_CORE_DEFINE
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.scene3d.uniforms import PassBlocks
+    from rendering.quick.visualizer.implementations.extruded_bubble import _common, _Uniforms
+    from tools.transition_contact_sheet import TransitionCapture
+
+    shaft_size = (5, 3)
+    scene_size = (11, 7)
+    # Opposite edges and rows have different values. Slack poisoned far above the content exposes either wrong
+    # row alignment or bilinear taps crossing an edge.
+    pattern = np.array([[.05, .3, .1, .5, .9], [.4, .5, .3, .6, .2], [.8, .2, .5, .3, .3]], dtype="f4")
+    target = TransitionCapture(14, 11)
+    programs, textures = [], []
+    blocks = PassBlocks("EB padded shaft sampling", block_bytes=shaders.FULLSCREEN_BLOCK.size)
+    bank = _Uniforms()
+
+    def source_with_rows(source):
+        if native_rows:
+            first, body = source.split("\n", 1)
+            return first + f"\n#define {NATIVE_CORE_DEFINE}\n" + body
+        return source
+
+    def texture(shape, pixels=None):
+        name = gl.glGenTextures(1)
+        textures.append(name)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, name)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_R32F, *shape, 0, gl.GL_RED, gl.GL_FLOAT, pixels)
+        for key in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, key, gl.GL_LINEAR)
+        for key in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, key, gl.GL_CLAMP_TO_EDGE)
+        return name
+
+    def draw(program, pixels, source_shape, size, allocation, unit, values):
+        origin = allocation[1] - size[1] if native_rows else 0
+        src_y = source_shape[1] - shaft_size[1] if native_rows else 0
+        source = np.full(source_shape[::-1], 17., dtype="f4")
+        source[src_y:src_y + shaft_size[1], :shaft_size[0]] = pixels
+        source_tex = texture(source_shape, source)
+        output_tex = texture(allocation)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, output_tex, 0)
+        gl.glViewport(0, origin, *size)
+        gl.glUseProgram(program)
+        gl.glBindTextureUnit(unit, source_tex)
+        bank.set(program, values)
+        with blocks.bound(bank.packed(program)):
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        result = gl.glReadPixels(0, origin, *size, gl.GL_RED, gl.GL_FLOAT)
+        assert gl.glGetError() == gl.GL_NO_ERROR
+        return np.frombuffer(result, dtype="f4").reshape(size[::-1]).copy()
+
+    try:
+        for label, source in (("blur", shaders.BLUR_FRAGMENT), ("backdrop", shaders.BACKDROP_FRAGMENT)):
+            program = compile_program(shaders.FULL_VERTEX, source_with_rows(source), label=f"EB padded {label}")
+            programs.append(program)
+            bank.register(program, shaders.FULLSCREEN_BLOCK, shaders.block_defaults(shaders.FULLSCREEN_BLOCK))
+        blur, backdrop = programs
+        gl.glBindVertexArray(target.vao)
+        gl.glDisable(gl.GL_BLEND)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glDrawBuffer(gl.GL_COLOR_ATTACHMENT0)
+        gl.glReadBuffer(gl.GL_COLOR_ATTACHMENT0)
+
+        differences = {}
+        for axis, step in (("horizontal", (1., 0.)), ("vertical", (0., 1.))):
+            args = {"u_target_px": shaft_size, "uStep": step}
+            exact = draw(blur, pattern, shaft_size, shaft_size, shaft_size, shaders.EB_SAMPLERS["uSource"], args)
+            padded = draw(blur, pattern, (8, 7), shaft_size, (8, 7), shaders.EB_SAMPLERS["uSource"], args)
+            assert np.ptp(exact) > .05
+            differences[axis] = float(np.max(np.abs(padded - exact)))
+
+        knobs = scene_knobs(require_canonical_default("widgets.spotify_visualizer"))
+        common = _common(knobs, view_to_world=(1., 0., 0., 0., 1., 0., 0., 0., 1.), tan=(.4, .4), time=.7,
+                         surface_travel=.7, rays=.6, streak=(.6, .8))
+        values = {**common, "uFrameSize": scene_size, "uShaftContentPx": shaft_size, "uRayFocus": 0.}
+        unit = shaders.EB_SAMPLERS["uShafts"]
+        exact = draw(backdrop, pattern, shaft_size, scene_size, scene_size, unit, {**values, "u_target_px": scene_size})
+        padded = draw(backdrop, pattern, (8, 7), scene_size, (14, 11), unit,
+                      {**values, "u_target_px": (14, 11)})
+        no_shafts = draw(backdrop, np.zeros_like(pattern), shaft_size, scene_size, scene_size, unit,
+                         {**values, "u_target_px": scene_size})
+        assert np.max(np.abs(exact - no_shafts)) > .001
+        differences["backdrop"] = float(np.max(np.abs(padded - exact)))
+        assert all(delta <= 2e-6 for delta in differences.values()), differences
+    finally:
+        blocks.release()
+        for program in programs:
+            delete_program(program)
+        if textures:
+            gl.glDeleteTextures(textures)
+        target.close()
+
+
 @pytest.fixture
 def backdrop_light(qt_app):
     from OpenGL import GL as gl
@@ -38,7 +138,8 @@ def backdrop_light(qt_app):
 
         def draw(values):
             gl.glBindTextureUnit(EB_SAMPLERS['uShafts'], shafts)
-            bank.set(program, {**values, 'uFrameSize': (1., 1.), 'uLensShift': (0., 0.)})
+            bank.set(program, {**values, 'uFrameSize': (1., 1.), 'uLensShift': (0., 0.),
+                               'u_target_px': (1., 1.), 'uShaftContentPx': (1., 1.)})
             with blocks.bound(bank.packed(program)):
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             result = np.frombuffer(gl.glReadPixels(0, 0, 1, 1, gl.GL_RGBA, gl.GL_FLOAT), dtype='f4').copy()

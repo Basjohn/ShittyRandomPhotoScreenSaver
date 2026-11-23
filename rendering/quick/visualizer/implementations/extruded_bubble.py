@@ -595,7 +595,7 @@ class QuickExtrudedBubbleRenderer:
                         "uLightReach": _floats(knobs["scene_light"]["reach"]),
                         "uParticleAtten": max(0.0, min(0.08, 0.08 * float(state.emission))),
                         # The shafts' own half-resolution target: the jitter's pixel (fragPixel, N1.4).
-                        "uFrameSize": (float(self._shafts.size[0]), float(self._shafts.size[1]))}
+                        "u_target_px": _floats(self._shafts.size)}
         for i, bubble in enumerate(leaders):
             ray_uniforms[f"uBlock{i}"] = bubble
         self._uniforms.set(programs["shafts"], ray_uniforms)
@@ -687,7 +687,10 @@ class QuickExtrudedBubbleRenderer:
                                 depth_texture=True, oit=True, hdr=1.0):
             scene_viewport = (frame.viewport[0] - x, frame.viewport[1] - y, frame.viewport[2], frame.viewport[3])
             allocation = self._target.allocation
-            self._uniforms.set(programs["backdrop"], {"uLensShift": shift, "uFrameSize": (float(width), float(height))})
+            content_px = (float(width), float(height))
+            self._uniforms.set(programs["backdrop"], {"uLensShift": shift, "uFrameSize": content_px,
+                                                      "u_target_px": _floats(allocation[:2]),
+                                                      "uShaftContentPx": _floats(self._shafts.size)})
             target_size = (float(allocation[0]), float(allocation[1]))
             for key in ("shells", "clusters", "near", "near_clusters", "beads"):
                 self._uniforms.set(programs[key], {"uTargetSize": target_size})
@@ -834,6 +837,7 @@ class QuickExtrudedBubbleRenderer:
             with self._bound(programs["shafts"]):
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glUseProgram(programs["blur"])
+            self._uniforms.set(programs["blur"], {"u_target_px": _floats(self._shafts.size)})
             for source, target, step in ((textures[0], framebuffers[1], (1.0, 0.0)),
                                          (textures[1], framebuffers[0], (0.0, 1.0))):
                 gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
