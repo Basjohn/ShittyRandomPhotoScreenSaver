@@ -1019,8 +1019,10 @@ commit/fresh-frame/fade-in **second-last**; full display teardown is **last reso
 under existing destruction guarantees, not a default. Whole-family disables still
 retire the family and all callbacks/resources; temporary Settings/Visualizers parking
 must satisfy zero-work dormancy and first-frame fencing. Windows Winlogon/secure or
-unknown desktop may not acquire an interactive Settings/Studio session or new HWND;
-retain the safe saver exit and account/browser handoff. A SettingsManager/source
+unknown desktop must **preserve its currently supported Settings request,
+exit and handoff**, without any *new unproved* interactive HWND/Studio/foreground
+activity; account/browser/credential operations remain denied on protected
+desktops. A SettingsManager/source
 of truth and QWidget UI remain; no Qt Quick rewrite is a prerequisite.
 
 **Until that independent milestone's acceptance**, the existing full-stop Settings
