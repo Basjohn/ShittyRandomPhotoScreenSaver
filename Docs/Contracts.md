@@ -18,8 +18,6 @@ interactive Settings or new floating Studio window**; existing saver/input/URL
 handoff paths stay authoritative. This paragraph does not supersede the
 currently implemented full-stop Settings lifecycle until accepted.
 
-## Physical presentation
-
 | Concern | Destination owner |
 | --- | --- |
 | one display runtime | `QuickDisplayRuntime` |
