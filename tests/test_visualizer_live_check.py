@@ -89,6 +89,22 @@ def _run_live_check(monkeypatch, tmp_path, returncode, report=None):
     return code, out
 
 
+def test_hud_text_control_reaches_the_child_and_consumes_pending_text(tmp_path):
+    from types import SimpleNamespace
+
+    from tools.visualizer_live_check import _discard_perf_hud_text, build_parser, runner_command
+
+    parser = build_parser()
+    enabled = parser.parse_args(["--mode", "bubble"])
+    suppressed = parser.parse_args(["--mode", "bubble", "--no-perf-hud-text"])
+    assert "--no-perf-hud-text" not in runner_command(enabled, tmp_path, None)
+    assert "--no-perf-hud-text" in runner_command(suppressed, tmp_path, None)
+
+    scene = SimpleNamespace(_perf_hud_pending=("scene", "visualizer"))
+    _discard_perf_hud_text(scene)
+    assert scene._perf_hud_pending is None
+
+
 def test_a_finished_run_keeps_its_settings_and_deletes_the_profile_copy(monkeypatch, tmp_path):
     seen = {}
 

@@ -682,12 +682,17 @@ def install_recorded_music(stack, clip: Path, *, clip_start: float, seconds: flo
             pcm=pcm[: int(rate * WORKER_PCM_LOOP_S)], pcm_rate=int(rate)))
 
 
+def _discard_perf_hud_text(scene) -> None:
+    """Consume sampled HUD text without dirtying the QML labels in the timing control."""
+    scene._perf_hud_pending = None
+
+
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
             display_off: list[tuple[float, float]] | None = None,
             settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = (),
             app_args: tuple[str, ...] = (), mode_switch: list[float] | None = None, display: int | None = None,
             settings: tuple[tuple[str, object], ...] = (), no_updates: bool = False,
-            transition_session: list[str] | None = None) -> None:
+            transition_session: list[str] | None = None, no_perf_hud_text: bool = False) -> None:
     import contextlib
 
     began = time.monotonic()
@@ -720,6 +725,12 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     if not visible:
         install_invisible_windows()
     stack = contextlib.ExitStack()
+    if no_perf_hud_text:
+        from unittest.mock import patch
+
+        from rendering.quick.scene_controller import QuickSceneController
+
+        stack.enter_context(patch.object(QuickSceneController, "_write_perf_hud_text", _discard_perf_hud_text))
     if clip is not None:
         install_recorded_music(stack, clip, clip_start=clip_start, seconds=seconds, app_args=app_args)
     phases._install()
@@ -953,6 +964,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "back (as tools/d1_run.py --setting); a refused key fails the run (exit 6)")
     parser.add_argument("--no-updates", action="store_true",
                         help="the saver's --noupdates: cached feeds, mail and weather, no live network")
+    parser.add_argument("--no-perf-hud-text", action="store_true",
+                        help="suppress PERF HUD text writes for a timing control while retaining PERF sampling")
     parser.add_argument("--process-samples", action="store_true",
                         help="sample the saver tree once a second (CPU of a core, GPU engine utilisation, RSS and "
                              "private memory) and report the steady window as summary['process']")
@@ -1030,6 +1043,7 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
              str(args.clip_start)] + (["--visible"] if args.visible else [])
             + (["--display", str(args.display)] if args.display is not None else [])
             + (["--no-updates"] if args.no_updates else [])
+            + (["--no-perf-hud-text"] if args.no_perf_hud_text else [])
             + [f"--setting={key}={json.dumps(value)}" for key, value in args.setting]
             + (["--display-off", args.display_off] if args.display_off else [])
             + (["--settings-roundtrip", ",".join(f"{at:g}" for at in args.settings_roundtrip)]
@@ -1054,7 +1068,8 @@ def main(argv: list[str] | None = None) -> int:
         _runner(args.out, args.seconds, args.visible, clip, args.clip_start, args.mode,
                 parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
                 args.roundtrip_memory if (args.settings_roundtrip or args.mode_switch) else (), tuple(args.app_arg),
-                args.mode_switch, args.display, tuple(args.setting), args.no_updates, args.transition_session)
+                args.mode_switch, args.display, tuple(args.setting), args.no_updates, args.transition_session,
+                no_perf_hud_text=args.no_perf_hud_text)
         return 0
     out = artifact_paths.checked_output(args.out) if args.out is not None else default_out(args)
     if clip is not None and not clip.exists():
@@ -1172,7 +1187,7 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
         return 1
     summary = {"mode": args.mode, "preset": args.preset, "overrides": overrides, "load": args.load,
                "clip": clip.name if clip else None, "clip_start": args.clip_start,
-               "visible": args.visible, "conditions": conditions}
+               "visible": args.visible, "perf_hud_text": not args.no_perf_hud_text, "conditions": conditions}
     edges_path = out / "power_edges.jsonl"
     edges = ([json.loads(line) for line in edges_path.read_text(encoding="utf-8").splitlines() if line.strip()]
              if edges_path.exists() else [])

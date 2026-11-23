@@ -20,6 +20,14 @@ python -m tools.visualizer_replay.bubble_native_diagnostics components --repo . 
 
 The command preserves the owner's exit code: exit 1 can be an honest owner parity failure even when diagnostic guards pass. A completed run with failed diagnostic guards returns 2; exceptions also fail and may have another nonzero exit. Inspect `owner_exit_code`, `passive_guards_pass` and the individual checks in metadata separately. A failed or interrupted capture is not a successful diagnostic and must not be rewritten as one. Cleanup and registry restoration are part of the recorded guards.
 
+## Display 1 timing control
+
+Use `tools/visualizer_live_check.py --mode bubble --display 1` with recorded audio, the same copied display settings and
+fresh evidence labels. Alternate `--app-arg=--graphics-backend=vulkan` and `--app-arg=--graphics-backend=opengl` in paired
+runs. Add `--no-perf-hud-text` to the suppression arm. It consumes the held text in the child harness while keeping PERF
+sampling and frame tracing active. Verify that `GUI_PERF_HUD_UPDATE` records are present in the control and absent in the
+suppression arm. Compare Qt frame-begin gaps and correlated Visualizer swap gaps with the sampled GPU clocks.
+
 ## Optimisation gate
 
 The rules for what to run, how much, and when it passes belong to `Native_Parity_And_Timing_Proof.md` (layers L, P, T,
