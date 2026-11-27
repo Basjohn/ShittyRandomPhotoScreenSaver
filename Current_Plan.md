@@ -1530,12 +1530,18 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       a sync or readback, per-frame resource or pipeline work, and the native `mode.texture` copy measured at
       7-13 ms per run (N5.2f agent, 27 Nov: attribute whether it is per run or per frame and where it lands). Each
       named share gets a negative control (remove it, the share goes).
-    - [ ] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
+    - [x] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
       without the draw, clears counted by route, the draw's time back with `surface_clear_draw`), the route check's
       pixels unchanged, and the Vulkan figures not worse.
     - [ ] Scene transitions next (the larger gap): measure the scene targets' own clearing draw (same pattern near
       `mode_content.cpp` line 7976) and each share that grows with motion blur, trails and 4x, by owner, with the
-      same negative controls; fix at the owner.
+      same negative controls; fix at the owner. 28 Nov (`9cf898348` harness, `5025acb09` C++, ready for build; evidence
+      `<successor worktree>/.artifacts/evidence/native_core/n5_2h/`): Crossfade after the surface clear, OpenGL 4K native
+      0.085-0.097 ms against Python 0.056-0.059 (gap about the composite pass); Vulkan not worse; route check pixels
+      unchanged (g4's `route_variant_drawn` FAIL: the group has no variant). Scene targets on OpenGL now clear by
+      their pass where a raw GL probe measured it cheaper (plain 1x 0.020 -> 0.002 ms at 4K); multisampled
+      non-RGBA8 targets keep the draw (`glClear` measured slower there). Open: the about 0.9 ms 4x motion+trails gap
+      at 4K is mostly not the clears; it needs per-pass timing.
     - [ ] The composite pass (lead's decision, 28 Nov; D7 row 10 stands: nothing reads the window). When no reader
       needs the kept surface on that frame (backdrop demand zero, no capture), record the background straight into the
       window's pass and skip the surface and its composite; when a reader needs it (D7's pyramid while demand is above
