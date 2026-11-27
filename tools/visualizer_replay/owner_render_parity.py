@@ -230,6 +230,31 @@ class _SpilledFrames:
         return (self[index] for index in range(len(self)))
 
 
+class _LastFrame:
+    """``_SpilledFrames``' interface for a run that judges nothing from pixels (``native_only``: its output is each
+    frame's hash): only the latest frame is held, so no frame of the take is stored anywhere. ``on_frame`` still
+    receives the frame just drawn; any other index is gone."""
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.last: tuple[tuple[int, ...], bytes] | None = None
+
+    def append(self, item: tuple[tuple[int, ...], bytes]) -> None:
+        self.count += 1
+        self.last = item
+
+    def __len__(self) -> int:
+        return self.count
+
+    def replace_last(self, item: tuple[tuple[int, ...], bytes]) -> None:
+        self.last = item
+
+    def __getitem__(self, index: int) -> tuple[tuple[int, ...], bytes]:
+        if index != self.count - 1 or self.last is None:
+            raise IndexError(f"frame {index}: this run keeps no frames but the latest")
+        return self.last
+
+
 class SceneMirror:
     """The owner's unshown scene, drawn: a hidden production scene that takes the owner's own scene commands.
 
@@ -739,8 +764,10 @@ class NativeSceneMirror(SceneMirror):
     route's takes (``VisualizerRenderItem.update``); another mode's activation draws through the item's Python node
     (the mixed window)."""
 
-    def __init__(self, core) -> None:
+    def __init__(self, core, *, keep_frames: bool = True) -> None:
         super().__init__()
+        if not keep_frames:
+            self.frames = _LastFrame()
         self.core = core
         self.window_host = None
         self.route = None
@@ -920,13 +947,13 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
 
 
 def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None,
-                     on_frame=None, draw_inputs: set | None = None) -> dict:
+                     on_frame=None, draw_inputs: set | None = None, keep_frames: bool = True) -> dict:
     """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``).
     ``on_frame``: called as each frame is drawn (``NativeSceneMirror.on_frame``); ``draw_inputs``: only these inputs are
-    drawn (``SceneMirror.draw_inputs``)."""
+    drawn (``SceneMirror.draw_inputs``). ``keep_frames`` False: no frame is stored (a hash-only run, ``native_only``)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
-    mirror = NativeSceneMirror(core)
+    mirror = NativeSceneMirror(core, keep_frames=keep_frames)
     mirror.measure_lit = False                       # no native run reads it
     mirror.draw_inputs = draw_inputs
     mirror.on_frame = on_frame
@@ -1424,7 +1451,7 @@ def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: 
             stream.write(json.dumps(line) + "\n")
 
     with single_sample_scene_targets(), card_placement(placement):
-        native = native_drawn_run(mode, script, settings=settings, core=core, on_frame=hashed)
+        native = native_drawn_run(mode, script, settings=settings, core=core, on_frame=hashed, keep_frames=False)
     hashes = [entry["hash"] for entry in native["pixels"]]
     verdict = {"mode": mode, "run": run, "placement": placement, "native_only": True, "inputs": native["inputs"],
                "switch_input": switch_input, "native_frames": native["native_frames"],

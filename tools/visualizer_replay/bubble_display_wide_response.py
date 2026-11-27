@@ -15,7 +15,8 @@ own PCM (RMS dBFS of each frame's capture history), so a response that saturates
 
 By default logical frames only (no renderer, no window, no display). ``--render-fps N`` also draws both cards (the
 card's ordinary record at ``--card-scale``, its display-wide record, both at ``--dpr``) through the production render
-host offscreen, N frames per second of the take, keeps those frames, and measures each mature big hero's drawn ring
+host offscreen, N frames per second of the take (the full frames live in a scratch folder deleted at the end; only
+the moment sheets, kept stills, data and WebPs are published), and measures each mature big hero's drawn ring
 from the pixels it changes when drawn alone: its outer radius in device pixels against its own nominal drawn size,
 the drawn card's short side and its equal-area side (``drawn`` in the report, a fourth trace under the music). No
 window is shown; not display-cadence or listening acceptance.
@@ -36,7 +37,7 @@ import sys as _sys  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-from tools import artifact_paths  # noqa: E402
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 
 def _size(text: str) -> tuple[float, float]:
@@ -303,7 +304,8 @@ def drawn_radii(snapshots, frames, times, presentation, frame_dir: Path | None =
     render host, offscreen; each mature big hero then drawn alone on the same card and its ring's outer radius read
     from the pixels it changed against the card drawn empty. One row per hero and frame: drawn outer radius in device
     pixels, the renderer's own projection of its payload and nominal radius (``bubble_presentation_layout``), and the
-    drawn card's content size. ``frame_dir``: the full frames are kept there as PNG."""
+    drawn card's content size. ``frame_dir``: the full frames are written there as PNG (a scratch folder the caller
+    deletes: full-take frame folders are never published, Current_Plan "Guard output lean")."""
     from dataclasses import replace
 
     import numpy as np
@@ -395,9 +397,10 @@ def drawn_frames(snapshots, presentation, *, width: int):
     return images
 
 
-def moment_sheet(output: Path, sampled, stamps, moments, names, labels, clearest=None) -> None:
-    """One column per moment (the nearest drawn frame): each run's kept frame stacked at one width. ``clearest``:
-    that run's frames at the moments are also kept alone at full size (``moment_<run>_<t>s.png``)."""
+def moment_sheet(output: Path, sampled, stamps, moments, names, labels, clearest=None, *, frames_root: Path) -> None:
+    """One column per moment (the nearest drawn frame): each run's frame stacked at one width. ``frames_root``: the
+    scratch folder the full frames were drawn into (``frames_<run>/``; never published, deleted when the run ends).
+    ``clearest``: that run's frames at the moments are also kept alone at full size (``moment_<run>_<t>s.png``)."""
     import shutil
 
     from PIL import Image
@@ -406,11 +409,11 @@ def moment_sheet(output: Path, sampled, stamps, moments, names, labels, clearest
     for moment in moments:
         index = min(sampled, key=lambda i: abs(stamps[i] - moment))
         if clearest is not None:
-            shutil.copyfile(output / f"frames_{clearest}" / f"frame_{index:05d}.png",
+            shutil.copyfile(frames_root / f"frames_{clearest}" / f"frame_{index:05d}.png",
                             output / f"moment_{clearest}_{stamps[index]:.1f}s.png")
         tiles = []
         for name in names:
-            image = Image.open(output / f"frames_{name}" / f"frame_{index:05d}.png").convert("RGB")
+            image = Image.open(frames_root / f"frames_{name}" / f"frame_{index:05d}.png").convert("RGB")
             image = image.resize((width, round(image.height * width / image.width)), Image.LANCZOS)
             tiles.append(_labelled(image, f"{labels.get(name, name)}  t={stamps[index]:.1f}s"))
         column = Image.new("RGB", (width, sum(t.height for t in tiles) + 8 * (len(tiles) - 1)), (0, 0, 0))
@@ -544,6 +547,10 @@ def main() -> None:
     parser.add_argument("--clearest", default="", help="a candidate whose moments and motion are also kept alone at "
                                                        "full size")
     args = parser.parse_args()
+    # The sheets, stills and data are published to --output when the run succeeds (tools/evidence_media.py); the full
+    # frames the radii are measured on go to a scratch folder that is deleted, never into the evidence.
+    evidence_media.redirect_output(args, "output", "bubble_display_wide_response")
+    frames_root = artifact_paths.run_scratch("bubble_display_wide_frames", "frames")
     candidates = {}
     for item in filter(None, args.candidates.split(",")):
         name, exponent, density = item.split(":")
@@ -627,8 +634,8 @@ def main() -> None:
         drawn_runs = [("card", card_frames, ordinary_drawn), ("display_wide", wide_frames, wide_drawn)]
         drawn_runs += [(name, runs[name][0], wide_drawn) for name in candidates]
         for name, frames, presentation in drawn_runs:
-            frame_dir = args.output / f"frames_{name}"
-            frame_dir.mkdir()
+            frame_dir = frames_root / f"frames_{name}"
+            frame_dir.mkdir(parents=True)
             with drawing(name):
                 rows = drawn_radii({i: snaps[name][i] for i in sampled}, frames, times, presentation, frame_dir)
             report["runs"][name]["drawn"] = drawn_summary(rows)
@@ -664,7 +671,7 @@ def main() -> None:
         if args.moments:
             moment_sheet(args.output, sampled, stamps, [float(v) for v in args.moments.split(",")],
                          [name for name, *_rest in drawn_runs], labels,
-                         clearest=f"candidate_{args.clearest}" if args.clearest else None)
+                         clearest=f"candidate_{args.clearest}" if args.clearest else None, frames_root=frames_root)
     if motion:
         from PIL import Image
 
@@ -711,8 +718,9 @@ def main() -> None:
             print("   breathing", row["breathing"])
         if row.get("drawn"):
             print("   drawn", {k: (round(v, 4) if isinstance(v, float) else v) for k, v in row["drawn"].items()})
+    artifact_paths.discard_run_scratch("bubble_display_wide_frames")
     print("->", args.output)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(evidence_media.finish(main()))

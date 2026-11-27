@@ -39,7 +39,7 @@ for path in (ROOT, HARNESS):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from tools import artifact_paths  # noqa: E402
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 #: mode id -> the generic mode harness module whose ``Scene``, ``Stream`` and ``program_item`` place its item.
@@ -91,7 +91,8 @@ def read_deliveries(folder: Path):
 
 
 def child(args) -> dict:
-    """One API's run: every delivered input drawn, hashed, its frame kept (zlib) in the work folder."""
+    """One API's run: every delivered input drawn and hashed (hash index in the work folder), its frame kept (zlib) in
+    the run's scratch folder (``--frames-dir``) for the judge, never in the evidence."""
     api = args.api
     out = Path(args.out_dir)
     header, inputs, records_path = read_deliveries(Path(args.deliveries))
@@ -153,7 +154,11 @@ def child(args) -> dict:
         record["window_inputs"] = len(allowed)
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
-    frames_file = (work / f"frames_{api}.bin").open("wb")
+    # The frames (compressed, for the judge to read back) live in the run's scratch folder, never in the evidence: the
+    # evidence keeps each frame's hash (``index_<api>.json``) and the failing frames' images (``rule_b``).
+    frames_dir = Path(args.frames_dir) if args.frames_dir else work
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    frames_file = (frames_dir / f"frames_{api}.bin").open("wb")
     index_rows: list = []
     scene = stream = None
     drawn_count = 0
@@ -222,11 +227,13 @@ def child(args) -> dict:
     return record
 
 
-def _frames(out: Path, api: str):
+def _frames(out: Path, api: str, frames_dir: Path | None = None):
+    """(each input's row, a reader of one row's pixels). The rows are in the evidence (``work/index_<api>.json``); the
+    pixels are in ``frames_dir`` (the run's scratch; default ``out/work``) and exist only while the run lasts."""
     import numpy as np
 
     rows = json.loads((out / "work" / f"index_{api}.json").read_text(encoding="utf-8"))
-    path = out / "work" / f"frames_{api}.bin"
+    path = Path(frames_dir if frames_dir is not None else out / "work") / f"frames_{api}.bin"
 
     def pixels(row):
         with path.open("rb") as stream:
@@ -236,11 +243,33 @@ def _frames(out: Path, api: str):
     return rows, pixels
 
 
+#: At most this many failing frames get images (both APIs' frames and the difference x64); every failing frame is
+#: recorded in the report whatever.
+MAX_FAILING_IMAGES = 24
+
+
+def write_failing_images(images_dir: Path, index: int, gl, vk) -> list[str]:
+    """One failing frame's images: OpenGL's, Vulkan's and their difference x64 (the only pixels the guard keeps)."""
+    import numpy as np
+    from PIL import Image
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    delta = np.abs(gl[..., :3].astype(np.int16) - vk[..., :3])
+    written = []
+    for label, picture in (("opengl", gl[..., :3]), ("vulkan", vk[..., :3]),
+                           ("difference_x64", np.clip(delta * 64, 0, 255).astype(np.uint8))):
+        path = images_dir / f"input{index}_{label}.png"
+        Image.fromarray(np.ascontiguousarray(picture), "RGB").save(path)
+        written.append(path.name)
+    return written
+
+
 def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None = None,
-           inputs: list | None = None) -> dict:
+           inputs: list | None = None, frames_dir: Path | None = None, images_dir: Path | None = None) -> dict:
     """Vulkan against OpenGL, frame by frame, under the mode's ``VULKAN_RULE_B``; every failing frame recorded; with
     ``windows`` (a coverage_windows.json), each window's figures with its position in the take. ``inputs``: the
-    delivery stream's lines (a harness configured by its settings, ``_configure``)."""
+    delivery stream's lines (a harness configured by its settings, ``_configure``). ``frames_dir``: where the drawn
+    frames are (``_frames``). ``images_dir``: where a failing frame's images go (the first ``MAX_FAILING_IMAGES``)."""
     from tools import pixel_tolerance as pt
 
     module, base = _harness(mode)
@@ -249,8 +278,8 @@ def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None 
     # Rule (b) judges two peers, neither the reference: its mask is the union of each frame's class (the lead, 21 Nov;
     # ``pt.peer_mask``): the translucent pixels of either frame, and the mode's own frame-side class where it has one.
     frame_mask = getattr(module, "peer_frame_mask", None) or getattr(base, "peer_frame_mask", None)
-    gl_rows, gl_pixels = _frames(out, "opengl")
-    vk_rows, vk_pixels = _frames(out, "vulkan")
+    gl_rows, gl_pixels = _frames(out, "opengl", frames_dir)
+    vk_rows, vk_pixels = _frames(out, "vulkan", frames_dir)
     judged, failed = [], []
     compared = equal = 0
     drawn_mismatch = []
@@ -273,6 +302,8 @@ def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None 
         if not verdict["pass"]:
             failed.append({k: verdict.get(k) for k in ("input", "reasons", "max_level", "scatter", "ties",
                                                        "scatter_group", "scatter_window")})
+            if images_dir is not None and len(failed) <= MAX_FAILING_IMAGES:
+                failed[-1]["images"] = write_failing_images(images_dir, a["input"], gl, vk)
     summary = pt.summarise(judged)
     halves = None
     if switch_input:
@@ -329,6 +360,7 @@ def main(argv=None) -> int:
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
+    parser.add_argument("--frames-dir", help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.child:
@@ -345,13 +377,20 @@ def main(argv=None) -> int:
     mode = header["mode"]
     if mode not in MODES:
         parser.error(f"the player draws the generic modes {sorted(MODES)}, not {mode!r}")
+    # The drawn frames and the failing frames' images are made in a scratch folder (deleted when the run ends); the
+    # evidence keeps the hashes per frame and only the failing frames' images, never a full-take frame store.
+    with artifact_paths.scratch("native_stream_player") as scratch:
+        return _play(args, out, mode, inputs, scratch / "frames", scratch / "failing")
+
+
+def _play(args, out: Path, mode: str, inputs: list, frames_dir: Path, images_dir: Path) -> int:
     report: dict = {"mode": mode, "deliveries": str(args.deliveries), "children": {}, "hashes": {}}
     for api in args.apis:
         child_json = out / f"child_{api}.json"
         child_json.unlink(missing_ok=True)
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--deliveries",
                    str(Path(args.deliveries).resolve()), "--module-dir", args.module_dir, "--out-dir", str(out),
-                   "--child-json", str(child_json), "--out", str(out)]
+                   "--child-json", str(child_json), "--out", str(out), "--frames-dir", str(frames_dir)]
         if args.control:
             command += ["--control", args.control]
         if args.windows:
@@ -378,8 +417,9 @@ def main(argv=None) -> int:
             report["hashes"][api] = [row.get("hash") for row in rows]
     if all(api in report["hashes"] for api in APIS):
         windows = json.loads(Path(args.windows).read_text(encoding="utf-8")) if args.windows else None
-        report["rule_b"] = rule_b(out, mode, args.switch_input, windows, inputs)
+        report["rule_b"] = rule_b(out, mode, args.switch_input, windows, inputs, frames_dir, images_dir)
         rb = report["rule_b"]
+        evidence_media.publish(images_dir, out / "failing_frames")
         print(f"[PLAYER] rule (b): {rb['compared']} frames compared ({rb['hash_equal']} hash-equal), "
               f"{len(rb['failed_frames'])} failing; {'PASS' if rb['pass'] else 'FAIL'}", flush=True)
     if args.against is not None:
