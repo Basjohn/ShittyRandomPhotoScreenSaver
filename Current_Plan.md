@@ -1771,7 +1771,11 @@ port/Studio/native flip or the designated new-mode order.
 ### Item 9. After the native core: new visualizers, then QoL; SMP separately deferred
 
 Existing-mode ports still obey every cross-backend parity/readiness rule. New post-flip Vulkan-only modes use the
-N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenGL twin. Expanded Visualizer continues
+N6.7 Vulkan capability and shader-admission rule instead of a manufactured OpenGL twin.
+Operator, 27 Nov: from the next completely new mode on, no OpenGL version is made; on an OpenGL run (chosen or
+fallback) the mode is skipped in rotation and greyed in Settings and the Studio with its reason. The next mode
+(Reactive Liquid / Audio Melt Pool) is expected to generate its geometry, and texture effects where needed, with
+mesh shaders (N6.7). Still some way off. Expanded Visualizer continues
 meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
 
 - [ ] Oscilloscope legibility (operator, 21 Nov; after the flip, with the other mode tweaks): a setting that slows
@@ -1780,6 +1784,14 @@ meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K bu
   from noise), and how to slow what the eye sees without lagging the reaction. For example, temporal smoothing of the
   displayed trace shape against the reaction envelope, or persistence. Judge it with the music-response traces and
   live rendered motion, never twitch.
+- [ ] Before the first new mode's Studio (lead, 27 Nov): one shared spec-to-Studio translator. Every
+  `ui/studio/*_adapter.py` copies the same loop over `spec.body_controls` (Slider/Toggle/Choice/Colour into
+  `StudioProperty`, decimals from `display_multiplier`, label and tooltip fallbacks, bucket to workspace), and the
+  copies have drifted: Oscilloscope raises on an unplaced control, the others skip it or default its workspace; label
+  and tooltip fallbacks differ. Move it into `ui/studio/schema.py` with each mode passing only its bucket map, priorities,
+  icons and its own extra rows (Custom rows, ScenePath inspectors); each adapter's schema identical before and after
+  (compare `build_schema()` output per mode), drift resolved to one rule. Then a new mode's adapter is its bucket
+  map, extras, evaluator and recorded inputs.
 - [ ] New native-core modes in this order: **Reactive Liquid / Audio Melt Pool, then Concrete Rain** (section 7,
   lab and mock-fidelity proof first). Usu Moonscape remains a later, separately admitted long-horizon concept;
   it does not block SMP re-evaluation just because it is listed after Concrete Rain.
