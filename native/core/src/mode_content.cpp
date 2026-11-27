@@ -2179,8 +2179,8 @@ bool parseStageStep(const QJsonObject &o, int index, const QByteArray &pack, Mod
 }
 
 // D17 point 2: each transparency target's passes all precede its one resolve step; between its first pass and the
-// resolve nothing samples or captures the owner or blooms from it (the owner's borrowed attachments are resolved by the
-// owner's run that the resolve step is).
+// resolve nothing samples or captures the owner or blooms from it, sampling its capture excepted (ABI 47; the owner's
+// borrowed attachments are resolved by the owner's run that the resolve step is).
 bool checkTransparencyOrder(const ModeProgram &program, QString *error)
 {
     for (int t = 0; t < int(program.targets.size()); ++t) {
@@ -2215,8 +2215,13 @@ bool checkTransparencyOrder(const ModeProgram &program, QString *error)
             bool reads = (pass.capture && pass.target == target.owner)
                 || (pass.stage == StageKind::Bloom && pass.stageSource == target.owner)
                 || (pass.stage == StageKind::Defocus && pass.target == target.owner);
-            for (const PassSampler &s : pass.samplers)
-                reads = reads || s.texture.startsWith(owner + '.');
+            // ABI 47: the owner's capture (``<owner>.capture_colour`` / ``capture_depth``) is its own texture, copied
+            // before the first pass (no capture of the owner follows it here), so every pass may sample it, as the
+            // first pass does: Extruded Bubble's glass passes each read the background behind them.
+            for (const PassSampler &s : pass.samplers) {
+                const bool captured = s.texture == owner + ".capture_colour" || s.texture == owner + ".capture_depth";
+                reads = reads || (s.texture.startsWith(owner + '.') && !captured);
+            }
             if (reads) {
                 *error = QStringLiteral("pass '%1' reads '%2' between its transparency target's first pass and the "
                                         "resolve step").arg(QString::fromLatin1(pass.name), QString::fromLatin1(owner));

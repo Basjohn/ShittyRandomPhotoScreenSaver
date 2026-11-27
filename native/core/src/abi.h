@@ -271,4 +271,8 @@
 // keeps its trigger, so u_srpss_compute's last-dispatch value names the last step it applied and the next record
 // dispatches the window's suffix after it; composite_live's compute_geometry_holds. Backward compatible for every
 // earlier program (an entry binding no geometry buffer is never held).
-#define SRPSS_NATIVE_CORE_ABI 46
+// 47 (N5.6, Extruded Bubble's program; awaiting the lead's reservation): a pass between a transparency target's first
+// pass and its resolve may sample the owner's capture (<owner>.capture_colour / capture_depth: its own texture, copied
+// before the first pass, which no capture of the owner follows there); the owner's attachments stay refused. Backward
+// compatible for every earlier program (it only admits more).
+#define SRPSS_NATIVE_CORE_ABI 47
