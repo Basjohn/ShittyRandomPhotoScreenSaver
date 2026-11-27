@@ -1081,6 +1081,8 @@ private:
     };
     // Audit 5 M2: the largest serial ModeStorage made the entry's storage bindings zeroed at (0: none).
     quint64 entryFreshKey(const ModePass &pass) const;
+    // ABI 46 (N5.6, D3): every geometry buffer `pass` binds holds the record's key (decideDispatches holds it if not).
+    bool geometryKeysResident(const ModePass &pass) const;
     // Audit 5 M2: the tracks of a new program, each entry's kept from the last program by its name.
     void retrackCompute(const ModeProgram &program);
     ModeStorage m_storage;

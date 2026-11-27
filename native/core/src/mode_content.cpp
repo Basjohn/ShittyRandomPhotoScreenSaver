@@ -6934,6 +6934,14 @@ void ModeContent::decideDispatches()
             countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
             continue;
         }
+        if (!geometryKeysResident(pass)) {
+            // ABI 46 (N5.6, D3): an entry binding a geometry buffer whose record key is not resident yet (the arena
+            // has not given it: its bank unwritten or torn at this record) is held, its trigger kept, so the next
+            // record holding the key dispatches from where the entry last did (the drift window's suffix), never this
+            // record's work over the previous key's geometry.
+            countGeometryHold();
+            continue;
+        }
         m_dispatch[i] = true;
         // u_srpss_compute: (the trigger, its value at the last dispatch, fresh, the dispatches since the storage was
         // made), into the arena's copy (written whole after this).
@@ -6951,6 +6959,20 @@ void ModeContent::decideDispatches()
         t.lastTrigger = value;
         t.freshSeen = freshKey;
     }
+}
+
+bool ModeContent::geometryKeysResident(const ModePass &pass) const
+{
+    for (const ComputeBinding &b : pass.computeBindings) {
+        if (b.kind != ComputeResource::Buffer)
+            continue;
+        // "<name>@previous" reads the key its current one replaces: the entry waits on the current key alone.
+        const QByteArray base = b.resource.endsWith("@previous") ? b.resource.chopped(9) : b.resource;
+        const auto key = m_geometryKeys.constFind(base);
+        if (key != m_geometryKeys.cend() && !m_storage.geometryResident(base, key.value()))
+            return false;
+    }
+    return true;
 }
 
 quint64 ModeContent::entryFreshKey(const ModePass &pass) const
