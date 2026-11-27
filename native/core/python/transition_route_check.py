@@ -814,15 +814,97 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
 #: The performance step's cost (``--cost``; Native_Parity_And_Timing_Proof.md section 3, "A transition port": C per pass
 #: at 2560 x 1440 and 4K on both backends): the layer's record of the run (the environment's copy and chain once, the
 #: scene's passes, the composite) timed by the core's GPU timer over COST_FRAMES frames of the effect, median and p90;
-#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context. Frames run back to
+#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context, and (N5.2h) the
+#: Python presenter on the product route on the same frames by the same instrument (``python_product_frame_gpu``
+#: against ``qrhi_frame_gpu``: the comparable pair; the benchmark is the draw alone in a bare FBO on a hot cache, which
+#: read 0.04 ms at 4K against the product's 0.057). Crossfade also runs the clear route's negative control
+#: (``_clear_control``). Both scenes are the product's display scene (a plain root). Frames run back to
 #: back (no readback between them, which let the GPU idle and downclock: the first run's 4K figures were below its
 #: 1440p ones); Crossfade, timed in the same run, is the control the others are read against.
 COST_SIZES = ((2560, 1440), (3840, 2160))
 COST_FRAMES = 240
 
 
+class _ClockTime:
+    """``time`` for the Python presenter's node (``background_node.run.sample(time.monotonic_ns())``) on the round's own
+    clock, so the product route's Python frames sample the run at the native layer's progress (a harness patch)."""
+
+    def __init__(self, clock: Clock) -> None:
+        self.monotonic_ns = clock
+
+
+def _product_python(core, engine, size, photos):
+    """N5.2h: the Python presenter on the product route (``BackgroundRenderItem``'s render node drawing into the window)
+    in a hidden host of the native layer's size, timed by the same instrument as the native layer (QRhi's whole-frame
+    GPU time, the timer's kind 0) on the same frames (interleaved one by one), under the product's display scene (a
+    plain root, nothing drawn under the background: DisplayScene.qml). ``python_opengl`` stays the bare-FBO benchmark
+    (``TransitionCapture.benchmark``: the draw alone on a hot cache), which no product frame is."""
+    host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
+    scene = blc.Scene(core, engine, host, 1.0, size, kind="python")
+    scene.root.setProperty("color", "transparent")
+    scene.present(photos[0][0])
+    scene.frames(6)
+    return host, scene
+
+
+def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]:
+    """N5.2h's negative control on Crossfade: the surface cleared at its first run by the pass's own clear (OpenGL;
+    Vulkan keeps the clearing draw, rule B) against the full-triangle clearing draw again (``stage_control``'s
+    ``surface_clear_draw``): the same pixels (the display read at one progress), the clears counted by their route
+    (``composite_live``'s ``mode_surface_pass_clears`` and ``mode_surface_draw_clears``), and the record and frame GPU
+    time with the draw back (its share returns). A module without the control: ``available`` False, nothing judged."""
+    if not core.module.stage_control("surface_clear_draw", False):
+        return {"available": False}, {}
+
+    def counts() -> tuple[int, int]:
+        live = core.composite_live()
+        return int(live.get("mode_surface_pass_clears", 0)), int(live.get("mode_surface_draw_clears", 0))
+
+    def drawn(progress: float):
+        clock.at(run, progress)
+        scene.layer.tick()
+        scene.frames(3)
+        return scene.read()
+
+    before = counts()
+    by_pass = drawn(0.5)
+    middle = counts()
+    core.module.stage_control("surface_clear_draw", True)
+    try:
+        by_draw = drawn(0.5)
+        neighbour = drawn(0.55)                                  # the comparison's own control: another progress
+        host.set_gpu_timer(True)
+        host.gpu_samples()
+        for frame in range(COST_FRAMES):
+            clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))
+            scene.layer.tick()
+            scene.frames(1)
+        scene.frames(4)
+        samples = host.gpu_samples()
+        host.set_gpu_timer(False)
+        after = counts()
+    finally:
+        core.module.stage_control("surface_clear_draw", False)
+    pixels = blc.compare(by_pass, by_draw)
+    control = blc.compare(by_draw, neighbour)
+    record = {"available": True, "pixels_pass_against_draw": pixels, "pixels_against_next_progress": control,
+              "pass_clears": [middle[0] - before[0], after[0] - middle[0]],
+              "draw_clears": [middle[1] - before[1], after[1] - middle[1]],
+              "core_record_gpu_clear_draw": blc._ms_stats([x.nanoseconds / 1e6 for x in samples if x.kind == 2]),
+              "qrhi_frame_gpu_clear_draw": blc._ms_stats([x.nanoseconds / 1e6 for x in samples if x.kind == 0])}
+    opengl = api == "opengl"
+    checks = {"clear_route_pixels_equal": pixels["equal"], "clear_route_control_differs": not control["equal"],
+              # [default, control]: OpenGL clears by the pass by default and by the draw under the control; Vulkan by
+              # the draw in both.
+              "clear_route_counted": (record["pass_clears"][0] > 0) == opengl and record["pass_clears"][1] == 0
+              and (record["draw_clears"][0] == 0) == opengl and record["draw_clears"][1] > 0}
+    return record, checks
+
+
 def round_cost(core, engine, app, api: str, variants) -> dict:
     from PIL import Image
+
+    import rendering.quick.render.background_node as background_node
 
     facts: dict = {}
     checks: dict = {}
@@ -831,14 +913,25 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
         photos = [blc.processed(path, "fill", size) for path in PHOTOS]
         host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
         scene = blc.Scene(core, engine, host, 1.0, size, kind="layer")
+        scene.root.setProperty("color", "transparent")           # N5.2h: the product's display scene, as Python's
         clock = Clock()
         scene.layer._clock_ns = clock
+        python = _product_python(core, engine, size, photos) if api == "opengl" else None
+        saved_time = background_node.time
+        background_node.time = _ClockTime(clock)
         try:
             for index, variant in enumerate(variants):
                 run = production_run(variant, [image for image, _rows in photos], index + 1)
                 scene.present(photos[0][0])
                 scene.settle()
                 clock.at(run, 0.1)
+                if python is not None:
+                    python[1].present(photos[0][0])
+                    python[1].frames(2)
+                    python[1].item.set_transition_run(run)
+                    python[1].frames(8)                          # its per-run resources made before the timing
+                    python[0].set_gpu_timer(True)
+                    python[0].gpu_samples()
                 host.set_gpu_timer(True)                         # N5.2g: the fields' frames timed too (OpenGL's
                 host.gpu_samples()                               # in-frame form records them at the commit)
                 started = time.perf_counter()
@@ -849,15 +942,30 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.frames(4)
                 start_records = [s.nanoseconds / 1e6 for s in host.gpu_samples() if s.kind == 2]
                 walls = []
+                python_walls = []
+                if python is not None:
+                    python[0].gpu_samples()                      # the timing starts with the native layer's
                 for frame in range(COST_FRAMES):
                     clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
                     started = time.perf_counter()
                     scene.layer.tick()
                     scene.frames(1)
                     walls.append((time.perf_counter() - started) * 1000.0)
+                    if python is not None:
+                        started = time.perf_counter()
+                        python[1].item.update()
+                        python[1].frames(1)
+                        python_walls.append((time.perf_counter() - started) * 1000.0)
                 scene.frames(4)
                 samples = host.gpu_samples()
                 host.set_gpu_timer(False)
+                python_frame_gpu = []
+                if python is not None:
+                    python[1].frames(4)
+                    python_frame_gpu = [s.nanoseconds / 1e6 for s in python[0].gpu_samples() if s.kind == 0]
+                    python[0].set_gpu_timer(False)
+                    python[1].item.set_transition_run(None)
+                    python[1].frames(2)
                 surface = [s.nanoseconds / 1e6 for s in samples if s.kind == 2]
                 frame_gpu = [s.nanoseconds / 1e6 for s in samples if s.kind == 0]
                 facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
@@ -869,14 +977,27 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                                                "fields_ready_wall_ms": round(ready_ms, 3),
                                                "start_record_gpu_max_ms": round(max(start_records, default=0.0), 4),
                                                "fields": (scene.layer.state().get("mode") or {}).get("fields")}
+                if python is not None:
+                    # N5.2h: the comparable pair (same instrument, same frames): qrhi_frame_gpu against this.
+                    facts[f"{label}_{variant}"]["python_product_frame_gpu"] = blc._ms_stats(python_frame_gpu)
+                    facts[f"{label}_{variant}"]["python_product_wall"] = blc._ms_stats(python_walls)
+                    checks[f"{label}_{variant}_python_timed"] = len(python_frame_gpu) >= COST_FRAMES // 4
                 checks[f"{label}_{variant}_fields_in"] = fields_in
+                if variant == "crossfade":
+                    control, control_checks = _clear_control(core, api, scene, host, clock, run)
+                    facts[f"{label}_{variant}"]["clear_control"] = control
+                    checks.update({f"{label}_{variant}_{k}": v for k, v in control_checks.items()})
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
                 scene.settle()
         finally:
+            background_node.time = saved_time
             scene.close(app)
             facts.setdefault("host_close", []).append(blc._close_host(app, host))
+            if python is not None:
+                python[1].close(app)
+                facts.setdefault("host_close", []).append(blc._close_host(app, python[0]))
         if api == "opengl":
             pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
             capture = product_capture(size[0], size[1], *pictures, 1.0)
