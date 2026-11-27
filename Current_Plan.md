@@ -1535,7 +1535,18 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       zero, captures), keep the surface. One route with an optional output, not a second renderer. First list every
       reader of the kept surface (D7 pyramid, quarter-turn orientation and fades in the composite, captures, Studio,
       idle frames that only re-composite) with what each costs either way; if a reader rules the design out, stop
-      and report before building.
+      and report before building. Guards (operator asked, 28 Nov: no overwork, no contention, no drawing when not
+      needed):
+      - Repaint frames with a still background (the window redraws for a widget while the photo is idle): the direct
+        draw must cost no more GPU than today's composite of the kept surface (both are one full-screen textured
+        pass for a still); measure it. If the still's draw is heavier than the composite (fit, effects), keep the
+        surface for idle frames and go direct only while a transition runs.
+      - A demand flip (a glass card appears or goes) never allocates: the surface stays resident, and the first frame
+        that needs it records it once. No per-frame toggling: the route changes only when demand or a reader changes.
+      - The window pass and the surface pass have different render-pass formats, so each pipeline the background
+        uses must exist for both. Warm the second variant gradually (one unit per spaced, rendered frame, next-likely
+        first), never on first use; a hitch row covers a demand flip mid-transition.
+      - No new threads, timers or polling; the same render thread records either route.
     - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
       below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
       Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
