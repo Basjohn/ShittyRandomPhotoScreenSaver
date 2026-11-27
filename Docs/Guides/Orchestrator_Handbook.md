@@ -229,6 +229,16 @@ defaults, the installer script) are committed and pushed at once, silently.
   operator to compact near 250k. An agent close to completion is left to finish instead, and an agent that will not
   be used again is never compacted. Journals, the plan and evidence on disk carry what compaction drops; keep the
   plan's resume box current.
+- **Mechanical proof sweeps go to the cheap slot** (lead, 27 Nov). Once a box's design, root cause and fix are done
+  and one take of its proof has passed, running the named commands over the remaining takes, keys and APIs and
+  collecting the figures is mechanical. Hand it, with the branch and journal, to Sonnet 5.5 Medium or Haiku 5.5
+  High. Opus keeps any failure the sweep finds. Turns are the cost (every turn re-reads the context), and a sweep
+  is many turns of little reasoning.
+- **No ticket system** (lead, 27 Nov, on the operator's question). The plan as live checklists already acts as the
+  ticket store. Agents read only their box: in the 17-27 Nov transcripts, the plan slices read were a few percent of
+  an agent's context. An external tracker would put its tool schemas into every turn of every agent and split the
+  one owner of open work. What costs is turns times context (above), not the plan's size. Revisit only if the lead's
+  own plan reads become a measurable share.
 - **Resume or fresh, by the agent's context size.** Resuming an agent after a long wait (a GitHub build, a lead run)
   writes its whole context to cache again. Resume related work when the agent's context is small (under about
   200k); otherwise start a fresh agent whose brief starts from the branch and journal (section 5's successor line).
