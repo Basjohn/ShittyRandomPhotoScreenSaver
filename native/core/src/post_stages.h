@@ -133,6 +133,10 @@ bool sceneFrameSurface();
 // not over the card's own quad (mode_content.cpp cardQuad; read per record).
 void setCardTriangle(bool triangle);
 bool cardTriangle();
+// N5.2h's negative control: the mode's surface cleared at its first run by the full-triangle clearing draw again (as
+// before N5.2h) on OpenGL too, not by the pass's own clear (targets.h clearingRenderTarget; read per record).
+void setSurfaceClearDraw(bool draw);
+bool surfaceClearDraw();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)

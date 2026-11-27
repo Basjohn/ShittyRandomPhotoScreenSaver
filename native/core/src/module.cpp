@@ -746,6 +746,10 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mode_texture_image_bytes"), double(textures.imageBytes));
     o.insert(QStringLiteral("mode_texture_uploads"), double(textures.uploads));
     o.insert(QStringLiteral("mode_texture_chains"), double(textures.chains)); // ABI 35: the box kernel's item chains
+    // N5.2h: the mode surfaces' clears at a record's first surface run (or its only clear): by the pass's own clear
+    // (OpenGL), or by the full-triangle clearing draw (Vulkan, rule B; the control surface_clear_draw).
+    o.insert(QStringLiteral("mode_surface_pass_clears"), double(textures.surfacePassClears));
+    o.insert(QStringLiteral("mode_surface_draw_clears"), double(textures.surfaceDrawClears));
     // N5.7b: the backdrop items, their pyramids and the pyramids' QRhi objects, and the builds recorded.
     const srpss_core::BackdropCounts backdrops = srpss_core::backdropCounts();
     o.insert(QStringLiteral("backdrop_items"), backdrops.items);
@@ -2285,6 +2289,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSceneFrameSurface(value);
     else if (control == "card_triangle")
         srpss_core::setCardTriangle(value);
+    else if (control == "surface_clear_draw")
+        srpss_core::setSurfaceClearDraw(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")

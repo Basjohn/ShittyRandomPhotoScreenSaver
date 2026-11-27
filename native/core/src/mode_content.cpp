@@ -300,6 +300,8 @@ QAtomicInteger<int> g_liveImages { 0 };
 QAtomicInteger<qint64> g_imageBytes { 0 };
 QAtomicInteger<qint64> g_textureUploads { 0 };
 QAtomicInteger<qint64> g_textureChains { 0 };   // ABI 35
+QAtomicInteger<qint64> g_surfacePassClears { 0 }; // N5.2h
+QAtomicInteger<qint64> g_surfaceDrawClears { 0 };
 QAtomicInteger<quint64> g_textureGenerations { 0 };
 
 // N5.7a: a still's schema (mode_content.h, "Stills"): no field, no record. Its program is checked against it exactly as
@@ -2525,6 +2527,8 @@ ModeTextureCounts modeTextureCounts()
     c.imageBytes = g_imageBytes.loadRelaxed();
     c.uploads = g_textureUploads.loadRelaxed();
     c.chains = g_textureChains.loadRelaxed();  // ABI 35
+    c.surfacePassClears = g_surfacePassClears.loadRelaxed(); // N5.2h
+    c.surfaceDrawClears = g_surfaceDrawClears.loadRelaxed();
     return c;
 }
 
@@ -7842,6 +7846,15 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     // ABI 35: the item textures committed with mips this record: their chains before any pass samples them.
     recordTextureChains(rhi, cb, &pending);
     bool surfaceOpened = false;
+    // N5.2h: on OpenGL the surface's first run begins on its clearing render target, whose pass clears the whole
+    // texture (glClear) to the transparent black the clearing draw wrote over the same whole surface (surfaceViewport is
+    // the texture), without the draw's fragments: the draw's share of the record (about 0.02 ms per frame at 4K, a
+    // fifth of Crossfade's) goes. Vulkan keeps the draw (rule B, targets.h), as does the control surface_clear_draw.
+    QString clearingError;
+    QRhiTextureRenderTarget *const clearingTarget
+        = surfaceClearDraw() ? nullptr : clearingRenderTarget(rhi, &target, &clearingError);
+    if (!clearingError.isEmpty())
+        m_reason = clearingError;             // the draw clears instead: nothing is lost but the share
     bool cleared[kMaxSceneTargets] = {};
     const int count = draw ? r.passCount : 0;
     bool computeOpen = false;                 // N3.3: a QRhi compute pass left open (the single-pass control only)
@@ -7929,14 +7942,20 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                && program.passes.at(last + 1).face == pass.face)
             ++last;
         if (runTarget < 0) {
-            cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
+            const bool passClears = !surfaceOpened && clearingTarget;
+            cb->beginPass(passClears ? clearingTarget : target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
+                          pending);
             pending = nullptr;
-            if (!surfaceOpened) {
+            if (passClears) {
+                g_surfacePassClears.fetchAndAddRelaxed(1);
+                surfaceOpened = true;
+            } else if (!surfaceOpened) {
                 cb->setGraphicsPipeline(r.clearPipeline.get());
                 setViewportAndScissor(cb, surfaceViewport);
                 cb->setShaderResources();
                 cb->setVertexInput(0, 1, &cardInput);
                 cb->draw(3);
+                g_surfaceDrawClears.fetchAndAddRelaxed(1);
                 surfaceOpened = true;
             }
             for (int k = i; k <= last; ++k) {
@@ -8012,13 +8031,20 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     if (computeOpen)
         cb->endComputePass();                 // N3.3: the program ended on compute entries
     if (!surfaceOpened) {
-        // The surface is cleared once at least (its frame is what the composite shows).
-        cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
-        cb->setGraphicsPipeline(r.clearPipeline.get());
-        setViewportAndScissor(cb, surfaceViewport);
-        cb->setShaderResources();
-        cb->setVertexInput(0, 1, &cardInput);
-        cb->draw(3);
+        // The surface is cleared once at least (its frame is what the composite shows): by its pass (N5.2h, OpenGL)
+        // or by the clearing draw.
+        cb->beginPass(clearingTarget ? clearingTarget : target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
+                      pending);
+        if (clearingTarget) {
+            g_surfacePassClears.fetchAndAddRelaxed(1);
+        } else {
+            cb->setGraphicsPipeline(r.clearPipeline.get());
+            setViewportAndScissor(cb, surfaceViewport);
+            cb->setShaderResources();
+            cb->setVertexInput(0, 1, &cardInput);
+            cb->draw(3);
+            g_surfaceDrawClears.fetchAndAddRelaxed(1);
+        }
         cb->endPass();
     }
 }

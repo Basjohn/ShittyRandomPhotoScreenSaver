@@ -30,6 +30,9 @@ ColorTarget &ColorTarget::operator=(ColorTarget &&) noexcept = default;
 
 void ColorTarget::reset()
 {
+    clearingRenderTargetObject.reset();
+    clearingRenderPass.reset();
+    clearingGeneration = 0;
     renderTarget.reset();
     renderPass.reset();
     depthStencil.reset();
@@ -71,6 +74,34 @@ bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, Col
     }
     out->generation = nextTargetGeneration();
     return true;
+}
+
+QRhiTextureRenderTarget *clearingRenderTarget(QRhi *rhi, ColorTarget *target, QString *error)
+{
+    if (!rhi || !target || !target->isValid() || rhi->backend() != QRhi::OpenGLES2)
+        return nullptr;
+    if (target->clearingRenderTargetObject && target->clearingGeneration == target->generation)
+        return target->clearingRenderTargetObject.get();
+    // Another generation (a new texture, or the same one resized in place): the old framebuffer is not reused.
+    target->clearingRenderTargetObject.reset();
+    target->clearingRenderPass.reset();
+    target->clearingGeneration = 0;
+    QRhiTextureRenderTargetDescription description { QRhiColorAttachment(target->texture.get()) };
+    if (target->depthStencil)
+        description.setDepthStencilBuffer(target->depthStencil.get());
+    target->clearingRenderTargetObject.reset(rhi->newTextureRenderTarget(description));
+    target->clearingRenderTargetObject->setName(target->texture->name() + QByteArrayLiteral(" clearing"));
+    target->clearingRenderPass.reset(target->clearingRenderTargetObject->newCompatibleRenderPassDescriptor());
+    target->clearingRenderTargetObject->setRenderPassDescriptor(target->clearingRenderPass.get());
+    if (!target->clearingRenderTargetObject->create()) {
+        *error = QStringLiteral("%1: clearing render target create failed")
+                     .arg(QString::fromUtf8(target->texture->name()));
+        target->clearingRenderTargetObject.reset();
+        target->clearingRenderPass.reset();
+        return nullptr;
+    }
+    target->clearingGeneration = target->generation;
+    return target->clearingRenderTargetObject.get();
 }
 
 QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture)
