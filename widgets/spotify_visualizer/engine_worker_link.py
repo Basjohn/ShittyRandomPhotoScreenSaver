@@ -248,6 +248,7 @@ class EngineWorkerLink:
         self._on_lost = on_lost
         self._mailbox: Any = None
         self._geometry_arena: Any = None    # N5.6 (D3): the stream's drift geometry arena (its owner), or None
+        self._staged_arenas: set = set()     # arenas staged by mode changes whose reply is still pending
         # The session's wake pipe as the main side holds it (``wake_channel``): its own writer end, and on POSIX the
         # pipe's name, until the session answers the configure.
         self._wake_channel: Any = None
@@ -701,10 +702,13 @@ class EngineWorkerLink:
             from core.visualizer_engine.extruded_bubble_native_schema import stage_stream_arena
 
             staged = stage_stream_arena(bank_bytes)
+            self._staged_arenas.add(staged)       # closed with the link while its reply is pending
 
         def drop_staged() -> None:
-            if staged is not None and not staged.closed:
-                staged.close()
+            if staged is not None:
+                self._staged_arenas.discard(staged)
+                if not staged.closed:
+                    staged.close()
 
         def committed(reply: dict) -> None:
             if change is not None:
@@ -721,6 +725,7 @@ class EngineWorkerLink:
             if staged is not None:
                 from core.visualizer_engine.extruded_bubble_native_schema import replace_stream_arena
 
+                self._staged_arenas.discard(staged)
                 replace_stream_arena(self.label_namespace, staged)   # registered; the previous arena retired
                 self._geometry_arena = staged
             on_committed((int(reply["engine_generation"]), int(reply["activation_id"])),
@@ -858,6 +863,11 @@ class EngineWorkerLink:
                 from core.visualizer_engine.extruded_bubble_native_schema import close_stream_arena
 
                 close_stream_arena(arena)        # the stream retired: unregistered and unlinked
+            # An activation's staged arena whose reply was abandoned above (neither committed nor failed runs).
+            staged, self._staged_arenas = self._staged_arenas, set()
+            for owner in staged:
+                if not owner.closed:
+                    owner.close()
             self._events.deleteLater()
         finally:
             if lease is not None:

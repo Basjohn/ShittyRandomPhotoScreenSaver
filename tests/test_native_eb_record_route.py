@@ -510,6 +510,40 @@ def test_the_real_link_owns_the_arena_and_the_worker_writes_it(qt_app, initial_m
 
 
 @pytest.mark.qt
+def test_a_link_closed_before_the_activation_reply_closes_its_staged_arena(qt_app, monkeypatch):
+    """A mode change stages an arena and the link closes while its reply is pending (the reply is abandoned, neither
+    ``committed`` nor ``failed`` runs): the staged arena is closed and unlinked with the link, never leaked."""
+    from tests.test_visualizer_engine_frame_capacity import _settings
+    from tests.test_visualizer_owner_engine_worker import _InProcessSupervisor
+    from tools.visualizer_replay import owner_worker_gate as gate
+    from tools.visualizer_replay.live_engine_gate import paced_pcm
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer.feature_replay import offline_activation_request
+
+    staged, stage = [], schema_module.stage_stream_arena
+    monkeypatch.setattr(schema_module, 'stage_stream_arena', lambda n: staged.append(stage(n)) or staged[-1])
+    supervisor, clock = _InProcessSupervisor(), [0.]
+    rig = gate.OwnerRig('spectrum', worker=True, supervisor=supervisor, cadence='thread', clock=clock,
+                        extra_modes=('extruded_bubble',))
+    try:
+        pcm, rate = paced_pcm(.5)
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm, pcm_rate=rate):
+            owner = rig.build()
+        link = owner._worker
+        replies = []
+        activation = offline_activation_request('extruded_bubble', 0, None, _settings('extruded_bubble', True))
+        link.set_mode('extruded_bubble', activation, on_committed=lambda *a: replies.append(a),
+                      on_failed=replies.append)
+        assert len(staged) == 1 and not staged[0].closed
+        link.close()
+        assert not replies and staged[0].closed
+    finally:
+        rig.close()
+        supervisor.close()
+        engine_worker_link.reset_run_state_for_testing()
+
+
+@pytest.mark.qt
 def test_control_an_activation_without_its_arena_is_seen(qt_app, monkeypatch):
     import core.visualizer_engine.frame_capacity as frame_capacity
     monkeypatch.setattr(frame_capacity, 'geometry_bank_bytes', lambda mode, kwargs: 0)

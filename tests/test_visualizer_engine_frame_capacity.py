@@ -137,7 +137,7 @@ def test_failed_allocation_and_mismatched_ack_never_adopt_a_mapping(monkeypatch)
         assert reader.mapping_name == old and reader._staged_memory is None
         monkeypatch.setattr(module, 'create_frame_mapping', create)
         link = object.__new__(EngineWorkerLink)
-        link._mailbox, link.mapping_name, link._geometry_arena = reader, old, None
+        link._mailbox, link.mapping_name, link._geometry_arena, link._staged_arenas = reader, old, None, set()
         failed, committed, sent = [], [], []
 
         def reply_with_stale_mapping(message, payload, *, on_reply, on_failed):
@@ -156,7 +156,7 @@ def test_failed_allocation_and_mismatched_ack_never_adopt_a_mapping(monkeypatch)
         with pytest.raises(FileNotFoundError):
             SharedMemory(name=sent[0]['capacity_change']['mapping'])
         # N5.6 (D3): the activation's staged geometry arena goes with the refused commit, never adopted.
-        assert link._geometry_arena is None and len(staged) == 1
+        assert link._geometry_arena is None and len(staged) == 1 and not link._staged_arenas
         assert sent[0]['geometry_arena']['name'] == staged[0].name and staged[0].closed
     finally:
         reader.close()
