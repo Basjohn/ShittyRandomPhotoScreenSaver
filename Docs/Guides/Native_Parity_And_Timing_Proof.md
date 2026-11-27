@@ -202,11 +202,16 @@ measures the real process:
 - **Load:** game60 is the operator's yes each time, at most 10 minutes, lead only, and the rare end-of-chain
   worst-case proof. Display 0 is never used.
 
-**Load during layer T.** The operator's modest load (a game, normal use) is fine and recorded with the figures. Other
-agents' parity or judge runs are not: eight parallel owner replays took the machine to 93-97 % CPU on 21 Nov and
-made a Bubble A/B unreadable. Check the whole-machine CPU before a T run (`Get-CimInstance Win32_Processor`), and
-rerun any T run that ran above about 40 %. The lead staggers agents' heavy runs and T runs, and briefs say how many
-parallel replay processes an agent may start.
+**Load during layer T.** The operator's own load (a game, normal use) is the condition the product must handle, not
+an excuse (operator, 22 Nov: "This load is modest and does not excuse bad behaviour at all. In fact we've spent weeks
+targeting behaviour under loads"). Run T when it is due, under whatever the operator is doing, record the
+whole-machine CPU and GPU with the figures (`Get-CimInstance Win32_Processor`), and judge the run as it stands: a
+gap or hitch under that load is a finding to attribute, never a reason to rerun on a quiet machine. Only load that we
+started is excluded: other agents' parity or judge runs (eight parallel owner replays took the machine to 93-97 % CPU
+on 21 Nov and made a Bubble A/B unreadable). Rerun a T run only when our own work caused its load. The lead staggers
+agents' heavy runs and T runs, and briefs say how many parallel replay processes an agent may start. Copy each run's
+trace and session folder out before the next run: per-run session folders are overwritten (22 Nov: Volumetric
+Dissolve's 182 ms trace was lost that way).
 
 The acceptance figures:
 - Frame-time p90 no worse than the pre-flip baseline beyond its run-to-run spread (stated with the figure).

@@ -67,6 +67,18 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
    section 3's "A port" list (or "A transition port") and its section 5 row; an optimisation or core change: section
    3's table and regression-guard rule) and name it in the brief ("its proof is
    that list, every bullet"), so the agent reads the documented list, not the lead's summary of it.
+   The plan box (or the brief, where the box cannot) must also carry these, because the agent never sees the lead's
+   memory (22 Nov: all four were missing from the N5.2f hitch brief and the Extruded Bubble defect briefs):
+   - **The operator's defect in their own words, quoted,** with how they see it: preset, camera, music, what they
+     do ("orbit Preset 9 with music": the "flickering starfish of emission"). Never paraphrase it into a search the
+     agent can satisfy without seeing it.
+   - **Keep every run:** each run's trace and session folder are copied out before the next run.
+   - **Load:** the operator's own running load is no load run; measure under it, never wait for a quiet machine.
+   - **Scope by cause, not by file:** fix the cause at its owner wherever it lives; never "if it is X's". Stop only
+     for `native/core` C++ the brief does not cover or files another agent holds.
+   **Before sending, check the brief for contradictions** against `Docs/Guardrails/Agent_Worktree_Rules.md` and the
+   proof guide's load and run rules. An agent that meets two rules that disagree follows the stricter one and stops,
+   which is how the N5.2f hitch was left attributed but unfixed.
 3. **Dispatch** with `isolation: "worktree"`, the slot's `model` and `effort`. Note the agent id in the plan item.
 4. **While it runs:** do not poll. If it seems stuck, `tools/agent_handover.py <worktree>` shows its journal,
    commits and live processes.
@@ -87,6 +99,12 @@ one audit; docs, tests and tooling merges get none (the lead's own check below s
 - Each box claimed done: find it in the diff; run its tests on the merge, not only on the branch (skip the rerun when
   `git log <branch>..main` is empty: main has not moved since the branch was cut).
 - A negative control exists for every new test and the agent says how it saw it fail.
+- **An operator-reported defect is never closed as "no defect" or "not reproduced".** If the report says so, the
+  reproduction did not match what the operator described (preset, camera, music, action): send it back with the
+  operator's words, or reproduce it yourself. Never ask the operator for footage or legwork the harnesses can do
+  (22 Nov: the Extruded Bubble "starfish" and stream speed were both real, R-250 and R-251).
+- **A report that stops at attribution** while the cause is fixable is not done: send the fix back to the same
+  agent, unless the cause is C++ outside its brief.
 - Caller sweep: a changed shared owner (DisplayManager, a runtime, a settings owner, the frame codec) has every
   test file that names it run.
 - Pixels: open the "open first" sheets yourself. A new control, row or list is compared side by side, at the same

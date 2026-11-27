@@ -58,9 +58,8 @@ Fresh agents only (the operator, 25 Nov: earlier agents carry stale cache and co
 `Docs/Guardrails/Agent_Worktree_Rules.md`, then `Current_Plan.md` <box>; its proof is <named checklist>, every
 bullet", following handbook section 3.
 
-1. **Lead, first, about 20 minutes: apply the handbook findings.** Edit the three docs named in the boxes under
-   "NEXT SESSION STARTS HERE", commit, push, and tick those boxes. Do this before writing any brief, so the new
-   briefs inherit the fixed rules.
+1. **Done 27 Nov:** the handbook findings are applied (`Agent_Worktree_Rules.md`, the proof guide's "Load during
+   layer T", handbook section 3 step 2 and section 4). Briefs now inherit them.
 2. **Lead, unattended, start at once: the 10 remaining N5.6 Python reference runs.** Use
    `owner_render_parity.py --references-only` into `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251`, with at most
    two processes at a time and the late-window rule. Decide first which 30 s alternates need the whole take, per

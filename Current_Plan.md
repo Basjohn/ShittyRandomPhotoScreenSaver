@@ -43,7 +43,7 @@ items promoted to run soon are in §3. Nothing else in it is admitted until it a
 
 Live checklist: every open step is its own box; landed boxes are deleted at merge; keep `[~]`
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
-after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
+after the operator's yes on a question card; agents never start load (invisible checks without load, at most 3 min); the operator's own running load is not a load run and is measured under (`Agent_Worktree_Rules.md`).
 
 **State (17 Nov):** Spectrum, Spline Curve and Bubble are native and accepted (operator), and Bubble is offered on
 Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port and optimisation is proved by one
@@ -72,27 +72,6 @@ Continue the native sequence below with the repaired timing receipts. The report
    this plan sets a global order.
 
 **Resume here**
-- [ ] **NEXT SESSION STARTS HERE (operator, 22 Nov):** read the orchestration handbook first and work out why the lead
-  keeps failing to enforce its protections. 22 Nov failures to explain: briefs paraphrased the operator's defects (the
-  "emission starfish" became a default-camera search; R-250); "no defect" results accepted against what the operator
-  sees; the N5.2f hitch brief kept no per-run traces (per-row runs overwrite one session folder, Volumetric's 182 ms
-  trace lost), conflicted with the agents-never-run-load rule without saying the operator's own running load is not
-  agent-started load, and scoped the fix to "if it is N5.2f's", so the agent stopped at attribution.
-  - Found 25 Nov (lead's reading): the protections lived only in the lead's memory, and the docs agents read say
-    the opposite. Fix these docs:
-    - [ ] `Docs/Guardrails/Agent_Worktree_Rules.md:22` forbids "load runs" without saying that the operator's own
-      running load (a game, normal use) is no load run. Say it there.
-    - [ ] `Docs/Guides/Native_Parity_And_Timing_Proof.md`, "Load during layer T", says to rerun any T run above
-      about 40 % CPU. That contradicts the operator's rule: "This load is modest and does not excuse bad behaviour
-      at all." Record the load with the figures and judge the run under it. Rerun only when agent-started work
-      caused the load.
-    - [ ] `Docs/Guides/Orchestrator_Handbook.md` section 3, step 2 (Brief) lacks three things:
-      - quote the operator's defect words verbatim, with how they see it (preset, camera, music);
-      - copy each run's trace and session folder out before the next run;
-      - fix the cause at its owner wherever it lives.
-      Section 4 lacks: a "no defect" or "not reproduced" against an operator report is rejected, never accepted.
-      Add one pre-dispatch check: read the brief against `Agent_Worktree_Rules.md` and the proof guide for
-      contradictions before sending it.
 - [ ] Live agents and where their work is (keep current). 27 Nov: **no agent is running.** All six retained worktrees
   are clean, detached and merged into main:
   - `C:/Users/Basjohn/.codex/worktrees/` `dashboard-naming`, `eb-compute-binding-limit` (N5.6 evidence, 1.5 MB),

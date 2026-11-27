@@ -19,7 +19,18 @@ that never started.
 - Do not call `update_plan` or `wrap_up`. Do not edit `Current_Plan.md`: the lead owns it. Your task is written there in detail and that plan item is your brief; work through its boxes in order and report box by box.
 - The one exception: where your brief asks you to edit `Current_Plan.md` (for example a line under a box saying what was built), you edit exactly that and nothing else in the file; you never tick, delete or reword a box.
 - Tests: run only the test files related to what you change, in the foreground, with `timeout 900` in front and `-p no:cacheprovider -q`. When you change a shared owner (DisplayManager, a runtime, a settings owner), grep `tests/` for the changed method and class names and run every file that hits, not only the files you edit. Never the whole suite, never `--isolated`. No background commands and no polling loops; nothing of yours may still be running when you report. New tests use the shared doubles in `tests/_display_manager_doubles.py` instead of hand-built stubs, and the real `SettingsDialog` instead of stub hosts.
-- Forbidden: load runs (`game60`, `tools/gpu_load_generator.py`, `--load`), visible windows of any kind on a real screen, builds or installers, live network, environment-variable flags, new timers or polling in product code, changes that retune the protected QSG/clip optimisation commits (ce07b991, 07486d83, 985b9d53).
+- Load you do not start is not a load run. The operator's own use of the machine (a game, normal work) is the
+  condition the product must handle (operator, 22 Nov: "This load is modest and does not excuse bad behaviour at
+  all"). Run timing, hitch and cost checks under it when they are due, and record it with the figures. Never wait
+  for a quiet machine and never discard a result because of that load.
+- Keep every run: copy each run's trace and session folder into your evidence directory before the next run
+  starts (a per-run session folder is overwritten by the next run).
+- Fix the cause at its owner, wherever it lives, even outside the files your box names. Stop and report only when
+  the owner is `native/core` C++ your brief does not cover, or files another agent holds.
+- An operator-reported defect is real. Never report "no defect" or "not reproduced" against it: reproduce it as
+  the operator sees it (the preset, camera, music and words quoted in your box), or report what you tried and
+  what is still missing.
+- Forbidden: load runs you start (`game60`, `tools/gpu_load_generator.py`, `--load`), visible windows of any kind on a real screen, builds or installers, live network, environment-variable flags, new timers or polling in product code, changes that retune the protected QSG/clip optimisation commits (ce07b991, 07486d83, 985b9d53).
 - Presets are authored, mutable, exchangeable content (`Docs/Guardrails/Visualizer_Presentation.md`, first
   section): never list, manifest, sign, count, guard or test their names, slots or contents anywhere (tests,
   product code, tools), never ask for a record when one is removed or renamed, never change a preset to make a
