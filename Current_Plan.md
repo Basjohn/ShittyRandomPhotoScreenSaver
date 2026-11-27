@@ -77,8 +77,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build". 28 Nov: sub-boxes 1 and 2 done on the branch (`e7c0764b3` ABI 46 hold, `8d635e313`
-    arena, seqlock, drift-window stream); built on GitHub from `8d635e31` (run 46075163413) and resumed for
-    sub-box 3, the L proof, the arena close on a pending mode change and the ABI 46 hold check.
+    arena, seqlock, drift-window stream); built from `8d635e31`, resumed. Second stop 28 Nov: `29cb8317c` (program,
+    worker record, route settings), `950465ab3` (arena close), `3fd93cc3a` (ABI 46 hold round), `24893c036` (C++,
+    **ABI 47 reserved for N5.6**: a glass pass may sample the owner's capture, live attachments still refused). The
+    lead builds `24893c036` and starts a fresh Opus High successor (216k context) from the branch and journal.
   - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
     (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
     `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
@@ -872,10 +874,15 @@ the feature (D3D11 is not stated).
       --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
-        find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes); prove the hold on the built
-        module with an `eb_core_check.py` round, and measure whether it ever fires on the long takes.
-      - A link closed while a mode change waits for its reply never closes the arena prepared for it (a leaked
-        named mapping). Close it on that path, with a test.
+        find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built
+        module (`3fd93cc3a`, `20261128_abi46_hold/summary.json`); open: whether it ever fires on the long takes (L runs).
+      - Done (`950465ab3`, test seen failing): the arena prepared for a pending mode change closes with the link.
+      - Registering the mode needs `program["buffers"]` passed to the item in `rendering/quick/visualizer/native_route.py`.
+        Edit it: the "hash" is only Bubble's evidence provenance (`_bubble_native_components.py` records its sha256),
+        not a lock; Bubble's next component receipt simply carries the new hash.
+      - Known approximations to rule on with L and P: a rebase's old steps run at the smaller capacity; the
+        `drift_out` relayout edge; the probe cube has no depth; a held geometry key leaves draws reading stale
+        `drift_out`; the near layer's edge with no shells.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
