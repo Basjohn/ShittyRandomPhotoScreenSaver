@@ -5,7 +5,7 @@ The Python renderer (``rendering.quick.visualizer.implementations.extruded_bubbl
 portable families (``rendering.gl_programs.extruded_bubble_program``: one std140 pass block a family), each program
 holding its own values of its family's block. The core fills a block member by name from one source for every pass
 that declares it (``native/core/src/mode_content.cpp``), so each program's texts here name its members for it
-(``uTime`` -> ``shells_uTime``, the core's own members kept: ``member_name``), as Waveform's pass files do
+(``uTime`` -> ``shells_u_time``, the core's own members kept: ``member_name``), as Waveform's pass files do
 (``rendering.gl_programs.waveform_shader_files``): the arithmetic is the Python text's, only the names differ, and the
 Python renderer packs by its layouts' offsets, which the renames leave as they are.
 
@@ -56,11 +56,15 @@ CUBE = ("probe_backdrop", "proxies")
 
 
 def member_name(program: str, member: str) -> str:
-    """A block member's name in a program's native text: its program's prefix, a core member keeping its own
+    """A block member's name in a program's native text, the record or settings field that fills it: its program's
+    prefix in the core's field-name form, lower case words joined by ``_`` (``member_name("shells", "uTime")`` ->
+    ``shells_u_time``, Waveform's rule: ``waveform_native_names.member_name``), a core member keeping its own
     (``rendering.native.mode.MODE_CORE_MEMBERS``: the core fills it per pass)."""
     from rendering.native.mode import MODE_CORE_MEMBERS
 
-    return member if member in MODE_CORE_MEMBERS else f"{program}_{member}"
+    if member in MODE_CORE_MEMBERS:
+        return member
+    return f"{program}_{re.sub(r'(?<!^)(?=[A-Z])', '_', member).lower()}"
 
 
 def block_layout(program: str):
@@ -141,14 +145,22 @@ def _renamed(text: str, program: str) -> str:
 
 
 def sorted_text(fragment: str) -> str:
-    """A transparent fragment's sorted pack text: ``SCENE_OIT_GLSL`` replaced by ``_SORTED_GLSL`` and its emission
-    moved to location 1, nothing else changed."""
+    """A transparent fragment's sorted pack text: ``SCENE_OIT_GLSL`` replaced by ``_SORTED_GLSL``, its emission moved
+    to location 1 and its sphere depth (``gl_FragDepth``) left out, nothing else changed. The core's sorted pass never
+    writes depth; the depth test it keeps decides nothing either way, since nothing before the glass writes the scene's
+    depth (the backdrop and the specks draw with it off, as ``extruded_bubble_program`` declares), so every fragment in
+    the frustum passes against the cleared far plane whichever depth it carries."""
     from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
     emission = "layout(location=2) out vec4 Emission;"
     if fragment.count(SCENE_OIT_GLSL) != 1 or fragment.count(emission) != 1:
         raise ValueError("a transparent program's fragment holds SCENE_OIT_GLSL once and its emission at location 2")
-    return fragment.replace(SCENE_OIT_GLSL, _SORTED_GLSL).replace(emission, "layout(location=1) out vec4 Emission;")
+    text = fragment.replace(SCENE_OIT_GLSL, _SORTED_GLSL).replace(emission, "layout(location=1) out vec4 Emission;")
+    return _FRAG_DEPTH.sub("", text)
+
+
+#: A sphere depth write (one statement on its own line), left out of the sorted packs.
+_FRAG_DEPTH = re.compile(r"^[ \t]*gl_FragDepth = [^;\n]*;[ \t]*\n", re.M)
 
 
 def unemitted_text(fragment: str) -> str:

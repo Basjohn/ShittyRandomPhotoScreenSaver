@@ -45,18 +45,18 @@ _U32_MAX = (1 << 32) - 1
 _STEP_BYTES = STEP_FLOATS * 8
 _SERIAL = STEP_INDEX["serial"]
 _FAMILY_NAMES = frozenset(FAMILIES)
-# The drift stream (``pack_drift_stream``) at its largest: a full window and every drawable chain's knots each step.
-# (chain_rows is drawable_chains: CHAIN_PATHS at most; 384,000 bytes.)
-DRIFT_STREAM_FLOATS = STEP_HISTORY * (STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES // 4)
+# The drift stream (``pack_drift_stream``) at its largest: a full window, every drawable chain's knots each step, and
+# the steps' serials (chain_rows is drawable_chains: CHAIN_PATHS at most; 384,512 bytes).
+DRIFT_STREAM_FLOATS = STEP_HISTORY * (STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES // 4 + 1)
 
 # These entries are composed into the runtime schema when the complete record and route are staged.
 DRIFT_RECORD_ENTRIES = (
     ("drift_first_step", "u32", 1),
     ("drift_last_step", "u32", 1),
     ("drift_step_count", "u32", 1),
-    ("drift_step_serials", "u32", STEP_HISTORY),
     ("drift_stream", "f32", DRIFT_STREAM_FLOATS),
     ("drift_stream_used", "u32", 1),
+    ("drift_serial_base", "u32", 1),
     *((f"{family}_{member}", "u32", count) for family in FAMILIES for member, count in (
         ("geometry_key", len(_NULL_GEOMETRY_KEY)), ("epoch", 1), ("rebase_from_epoch", 1), ("first_step", 1),
     )),
@@ -165,13 +165,14 @@ class DriftRecordProjector:
 
         fields: dict[str, int | tuple[int, ...] | bytes] = {
             "drift_first_step": window.first_serial, "drift_last_step": window.last_serial,
-            **dict(zip(("drift_step_count", "drift_step_serials"), drift_step_serials(window))),
+            "drift_step_count": drift_step_serials(window)[0],
         }
         stream = pack_drift_stream(window)
         if len(stream) > DRIFT_STREAM_FLOATS * 4:
             raise NativeSchemaError(f"Extruded Bubble's drift stream is {len(stream)} bytes, past the record's "
                                     f"{DRIFT_STREAM_FLOATS * 4}")
         fields["drift_stream"], fields["drift_stream_used"] = stream, len(stream) // 4
+        fields["drift_serial_base"] = len(stream) // 4 - fields["drift_step_count"]
         epochs, last_epoch, named = {}, self._last_epoch.copy(), {}
         for family_id, name in enumerate(FAMILIES):
             descriptor = descriptors.get(name)
@@ -223,8 +224,9 @@ _KNOT_START = STEP_INDEX["serial"]
 
 
 def drift_step_serials(window: DriftSteps) -> tuple[int, tuple[int, ...]]:
-    """(the window's step count, its serials as u32, zero past the count): the native solver's cursor reads them,
-    since a window's serials need not be consecutive (a tick with no live family records no step)."""
+    """(the window's step count, its serials as u32, zero past the count): the native solver's cursor reads them (the
+    stream's last words, ``pack_drift_stream``), since a window's serials need not be consecutive (a tick with no live
+    family records no step)."""
     if not window.steps:
         return 0, (0,) * STEP_HISTORY
     serials = unpack_steps(window.steps)[:, _SERIAL]
@@ -236,10 +238,12 @@ def drift_step_serials(window: DriftSteps) -> tuple[int, tuple[int, ...]]:
 def pack_drift_stream(window: DriftSteps) -> bytes:
     """The whole retained window as the drift solver's one storage stream: each step as float32 with its serial slot
     carrying where its knot decisions begin (relative to the window's first step), then those decisions, as the Python
-    solver uploads a suffix (``extruded_bubble_drift_solver._upload``). The core's cursor picks the unapplied suffix
-    (``u_srpss_compute``: the trigger ``drift_last_step`` and its value at the entry's last dispatch): a repeated record
-    dispatches nothing, a short gap applies the steps after the last applied one, and a gap past the window restarts
-    from its first step, as the Python solver restarts. Empty when no family is live."""
+    solver uploads a suffix (``extruded_bubble_drift_solver._upload``), and last the steps' serials as whole u32 words
+    (``drift_step_serials``: a float's 24 bits cannot hold them; the core fills no uint array of a uniform block, so
+    the cursor reads them here, from ``drift_serial_base``: the used words less the step count). The core's cursor
+    picks the unapplied suffix (``u_srpss_compute``: the trigger ``drift_last_step`` and its value at the entry's last
+    dispatch): a repeated record dispatches nothing, a short gap applies the steps after the last applied one, and a
+    gap past the window restarts from its first step, as the Python solver restarts. Empty when no family is live."""
     if not window.steps:
         return b""
     records = unpack_steps(window.steps)
@@ -249,7 +253,8 @@ def pack_drift_stream(window: DriftSteps) -> bytes:
     knots = window.knots[:int(starts[-1]) * KNOT_DECISION_BYTES]
     if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:
         raise NativeSchemaError("Extruded Bubble's drift knots are shorter than their steps' chain rows")
-    return gpu.tobytes() + knots
+    count, serials = drift_step_serials(window)
+    return gpu.tobytes() + knots + np.asarray(serials[:count], dtype="<u4").tobytes()
 
 
 def drift_stream_bytes(chain_rows: int) -> int:
@@ -358,3 +363,172 @@ class DriftStream:
             if item is not None and bound == identity and told[0] != name:
                 item.geometry_arena(name)
                 told[0] = name
+
+
+# ------------------------------------------------------------------------------- the record (N5.6, version 1)
+#
+# A generic mode's runtime schema (D12, ``native_schema._RUNTIME_SCHEMA_MODULES``). The record carries what follows
+# the frame: each program's state members (``rendering.native.extruded_bubble_values.STATE_MEMBERS``, named for their
+# program, ``extruded_bubble_shaders.member_name``), the draws' instance streams (the shells, clusters, glint proxies
+# and wakes as the renderer uploads them, f32 each with its used length in floats), the draws' counts and the near
+# layer's gate, each drift family's capacity, output offset, carry and groups, and the drift portion above
+# (``DriftStream``: the steps, their stream and each family's geometry key and lineage). The Settings and the card
+# decide everything else (the route's settings: ``extruded_bubble_values.settings``).
+#
+# Version 1. A change to the fields or the layout is a new version.
+
+from core.visualizer_engine.native_schema import (  # noqa: E402
+    NativeLayout, NativeSchema, native_schema_id, validate_record_head)
+from core.visualizer_engine.packet_abi import MODE_CODES  # noqa: E402
+
+MODE_ID = "extruded_bubble"
+VERSION = 1
+SCHEMA_ID = native_schema_id(MODE_CODES[MODE_ID], VERSION)
+#: The most an int member's u32 field holds (the core fills an int only under a range rule within int32).
+INT_LIMIT = 2147483647
+
+
+def _capacities() -> dict[str, int]:
+    from core.constants.extruded_bubble_world import WAKE_STRIDE
+    from rendering.gl_programs.extruded_bubble_scene import CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS
+    from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES
+
+    return {"shells": MAX_BUBBLES * SHELL_FLOATS, "clusters": MAX_BUBBLES // 2 * CLUSTER_FLOATS,
+            "proxies": MAX_BUBBLES * PROXY_FLOATS, "wakes": MAX_BUBBLES * 2 * WAKE_STRIDE}
+
+
+CAPACITIES = _capacities()
+#: The instance streams, in the program's order (``extruded_bubble_program.INSTANCE_STREAMS`` and ``wakes``).
+INSTANCE_STREAM_NAMES = ("shells", "clusters", "proxies", "wakes")
+
+
+def field_kind(glsl_type: str, numbers: int) -> tuple[str, int]:
+    """A member's record field (kind, count) by its GLSL type (``waveform_native_schema.field_kind``'s rule)."""
+    if glsl_type == "vec4":
+        return "f64x4", 1
+    if glsl_type in ("int", "uint", "bool"):
+        return "u32", numbers
+    return "f64", numbers
+
+
+def _member_entries() -> tuple[tuple[str, str, int], ...]:
+    from rendering.native.extruded_bubble_values import block_members, state_fields
+
+    numbers = {"float": 1, "int": 1, "uint": 1, "bool": 1, "vec2": 2, "vec3": 3, "vec4": 4}
+    entries = []
+    for name, program, member in state_fields():
+        glsl_type = block_members(program)[member]
+        entries.append((name, *field_kind(glsl_type, numbers[glsl_type])))
+    return tuple(entries)
+
+
+MEMBER_ENTRIES = _member_entries()
+STREAM_ENTRIES: tuple[tuple[str, str, int], ...] = tuple(
+    (name, "f32", CAPACITIES[name]) for name in INSTANCE_STREAM_NAMES)
+COUNT_ENTRIES: tuple[tuple[str, str, int], ...] = (
+    *((f"{name}_floats", "u32", 1) for name in INSTANCE_STREAM_NAMES),
+    ("speck_count", "u32", 1), ("bead_instances", "u32", 1), ("trail_instances", "u32", 1), ("near_layer", "u32", 1),
+    *((f"{family}_{member}", kind, 1) for family in FAMILIES
+      for member, kind in (("capacity", "u32"), ("out_offset", "u32"), ("carry", "f64"), ("groups", "u32"))),
+)
+_ENTRIES = MEMBER_ENTRIES + STREAM_ENTRIES + COUNT_ENTRIES + DRIFT_RECORD_ENTRIES
+LAYOUT = NativeLayout.build(_ENTRIES)
+FIELD_NAMES = tuple(name for name, _kind, _count in _ENTRIES)
+
+
+def _drift_limits() -> dict[str, int]:
+    from core.constants.extruded_bubble_world import SNOW_FULL, SPECKS_FULL
+    from rendering.native.extruded_bubble_program import buffer_bytes
+
+    return {"chains": CHAIN_PATHS, "snow": SNOW_FULL, "specks": SPECKS_FULL,
+            "out_rows": buffer_bytes()["drift_out"] // 16}
+
+
+_LIMITS = _drift_limits()
+FIELD_CHECKS: tuple[tuple[str, str, int], ...] = (
+    *((name, "at_most", INT_LIMIT) for name, kind, _count in MEMBER_ENTRIES if kind == "u32"),
+    *((f"{name}_floats", "at_most", CAPACITIES[name]) for name in INSTANCE_STREAM_NAMES),
+    ("drift_stream_used", "at_most", DRIFT_STREAM_FLOATS),
+    ("drift_serial_base", "at_most", DRIFT_STREAM_FLOATS),
+    ("drift_step_count", "at_most", STEP_HISTORY),
+    *((f"{family}_capacity", "at_most", _LIMITS[family]) for family in FAMILIES),
+    *((f"{family}_out_offset", "at_most", _LIMITS["out_rows"]) for family in FAMILIES),
+    # A chain's group is one path; a cloud's one of 256 rows (``extruded_bubble_values.state_values``).
+    *((f"{family}_groups", "at_most", _LIMITS[family] if family == "chains" else -(-_LIMITS[family] // 256))
+      for family in FAMILIES),
+)
+
+
+def _numbers(name: str, kind: str, count: int, value: Any) -> object:
+    from core.visualizer_engine.waveform_native_schema import flat_numbers
+
+    expected = 4 * count if kind == "f64x4" else count
+    numbers = flat_numbers(value)
+    if len(numbers) != expected or not all(np.isfinite(numbers)):
+        raise NativeSchemaError(f"{name} is not {expected} finite numbers")
+    if kind == "u32":
+        if not all(0 <= v <= INT_LIMIT and v == int(v) for v in numbers):
+            raise NativeSchemaError(f"{name} is not {expected} whole numbers from 0 to {INT_LIMIT}")
+        numbers = tuple(int(v) for v in numbers)
+    return numbers if expected > 1 else numbers[0]
+
+
+#: The route's drift side (one per process: the route's records and the reference encoder name the same lineage).
+DRIFT = DriftStream()
+
+
+def project(frame: Any) -> dict[str, object]:
+    """The record's field values (header words excluded) of an Extruded Bubble ``VisualizerLogicalFrame``."""
+    if getattr(frame, "mode_id", None) != MODE_ID:
+        raise NativeSchemaError(f"Extruded Bubble's native schema cannot carry a {getattr(frame, 'mode_id', None)!r} "
+                                "frame")
+    from rendering.native.extruded_bubble_shaders import member_name
+    from rendering.native.extruded_bubble_values import state_values
+
+    members, counts, streams = state_values(frame.mode_state)
+    filled = {member_name(program, member): value
+              for program, values in members.items() for member, value in values.items()}
+    values: dict[str, object] = {}
+    for name, kind, count in MEMBER_ENTRIES:
+        if name not in filled:
+            raise NativeSchemaError(f"Extruded Bubble's frame has no value for {name}")
+        values[name] = _numbers(name, kind, count, filled[name])
+    for name in INSTANCE_STREAM_NAMES:
+        data = streams[name]
+        size = LAYOUT.field(name).size
+        if len(data) > size or len(data) % 4:
+            raise NativeSchemaError(f"{name} holds {len(data)} bytes, past its {size} or not whole floats")
+        values[name], values[f"{name}_floats"] = data, len(data) // 4
+    values.update(counts)
+    values.update(DRIFT.project(frame))
+    return values
+
+
+def encode(frame: Any) -> bytes:
+    """The writer: one Extruded Bubble logical frame as the version-1 record."""
+    return LAYOUT.pack(SCHEMA_ID, project(frame))
+
+
+def decode(payload: bytes) -> dict[str, object]:
+    """The reference reader: the record's fields by name (header words excluded); the streams as their bytes."""
+    validate_record_head(payload, SCHEMA)
+    unpacked = LAYOUT.unpack(payload)
+    values = {name: unpacked[name] for name in FIELD_NAMES}
+    for stream in (*INSTANCE_STREAM_NAMES, "drift_stream"):
+        field_ = LAYOUT.field(stream)
+        values[stream] = bytes(payload[field_.offset:field_.offset + field_.size])
+    return values
+
+
+class _ArenaSchema(NativeSchema):
+    """The schema a bound native item is told its stream's arena through (``NativeMode.bind``'s ``bound``)."""
+
+    __slots__ = ()
+
+    def bound(self, item: Any, expect: dict) -> None:
+        DRIFT.bound(item, expect)
+
+
+SCHEMA = _ArenaSchema(mode_id=MODE_ID, version=VERSION, layout=LAYOUT, encode=encode, decode=decode,
+                      fields=FIELD_NAMES, checks=FIELD_CHECKS)
+SCHEMAS = (SCHEMA,)

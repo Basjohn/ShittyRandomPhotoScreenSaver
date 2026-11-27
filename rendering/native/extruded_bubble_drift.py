@@ -29,7 +29,7 @@ import re
 _BLOCK_BINDING = 14
 #: The header buffer's binding (beside the Python solver's storage bindings 8 to 13).
 _HEADER_BINDING = 15
-#: The record's window size (``extruded_bubble_drift_log.STEP_HISTORY``), the cursor's serial array.
+#: The Python text's ``DriftDispatch`` block (made plain globals by ``_globals``).
 _DISPATCH = re.compile(r"// One block for every dispatch value.*?\n(layout\(std140, binding = \d+\) uniform DriftDispatch \{"
                        r"\n(.*?)\n\};)", re.S)
 
@@ -46,8 +46,6 @@ def _globals(text: str) -> str:
 
 
 def _block(family: str) -> str:
-    from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_HISTORY
-
     return f"""
 layout(std140, binding = {_BLOCK_BINDING}) uniform EbDrift_{family} {{
     uvec4 u_srpss_compute;      // the core's: (drift_last_step, its value at the last dispatch, fresh, dispatches)
@@ -58,7 +56,7 @@ layout(std140, binding = {_BLOCK_BINDING}) uniform EbDrift_{family} {{
     uint {family}_out_offset;
     uint {family}_capacity;
     float {family}_carry;
-    uint drift_step_serials[{STEP_HISTORY}];
+    uint drift_serial_base;     // where the stream's serials begin (its last drift_step_count words)
 }};
 layout(std430, binding = {_HEADER_BINDING}) {{access}} buffer DriftHeader {{ uvec4 header[2]; }};
 """
@@ -71,7 +69,7 @@ def _cursor(family: str) -> str:
     chains = family == "chains"
     count = "" if chains else STEP_INDEX[f"count_{family}"]
     return f"""
-uint stepSerial(int s) {{ return drift_step_serials[s]; }}
+uint stepSerial(int s) {{ return steps[drift_serial_base + uint(s)]; }}
 vec2 stepTravel(int s) {{ return vec2(stepValue(s, {STEP_INDEX['travel_high']}), stepValue(s, {STEP_INDEX['travel_low']})); }}
 // The family's count after step s at a state of ``capacity`` rows (DriftSolver._dispatch's ``state.count``).
 uint countAfter(int s, uint capacity) {{

@@ -587,7 +587,7 @@ def _suffix(stream, count, first):
     """The steps ``first:`` of a packed stream with their knot starts made relative to step ``first``, then their knots
     (what the cursor hands the solver)."""
     steps = np.frombuffer(stream[:count * STEP_FLOATS * 4], dtype="<f4").reshape(count, STEP_FLOATS).copy()
-    knots = stream[count * STEP_FLOATS * 4:]
+    knots = stream[count * STEP_FLOATS * 4:len(stream) - 4 * count]
     base = int(steps[first, STEP_INDEX["serial"]]) if first < count else int(len(knots) // KNOT_DECISION_BYTES)
     steps = steps[first:]
     steps[:, STEP_INDEX["serial"]] -= base
@@ -602,10 +602,14 @@ def _check_stream(pack, cursor):
     stream = pack(DriftSteps(frame.drift_steps, frame.drift_knots, 3, 9))
     count, ordered = schema_module.drift_step_serials(DriftSteps(frame.drift_steps, frame.drift_knots, 3, 9))
     assert count == 5 and ordered[:5] == serials and not any(ordered[5:])
-    # The whole window is the Python solver's restart upload.
-    assert stream == upload(records, starts, frame.drift_knots, 0, 5)
+    # The whole window is the Python solver's restart upload, then the serials as whole words: the cursor reads them
+    # at the stream's used length less the step count (``stepSerial``), the only serials it has.
+    assert stream[:-4 * count] == upload(records, starts, frame.drift_knots, 0, 5)
+    words = np.frombuffer(stream, dtype="<u4")
+    read = tuple(int(words[len(words) - count + s]) for s in range(count))
+    assert read == serials
     for last_applied in (6, 7, 3, 9, 1, 2, 4, 5):
-        first, restart = cursor(ordered, count, last_applied)
+        first, restart = cursor(read, count, last_applied)
         suffix, fresh = DriftSteps(frame.drift_steps, frame.drift_knots, 3, 9).after(last_applied)
         assert restart == fresh
         # The cursor's suffix is the solver's own upload of the steps after the last applied one (a short gap), the
@@ -622,6 +626,13 @@ def test_control_a_stream_keeping_the_serial_slot_is_seen():
     raw = _mutated(schema_module, ("    gpu[:, _KNOT_START] = starts[:-1]\n", ""))
     with pytest.raises(AssertionError):
         _check_stream(raw.pack_drift_stream, _cursor)
+
+
+def test_control_serials_packed_as_floats_are_seen():
+    floats = _mutated(schema_module, ('np.asarray(serials[:count], dtype="<u4")',
+                                      'np.asarray(serials[:count], dtype="<f4")'))
+    with pytest.raises(AssertionError):
+        _check_stream(floats.pack_drift_stream, _cursor)
 
 
 def test_control_a_cursor_assuming_consecutive_serials_is_seen():
@@ -641,6 +652,9 @@ def _check_repeated(module):
     # A record the core sees again changes no trigger (drift_last_step) and no stream: the entry is not due, and a
     # record the core missed still carries the whole window its cursor needs.
     assert a == b and a["drift_last_step"] == 3 and a["drift_stream_used"] * 4 == len(a["drift_stream"]) > 0
+    # The cursor's serials are the stream's last words (``stepSerial``).
+    words = np.frombuffer(a["drift_stream"], dtype="<u4")
+    assert tuple(words[a["drift_serial_base"]:]) == (1, 2, 3) == tuple(words[-a["drift_step_count"]:])
     empty, _ = module.DriftRecordProjector(5, 2, 3).project(ExtrudedBubbleFrame())
     assert empty["drift_stream"] == b"" and empty["drift_stream_used"] == empty["drift_step_count"] == 0
 
