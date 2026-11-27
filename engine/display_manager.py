@@ -61,7 +61,6 @@ from rendering.quick.state import (
     QuickWindowPolicy,
     QuickWindowRole,
 )
-from rendering.quick.transitions.implementation_registry import preload_quick_transition_implementation
 from rendering.quick.transitions.request_resolution import (
     RandomTransitionSelection,
     ResolvedQuickTransitionSpec,
@@ -5004,11 +5003,8 @@ class DisplayManager(QObject):
         # Geometry is per display now (its own seed): the first display's here, each next one's when the spaced chain
         # reaches it (_on_idle_warm_step_finished), so the idle gap never builds more than one set at a time.
         self._prepare_transition_run_geometry(spec, reserved_seed, self.displays[:1])
-        try:
-            preload_quick_transition_implementation(spec.transition_id)
-        except Exception:
-            logger.debug("[TRANSITION] Warm-up import failed for %s", spec.transition_id, exc_info=True)
-            return
+        # The renderer module's import (its shader text build) is the chain's first unit, not a burst here: the
+        # display's step runs it at a spaced, already-rendered frame (BackgroundRenderItem.schedule_warm_step).
         self._cancel_idle_transition_warmup()
         self._idle_warm_seed = reserved_seed
         self._idle_warm_generation = generation

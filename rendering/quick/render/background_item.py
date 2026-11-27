@@ -6,7 +6,7 @@ import threading
 import time
 import weakref
 
-from PySide6.QtCore import Property, QRunnable, Signal, Qt
+from PySide6.QtCore import Property, QObject, QRunnable, Signal, Qt
 from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
@@ -132,6 +132,17 @@ class _TransitionWarmStepJob:
                 pass
 
 
+class _FrameEdgeReceiver(QObject):
+    """GUI-thread receiver of one queued window signal (a plain method: no @Slot with a result, the QML slot crash)."""
+
+    def __init__(self, fire) -> None:
+        super().__init__()
+        self._fire = fire
+
+    def fired(self) -> None:
+        self._fire()
+
+
 class BackgroundRenderItem(QQuickItem):
     """Full-scene background with retained steady content and custom transitions."""
 
@@ -171,6 +182,12 @@ class BackgroundRenderItem(QQuickItem):
         self._native_layer = None
         self._native_layer_wanted = (not self._renderers_on_backend) and _native_background_wanted()
         self._warm_up_cancel: threading.Event | None = None
+        # The hitch rows (22 Nov): a GUI-thread warm-up unit (the renderer module's import with its shader text build,
+        # then the native layer's own) waits for the next frame the window renders anyway (afterRendering, queued),
+        # then runs alone: (transition id, weak reporter, ticket) while one is armed.
+        self._gui_warm_pending: tuple[str, weakref.ref, int] | None = None
+        self._gui_warm_window = None
+        self._gui_warm_receiver = None
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
         self._bind_window_invalidation(self.window())
@@ -285,14 +302,22 @@ class BackgroundRenderItem(QQuickItem):
             self._native_layer.transition(run)   # N5.2a: the core draws the run on the native background's backend
 
     def schedule_warm_step(self, transition_id: str, parameters, reporter, ticket: int) -> bool:
-        """GUI thread: one GL step with NoStage, with no rendering request.
+        """GUI thread: one warm-up unit, with no rendering request: the renderer module's import and the native
+        layer's units on the GUI thread at the next frame rendered anyway, else one GL step with NoStage.
 
         Only the shared idle-preparation owner may call this. A hidden or
         retiring window must fail closed instead of creating a repaint loop.
         """
         window = self.window()
-        if (window is None or not window.isExposed() or self._transition_run is not None
-                or not self._renderers_on_backend):
+        if window is None or not window.isExposed() or self._transition_run is not None:
+            return False
+        if self._gui_warm_unit(str(transition_id)) is not None:
+            # One GUI-thread unit first (the module's import before any GL step resolves the renderer on the render
+            # thread), at the next frame rendered anyway: no frame is asked for.
+            self._cancel_warm_up()
+            self._arm_gui_warm(window, str(transition_id), reporter, int(ticket))
+            return True
+        if not self._renderers_on_backend:
             return False
         self._cancel_warm_up()
         cancelled = threading.Event()
@@ -314,7 +339,57 @@ class BackgroundRenderItem(QQuickItem):
             return False
         return True
 
+    def _gui_warm_unit(self, transition_id: str):
+        """The next GUI-thread warm-up unit for ``transition_id`` (None: none left): the renderer module's (its
+        shared modules, its import, its shader text pieces: ``next_quick_transition_warm_unit``), then, on the native
+        background, the layer's own units."""
+        from rendering.quick.transitions import implementation_registry
+
+        unit = implementation_registry.next_quick_transition_warm_unit(transition_id)
+        if unit is not None:
+            return unit
+        layer = self._native_layer
+        return layer.next_warm_unit(transition_id) if layer is not None else None
+
+    def _arm_gui_warm(self, window, transition_id: str, reporter, ticket: int) -> None:
+        if self._gui_warm_receiver is None:
+            self._gui_warm_receiver = _FrameEdgeReceiver(self._run_gui_warm)
+        self._gui_warm_pending = (transition_id, weakref.ref(reporter), ticket)
+        window.afterRendering.connect(self._gui_warm_receiver.fired, Qt.ConnectionType.QueuedConnection)
+        self._gui_warm_window = window
+
+    def _disarm_gui_warm(self) -> None:
+        self._gui_warm_pending = None
+        window, self._gui_warm_window = self._gui_warm_window, None
+        if window is not None:
+            try:
+                window.afterRendering.disconnect(self._gui_warm_receiver.fired)
+            except (RuntimeError, TypeError):
+                pass                              # the window went first
+
+    def _run_gui_warm(self) -> None:
+        """GUI thread, a frame just rendered: one unit, then the owner is told whether this display has more."""
+        pending = self._gui_warm_pending
+        self._disarm_gui_warm()
+        if pending is None or self._transition_run is not None:
+            return                                # cancelled, or a run prepares whatever is left itself
+        transition_id, reporter_ref, ticket = pending
+        unit = self._gui_warm_unit(transition_id)
+        if unit is not None:
+            try:
+                unit()
+            except Exception:
+                logger.debug("[TRANSITION] A warm-up unit failed for %s", transition_id, exc_info=True)
+        done = self._gui_warm_unit(transition_id) is None and not self._renderers_on_backend
+        reporter = reporter_ref()
+        if reporter is not None:
+            try:
+                reporter.finished.emit(ticket, done)
+            except RuntimeError:
+                pass                              # the owner retired meanwhile
+
     def _cancel_warm_up(self) -> None:
+        self._disarm_gui_warm()
         token, self._warm_up_cancel = self._warm_up_cancel, None
         if token is not None:
             token.set()

@@ -18,6 +18,7 @@ and flight for tests.
 
 from __future__ import annotations
 
+import functools
 import math
 
 from rendering.gl_programs.item_quad import item_quad_program
@@ -124,7 +125,7 @@ vec4 populationState(uint id) {
 """
 
 # The picture where its grains have not left: the old picture before a grain's release, the new after.
-DISINTEGRATE_INTACT_FRAGMENT_SOURCE = (
+_INTACT_FRAGMENT = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\n" + _COMMON_GLSL + """
 void main() {
@@ -159,8 +160,7 @@ void main() {
 """)
 
 
-DISINTEGRATE_GRAIN_VERTEX_SOURCE = _draw_vertex()
-DISINTEGRATE_GRAIN_FRAGMENT_SOURCE = """#version 460 core
+_GRAIN_FRAGMENT = """#version 460 core
 in vec2 vUv;
 in float vAlpha;
 out vec4 FragColor;
@@ -172,8 +172,17 @@ void main() {
 
 # N1.6: each program's loose values in one std140 pass block beside the frame block (``portable_program``; the intact
 # picture with the item quad's), samplers at the photographs' units.
-DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE, DISINTEGRATE_INTACT_BLOCK = item_quad_program(
-    DISINTEGRATE_INTACT_FRAGMENT_SOURCE, block="DisintegrateIntact", samplers={"uOldTex": 0, "uNewTex": 1})
-DISINTEGRATE_GRAIN_VERTEX_SOURCE, (DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,), DISINTEGRATE_GRAIN_BLOCK = portable_program(
-    DISINTEGRATE_GRAIN_VERTEX_SOURCE, (DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,), block="DisintegrateGrains",
-    samplers={"uOldTex": 0})
+# The hitch rows (22 Nov): built on first use, not at import, so the idle warm-up builds each one at its own
+# spaced, already-rendered frame (the implementation's ``WARM_PIECES``) and a run builds whatever is left.
+@functools.cache
+def disintegrate_intact_program() -> tuple[str, str, Scene3DBlockLayout]:
+    """(vertex, fragment, pass block) of the intact picture."""
+    return item_quad_program(_INTACT_FRAGMENT, block="DisintegrateIntact", samplers={"uOldTex": 0, "uNewTex": 1})
+
+
+@functools.cache
+def disintegrate_grain_program() -> tuple[str, str, Scene3DBlockLayout]:
+    """(vertex, fragment, pass block) of the grains' draw."""
+    vertex, (fragment,), block = portable_program(_draw_vertex(), (_GRAIN_FRAGMENT,), block="DisintegrateGrains",
+                                                  samplers={"uOldTex": 0})
+    return vertex, fragment, block

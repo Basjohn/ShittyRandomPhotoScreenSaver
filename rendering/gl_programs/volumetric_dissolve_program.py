@@ -21,6 +21,7 @@ The CPU mirrors below define the same schedule and flight for tests.
 
 from __future__ import annotations
 
+import functools
 import math
 
 from rendering.gl_programs.item_quad import item_quad_program
@@ -212,7 +213,7 @@ vec4 populationState(uint id) {
 
 # The intact old picture ahead of the front; behind it the new picture resolving from its blurred
 # copy to sharp through luminous parallax mist coloured by the old picture's blurred copy.
-VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE = (
+_BACKDROP_FRAGMENT = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform sampler2D uNewCopy;\nuniform sampler2D uOldCopy;\n"
     + _COMMON_GLSL + """
@@ -301,8 +302,7 @@ void main() {
 """)
 
 
-VOLUMETRIC_PARTICLE_VERTEX_SOURCE = _draw_vertex()
-VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE = (
+_PARTICLE_FRAGMENT = (
     "#version 460 core\n"
     "in vec2 vUv;\nin vec2 vQuad;\nin float vAlpha;\nin float vDefocus;\nin float vRound;\nin float vFlake;\n"
     "in float vShade;\nin float vAge;\nin float vGlint;\nout vec4 FragColor;\n"
@@ -336,9 +336,18 @@ void main() {
 
 # N1.6: each program's loose values (the quad's matrix and item size) in one std140 pass block beside the frame block
 # (``portable_program``), samplers at their units (the photographs 0 and 1, the copies 2 new and 3 old).
-VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE, VOLUMETRIC_BACKDROP_BLOCK = item_quad_program(
-    VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE, block="VolumetricBackdrop",
-    samplers={"uOldTex": 0, "uNewTex": 1, "uNewCopy": 2, "uOldCopy": 3})
-VOLUMETRIC_PARTICLE_VERTEX_SOURCE, (VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,), VOLUMETRIC_PARTICLE_BLOCK = portable_program(
-    VOLUMETRIC_PARTICLE_VERTEX_SOURCE, (VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,), block="VolumetricParticles",
-    samplers={"uOldTex": 0, "uOldCopy": 3})
+# The hitch rows (22 Nov): built on first use, not at import, so the idle warm-up builds each one at its own
+# spaced, already-rendered frame (the implementation's ``WARM_PIECES``) and a run builds whatever is left.
+@functools.cache
+def volumetric_backdrop_program() -> tuple[str, str, Scene3DBlockLayout]:
+    """(vertex, fragment, pass block) of the backdrop."""
+    return item_quad_program(_BACKDROP_FRAGMENT, block="VolumetricBackdrop",
+                             samplers={"uOldTex": 0, "uNewTex": 1, "uNewCopy": 2, "uOldCopy": 3})
+
+
+@functools.cache
+def volumetric_particle_program() -> tuple[str, str, Scene3DBlockLayout]:
+    """(vertex, fragment, pass block) of the particles' draw."""
+    vertex, (fragment,), block = portable_program(_draw_vertex(), (_PARTICLE_FRAGMENT,), block="VolumetricParticles",
+                                                  samplers={"uOldTex": 0, "uOldCopy": 3})
+    return vertex, fragment, block
