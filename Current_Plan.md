@@ -76,7 +76,9 @@ Continue the native sequence below with the repaired timing receipts. The report
   - **Opus High `a7a8666a093ef7d48`**: N5.6 "Native record and route", **ABI 46**. Worktree
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
-    "ready for build".
+    "ready for build". 28 Nov: sub-boxes 1 and 2 done on the branch (`e7c0764b3` ABI 46 hold, `8d635e313`
+    arena, seqlock, drift-window stream); the lead pushed the branch and is building `native_module` on GitHub.
+    Next: resume it (about 110k context) with the module for sub-box 3 and the L proof.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -853,6 +855,13 @@ the feature (D3D11 is not stated).
       read spans, streams and positional members. Prove L frame by frame for each take and graphics key with
       `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
       --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
+    - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
+      - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
+        find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes); prove the hold on the built
+        module with an `eb_core_check.py` round, and measure whether it ever fires on the long takes.
+      - A link closed while a mode change waits for its reply never closes the arena prepared for it (a leaked
+        named mapping). Close it on that path, with a test.
+      - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
     skip and dispatch drift from cold start; confirm continuity and the restart control in `WARMUP_INPUTS`.
