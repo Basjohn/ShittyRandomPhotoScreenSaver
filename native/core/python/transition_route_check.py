@@ -928,10 +928,12 @@ def _clear_control(core, api: str, scene, host, clock, run, route: str = "surfac
               # Vulkan draws on both phases, so nothing is judged there but that both were timed.
               "clear_route_share_returns": pass_ms is not None and draw_ms is not None
               and (draw_ms > pass_ms if opengl else True),
-              # [default, control]: OpenGL clears by the pass by default and by the draw under the control; Vulkan by
-              # the draw in both.
+              # [default, control]: OpenGL clears by the pass by default (a scene's multisampled non-RGBA8 targets
+              # keep the draw, so a scene may count both) and every clear by the draw under the control; Vulkan by the
+              # draw in both. The surface has no such target: on OpenGL it counts no draw clear by default.
               "clear_route_counted": (record["pass_clears"][0] > 0) == opengl and record["pass_clears"][1] == 0
-              and (record["draw_clears"][0] == 0) == opengl and record["draw_clears"][1] > 0}
+              and record["draw_clears"][1] > 0
+              and (route != "surface" or (record["draw_clears"][0] == 0) == opengl)}
     return record, checks
 
 

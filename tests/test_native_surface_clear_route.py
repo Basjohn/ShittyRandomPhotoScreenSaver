@@ -128,9 +128,12 @@ def test_scene_targets_are_cleared_by_their_pass_on_opengl_and_by_the_draw_under
 class _Stand:
     """A stand-in core, scene and host for ``_clear_control``: counts per route and a frame that is the progress."""
 
-    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True, share_returns=True, route="surface"):
+    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True, share_returns=True, route="surface",
+                 kept_draws=0):
         import transition_route_check as trc
 
+        # kept_draws: targets cleared by the draw on every route (a scene's multisampled non-RGBA8 ones).
+        self.kept_draws = kept_draws
         self.control = False
         self.known = known
         self.by_pass = by_pass_on_opengl
@@ -151,6 +154,7 @@ class _Stand:
     def _record(self):
         route = "draw" if self.control or not self.by_pass else "pass"
         self.live[f"{self.prefix}_{route}_clears"] += 1
+        self.live[f"{self.prefix}_draw_clears"] += self.kept_draws
 
     def composite_live(self):
         return dict(self.live)
@@ -187,6 +191,18 @@ def test_the_scene_clear_control_judges_the_scene_route_by_its_own_control_and_c
     assert _run(_Stand(route="surface"), route="scene") == ({"available": False}, {})
     assert not _run(_Stand(route="scene", by_pass_on_opengl=False), route="scene")[1]["clear_route_counted"]
     assert not _run(_Stand(route="scene", share_returns=False), route="scene")[1]["clear_route_share_returns"]
+
+
+def test_a_scene_whose_multisampled_targets_keep_the_draw_counts_both_routes_on_opengl():
+    # crumble_both_4x on the 5025acb0 module: [2, 0] pass and [1, 3] draw clears, by design (glClear measured slower
+    # on its multisampled R16F targets), so the scene route admits draw clears beside the pass's by default.
+    record, checks = _run(_Stand(route="scene", kept_draws=1), route="scene")
+    assert record["draw_clears"][0] > 0 and all(checks.values()), checks
+    # Negatives: the surface has no kept target, so the same counts fail there; a scene whose every target keeps the
+    # draw on OpenGL (no pass clear at all) still fails.
+    assert not _run(_Stand(kept_draws=1))[1]["clear_route_counted"]
+    assert not _run(_Stand(route="scene", kept_draws=1, by_pass_on_opengl=False),
+                    route="scene")[1]["clear_route_counted"]
 
 
 def test_the_clear_control_passes_on_the_pass_route_and_fails_on_its_negatives():
