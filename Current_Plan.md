@@ -77,8 +77,7 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build".
-  - **Lead, unattended:** the ten N5.6 reference runs (two processes), receipts
-    `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`, arrays in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/`.
+  - **Lead:** the N5.2f Display 1 hitch rows (references done, machine free of our renders).
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -87,7 +86,7 @@ Continue the native sequence below with the repaired timing receipts. The report
   - `.claude/worktrees/agent-ac5f7832a73527151` (earlier N5.6 core and drift journal).
 
   Copy any cited evidence they hold into the main checkout's `.artifacts/` before removing them. The N5.6 Python
-  references are in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/` (8 of 18 runs done).
+  references are in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/` (18 of 18 runs done).
 - [ ] Working rules (operator, 21 Nov; handbook 7a and section 3-4, proof guide section 3): critical path only; related
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
@@ -829,25 +828,12 @@ the feature (D3D11 is not stated).
     The original source reading is in `git show 644c18cb3:Current_Plan.md` under N5.6 → Reading. It inventories
     per-frame and on-change fields, stream sizes, pass order, formats, clears and turn handling. Verify paths and
     limits against current source. Use Extruded Bubble's own references.
-  - [ ] **Redraw the Python references.** Use `--references D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251`
-    for the redraw and matching native runs. Use [the proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md#3-how-much-to-run)
-    and `owner_render_parity.py --references-only`. Keep the reference producer at the verified rendering and
-    logical revision until the queue finishes. Earlier references are indexed in the
-    [compact proof archive](Docs/Guides/Native_Parity_And_Timing_Proof.md#compact-fast-proof-and-mode-evidence-23-nov-2026).
-    The [compact reference indexes](.artifacts/evidence/native_core/n5_6/20261123_r251_reference_indexes.zip)
-    retain the frame receipts for all three 60 s base runs and completed alternates. The full arrays stay
-    in the reference root.
-    - [ ] Redraw the remaining alternates with frozen adaptive settings, single sampling and masks. Use
-      `conventions_identity.mode_runs('extruded_bubble', offers=True)`. Budget 30 s per run and take, apply the
-      late-window rule below, and run at most two reference processes at once. Lead, 27 Nov: these ten are
-      continuous 30 s comparisons, never windowed, so none needs the whole take; the keys that get late coverage
-      windows (drift direction, collision scope, audio block size) draw their whole-take references with the
-      Coverage windows box. Running unattended (lead), receipts `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`.
-      - [ ] Display alternate SCENE (`:b`) on ragdoll and nightsolong.
-      - [ ] Display lighting BEAM (`extruded_bubble_lighting_coverage=0`) on each take.
-      - [ ] Display Sunlit Surface (`extruded_bubble_light_type=0`) on human and ragdoll.
-      - [ ] Display BEAM emission (`extruded_bubble_emission_geometry=0`) on nightsolong.
-      - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on ragdoll and nightsolong.
+  - References (all 18 runs drawn and stored 27 Nov, frozen adaptive settings, single sampling and masks): root
+    `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251`, receipts `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`,
+    earlier ones in the [compact reference indexes](.artifacts/evidence/native_core/n5_6/20261123_r251_reference_indexes.zip).
+    Keep the reference producer at its verified rendering and logical revision for the native comparisons. The keys
+    that get late coverage windows (drift direction, collision scope, audio block size) draw their whole-take
+    references with the Coverage windows box.
   - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
     and the source reading for field and resource ownership. **ABI 46 reserved** for this box (27 Nov, Opus High;
     agent id under "Live agents"). Agents never build: when the C++ for the first three sub-boxes is written and
