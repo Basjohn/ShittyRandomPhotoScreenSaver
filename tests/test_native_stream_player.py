@@ -10,11 +10,13 @@ import zlib
 import numpy as np
 
 
-def _save(out, api, frames):
+def _save(out, api, frames, frames_dir=None):
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
+    frames_dir = work if frames_dir is None else frames_dir
+    frames_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    with (work / f"frames_{api}.bin").open("wb") as stream:
+    with (frames_dir / f"frames_{api}.bin").open("wb") as stream:
         for index, frame in enumerate(frames):
             if frame is None:
                 rows.append({"input": index, "drawn": False})

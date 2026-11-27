@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import artifact_paths, evidence_media  # noqa: E402
+
 RECORDINGS = Path("F:/Programming/Apps/ShittyRandomPhotoScreenSaver/logs/visualizer_recordings")
 BANDS = (("newborn <5 s", 0.0, 5.0), ("5-15 s", 5.0, 15.0), ("older >15 s", 15.0, 1e9))
 WIDTH, HEIGHT = 1920, 1080
@@ -210,12 +212,13 @@ def main() -> None:
     parser.add_argument("--preset", type=int, action="append", required=True, help="curated preset number (1-based)")
     parser.add_argument("--start", type=float, default=0.0)
     parser.add_argument("--seconds", type=float, default=120.0)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out", "extruded_bubble_music_response")   # published when the run succeeds
     for preset in args.preset:
         rows = trace(args.clip, preset, args.start, args.seconds)
         print("\n".join(report(rows, args.out, f"{args.clip}_p{preset}_{int(args.start)}s")))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(evidence_media.finish(main()))
