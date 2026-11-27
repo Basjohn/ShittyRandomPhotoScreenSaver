@@ -170,6 +170,23 @@ an uncertain uplift or degradation.
   - [ ] Edit Reaction Mode while Waveform plays (the Studio keeps responding; the sidecar log shows the replay).
   - [ ] Pick Human once (the clip selection lands once, with its sidecar log line).
 
+- [ ] Move Borderless from Widgets -> General -> Style Overrides to Themes -> Widget Themes (operator, 28 Nov: "neatly
+  placed with same styling"). Small, Sonnet.
+  - [ ] Today: `tab.borderless_btn` (`OutlinedButton("Borderless", role="secondary")`, checkable) sits at the end of
+    the Card Border Width row in `ui/tabs/widgets_tab_defaults.py`; it writes `widgets.global.borderless`
+    (`WIDGETS_BORDERLESS_KEY`, read by `resolve_widgets_borderless`) through the Widgets tab's `_save_settings`, and
+    `release_borderless` un-latches it on Reset All Colours to Theme, a border-width edit and a surface change.
+  - [ ] Put the same control on the Widget Themes page (`ui/tabs/themes_tab.py`, `_build_widget_themes_page`), placed
+    with that page's existing rows and its shared styles (same button class and role, same tooltip; Title Case),
+    and remove it from Style Overrides. One owner writes the key; the Widgets tab's release paths keep working (they
+    clear the key, and the Themes control shows the released state without a reopen); the Widget Themes intro line
+    that points to Style Overrides still reads true.
+  - [ ] Guided Setup's Borderless page writes the same key and stays as it is; fix its comment that names Style Overrides.
+  - [ ] Proof: tests on the real `SettingsDialog` (built tabs, `self.<key>_tab`): the control lives on Themes and not
+    on Widgets; toggling it saves the key; each release path un-latches it on Themes; a reopen shows the saved
+    state. Seen failing before the move. An offscreen render of the Widget Themes page (offscreen QPA, Windows fonts)
+    zoomed at the control, checked against its neighbours.
+
 ### Item 2. §7.1 Waveform Ribbon reactivity (operator, 7 Nov night: "Adaptivity is the enemy")
 
 Contract: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (§2B, §2C, §13D). Evidence:
@@ -1490,6 +1507,19 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     switch. Known: the native OpenGL route's fixed cost (Crossfade control 0.15 ms against Python's 0.04 at 4K,
     `n52f_cost`) puts N5.2f's native OpenGL (0.53-0.77 ms) above Python's (0.27-0.46); find that route overhead first.
     Behaviour under modest load (a game running) is a target, never an excuse: hitch rows run and must pass under it.
+    Proof: the proof guide's section 3, "A transition port", Performance, every bullet. Binding (lead, 28 Nov):
+    - [ ] Root cause first, on the product route, off-screen (hidden host, 3840 x 2160 and 2560 x 1440): split
+      Crossfade's native OpenGL frame cost against Python's on the same frames into GPU (timestamps around each
+      pass) and CPU (submit, state, uniform upload, sync). Name each share over 0.02 ms with its owner. Candidates to
+      prove or rule out: an extra pass, clear or copy on the native route (including the wrapped-texture bridge),
+      a sync or readback, per-frame resource or pipeline work, and the native `mode.texture` copy measured at
+      7-13 ms per run (N5.2f agent, 27 Nov: attribute whether it is per run or per frame and where it lands). Each
+      named share gets a negative control (remove it, the share goes).
+    - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
+      below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
+      Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
+    - [ ] Then every transition: native OpenGL against Python OpenGL on the same frames (`--cost`, 1440p and 4K),
+      one table, each row at or below Python's or named with its own share and owner.
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
@@ -1518,7 +1548,9 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   damping, a displaced mesh with true normals, reflection distortion driven by it (with N4.d).
 - [ ] N6.2 Static scene geometry and materials. **High potential** (what turns a mode into a place: floors,
   walls, wells, simple skyline and tunnel slices, with roughness, bevel and contact shading, built once and
-  kept).
+  kept). Operator, 28 Nov: a likely later help for modes like Extruded Bubble whose framing has very little room in
+  which it renders correctly (surroundings that stay right at more poses). Not an EB defect and not scheduled:
+  parity and the native core come first.
 - [ ] N6.3 Advected smoke and haze on the volume primitive. **High potential** (atmosphere for every 3D scene;
   shares N4.f2's reduced-resolution path).
 - [ ] N6.4 Photo-textured shells and planes with real depth. **Low potential until a consumer** (a transition
