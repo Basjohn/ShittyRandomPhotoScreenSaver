@@ -1562,6 +1562,15 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
         uses must exist for both. Warm the second variant gradually (one unit per spaced, rendered frame, next-likely
         first), never on first use; a hitch row covers a demand flip mid-transition.
       - No new threads, timers or polling; the same render thread records either route.
+      - No flicker (operator asked, 28 Nov). Three ways this could flicker:
+        - A flip frame reads a resident surface that still holds an older frame. Fix: the surface is recorded before
+          any reader samples it, in the same frame.
+        - The direct route leans on swapchain contents surviving between frames; they are undefined on Vulkan and on
+          a flip-model swapchain. Fix: every direct frame clears and draws in full.
+        - The two routes don't match pixel for pixel. Causes: surface format against swapchain format, sRGB handling,
+          alpha, orientation, or the fade maths moving into a different pass.
+        Proof: read back every frame across demand flips (glass card in and out, mid-transition and at idle) on both
+        APIs. Each frame is identical to the kept-surface route's frame, and no frame shows the older photo.
     - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
       below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
       Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
