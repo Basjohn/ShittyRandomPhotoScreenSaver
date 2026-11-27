@@ -34,6 +34,7 @@ QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_bloomAtTargetOrigin { 0 };
 QAtomicInteger<int> g_sceneFrameSurface { 0 };
 QAtomicInteger<int> g_cardTriangle { 0 };
+QAtomicInteger<int> g_surfaceClearDraw { 0 };    // N5.2h
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
 QAtomicInteger<int> g_stageAllocationFailure { 0 };
@@ -335,6 +336,8 @@ void setSceneFrameSurface(bool surface) { setControl(g_sceneFrameSurface, surfac
 bool sceneFrameSurface() { return g_sceneFrameSurface.loadAcquire() != 0; }
 void setCardTriangle(bool triangle) { setControl(g_cardTriangle, triangle); }
 bool cardTriangle() { return g_cardTriangle.loadAcquire() != 0; }
+void setSurfaceClearDraw(bool draw) { setControl(g_surfaceClearDraw, draw); }
+bool surfaceClearDraw() { return g_surfaceClearDraw.loadAcquire() != 0; }
 void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
 void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }

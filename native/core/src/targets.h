@@ -1,7 +1,8 @@
 // The core's colour render targets and the two Qt 6.12.0 rules they follow (Native_Core_N06_N07_Qt_Facts.md section I):
 // - B: every target keeps its contents (PreserveColorContents), because QRhi gives a non-preserving offscreen render pass
 //   an UNDEFINED initial layout and no external dependency (a write-after-write hazard between frames). A target that
-//   must be cleared is cleared by its first draw, never by an UNDEFINED load.
+//   must be cleared is cleared by its first draw, never by an UNDEFINED load. That hazard is Vulkan's: on OpenGL a
+//   target to be cleared at a pass's start is cleared by the pass itself (glClear: clearingRenderTarget, N5.2h).
 // - C: on Vulkan a preserving target is primed: the transition to COLOR_ATTACHMENT_OPTIMAL is recorded by the core with
 //   READ and WRITE in its second scope, at creation and again after any other use (a readback), because QRhi's tracker
 //   makes the image visible to the pass's write only, not to its load.
@@ -35,6 +36,12 @@ struct ColorTarget
     RhiOwned<QRhiRenderBuffer> depthStencil; // only a Qt Quick target's (createColorTarget's withDepthStencil)
     RhiOwned<QRhiRenderPassDescriptor> renderPass;
     RhiOwned<QRhiTextureRenderTarget> renderTarget;
+    // N5.2h, OpenGL only: the same texture's render target without PreserveColorContents (its pass clears the whole
+    // target at its start) and its own descriptor, made when first asked for (clearingRenderTarget) and again for a
+    // later generation; compatible with renderPass's (the load is the only difference). Destroyed first.
+    RhiOwned<QRhiRenderPassDescriptor> clearingRenderPass;
+    RhiOwned<QRhiTextureRenderTarget> clearingRenderTargetObject;
+    quint64 clearingGeneration = 0;
 
     ColorTarget();
     ~ColorTarget();
@@ -56,6 +63,12 @@ quint64 nextTargetGeneration();
 // handed over with QQuickRenderTarget::fromRhiRenderTarget). Not preserved: Qt Quick clears it at every pass.
 bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
                        bool withDepthStencil = false, QRhiTexture::Format format = QRhiTexture::RGBA8);
+
+// N5.2h: on OpenGL, the target's clearing render target (a pass begun on it clears the whole texture to the pass's clear
+// colour, as a full-target clearing draw did, without that draw's fragments), made for the target's generation when
+// needed; nullptr on every other backend (rule B: Vulkan clears by a draw) or when it cannot be made (`error` set), and
+// the caller clears by its draw. Render thread only.
+QRhiTextureRenderTarget *clearingRenderTarget(QRhi *rhi, ColorTarget *target, QString *error);
 
 // Rule C: on Vulkan, when the texture is not in COLOR_ATTACHMENT_OPTIMAL, records the transition into `cb` (recording,
 // outside any pass) and tells QRhi the layout; elsewhere nothing. Returns what was done. Every mip level is transitioned
