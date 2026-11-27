@@ -80,9 +80,6 @@ Continue the native sequence below with the repaired timing receipts. The report
   - **Opus Medium `af79728844114c3a4`**: the N5.2f hitch box (warm-up fix). Worktree
     `.claude/worktrees/agent-af79728844114c3a4`, branch `worktree-agent-af79728844114c3a4`, journal and evidence
     under `<worktree>/.artifacts/` (`native_core/n5_2f/`). Stops at "ready for the rows".
-  - **Sonnet Medium `a75a706dc286f6d1a`**: Item 1 "Guard output lean" and the PNG publisher test defect. Worktree
-    `.claude/worktrees/agent-a75a706dc286f6d1a`, branch `worktree-agent-a75a706dc286f6d1a`, journal and evidence under
-    `<worktree>/.artifacts/`. No ABI.
   - **Lead, unattended:** the ten N5.6 reference runs (two processes), receipts
     `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`, arrays in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/`.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
@@ -149,10 +146,11 @@ an uncertain uplift or degradation.
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
-- [ ] Guard output lean (operator, 22 Nov): native guard runs keep hashes per frame and images only for failing
-  frames, never lossless full-take frame folders (Bubble's guard wrote 26 GB on F: on 22 Nov).
-- [ ] Defect: `tests/test_artifact_paths_contract.py::test_png_output_goes_through_the_evidence_publisher` fails on
-  `tools/visualizer_replay/bubble_display_wide_response.py` (writes PNG without `tools/evidence_media.py`).
+- [ ] Lean guard output landed 27 Nov (merge of `worktree-agent-a75a706dc286f6d1a`; unit tests only). Lead: confirm on
+  the first real run of each after it: `native_stream_player.py` leaves only `work/index_<api>.json`, the report and
+  `failing_frames/` in the evidence (no `frames_*.bin`), `owner_render_parity.py --native-only` completes with
+  `_LastFrame`, and `bubble_display_wide_response.py` / `extruded_bubble_music_response.py` publish through
+  `evidence_media`. The judged `--native` run still spills the whole take to owner scratch until it exits (transient).
 - [ ] Bubble's fast-proof baseline and record check (found by the C guard, 22 Nov):
   - [ ] The accepted `native_render_parity.json` used by `--accepted` predates the card quad (ABI 31/32), so no frame
     keeps its verdict and every guard judges all frames; take a fresh accepted Bubble baseline on main (ABI 39), with
