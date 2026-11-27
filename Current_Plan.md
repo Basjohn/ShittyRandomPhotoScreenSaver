@@ -1376,7 +1376,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     game's CPU load past 33 ms. Fix (not N5.2f-scoped): warm the next transition's module import and text build
     gradually ahead of its run (warm-up rule; audit low L6, N3.6), then retake the rows under the same running load,
     copying each per-row session folder out between runs. Volumetric Dissolve's 182.6 ms gap: trace lost, retake it.
-    Dispatched 27 Nov (Opus Medium, agent id: see "Live agents"). Binding for this box:
+    Dispatched 27 Nov (Opus Medium, agent id: see "Live agents"). 27 Nov report: root cause, gradual
+    `afterRendering` units and off-screen proof on `6caceaa1b` (evidence `native_core/n5_2f/20261127_hitch_warm_units/`).
+    Sent back: every figure so far, including the 22 Nov attribution, was compile-inclusive (`PYTHONDONTWRITEBYTECODE=1`
+    in the Claude shells; proof guide, "Bytecode during timing runs"). Remeasure with bytecode cached, and split the
+    first unit (about 34 ms with compile) until each unit is at most 8 ms on the GUI thread. Binding for this box:
     - [ ] Root cause first, on the product path: show the first-run `transition()` cost split (module import, shader
       text build, first scene frame import) on a hidden host, with a negative control (a pre-warmed module removes
       that share).

@@ -213,6 +213,14 @@ agents' heavy runs and T runs, and briefs say how many parallel replay processes
 trace and session folder out before the next run: per-run session folders are overwritten (22 Nov: Volumetric
 Dissolve's 182 ms trace was lost that way).
 
+**Bytecode during timing runs** (lead, 27 Nov). The Claude Code shells, the lead's and every agent's, set
+`PYTHONDONTWRITEBYTECODE=1`, and every process started from them inherits it. The operator's environment does not,
+and the frozen build ships `.pyc`. With the variable set, every import compiles its module, so first-run and warm-up
+costs read high: the N5.2f warm-up's first unit measured about 34 ms that way. A timing, hitch or warm-up measurement
+removes the variable for the measured process (a launcher that deletes it from the child's environment), runs once to
+write the cache, then measures, and records which it did. Figures taken with it set are compile-inclusive and are
+compared only with each other.
+
 The acceptance figures:
 - Frame-time p90 no worse than the pre-flip baseline beyond its run-to-run spread (stated with the figure).
 - No new late frames in steady state.
