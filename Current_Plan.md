@@ -77,8 +77,13 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build". 28 Nov: sub-boxes 1 and 2 done on the branch (`e7c0764b3` ABI 46 hold, `8d635e313`
-    arena, seqlock, drift-window stream); the lead pushed the branch and is building `native_module` on GitHub.
-    Next: resume it (about 110k context) with the module for sub-box 3 and the L proof.
+    arena, seqlock, drift-window stream); built on GitHub from `8d635e31` (run 46075163413) and resumed for
+    sub-box 3, the L proof, the arena close on a pending mode change and the ABI 46 hold check.
+  - **Opus Medium `a57f8463d6a354e23`**: N5.2h Gate (native OpenGL route cost, root cause first). Worktree
+    `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`, journal and evidence under
+    `<worktree>/.artifacts/`. Stops at "ready for build" on any C++.
+  - **Sonnet `a078267cdddc16b60`**: Borderless move to Widget Themes (Item 1). Worktree
+    `.claude/worktrees/agent-a078267cdddc16b60`, branch `worktree-agent-a078267cdddc16b60`.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
