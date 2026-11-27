@@ -50,7 +50,8 @@ Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port
 method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
-**Operator priority (23 Nov):** take the Qt 6.12.1 patch when its four matching Python wheels are published.
+**Operator priority (23 Nov):** take the Qt 6.12.1 patch when its four matching Python wheels are published
+(checked 27 Nov: the 6.12.1 SDK is staged and verified; all four PyPI wheels still return 404, latest 6.12.0).
 Continue the native sequence below with the repaired timing receipts. The reported EB response delay is in the Watchlist.
 
 **Order (lead and operator, 17 Nov):**
@@ -77,6 +78,29 @@ Continue the native sequence below with the repaired timing receipts. The report
   sees; the N5.2f hitch brief kept no per-run traces (per-row runs overwrite one session folder, Volumetric's 182 ms
   trace lost), conflicted with the agents-never-run-load rule without saying the operator's own running load is not
   agent-started load, and scoped the fix to "if it is N5.2f's", so the agent stopped at attribution.
+  - Found 25 Nov (lead's reading): the protections lived only in the lead's memory, and the docs agents read say
+    the opposite. Fix these docs:
+    - [ ] `Docs/Guardrails/Agent_Worktree_Rules.md:22` forbids "load runs" without saying that the operator's own
+      running load (a game, normal use) is no load run. Say it there.
+    - [ ] `Docs/Guides/Native_Parity_And_Timing_Proof.md`, "Load during layer T", says to rerun any T run above
+      about 40 % CPU. That contradicts the operator's rule: "This load is modest and does not excuse bad behaviour
+      at all." Record the load with the figures and judge the run under it. Rerun only when agent-started work
+      caused the load.
+    - [ ] `Docs/Guides/Orchestrator_Handbook.md` section 3, step 2 (Brief) lacks three things:
+      - quote the operator's defect words verbatim, with how they see it (preset, camera, music);
+      - copy each run's trace and session folder out before the next run;
+      - fix the cause at its owner wherever it lives.
+      Section 4 lacks: a "no defect" or "not reproduced" against an operator report is rejected, never accepted.
+      Add one pre-dispatch check: read the brief against `Agent_Worktree_Rules.md` and the proof guide for
+      contradictions before sending it.
+- [ ] Live agents and where their work is (keep current). 27 Nov: **no agent is running.** All six retained worktrees
+  are clean, detached and merged into main:
+  - `C:/Users/Basjohn/.codex/worktrees/` `dashboard-naming`, `eb-compute-binding-limit` (N5.6 evidence, 1.5 MB),
+    `eb-optical-reference`, `native-mat3-packing` and `native-viz-timing`;
+  - `.claude/worktrees/agent-ac5f7832a73527151` (earlier N5.6 core and drift journal).
+
+  Copy any cited evidence they hold into the main checkout's `.artifacts/` before removing them. The N5.6 Python
+  references are in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/` (8 of 18 runs done).
 - [ ] Working rules (operator, 21 Nov; handbook 7a and section 3-4, proof guide section 3): critical path only; related
   work to the agent that holds it, unrelated to a fresh one; regression guards only after acceptance; unattended runs
   at once; briefs name the owning checklists, merges check the report bullet by bullet against the cited evidence;
@@ -3421,6 +3445,18 @@ unchanged serialized data unless a migration is justified. Accepted looks/behavi
 change.
 
 - [ ] Finish Waveform Studio acceptance first (section 7.1), then extract any remaining Waveform-shaped assumptions.
+- [ ] Waveform's sensitivity (operator, 25 Nov: "does waveform have an equivalent to a sensitivity slider option?").
+  Found 25 Nov: it does, as **Input Gain** (`waveform_ribbon_input_gain`, 5-200 %, default 1.0). It scales the PCM
+  before every raw lane Waveform reads (`widgets/spotify_visualizer/bar_computation.py:1085-1089`). The shared
+  Sensitivity, Use Recommended Sensitivity and noise-floor controls were retired for Waveform on 8 Nov because they
+  sit after its fixed-scale lanes and never reached its frame (`core/settings/visualizer_mode_registry.py:479-484`).
+  Input Gain is already offered in Settings' Technical group and in the Studio's Reactivity workspace, Technical
+  group (`ui/studio/waveform_adapter.py:180-295`), and the presets carry their own values. Pulse Strength (`bend`)
+  and Carrier Height size the response and the drawing, not what the mode hears. Left to do:
+  - [ ] Lead, D1 Studio run (1B.14 harness): confirm Input Gain shows and acts live in Waveform's Studio. If it is
+    buried (Technical is the last group), move it into the Reaction section's head through the spec owner
+    (`core/settings/visualizer_mode_settings.py`) and label it "Sensitivity (Input Gain)". Keep the key and every
+    preset's stored value. Never add a second gain stage.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and Neon
   Lake (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built below):
   - [ ] Neon Lake awaits the lead's acceptance review on its rendered Studio frames (evidence
