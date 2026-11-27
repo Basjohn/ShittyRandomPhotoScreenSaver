@@ -317,7 +317,8 @@ def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app
         assert not deferred and not requests
         manager._transition_work_pending = False
         manager.prepare_next_transition(RandomTransitionSelection("Crumble"))
-        assert module in sys.modules and len(deferred) == 1 and not requests
+        # The idle edge imports nothing (the hitch rows, 22 Nov): the module's import is the display's first unit.
+        assert module not in sys.modules and len(deferred) == 1 and not requests
         assert deferred[0][0] == IDLE_TRANSITION_WARM_STEP_SPACING_MS
         deferred.pop(0)[1]()
         assert [item[0] for item in requests] == ["D0"]
@@ -559,7 +560,6 @@ def test_stale_reservation_and_recreation_cancel_idle_gl_jobs(qt_app, monkeypatc
     spec = ResolvedQuickTransitionSpec(transition_id="crossfade", requested_name="Crossfade",
                                        selected_from_random=False, duration_ms=1000, direction=None, parameters=())
     monkeypatch.setattr(source, "resolve_quick_transition_spec", lambda *a, **k: spec)
-    monkeypatch.setattr(source, "preload_quick_transition_implementation", lambda *a: None)
     manager = DisplayManager(settings_manager=object(), thread_manager=_Threads(), runtime_generation=710)
     manager._prepare_transition_run_geometry = lambda spec, seed, displays: None
     manager._authoritative_first_frame_emitted = True

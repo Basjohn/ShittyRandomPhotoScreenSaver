@@ -420,6 +420,32 @@ def field_deadline_ms(run: Any, settled: float) -> int:
     return max(1, min(60000, int(0.5 * margin_ms)))
 
 
+#: The modules a scene run's first frames import lazily (``scene_program``, ``scene_settings``, ``population_compute``,
+#: ``scene_storage``, ``_start_scene`` / ``_scene_frame``), so importing this module stays light; the warm-up imports
+#: them one unit ahead of a run (the hitch rows, 22 Nov: the first scene frame paid them).
+_SCENE_FRAME_MODULES = ("rendering.gl_programs.scene3d", "rendering.native.mode", "rendering.native.composite",
+                        "rendering.quick.scene3d.environment", "rendering.quick.transitions.native_scene")
+
+
+def _warm_renderer(transition_id: str) -> None:
+    """Warm-up unit: what a run's start resolves first in the process (the registry, the fragment and scene owners,
+    the shared post passes' sources, the packs shipped)."""
+    native_transition_renderer(transition_id)
+
+
+def _warm_scene_frame(_transition_id: str) -> None:
+    """Warm-up unit: the modules a run's first scene frame imports."""
+    from importlib import import_module
+
+    for name in _SCENE_FRAME_MODULES:
+        import_module(name)
+
+
+#: The layer's own warm-up units after the renderer module's import (``BackgroundRenderItem.schedule_warm_step`` owns
+#: that one): each one bounded, run one per spaced, already-rendered frame, in the order a run needs them.
+NATIVE_WARM_UNITS: tuple[Callable[[str], None], ...] = (_warm_renderer, _warm_scene_frame)
+
+
 def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[float, float]) -> dict:
     """The pass's settings for a photo of ``pixel_size`` over an item of ``logical_size``: the presenter's placement."""
     from rendering.quick.background_placement import background_placement
@@ -477,6 +503,7 @@ class NativeBackgroundLayer:
         self._fields_pending: set[str] = set()
         self._clock_offset_ns = 0
         self._field_program: Any = None
+        self._warmed: dict[str, int] = {}    # the hitch rows (22 Nov): warm-up units done per transition id
         self.runs = 0                    # runs the core drew
         self._waiting_kept_seen = 0      # the core's waiting_kept at the last traced run's end (--frame-trace only)
         self.ticks = 0                   # frames of a run given their progress
@@ -543,6 +570,23 @@ class NativeBackgroundLayer:
         self._sync(force=True)
 
     # ---------------------------------------------------------------------------------------------- the transition
+
+    def next_warm_unit(self, transition_id: str) -> Callable[[], None] | None:
+        """The next of ``NATIVE_WARM_UNITS`` not yet done for ``transition_id`` (None: nothing left, or the layer is
+        closed or drawing a run, which prepares whatever is left itself). The caller runs it at a rendered frame; it
+        counts as done once run, even if it raised (a failed optional preparation never strands the warm-up)."""
+        if self.closed or self._run is not None:
+            return None
+        key = str(transition_id)
+        done = self._warmed.get(key, 0)
+        if done >= len(NATIVE_WARM_UNITS):
+            return None
+
+        def unit() -> None:
+            self._warmed[key] = done + 1
+            NATIVE_WARM_UNITS[done](key)
+
+        return unit
 
     def transition(self, run: Any) -> None:
         """The item's transition run changed (N5.2a; ``None``: it ended). A run is drawn by the core from its own

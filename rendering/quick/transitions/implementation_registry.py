@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import import_module
@@ -154,9 +155,20 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
     return frozenset(enabled)
 
 
+def quick_transition_implementation_loaded(transition_id: object) -> bool:
+    """Whether one transition's renderer module is imported already (its shader texts are built at its import), so the
+    idle warm-up has no import unit left for it. An unknown or unavailable transition has nothing to import: True."""
+    canonical = get_transition_descriptor_for_runtime_identity(transition_id)
+    if canonical is None or not is_transition_available(canonical.setting_name):
+        return True
+    descriptor = _BY_ID.get(canonical.stable_id)
+    return descriptor is None or descriptor.module_name in sys.modules
+
+
 def preload_quick_transition_implementation(transition_id: object) -> None:
     """Import one transition's renderer module ahead of its first run (GUI thread), so the
-    render thread's resolve is instant. Constructs nothing and touches no GL."""
+    render thread's resolve is instant. Constructs nothing and touches no GL. One warm-up unit
+    (``BackgroundRenderItem.schedule_warm_step``): the module's import with its shader text build."""
     canonical = get_transition_descriptor_for_runtime_identity(transition_id)
     if canonical is None:
         raise ValueError(f"unknown canonical transition: {transition_id!r}")
