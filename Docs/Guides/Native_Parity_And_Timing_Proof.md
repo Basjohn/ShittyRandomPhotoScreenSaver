@@ -214,9 +214,11 @@ trace and session folder out before the next run: per-run session folders are ov
 Dissolve's 182 ms trace was lost that way).
 
 **Bytecode during timing runs** (lead, 27 Nov). The Claude Code shells, the lead's and every agent's, set
-`PYTHONDONTWRITEBYTECODE=1`, and every process started from them inherits it. The operator's environment does not,
-and the frozen build ships `.pyc`. With the variable set, every import compiles its module, so first-run and warm-up
-costs read high: the N5.2f warm-up's first unit measured about 34 ms that way. A timing, hitch or warm-up measurement
+`PYTHONDONTWRITEBYTECODE=1`, and every process started from them inherits it. The operator's environment does not.
+The variable only stops writing the cache, so a module that is new or was edited since its cache was written compiles
+on every import, and first-run and warm-up costs read high: the N5.2f warm-up's first unit measured about 34 ms that
+way (R-252). The frozen build is Nuitka (`scripts/build_nuitka.ps1`): module bodies still run at import there, so
+cached bytecode is the closer stand-in. A timing, hitch or warm-up measurement
 removes the variable for the measured process (a launcher that deletes it from the child's environment), runs once to
 write the cache, then measures, and records which it did. Figures taken with it set are compile-inclusive and are
 compared only with each other.

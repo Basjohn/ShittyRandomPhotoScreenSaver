@@ -77,9 +77,6 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build".
-  - **Opus Medium `af79728844114c3a4`**: the N5.2f hitch box (warm-up fix). Worktree
-    `.claude/worktrees/agent-af79728844114c3a4`, branch `worktree-agent-af79728844114c3a4`, journal and evidence
-    under `<worktree>/.artifacts/` (`native_core/n5_2f/`). Stops at "ready for the rows".
   - **Lead, unattended:** the ten N5.6 reference runs (two processes), receipts
     `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`, arrays in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/`.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
@@ -1380,18 +1377,20 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     `afterRendering` units and off-screen proof on `6caceaa1b` (evidence `native_core/n5_2f/20261127_hitch_warm_units/`).
     Sent back: every figure so far, including the 22 Nov attribution, was compile-inclusive (`PYTHONDONTWRITEBYTECODE=1`
     in the Claude shells; proof guide, "Bytecode during timing runs"). Remeasure with bytecode cached, and split the
-    first unit (about 34 ms with compile) until each unit is at most 8 ms on the GUI thread. Binding for this box:
-    - [ ] Root cause first, on the product path: show the first-run `transition()` cost split (module import, shader
+    first unit (about 34 ms with compile) until each unit is at most 8 ms on the GUI thread. Merged 27 Nov
+    (`003b86fbe`, R-252): units at most 7.3 ms with bytecode cached; first run after the warm-up imports and builds
+    nothing (7.4 / 8.0 ms); evidence `native_core/n5_2f/20261127_hitch_warm_units_split/`. Only the lead's rows remain.
+    - [x] Root cause first, on the product path: show the first-run `transition()` cost split (module import, shader
       text build, first scene frame import) on a hidden host, with a negative control (a pre-warmed module removes
       that share).
-    - [ ] Fix at the owner, wherever it lives (the transition controller, the renderer registry, the native
+    - [x] Fix at the owner, wherever it lives (the transition controller, the renderer registry, the native
       background, the prewarm owner): the next likely transition's module import and shader text build are warmed
       **gradually**: one bounded unit per spaced, already-rendered frame (piggybacked on frames the window renders
       anyway, spaced like S11's >= 0.2 s), next-likely transition first; never at startup, never in a burst, no new
       timers, threads, polling or forced frames; a run still prepares whatever is left. An image change resolves its
       transition only ~14 ms before its first frame, so the warm-up must not depend on that lead time. Guard test with
       a control seen failing on the old code (the first run's `transition()` pays the import).
-    - [ ] Agent: prove the fix off-screen first: on a hidden host, the first run's `transition()` after the warm-up
+    - [x] Agent: prove the fix off-screen first: on a hidden host, the first run's `transition()` after the warm-up
       pays no import or text build, and the warm-up units land one per spaced rendered frame (their per-frame cost
       recorded). Then stop and report "ready for the rows" with the commit.
     - [ ] Lead (Display 1 runs are the lead's alone): retake the hitch rows, Disintegrate and Volumetric Dissolve
@@ -1400,6 +1399,10 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       33 ms inside a run, first run included. Copy each row's trace and session folder out before the next row.
       The operator's own running load is no load run: measure under it, record whole-machine CPU and GPU. Never
       while the lead's own `owner_render_parity.py` reference renders run (our load).
+    - [ ] Side (N5.2f agent, 27 Nov): other scene transitions (Crumble, Glass Shatter, Exploding Tiles and others) still
+      build their shader texts at import, so their first warm unit may exceed 8 ms. Measure each module's import with
+      bytecode cached; split any over 8 ms into `WARM_PIECES` like Disintegrate's. Also measured: the native
+      `mode.texture` copy costs 7-13 ms per run; attribute it before N5.2h (route cost, not general optimisation).
   - No cull fallback (lead, 22 Nov): indirect draw is core Vulkan 1.0 and OpenGL 4.0, and Python's population already
     draws with `glDrawArraysIndirect`, so no supported card lacks it; the core refuses with its reason if one ever does
     (ABI 41's facts record the answer). N4.c's one-million-sprite cost check runs on the indirect form only.

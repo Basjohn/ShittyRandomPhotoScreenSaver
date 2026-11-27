@@ -139,7 +139,7 @@ def _locate(source: str, direction: str, locations: Mapping[str, int] | None) ->
 def _vertex_index(source: str) -> str:
     if "gl_VertexID" not in source and "gl_InstanceID" not in source:
         return source                             # the common case, without two word-boundary scans of the text
-    replaced =re.sub(r"\bgl_VertexID\b", "srpssVertexIndex", source)
+    replaced = re.sub(r"\bgl_VertexID\b", "srpssVertexIndex", source)
     replaced = re.sub(r"\bgl_InstanceID\b", "srpssInstanceIndex", replaced)
     return source if replaced == source else _after_version(replaced, SRPSS_VERTEX_INDEX_GLSL)
 
