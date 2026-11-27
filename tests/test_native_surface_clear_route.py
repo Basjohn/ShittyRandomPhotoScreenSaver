@@ -75,32 +75,82 @@ def test_the_surface_is_cleared_by_its_pass_on_opengl_and_by_the_draw_under_the_
         "rhi->backend() != QRhi::OpenGLES2", "rhi->backend() == QRhi::Null"))
 
 
+def scene_clear_is_the_passes(mode_cpp: str, scene_cpp: str) -> bool:
+    """Box 3: a scene target's first run begins on its clearing target (made beside its render target on OpenGL only,
+    without the preserving flags, for a pass-clearable declaration) unless the control is on, and only then skips the
+    clearing draw; a cube, a transparency target, a borrowed attachment and a clear value other than 0 or 1 keep it."""
+    passes = _function(mode_cpp, "void ModeContent::recordPasses(", "bool ModeContent::record(")
+    if "bool scenePassClearColour(" not in scene_cpp:
+        return False
+    helper = _function(scene_cpp, "bool scenePassClearColour(", "bool TargetDeclaration::sameLayout(")
+    made = scene_cpp[scene_cpp.index("t.renderTarget.reset(rhi->newTextureRenderTarget(description, flags));"):]
+    made = made[:made.index("if (t.decl.cube) {")]
+    return ("const bool passClears = !cube && !cleared[runTarget] && t.clearingTarget && !sceneClearDraw();" in passes
+            and "cb->beginPass(t.clearingTarget.get(), t.clearingColour, { 1.0f, 0 }, pending);" in passes
+            and "} else if (!cleared[runTarget]) {" in passes
+            and "rhi->backend() == QRhi::OpenGLES2 && scenePassClearColour(t.decl, t.samples, &passColour)" in made
+            and "t.clearingTarget.reset(rhi->newTextureRenderTarget(description));" in made
+            and "t.clearingTarget && !t.clearingTarget->create()" in made
+            and "decl.cube || decl.transparency()" in helper and "if (a.borrowed)" in helper
+            and "a.clear[c] != 0.0f && a.clear[c] != 1.0f" in helper
+            and "known[c] && value[c] != a.clear[c]" in helper
+            and "if (samples > 1 && a.format != TargetFormat::RGBA8)" in helper)
+
+
+def test_scene_targets_are_cleared_by_their_pass_on_opengl_and_by_the_draw_under_the_control():
+    mode_cpp, scene_cpp = _source("mode_content.cpp"), _source("scene_targets.cpp")
+    assert scene_clear_is_the_passes(mode_cpp, scene_cpp)
+    module = _source("module.cpp")
+    assert 'control == "scene_clear_draw"' in module and "setSceneClearDraw(value)" in module
+    assert '"mode_scene_pass_clears"' in module and '"mode_scene_draw_clears"' in module
+    # The clearing target goes before the objects it names, on a release and on a new layout.
+    release = _function(scene_cpp, "void SceneTargets::releaseTarget(", "t.depthNearest.reset();")
+    assert release.index("t.clearingTarget.reset();") < release.index("t.renderTarget.reset();")
+    # Negative controls: the pre-change record (the draw at every first run), a clearing target that preserved its
+    # contents, one made on Vulkan too, and a helper that admitted any clear value, are each caught.
+    assert not scene_clear_is_the_passes(mode_cpp.replace(
+        "cb->beginPass(t.clearingTarget.get(), t.clearingColour, { 1.0f, 0 }, pending);", ""), scene_cpp)
+    assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
+        "t.clearingTarget.reset(rhi->newTextureRenderTarget(description));",
+        "t.clearingTarget.reset(rhi->newTextureRenderTarget(description, flags));"))
+    assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
+        "rhi->backend() == QRhi::OpenGLES2 && scenePassClearColour", "scenePassClearColour"))
+    assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
+        "a.clear[c] != 0.0f && a.clear[c] != 1.0f", "false"))
+    # ... and one that pass-cleared a multisampled R16F attachment (measured slower than the draw).
+    assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
+        "if (samples > 1 && a.format != TargetFormat::RGBA8)", "if (false)"))
+
+
 # ------------------------------------------------------------------------------------ the harness's control
 
 
 class _Stand:
     """A stand-in core, scene and host for ``_clear_control``: counts per route and a frame that is the progress."""
 
-    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True, share_returns=True):
+    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True, share_returns=True, route="surface"):
+        import transition_route_check as trc
+
         self.control = False
         self.known = known
         self.by_pass = by_pass_on_opengl
         self.same = same_pixels
         self.share = share_returns
-        self.live = {"mode_surface_pass_clears": 0, "mode_surface_draw_clears": 0}
+        self.name, self.prefix = trc.CLEAR_ROUTES[route]
+        self.live = {f"{self.prefix}_pass_clears": 0, f"{self.prefix}_draw_clears": 0}
         self.progress = 0.0
         self.module = SimpleNamespace(stage_control=self._stage_control)
         self.layer = SimpleNamespace(tick=self._record)
 
     def _stage_control(self, name, on):
-        if not self.known or name != "surface_clear_draw":
+        if not self.known or name != self.name:
             return False
         self.control = bool(on)
         return True
 
     def _record(self):
-        key = "mode_surface_draw_clears" if self.control or not self.by_pass else "mode_surface_pass_clears"
-        self.live[key] += 1
+        route = "draw" if self.control or not self.by_pass else "pass"
+        self.live[f"{self.prefix}_{route}_clears"] += 1
 
     def composite_live(self):
         return dict(self.live)
@@ -121,12 +171,22 @@ class _Stand:
         return [SimpleNamespace(kind=2, nanoseconds=record), SimpleNamespace(kind=0, nanoseconds=80_000)]
 
 
-def _run(stand, api="opengl"):
+def _run(stand, api="opengl", route="surface"):
     import transition_route_check as trc
 
     clock = SimpleNamespace(at=lambda run, progress: setattr(stand, "progress", progress))
     scene = SimpleNamespace(layer=stand.layer, frames=stand.frames, read=stand.read)
-    return trc._clear_control(stand, api, scene, stand, clock, object())
+    return trc._clear_control(stand, api, scene, stand, clock, object(), route=route)
+
+
+def test_the_scene_clear_control_judges_the_scene_route_by_its_own_control_and_counts():
+    record, checks = _run(_Stand(route="scene"), route="scene")
+    assert record["available"] and all(checks.values()), checks
+    # The scene route asks for its own control and reads its own counts: a module with only the surface's control
+    # judges nothing for scenes, and a scene still cleared by the draw on OpenGL, or a share that did not return, fails.
+    assert _run(_Stand(route="surface"), route="scene") == ({"available": False}, {})
+    assert not _run(_Stand(route="scene", by_pass_on_opengl=False), route="scene")[1]["clear_route_counted"]
+    assert not _run(_Stand(route="scene", share_returns=False), route="scene")[1]["clear_route_share_returns"]
 
 
 def test_the_clear_control_passes_on_the_pass_route_and_fails_on_its_negatives():

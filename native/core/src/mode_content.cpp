@@ -302,6 +302,8 @@ QAtomicInteger<qint64> g_textureUploads { 0 };
 QAtomicInteger<qint64> g_textureChains { 0 };   // ABI 35
 QAtomicInteger<qint64> g_surfacePassClears { 0 }; // N5.2h
 QAtomicInteger<qint64> g_surfaceDrawClears { 0 };
+QAtomicInteger<qint64> g_scenePassClears { 0 };   // N5.2h: scene targets' first runs cleared by the pass / the draw
+QAtomicInteger<qint64> g_sceneDrawClears { 0 };
 QAtomicInteger<quint64> g_textureGenerations { 0 };
 
 // N5.7a: a still's schema (mode_content.h, "Stills"): no field, no record. Its program is checked against it exactly as
@@ -2529,6 +2531,8 @@ ModeTextureCounts modeTextureCounts()
     c.chains = g_textureChains.loadRelaxed();  // ABI 35
     c.surfacePassClears = g_surfacePassClears.loadRelaxed(); // N5.2h
     c.surfaceDrawClears = g_surfaceDrawClears.loadRelaxed();
+    c.scenePassClears = g_scenePassClears.loadRelaxed();
+    c.sceneDrawClears = g_sceneDrawClears.loadRelaxed();
     return c;
 }
 
@@ -7985,14 +7989,26 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // ABI 42: a cube's run draws into its face's render target, and every face is cleared at its run (colour to
             // the attachment's clear, depth to 1: probe.py clears both per face).
             const bool cube = t.decl.cube && pass.face >= 0;
-            cb->beginPass(cube ? t.faceRenderTarget(pass.face) : t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
-                          pending);
+            // N5.2h: on OpenGL a pass-clearable target's first run begins on its clearing render target, whose pass
+            // clears every attachment and the depth (glClear) to what its clearing draw wrote, without the draw's
+            // fragments over the whole allocation (per attachment and per sample). Vulkan, a cube, a transparency
+            // target and the control scene_clear_draw keep the draw.
+            const bool passClears = !cube && !cleared[runTarget] && t.clearingTarget && !sceneClearDraw();
+            if (passClears)
+                cb->beginPass(t.clearingTarget.get(), t.clearingColour, { 1.0f, 0 }, pending);
+            else
+                cb->beginPass(cube ? t.faceRenderTarget(pass.face) : t.renderTarget.get(), QColor(0, 0, 0, 0),
+                              { 1.0f, 0 }, pending);
             pending = nullptr;
             if (cube) {
                 cleared[runTarget] = false;
                 countCubeFaceRun();
             }
-            if (!cleared[runTarget]) {
+            if (passClears) {
+                cleared[runTarget] = true;
+                g_scenePassClears.fetchAndAddRelaxed(1);
+            } else if (!cleared[runTarget]) {
+                g_sceneDrawClears.fetchAndAddRelaxed(1);
                 cb->setGraphicsPipeline(r.targetClears[runTarget].pipeline.get());
                 setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
                 const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[runTarget].offset };

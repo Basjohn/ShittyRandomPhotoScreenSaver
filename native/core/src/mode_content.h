@@ -659,6 +659,8 @@ struct ModeTextureCounts
     qint64 chains = 0;           // ABI 35: item textures' mip chains made by the box kernel
     qint64 surfacePassClears = 0; // N5.2h: surfaces cleared by their pass's own clear (OpenGL)
     qint64 surfaceDrawClears = 0; // N5.2h: surfaces cleared by the full-triangle clearing draw
+    qint64 scenePassClears = 0;   // N5.2h: scene targets' first runs cleared by their pass's own clear (OpenGL)
+    qint64 sceneDrawClears = 0;   // N5.2h: scene targets' first runs cleared by their clearing draw
 };
 ModeTextureCounts modeTextureCounts();
 

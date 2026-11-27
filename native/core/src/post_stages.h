@@ -137,6 +137,10 @@ bool cardTriangle();
 // before N5.2h) on OpenGL too, not by the pass's own clear (targets.h clearingRenderTarget; read per record).
 void setSurfaceClearDraw(bool draw);
 bool surfaceClearDraw();
+// N5.2h's scene negative control: a scene target's first run cleared by its clearing draw (scene_clear<n>) again on
+// OpenGL too, not by its pass's own clear (scene_targets.h clearingTarget; read per record).
+void setSceneClearDraw(bool draw);
+bool sceneClearDraw();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)

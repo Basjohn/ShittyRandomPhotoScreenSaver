@@ -850,18 +850,28 @@ def _product_python(core, engine, size, photos):
     return host, scene
 
 
-def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]:
+#: N5.2h's clear-route controls: the ``stage_control`` name and the ``composite_live`` count prefix of the mode surface's
+#: first-run clear (Crossfade's control) and of a scene target's (SCENE_CLEAR_CONTROL_VARIANTS', box 3).
+CLEAR_ROUTES = {"surface": ("surface_clear_draw", "mode_surface"), "scene": ("scene_clear_draw", "mode_scene")}
+#: The scene variants that run the scene clear control in the cost round: a single-sampled scene and the 4x scene with
+#: motion blur and trails (three attachments, four samples: the draw's largest share).
+SCENE_CLEAR_CONTROL_VARIANTS = ("crumble_plain", "crumble_both_4x")
+
+
+def _clear_control(core, api: str, scene, host, clock, run, route: str = "surface") -> tuple[dict, dict]:
     """N5.2h's negative control on Crossfade: the surface cleared at its first run by the pass's own clear (OpenGL;
     Vulkan keeps the clearing draw, rule B) against the full-triangle clearing draw again (``stage_control``'s
     ``surface_clear_draw``): the same pixels (the display read at one progress), the clears counted by their route
     (``composite_live``'s ``mode_surface_pass_clears`` and ``mode_surface_draw_clears``), and the record and frame GPU
-    time with the draw back (its share returns). A module without the control: ``available`` False, nothing judged."""
-    if not core.module.stage_control("surface_clear_draw", False):
+    time with the draw back (its share returns). ``route`` "scene": the same for a scene target's first run
+    (``scene_clear_draw``, ``mode_scene_*``). A module without the control: ``available`` False, nothing judged."""
+    control_name, prefix = CLEAR_ROUTES[route]
+    if not core.module.stage_control(control_name, False):
         return {"available": False}, {}
 
     def counts() -> tuple[int, int]:
         live = core.composite_live()
-        return int(live.get("mode_surface_pass_clears", 0)), int(live.get("mode_surface_draw_clears", 0))
+        return int(live.get(f"{prefix}_pass_clears", 0)), int(live.get(f"{prefix}_draw_clears", 0))
 
     def drawn(progress: float):
         clock.at(run, progress)
@@ -872,7 +882,7 @@ def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]
     before = counts()
     by_pass = drawn(0.5)
     middle = counts()
-    core.module.stage_control("surface_clear_draw", True)
+    core.module.stage_control(control_name, True)
     try:
         by_draw = drawn(0.5)
         neighbour = drawn(0.55)                                  # the comparison's own control: another progress
@@ -887,7 +897,7 @@ def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]
         frame = 0
         for _block in range(CLEAR_CONTROL_BLOCKS):
             for draw_route in (False, True):
-                core.module.stage_control("surface_clear_draw", draw_route)
+                core.module.stage_control(control_name, draw_route)
                 for _ in range(CLEAR_CONTROL_BLOCK_FRAMES):
                     clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
                     frame += 1
@@ -897,7 +907,7 @@ def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]
                 timed[draw_route].extend(host.gpu_samples())
         host.set_gpu_timer(False)
     finally:
-        core.module.stage_control("surface_clear_draw", False)
+        core.module.stage_control(control_name, False)
     pixels = blc.compare(by_pass, by_draw)
     control = blc.compare(by_draw, neighbour)
 
@@ -1011,6 +1021,10 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     control, control_checks = _clear_control(core, api, scene, host, clock, run)
                     facts[f"{label}_{variant}"]["clear_control"] = control
                     checks.update({f"{label}_{variant}_{k}": v for k, v in control_checks.items()})
+                if variant in SCENE_CLEAR_CONTROL_VARIANTS:
+                    control, control_checks = _clear_control(core, api, scene, host, clock, run, route="scene")
+                    facts[f"{label}_{variant}"]["scene_clear_control"] = control
+                    checks.update({f"{label}_{variant}_scene_{k}": v for k, v in control_checks.items()})
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
