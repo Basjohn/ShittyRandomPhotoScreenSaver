@@ -32,7 +32,7 @@ def _is_border_field(name: str) -> bool:
 
 
 def hide_borders(config):
-    """``config`` with every border or outline colour invisible (Style Overrides' Borderless).
+    """``config`` with every border or outline colour invisible (Widget Themes' Borderless).
 
     A family config is a dataclass of resolved fields. A field whose name says border or
     outline and whose value is an RGBA tuple keeps its colour but loses its alpha, whatever
@@ -70,7 +70,7 @@ def tile_wash(ink: RgbaTuple) -> RgbaTuple:
 
 
 def with_borderless(config, widgets_config):
-    """``config`` as Style Overrides' Borderless latch in ``widgets_config`` wants it drawn."""
+    """``config`` as Widget Themes' Borderless latch in ``widgets_config`` wants it drawn."""
 
     from core.settings.default_contract import resolve_widgets_borderless
 

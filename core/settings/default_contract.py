@@ -198,7 +198,7 @@ WIDGETS_BORDERLESS_KEY = "widgets.global.borderless"
 
 
 def resolve_widgets_borderless(widgets_config: Mapping[str, Any] | object) -> bool:
-    """Whether Style Overrides' Borderless latch is set (missing or malformed: not latched)."""
+    """Whether Widget Themes' Borderless latch is set (missing or malformed: not latched)."""
 
     values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
     return isinstance(values, Mapping) and values.get("borderless") is True

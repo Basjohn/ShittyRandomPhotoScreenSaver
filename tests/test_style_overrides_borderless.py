@@ -89,6 +89,17 @@ def test_the_control_lives_on_themes_and_not_on_widgets(manager):
         assert getattr(tab, "borderless_btn", None) is None
         assert not [b for b in tab.findChildren(type(themes.borderless_btn)) if b.text() == "Borderless"]
         assert getattr(tab, "borderless_btn", None) is None
+        # Placed in the Linked/filter row: Linked, then Borderless, then the filter; a matched pair.
+        group_layout = themes._page_stack.widget(1).layout().itemAt(0).widget().layout()
+        link_row = next(group_layout.itemAt(i).layout() for i in range(group_layout.count())
+                        if group_layout.itemAt(i).layout() is not None)
+        order = [link_row.itemAt(i).widget() for i in range(link_row.count()) if link_row.itemAt(i).widget()]
+        assert order == [themes.widget_keep_synced, themes.borderless_btn, themes.widget_theme_filter]
+        from PySide6.QtWidgets import QPushButton
+        assert isinstance(themes.borderless_btn, QPushButton)
+        assert themes.borderless_btn.objectName() == themes.widget_keep_synced.objectName()
+        assert themes.borderless_btn.minimumWidth() == themes.widget_keep_synced.minimumWidth()
+        assert themes.borderless_btn.styleSheet() == themes.widget_keep_synced.styleSheet()
     finally:
         _close(dialog)
 
