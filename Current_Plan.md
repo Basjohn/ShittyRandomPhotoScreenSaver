@@ -80,7 +80,9 @@ Continue the native sequence below with the repaired timing receipts. The report
     arena, seqlock, drift-window stream); built from `8d635e31`, resumed. Second stop 28 Nov: `29cb8317c` (program,
     worker record, route settings), `950465ab3` (arena close), `3fd93cc3a` (ABI 46 hold round), `24893c036` (C++,
     **ABI 47 reserved for N5.6**: a glass pass may sample the owner's capture, live attachments still refused). The
-    lead builds `24893c036` and starts a fresh Opus High successor (216k context) from the branch and journal.
+    lead built `24893c03` (module in that worktree's `release/native_module/`); successor **Opus High
+    `a29135bafeaab65bb`** (28 Nov), worktree `.claude/worktrees/agent-a29135bafeaab65bb`, branch
+    `worktree-agent-a29135bafeaab65bb` (merges the first branch). Retire the first worktree only after its merge.
   - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
     (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
     `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
