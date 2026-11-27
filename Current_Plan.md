@@ -77,7 +77,6 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build".
-  - **Lead:** the N5.2f Display 1 hitch rows (references done, machine free of our renders).
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -1379,12 +1378,12 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     - [x] Agent: prove the fix off-screen first: on a hidden host, the first run's `transition()` after the warm-up
       pays no import or text build, and the warm-up units land one per spaced rendered frame (their per-frame cost
       recorded). Then stop and report "ready for the rows" with the commit.
-    - [ ] Lead (Display 1 runs are the lead's alone): retake the hitch rows, Disintegrate and Volumetric Dissolve
-      (`preflip_pack.py --rows "transition/<id>/*" --per-row --backend native-vulkan
-      --app-arg=--graphics-backend=vulkan`; proof guide section 3, "A transition port", Performance): no gap over
-      33 ms inside a run, first run included. Copy each row's trace and session folder out before the next row.
-      The operator's own running load is no load run: measure under it, record whole-machine CPU and GPU. Never
-      while the lead's own `owner_render_parity.py` reference renders run (our load).
+    - Lead rows, 27-28 Nov (native Vulkan, 3840 x 2160 on Display 1, bytecode cached, one priming pass): both pass,
+      no gap over 33 ms. Disintegrate max 14.65 ms (first 12.25), Volumetric Dissolve max 13.66 ms (first 13.66), render
+      1.2-1.5 ms median, 0 % late. Measured under the operator's own running load (GPU 61-83 %, 10.5 GB in use;
+      CPU 12-22 %). Baselines `tools/baselines/preflip/20261127_n52f_warm_units*.json`, traces in
+      `.artifacts/evidence/performance/preflip_pack/20261127_20261127_n52f_warm_units*`. Side defect fixed on the way:
+      `--per-row` wrote every row to one size-and-state folder, so a later row overwrote the earlier row's trace.
     - [ ] Side (N5.2f agent, 27 Nov): other scene transitions (Crumble, Glass Shatter, Exploding Tiles and others) still
       build their shader texts at import, so their first warm unit may exceed 8 ms. Measure each module's import with
       bytecode cached; split any over 8 ms into `WARM_PIECES` like Disintegrate's. Also measured: the native

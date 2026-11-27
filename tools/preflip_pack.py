@@ -657,7 +657,9 @@ def measure_rows(rows: list[Row], baseline: dict, path: Path, *, measure, condit
         before = conditions_fn()
         began = clock()
         if kind == "session":
-            out = out_dir_fn(group[0], session=True)
+            # A one-row session (--per-row, or a lone pending row) gets its row's own folder: the size-and-state
+            # folder would be overwritten by the next row's run.
+            out = out_dir_fn(group[0], session=len(group) > 1)
             code, summary = measure_session(group, out)
             records = session_records(group, code, summary, out, before, clock() - began)
         else:

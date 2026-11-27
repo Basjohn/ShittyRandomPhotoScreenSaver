@@ -302,6 +302,23 @@ def test_a_session_stores_one_ok_row_per_transition_under_the_same_keys_as_a_per
     assert "transition/b/2160p/idle" in pack.baseline_markdown(baseline)
 
 
+def test_per_row_sessions_write_each_row_to_its_own_folder_and_a_shared_session_to_one():
+    rows = [r for r in _rows() if r.kind == "transition"]
+    for per_row, expected in ((True, [(r.key, False) for r in rows]), (False, [(rows[0].key, True)])):
+        outs = []
+
+        def out_dir(row, session=False):
+            outs.append((row.key, session))
+            return pack.ROOT / "out"
+
+        baseline = pack.new_baseline("s", commit="abc", load=None, backend="x")
+        pack.measure_rows(rows, baseline, None, measure=lambda r, o: (0, None),
+                          measure_session=lambda group, out: (0, _session_summary()), conditions_fn=dict,
+                          displays_fn=lambda: [{"index": 1, "width": 3840, "height": 2160, "primary": False}],
+                          out_dir_fn=out_dir, save=lambda *a: None, per_row=per_row)
+        assert outs == expected
+
+
 def test_a_window_the_session_could_not_close_is_stored_failed_with_its_reason_and_the_others_survive():
     rows = [r for r in _rows() if r.kind == "transition"]
     baseline, _ = _measure(rows, _session_summary(failed={"Name B"}), code=3)          # the live check exits 3 on a failure
