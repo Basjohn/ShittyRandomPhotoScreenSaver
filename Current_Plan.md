@@ -82,8 +82,10 @@ Continue the native sequence below with the repaired timing receipts. The report
   - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
     (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
     `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
-    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; the lead builds the branch on GitHub
-    (28 Nov) and starts a fresh Opus Medium successor from the branch and this box.
+    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; built on GitHub from `b483770b`
+    (module in that worktree's `release/native_module/`). Successor **Opus Medium `a0c4a0b53ffc18f96`** (28 Nov),
+    worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
+    branch). Retire the first worktree only after the successor's merge.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
