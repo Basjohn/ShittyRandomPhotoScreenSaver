@@ -170,6 +170,9 @@ def shader_files() -> dict[str, str]:
         files[f"eb_{program}.frag"] = _renamed(located, program)
         if program in TRANSPARENT:
             files[f"eb_{program}_sorted.frag"] = _renamed(_located(vertex, sorted_text(fragment))[1], program)
+    from rendering.native.extruded_bubble_drift import compute_texts
+
+    files.update(compute_texts())       # the drift entries (eb_drift_*.comp)
     return files
 
 

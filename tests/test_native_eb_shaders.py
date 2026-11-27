@@ -79,3 +79,26 @@ def test_the_committed_packs_are_what_the_texts_bake_to():
 
     found = statuses(bake=False)
     assert found and all(current for _name, current, _reason in found), [f for f in found if not f[1]]
+
+
+def test_the_drift_entries_run_the_python_solver_texts_unchanged_under_a_cursor():
+    from rendering.native.extruded_bubble_drift import _globals, compute_texts
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import (
+        CHAIN_COMPUTE, CLOUD_COMPUTE, PAIR_CHECK_COMPUTE)
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import FAMILIES
+
+    files = compute_texts()
+    assert files["eb_drift_pair_check.comp"] == PAIR_CHECK_COMPUTE
+    for family in FAMILIES:
+        python = CHAIN_COMPUTE if family == "chains" else CLOUD_COMPUTE
+        body = python.split("void main() {", 1)[1]
+        for entry in ("_before", ""):
+            text = files[f"eb_drift_{family}{entry}.comp"]
+            assert "uniform DriftDispatch" not in text and text.count("void main() {") == 1
+            assert "void driftRun() {" + body.split("\n}\n", 1)[0] in text      # the arithmetic as it is
+            assert f"uniform EbDrift_{family}" in text and "driftRun();" in text
+        mark = files[f"eb_drift_{family}_mark.comp"]
+        assert "driftRun" not in mark and "header[0] = uvec4(" in mark
+    # Control: a text without its DriftDispatch block (or with two mains) is refused, not silently left as it is.
+    with pytest.raises(ValueError):
+        _globals(PAIR_CHECK_COMPUTE)
