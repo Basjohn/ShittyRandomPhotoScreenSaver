@@ -26,6 +26,9 @@ Rounds (each with its control):
             with the old drawn, zero residencies after a mode switch and teardown.
   geometry_projection  the native drift projector's D3 keys and canonical family geometry through that same writer.
             Repeat, capacity growth, rebase with the previous geometry, and stale activation isolation.
+  geometry_hold  ABI 46: a compute entry whose geometry key is not resident (bank unwritten, then torn) is held at
+            each such record with its trigger kept, and dispatched from that trigger once the bank is whole; nothing
+            held at rest. Control: an entry of the same trigger without geometry dispatches through the hold.
   probe     a cube drawn face by face (through v_uv and through uMatrix), its prefilter, every face and level read back
             against a CPU twin of probe.py's chain, lookups at levels 0, 2 and 3 and across face edges. Controls:
             swapped faces, a per-face box chain, a clamped (non-seamless) read.
@@ -57,7 +60,8 @@ import vk_validation  # noqa: E402
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("limits", "skip", "readback", "geometry", "probe", "compute_bindings", "geometry_projection")
+ROUNDS = ("limits", "skip", "readback", "geometry", "probe", "compute_bindings", "geometry_projection",
+          "geometry_hold")
 CHILD_TIMEOUT_S = 1800
 _ALLOWED_ENV: set[str] = set()
 OUT: Path | None = None     # the child's evidence folder (set by child)
@@ -66,7 +70,7 @@ CARD = (64, 64)
 FILL = [0.25, 0.5, 0.75, 1.0]
 EXTRA = [0.5, 0.25, 0.0, 0.0]
 CODES = {"skip": 210, "skip_plain": 211, "defocus": 212, "defocus_plain": 213, "geometry": 214,
-         "geometry_none": 215}
+         "geometry_none": 215, "geometry_hold": 216}
 
 FILL_FRAG = """#version 440
 layout(std140, binding = 18) uniform Fill { vec4 u_fill; };
@@ -89,6 +93,28 @@ void main() {
     uint i = gl_GlobalInvocationID.x;
     result[i] = cur[i];
     result[64u + i] = prev[i];
+}
+"""
+#: ABI 46's held entry: key B's rows and, in row 64, u_srpss_compute (trigger, last trigger, fresh, dispatches).
+HOLD_COMP = """#version 440
+layout(local_size_x = 64) in;
+layout(std140, binding = 0) uniform HoldDispatch { uvec4 u_srpss_compute; };
+layout(std430, binding = 1) readonly buffer Current { vec4 cur[]; };
+layout(std430, binding = 2) writeonly buffer Result { vec4 result[]; };
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    result[i] = cur[i];
+    if (i == 0u)
+        result[64u] = vec4(u_srpss_compute);
+}
+"""
+#: Its control: the same trigger, no geometry.
+HOLD_FREE_COMP = """#version 440
+layout(local_size_x = 1) in;
+layout(std140, binding = 0) uniform FreeDispatch { uvec4 u_srpss_compute; };
+layout(std430, binding = 1) writeonly buffer FreeResult { vec4 free_rows[]; };
+void main() {
+    free_rows[0] = vec4(u_srpss_compute);
 }
 """
 PROBE_SIDE = 32
@@ -151,6 +177,7 @@ void main() {
 }
 """
 SHADERS = {"fill.frag": FILL_FRAG, "extra.frag": EXTRA_FRAG, "geometry.comp": GEOMETRY_COMP, "look.frag": LOOK_FRAG,
+           "hold.comp": HOLD_COMP, "hold_free.comp": HOLD_FREE_COMP,
            **{f"face{f}.frag": face_frag(f) for f in range(6)},
            **{f"face_matrix{f}.frag": face_matrix_frag(f) for f in range(6)}, "face_matrix.vert": FACE_MATRIX_VERT}
 
@@ -1020,6 +1047,113 @@ def round_geometry_projection(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# ------------------------------------------------------------------------------------- ABI 46: the geometry hold
+
+def round_geometry_hold(core, engine, app, api: str, packs: dict) -> dict:
+    """ABI 46 (N5.6 "Native record and route"): a compute entry binding a geometry buffer is held at a record whose key
+    is not resident (its bank unwritten, then torn), its trigger kept: the record that finally holds the key dispatches
+    it with the last trigger it dispatched at (the drift window's suffix from there), never the held records' work over
+    the previous key's geometry. Control: an entry of the same trigger binding no geometry dispatches at every held
+    record (its last trigger the record before), so the hold is the geometry entry's alone. At rest (a repeated record)
+    nothing is held."""
+    import struct
+
+    import numpy as np
+    from rendering.native.mode import ComputeBinding, ComputePass, StorageBuffer
+
+    checks, facts = {}, {}
+    held = ComputePass("held", packs["hold.comp"], groups=(1, 1, 1), trigger="trig",
+                       bindings=(ComputeBinding("Current", "geo", "buffer", "read"),
+                                 ComputeBinding("Result", "held_rows", "buffer", "write")))
+    free = ComputePass("free", packs["hold_free.comp"], groups=(1, 1, 1), trigger="trig",
+                       bindings=(ComputeBinding("FreeResult", "free_rows", "buffer", "write"),))
+    geo = Raw({"name": "geo", "geometry": {"family": 0, "key": "geo_key"}})
+    buffers = (geo, StorageBuffer("held_rows", (GEO_ROWS + 1) * 16), StorageBuffer("free_rows", 16))
+    entries = (("geo_key", "u32", 8), ("trig", "u32", 1))
+    ns = (9 << 32) | 1
+    key_a, key_b, key_c = (ns, 2, 9, 0, 64, 5), (ns, 2, 9, 0, 64, 6), (ns, 2, 9, 0, 64, 7)
+    arena = Arena(bank_bytes=4096)
+    host = _host(core, CARD)
+
+    def read(scene):
+        got = scene.storage(app)
+        rows = np.frombuffer(got["held_rows"][3], np.float32).reshape(-1, 4)
+        tags = set(rows[:GEO_ROWS, 0].tolist())
+        return {"tag": tags.pop() if len(tags) == 1 else float("nan"),
+                "held_compute": [int(v) for v in rows[GEO_ROWS]],
+                "free_compute": [int(v) for v in np.frombuffer(got["free_rows"][3], np.float32)[:4]]}
+
+    def holds() -> float:
+        return _live(core).get("compute_geometry_holds") or 0
+
+    def bank_sequence(bank: int) -> int:
+        return struct.unpack_from("<I", arena.buf, arena._offset(0, bank))[0]
+
+    try:
+        arena.write(0, key_a, _rows(1.0, 64))
+        scene = _streamed(core, engine, host, "geometry_hold", (held, free), (), {}, entries,
+                          {"geo_key": _key_words(key_a), "trig": 1}, buffers=buffers)
+        try:
+            scene.mode._module.composite_mode_geometry_arena(scene.mode._handle(), arena.name)
+            for _ in range(3):
+                scene.draw(1, geo_key=_key_words(key_a), trig=1)
+            base = holds()
+            facts["a"] = read(scene)
+            for _ in range(5):
+                scene.draw(1, geo_key=_key_words(key_a), trig=1)
+            facts["at_rest_holds"] = holds() - base
+            checks["key_a_dispatched_first"] = facts["a"]["tag"] == 1.0 and facts["a"]["held_compute"][:3] == [1, 0, 1]
+            checks["nothing_held_at_rest"] = facts["at_rest_holds"] == 0
+            # Key B named before its bank is written: three records held, the free entry dispatched at each.
+            before = holds()
+            for trig in (2, 3, 4):
+                scene.draw(1, geo_key=_key_words(key_b), trig=trig)
+            facts["b_unwritten"] = {"holds": holds() - before, **read(scene),
+                                    "content_failing": scene.mode.state().get("content_failing")}
+            checks["unwritten_key_held_each_record"] = facts["b_unwritten"]["holds"] == 3
+            checks["held_entry_kept_its_geometry_and_trigger"] = (facts["b_unwritten"]["tag"] == 1.0
+                                                                   and facts["b_unwritten"]["held_compute"][0] == 1)
+            checks["control_free_entry_dispatched_through_the_hold"] = facts["b_unwritten"]["free_compute"][:2] == [4, 3]
+            checks["a_hold_is_not_a_failure"] = not facts["b_unwritten"]["content_failing"]
+            # The bank written: the next record dispatches over key B from the last dispatched trigger (1).
+            arena.write(1, key_b, _rows(2.0, 64))
+            before = holds()
+            scene.draw(1, geo_key=_key_words(key_b), trig=5)
+            facts["b_written"] = {"holds": holds() - before, **read(scene)}
+            checks["written_key_dispatched_from_the_kept_trigger"] = (
+                facts["b_written"]["holds"] == 0 and facts["b_written"]["tag"] == 2.0
+                and facts["b_written"]["held_compute"][:3] == [5, 1, 0])
+            # Key C's bank torn (its sequence odd, as while the worker writes it): held; mended: dispatched from 5.
+            arena.write(0, key_c, _rows(3.0, 64))
+            torn_at = arena._offset(0, 0)
+            sequence = bank_sequence(0)
+            struct.pack_into("<I", arena.buf, torn_at, sequence + 1)
+            before = holds()
+            for trig in (6, 7):
+                scene.draw(1, geo_key=_key_words(key_c), trig=trig)
+            facts["c_torn"] = {"holds": holds() - before, **read(scene),
+                               "reads_torn": _live(core).get("geometry_reads_torn")}
+            struct.pack_into("<I", arena.buf, torn_at, sequence + 2)
+            before = holds()
+            scene.draw(1, geo_key=_key_words(key_c), trig=8)
+            facts["c_mended"] = {"holds": holds() - before, **read(scene)}
+            checks["torn_bank_held"] = facts["c_torn"]["holds"] == 2 and facts["c_torn"]["tag"] == 2.0
+            checks["mended_bank_dispatched_from_the_kept_trigger"] = (
+                facts["c_mended"]["holds"] == 0 and facts["c_mended"]["tag"] == 3.0
+                and facts["c_mended"]["held_compute"][:3] == [8, 5, 0])
+        finally:
+            _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+        arena.close()
+    facts["after_teardown"] = {k: _live(core).get(k) for k in ("geometry_resident", "geometry_arenas",
+                                                                "compute_geometry_holds")}
+    checks["zero_residencies_after_teardown"] = (facts["after_teardown"]["geometry_resident"] == 0
+                                                 and facts["after_teardown"]["geometry_arenas"] == 0)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- the probe
 # A CPU twin of probe.py's chain on the same scene (each texel the direction it faces): OpenGL's cube-map faces (the
 # major-axis table, row 0 at t = 0), bilinear reads clamped at a face's edge, each level probe.py's 32-tap cone over
@@ -1292,7 +1426,7 @@ def child(args) -> dict:
     packs = load_packs(out)
     rounds = {"limits": round_limits, "skip": round_skip, "readback": round_readback, "geometry": round_geometry,
               "probe": round_probe, "compute_bindings": round_compute_bindings,
-              "geometry_projection": round_geometry_projection}
+              "geometry_projection": round_geometry_projection, "geometry_hold": round_geometry_hold}
     try:
         for name in args.rounds:
             if vulkan:

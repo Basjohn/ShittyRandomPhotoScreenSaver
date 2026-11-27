@@ -602,3 +602,39 @@ def test_a_cube_is_sampled_with_mips_and_primed_on_every_layer():
     assert not every_colour_prime_takes_every_layer(targets.replace(
         "barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;", "barrier.subresourceRange.layerCount = 1;",
         1))
+
+
+# ------------------------------------------------------- ABI 46: a compute entry waits for its geometry key (D3)
+
+def geometry_hold_is_wired(mode_cpp: str, storage_cpp: str) -> bool:
+    """decideDispatches holds an entry whose bound geometry buffer lacks the record's key: after the due check and
+    before anything of the dispatch (its flag, u_srpss_compute, its track), so the held entry's last trigger is the last
+    step it applied; the residency check compares the current key whole, strips "@previous" and never holds an entry
+    over a buffer that is not a geometry buffer."""
+    decide = _function(mode_cpp, "void ModeContent::decideDispatches()", "bool ModeContent::geometryKeysResident(")
+    keys = _function(mode_cpp, "bool ModeContent::geometryKeysResident(", "quint64 ModeContent::entryFreshKey(")
+    resident = _function(storage_cpp, "bool ModeStorage::geometryResident(", "bool ModeStorage::syncGeometry(")
+    hold = decide.find("if (!geometryKeysResident(pass)) {")
+    held = decide[hold:decide.find("        }", hold)]
+    return (0 <= decide.find("if (!due) {") < hold < decide.find("m_dispatch[i] = true;")
+            < decide.find("t.lastTrigger = value;")
+            and "countGeometryHold();" in held and "continue;" in held
+            and 'b.resource.endsWith("@previous") ? b.resource.chopped(9) : b.resource' in keys
+            and "!m_storage.geometryResident(base, key.value())" in keys
+            and "return slot->current != nullptr && slot->currentKey == key;" in resident
+            and "return true;                              // not a geometry buffer" in resident)
+
+
+def test_a_compute_entry_over_a_geometry_key_not_yet_resident_is_held_with_its_trigger_kept():
+    mode_cpp, storage_cpp = _source("mode_content.cpp"), _source("compute_passes.cpp")
+    assert geometry_hold_is_wired(mode_cpp, storage_cpp)
+    assert "compute_geometry_holds" in _source("module.cpp")
+    # Negative controls: no hold (the ABI 45 core dispatched a new epoch's steps over the old key's geometry); a hold
+    # after the track moved (the held record's steps counted as applied); a residency matching any resident key.
+    hold = "        if (!geometryKeysResident(pass)) {"
+    assert not geometry_hold_is_wired(mode_cpp.replace(hold, "        if (false) {"), storage_cpp)
+    moved = mode_cpp.replace("        t.lastTrigger = value;\n", "").replace(
+        hold, "        t.lastTrigger = value;\n" + hold)
+    assert not geometry_hold_is_wired(moved, storage_cpp)
+    assert not geometry_hold_is_wired(mode_cpp, storage_cpp.replace(
+        "return slot->current != nullptr && slot->currentKey == key;", "return slot->current != nullptr;"))
