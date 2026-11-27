@@ -119,7 +119,6 @@ def test_transport_material_uses_volume_semantic_colour_and_shared_material_path
 def test_linux_installers_have_independent_opt_outs_with_replacement_as_default() -> None:
     import shutil
     import subprocess
-    import tempfile
     from tools.linux_build import install_script
 
     for profile, executable in (("screensaver", "srpss-screensaver"), ("dashboard", "srpss-dashboard")):
@@ -142,18 +141,19 @@ def test_linux_installers_have_independent_opt_outs_with_replacement_as_default(
         assert 'Unknown option:' in script
         assert 'cannot be combined with catalogue preservation switches' in script
         if shutil.which("bash"):
-            syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True, check=False)
-            assert syntax.returncode == 0, syntax.stderr
-            # Only option parsing: no install/uninstall and no data mutation.
-            with tempfile.TemporaryDirectory() as directory:
-                script_path = Path(directory) / "install.sh"
-                script_path.write_text(script, encoding="utf-8")
-                usage = subprocess.run(["bash", str(script_path), "--help"], text=True, capture_output=True)
-                assert usage.returncode == 0 and "--keep-themes" in usage.stdout
-                invalid = subprocess.run(["bash", str(script_path), "--unknown"], text=True, capture_output=True)
-                assert invalid.returncode == 2 and "Unknown option" in invalid.stderr
-                conflicting = subprocess.run(
-                    ["bash", str(script_path), "--keep-themes", "--uninstall"],
-                    text=True, capture_output=True,
-                )
-                assert conflicting.returncode == 2 and "cannot be combined" in conflicting.stderr
+            # Bytes, not text mode: Windows text-mode stdin would turn every LF into CRLF before bash reads it.
+            syntax = subprocess.run(["bash", "-n"], input=script.encode("utf-8"), capture_output=True, check=False)
+            assert syntax.returncode == 0, syntax.stderr.decode("utf-8", "replace")
+            # Only option parsing: no install/uninstall and no data mutation. The script goes in on stdin as bytes, so
+            # neither a Windows path (WSL's bash cannot open one) nor CRLF translation reaches bash.
+            def run(*options: str) -> tuple[int, str, str]:
+                done = subprocess.run(["bash", "-s", "--", *options], input=script.encode("utf-8"),
+                                      capture_output=True, check=False)
+                return done.returncode, done.stdout.decode("utf-8", "replace"), done.stderr.decode("utf-8", "replace")
+
+            code, out, _err = run("--help")
+            assert code == 0 and "--keep-themes" in out
+            code, _out, err = run("--unknown")
+            assert code == 2 and "Unknown option" in err
+            code, _out, err = run("--keep-themes", "--uninstall")
+            assert code == 2 and "cannot be combined" in err

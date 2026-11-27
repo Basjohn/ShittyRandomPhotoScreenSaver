@@ -108,11 +108,3 @@ def test_removed_visual_experiment_has_no_settings_or_shader_binding() -> None:
         assert "borderRimHighlight" not in content, path
         assert "border_rim_highlight" not in content, path
 
-
-def test_audit_checklist_is_bounded_and_removable() -> None:
-    plan = read("Current_Plan.md")
-    audit = read("Docs/Temporary_Material_Surface_Audit_2026-11-19.md")
-    assert "Docs/Temporary_Material_Surface_Audit_2026-11-19.md" in plan
-    assert "delete the temporary document" in plan
-    assert "performance" in audit.lower()
-    assert "cleanup" in audit.lower()

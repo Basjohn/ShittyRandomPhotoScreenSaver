@@ -293,6 +293,11 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   fail; each passes with the default retention, so something process-scoped keeps a path into an earlier test's
   `tmp_path` (a cached preset tree or storage root). The setting was reverted. Find the cache and give each test its
   own root; this may also hide state leaking between tests.
+- [ ] Order-dependent failure (lead, 28 Nov; Borderless merge run): `test_qtquick_child_lock_scene.py::
+  test_child_lock_is_reset_adjacent_default_locked_and_does_not_retire_geometry` passes alone but fails after the 80
+  files that name `themes_tab`/`widgets_tab_defaults`/`widget_descriptors` (twice): `customLayoutClose-clock` is
+  visible but not enabled. Find the earlier test leaving process state (likely the same class as the `tmp_path` box
+  above), fix it at that owner.
 - [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
 - [ ] AC-14, AC-15 and AC-16 (same checklist).
 - [ ] The rest of the plan staleness audit of 12 Nov
