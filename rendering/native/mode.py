@@ -881,6 +881,16 @@ class NativeMode:
         table = schema if isinstance(schema, Mapping) else schema_table_entry(schema)
         self._module.composite_mode_bind(self._handle(), str(mapping_name), json.dumps(dict(table)),
                                          reader_config(expect, tuple(controls)))
+        # N5.6 (D3): a schema whose stream carries side mappings (Extruded Bubble's geometry arena) is told which item
+        # draws which stream, so it can name the stream's arena to the core (``geometry_arena``).
+        bound = getattr(schema, "bound", None)
+        if callable(bound):
+            bound(self, dict(expect or {}))
+
+    def geometry_arena(self, name: str) -> None:
+        """ABI 42 (D3): the stream's geometry arena by mapping name (the main process's ``GeometryArenaOwner``), opened
+        read-only by the core once per name; "" closes it."""
+        self._module.composite_mode_geometry_arena(self._handle(), str(name))
 
     def unbind(self) -> None:
         self._module.composite_mode_unbind(self._handle())

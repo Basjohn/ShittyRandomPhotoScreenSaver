@@ -40,3 +40,29 @@ def required_slot_bytes(mode: str, logical_kwargs: Mapping) -> int:
         if active('drift_specks'):
             geometry += SPECKS_FULL*CLOUD_GEOMETRY_BYTES
     return (BASE_SLOT_BYTES+geometry+15)//16*16
+
+
+def geometry_bank_bytes(mode: str, logical_kwargs: Mapping) -> int:
+    """The D3 geometry arena's bank bytes (``geometry_arena``): the largest admitted drift family's canonical maximum
+    geometry, or 0 when the stream has no drift family (no arena). Resolved at the same edge as the slot."""
+    mode_code(mode)
+    if mode != 'extruded_bubble':
+        return 0
+    from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import drawable_chains
+
+    def active(suffix):
+        return any(float(value) != 0. for value in logical_kwargs['extruded_bubble_'+suffix])
+
+    if not active('drift'):
+        return 0
+    largest = 0
+    if active('drift_chains'):
+        largest = drawable_chains(logical_kwargs['extruded_bubble_bead_chains'])*CHAIN_GEOMETRY_BYTES
+    if active('particles'):
+        if active('drift_snow'):
+            largest = max(largest, SNOW_FULL*CLOUD_GEOMETRY_BYTES)
+        if active('drift_specks'):
+            largest = max(largest, SPECKS_FULL*CLOUD_GEOMETRY_BYTES)
+    return (largest+15)//16*16

@@ -137,7 +137,7 @@ def test_failed_allocation_and_mismatched_ack_never_adopt_a_mapping(monkeypatch)
         assert reader.mapping_name == old and reader._staged_memory is None
         monkeypatch.setattr(module, 'create_frame_mapping', create)
         link = object.__new__(EngineWorkerLink)
-        link._mailbox, link.mapping_name = reader, old
+        link._mailbox, link.mapping_name, link._geometry_arena = reader, old, None
         failed, committed, sent = [], [], []
 
         def reply_with_stale_mapping(message, payload, *, on_reply, on_failed):
@@ -145,12 +145,19 @@ def test_failed_allocation_and_mismatched_ack_never_adopt_a_mapping(monkeypatch)
             on_reply({'mapping': old, 'engine_generation': 2, 'activation_id': 4})
 
         link._send = reply_with_stale_mapping
+        import core.visualizer_engine.extruded_bubble_native_schema as eb_schema
+
+        staged, stage = [], eb_schema.stage_stream_arena
+        monkeypatch.setattr(eb_schema, 'stage_stream_arena', lambda n: staged.append(stage(n)) or staged[-1])
         activation = offline_activation_request('extruded_bubble', 0, None, _settings('extruded_bubble', True))
         link.set_mode('extruded_bubble', activation, on_committed=lambda *a: committed.append(a),
                       on_failed=failed.append)
         assert failed and not committed and reader.mapping_name == old and reader._staged_memory is None
         with pytest.raises(FileNotFoundError):
             SharedMemory(name=sent[0]['capacity_change']['mapping'])
+        # N5.6 (D3): the activation's staged geometry arena goes with the refused commit, never adopted.
+        assert link._geometry_arena is None and len(staged) == 1
+        assert sent[0]['geometry_arena']['name'] == staged[0].name and staged[0].closed
     finally:
         reader.close()
 
