@@ -1,4 +1,7 @@
-"""Widgets -> General -> Style Overrides "Borderless": a latch on the real SettingsDialog.
+"""Themes -> Widget Themes "Borderless": a latch on the real SettingsDialog.
+
+The control lives on the Themes tab and writes ``widgets.global.borderless``; the Widgets tab (General -> Style
+Overrides) only releases it.
 
 Latch, every un-latch path (Reset Colours, the border width, each surface choice), persistence across a reload,
 and what the latch does to the resolvers every card reads. No preset or default value is pinned: widths and
@@ -38,11 +41,14 @@ def _open(manager):
     for _ in range(5):
         QCoreApplication.processEvents()
     tab = dialog.widgets_tab
-    if getattr(tab, "borderless_btn", None) is None:
+    if getattr(tab, "card_border_width_spin", None) is None:
         tab._btn_defaults.click()
         for _ in range(5):
             QCoreApplication.processEvents()
-    assert tab.borderless_btn is not None
+    assert tab.card_border_width_spin is not None
+    dialog._switch_tab(dialog._tab_index_for_key("themes"), animate=False)
+    for _ in range(5):
+        QCoreApplication.processEvents()
     return dialog, tab
 
 
@@ -54,21 +60,55 @@ def _close(dialog):
     QCoreApplication.processEvents()
 
 
+def _btn(tab):
+    return tab.window().themes_tab.borderless_btn
+
+
 def _stored(manager) -> bool:
     return resolve_widgets_borderless(manager.get("widgets", {}))
 
 
 def _latch(tab):
-    tab.borderless_btn.click()
+    _btn(tab).click()
     tab._save_settings_now()
-    assert tab.borderless_btn.isChecked()
+    assert _btn(tab).isChecked()
+    assert _stored_from(tab)
+
+
+def _stored_from(tab):
+    return resolve_widgets_borderless(tab._settings.get("widgets", {}))
+
+
+def test_the_control_lives_on_themes_and_not_on_widgets(manager):
+    dialog, tab = _open(manager)
+    try:
+        themes = dialog.themes_tab
+        assert themes.borderless_btn.isCheckable()
+        assert themes.widget_themes_pill is not None
+        assert themes._page_stack.widget(1).isAncestorOf(themes.borderless_btn)
+        assert getattr(tab, "borderless_btn", None) is None
+        assert not [b for b in tab.findChildren(type(themes.borderless_btn)) if b.text() == "Borderless"]
+        assert getattr(tab, "borderless_btn", None) is None
+    finally:
+        _close(dialog)
+
+
+def test_toggling_saves_the_key_without_the_widgets_tab(manager):
+    dialog, tab = _open(manager)
+    try:
+        dialog.themes_tab.borderless_btn.click()
+        assert _stored(manager)
+        dialog.themes_tab.borderless_btn.click()
+        assert not _stored(manager)
+    finally:
+        _close(dialog)
 
 
 def test_latch_persists_and_resolvers_draw_no_border(manager):
     dialog, tab = _open(manager)
     try:
-        assert not tab.borderless_btn.isChecked()
-        assert tab.borderless_btn.isCheckable()
+        assert not _btn(tab).isChecked()
+        assert _btn(tab).isCheckable()
         _latch(tab)
         widgets = manager.get("widgets", {})
         assert resolve_widgets_borderless(widgets)
@@ -87,7 +127,7 @@ def test_latch_survives_a_reload(manager):
         _close(dialog)
     dialog, tab = _open(manager)
     try:
-        assert tab.borderless_btn.isChecked()
+        assert _btn(tab).isChecked()
         assert _stored(manager)
     finally:
         _close(dialog)
@@ -101,7 +141,7 @@ def test_reset_colours_unlatches(manager):
         _on_reset_family_colors_to_theme(tab)
         for _ in range(3):
             QCoreApplication.processEvents()
-        assert not tab.borderless_btn.isChecked()
+        assert not _btn(tab).isChecked()
         assert not _stored(manager)
     finally:
         _close(dialog)
@@ -114,7 +154,7 @@ def test_editing_the_border_width_unlatches(manager):
         spin = tab.card_border_width_spin
         spin.setValue(spin.value() + 1 if spin.value() < spin.maximum() else spin.value() - 1)
         tab._save_settings_now()
-        assert not tab.borderless_btn.isChecked()
+        assert not _btn(tab).isChecked()
         assert not _stored(manager)
     finally:
         _close(dialog)
@@ -129,7 +169,7 @@ def test_each_surface_choice_unlatches(manager, combo_attr):
         combo = getattr(tab, combo_attr)
         combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
         tab._save_settings_now()
-        assert not tab.borderless_btn.isChecked()
+        assert not _btn(tab).isChecked()
         assert not _stored(manager)
     finally:
         _close(dialog)
@@ -143,7 +183,7 @@ def test_a_reload_does_not_unlatch_through_the_controls_it_refills(manager):
         tab.load_from_settings()
         for _ in range(3):
             QCoreApplication.processEvents()
-        assert tab.borderless_btn.isChecked()
+        assert _btn(tab).isChecked()
         assert _stored(manager)
     finally:
         _close(dialog)
