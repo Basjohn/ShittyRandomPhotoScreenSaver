@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from importlib import import_module
 
@@ -155,20 +155,50 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
     return frozenset(enabled)
 
 
-def quick_transition_implementation_loaded(transition_id: object) -> bool:
-    """Whether one transition's renderer module is imported already (its shader texts are built at its import), so the
-    idle warm-up has no import unit left for it. An unknown or unavailable transition has nothing to import: True."""
+#: The modules the scene renderers' modules import (shared by them, leaves first), so the idle warm-up imports each at
+#: its own unit before a renderer module itself (the hitch rows, 22 Nov: one import pulled them all in one go). A
+#: module missing here is still imported, with the renderer's module: a larger unit, never a wrong one.
+SHARED_RENDERER_MODULES = (
+    "rendering.gl_programs.mip_chain",
+    "rendering.quick.scene3d.compute",
+    "rendering.quick.scene3d.passes",
+    "rendering.quick.scene3d.population",
+    "rendering.quick.scene3d.resources",
+    "rendering.quick.scene3d.post",
+    "rendering.quick.scene3d.shafts",
+    "rendering.quick.scene3d.motion",
+    "rendering.quick.scene3d.trails",
+    "rendering.quick.scene3d.target",
+    "rendering.quick.scene3d.environment",
+    "rendering.quick.transitions.directions",
+)
+
+
+def next_quick_transition_warm_unit(transition_id: object) -> Callable[[], object] | None:
+    """The next GUI-thread warm-up unit of one transition's renderer module (None: none left; an unknown or
+    unavailable transition has none): one shared module (``SHARED_RENDERER_MODULES``) not yet imported, else the
+    module's own import, else the first of its ``WARM_PIECES`` (its shader texts, each built on first use and cached)
+    not yet built. Constructs nothing and touches no GL; a run builds whatever is left itself."""
     canonical = get_transition_descriptor_for_runtime_identity(transition_id)
     if canonical is None or not is_transition_available(canonical.setting_name):
-        return True
+        return None
     descriptor = _BY_ID.get(canonical.stable_id)
-    return descriptor is None or descriptor.module_name in sys.modules
+    if descriptor is None:
+        return None
+    module = sys.modules.get(descriptor.module_name)
+    if module is None:
+        name = next((name for name in SHARED_RENDERER_MODULES if name not in sys.modules), descriptor.module_name)
+        return lambda: import_module(name)
+    for piece in getattr(module, "WARM_PIECES", ()):
+        if piece.cache_info().currsize == 0:
+            return piece
+    return None
 
 
 def preload_quick_transition_implementation(transition_id: object) -> None:
     """Import one transition's renderer module ahead of its first run (GUI thread), so the
-    render thread's resolve is instant. Constructs nothing and touches no GL. One warm-up unit
-    (``BackgroundRenderItem.schedule_warm_step``): the module's import with its shader text build."""
+    render thread's resolve is instant. Constructs nothing and touches no GL. The idle warm-up imports it in bounded
+    units instead (``next_quick_transition_warm_unit``)."""
     canonical = get_transition_descriptor_for_runtime_identity(transition_id)
     if canonical is None:
         raise ValueError(f"unknown canonical transition: {transition_id!r}")

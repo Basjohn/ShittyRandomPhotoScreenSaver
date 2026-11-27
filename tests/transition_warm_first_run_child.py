@@ -1,14 +1,18 @@
 """Child process of ``test_transition_warm_units.py`` (a fresh interpreter: imports are process-wide): one transition's
-first run on the native background layer over a stand-in core, after a warm-up of the given kind, printing as JSON the
-modules imported during the run's start and its first frames.
+first run on the native background layer over a stand-in core, after a warm-up of the given kind, printing as JSON
+what the warm-up's units and the run's start and first frames imported and built.
 
-Usage: python tests/transition_warm_first_run_child.py <transition_id> <none|import|product|product_without_layer_units>
+A build is one shader text conversion (``portable._convert``, under ``portable_program`` and ``item_quad_program``) or
+one block merge (``native_scene.native_one_block``, under ``population_packs`` too).
+
+Usage: python tests/transition_warm_first_run_child.py <transition_id> <none|import|product>
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,6 +80,21 @@ class _Item:
 
 
 _WINDOW = _Window()
+_BUILDS = {"count": 0}
+
+
+def _count_builds() -> None:
+    from rendering.gl_programs import portable
+    from rendering.quick.transitions import native_scene
+
+    for module, name in ((portable, "_convert"), (native_scene, "native_one_block")):
+        original = getattr(module, name)
+
+        def counted(*args, _original=original, **kwargs):
+            _BUILDS["count"] += 1
+            return _original(*args, **kwargs)
+
+        setattr(module, name, counted)
 
 
 def _image(identity: str, value: int):
@@ -95,40 +114,44 @@ def main() -> None:
     from rendering.quick.transitions.state import TransitionRun
     from tools.transition_contact_sheet import production_transition_spec
 
+    _count_builds()
     native_background.NativeBackgroundLayer._arm = lambda self, signal: None
     native_background._fade_ms = lambda: 0
-    if warm == "product_without_layer_units":
-        native_background.NATIVE_WARM_UNITS = ()           # the control: the module's import alone (the old warm-up)
     layer = native_background.NativeBackgroundLayer(SimpleNamespace(mode=lambda _item: _Mode()), _Item())
     source, destination = _image("a", 40), _image("b", 200)
     layer.present(source)
     spec = production_transition_spec(transition_id, 1000)
     request = spec.build_request(runtime_generation=0, source_image=source, destination_image=destination)
     run = TransitionRun.start(run_id=1, request=request, start_ns=1_000_000_000)
-    units = 0
-    if warm == "import":
+    units: list[dict] = []
+    if warm == "import":                                   # the control: the warm-up before the split (the import alone)
         from rendering.quick.transitions.implementation_registry import preload_quick_transition_implementation
 
+        before, started = set(sys.modules), time.perf_counter()
         preload_quick_transition_implementation(transition_id)
-        units = 1
-    elif warm.startswith("product"):
+        units.append({"builds": _BUILDS["count"], "imported": len(set(sys.modules) - before),
+                      "ms": (time.perf_counter() - started) * 1000.0})
+    elif warm == "product":
         item = BackgroundRenderItem()
         item._native_layer = layer
-        while (unit := item._gui_warm_unit(transition_id)) is not None and units < 16:
+        while (unit := item._gui_warm_unit(transition_id)) is not None and len(units) < 64:
+            builds, before, started = _BUILDS["count"], set(sys.modules), time.perf_counter()
             unit()
-            units += 1
+            units.append({"builds": _BUILDS["count"] - builds, "imported": sorted(set(sys.modules) - before),
+                          "ms": (time.perf_counter() - started) * 1000.0})
     now = {"ns": run.start_ns}
     layer._clock_ns = lambda: now["ns"]
-    before = set(sys.modules)
+    builds, before = _BUILDS["count"], set(sys.modules)
     layer.transition(run)
     for step in range(1, 6):
         now["ns"] = run.start_ns + (run.end_ns - run.start_ns) * step // 6
         layer.tick()
     imported = sorted(set(sys.modules) - before)
+    built = _BUILDS["count"] - builds
     drawn = layer.runs == 1 and layer.ticks == 5
     layer.close()
     del app
-    print(json.dumps({"imported": imported, "units": units, "drawn": drawn}))
+    print(json.dumps({"imported": imported, "built": built, "units": units, "drawn": drawn}))
 
 
 if __name__ == "__main__":

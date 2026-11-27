@@ -340,15 +340,14 @@ class BackgroundRenderItem(QQuickItem):
         return True
 
     def _gui_warm_unit(self, transition_id: str):
-        """The next GUI-thread warm-up unit for ``transition_id`` (None: none left): the renderer module's import (its
-        shader texts are built at its import), then, on the native background, the layer's own units."""
-        from rendering.quick.transitions.implementation_registry import (
-            preload_quick_transition_implementation,
-            quick_transition_implementation_loaded,
-        )
+        """The next GUI-thread warm-up unit for ``transition_id`` (None: none left): the renderer module's (its
+        shared modules, its import, its shader text pieces: ``next_quick_transition_warm_unit``), then, on the native
+        background, the layer's own units."""
+        from rendering.quick.transitions import implementation_registry
 
-        if not quick_transition_implementation_loaded(transition_id):
-            return lambda: preload_quick_transition_implementation(transition_id)
+        unit = implementation_registry.next_quick_transition_warm_unit(transition_id)
+        if unit is not None:
+            return unit
         layer = self._native_layer
         return layer.next_warm_unit(transition_id) if layer is not None else None
 

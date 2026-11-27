@@ -39,6 +39,7 @@ layer waits for its window's framebuffer), ``afterRendering`` (once after a chan
 """
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -420,30 +421,14 @@ def field_deadline_ms(run: Any, settled: float) -> int:
     return max(1, min(60000, int(0.5 * margin_ms)))
 
 
-#: The modules a scene run's first frames import lazily (``scene_program``, ``scene_settings``, ``population_compute``,
-#: ``scene_storage``, ``_start_scene`` / ``_scene_frame``), so importing this module stays light; the warm-up imports
-#: them one unit ahead of a run (the hitch rows, 22 Nov: the first scene frame paid them).
-_SCENE_FRAME_MODULES = ("rendering.gl_programs.scene3d", "rendering.native.mode", "rendering.native.composite",
-                        "rendering.quick.scene3d.environment", "rendering.quick.transitions.native_scene")
-
-
-def _warm_renderer(transition_id: str) -> None:
-    """Warm-up unit: what a run's start resolves first in the process (the registry, the fragment and scene owners,
-    the shared post passes' sources, the packs shipped)."""
-    native_transition_renderer(transition_id)
-
-
-def _warm_scene_frame(_transition_id: str) -> None:
-    """Warm-up unit: the modules a run's first scene frame imports."""
-    from importlib import import_module
-
-    for name in _SCENE_FRAME_MODULES:
-        import_module(name)
-
-
-#: The layer's own warm-up units after the renderer module's import (``BackgroundRenderItem.schedule_warm_step`` owns
-#: that one): each one bounded, run one per spaced, already-rendered frame, in the order a run needs them.
-NATIVE_WARM_UNITS: tuple[Callable[[str], None], ...] = (_warm_renderer, _warm_scene_frame)
+#: The modules a run's start and first scene frames import lazily (``native_transition_renderer``, ``scene_program``,
+#: ``scene_settings``, ``population_compute``, ``scene_storage``, ``_start_scene`` / ``_scene_frame``), so importing
+#: this module stays light; the warm-up imports each at its own unit ahead of a run (the hitch rows, 22 Nov: the first
+#: scene frame paid them).
+_RUN_MODULES = ("rendering.gl_programs.scene3d", "rendering.native.mode", "rendering.native.composite",
+                "rendering.quick.scene3d.environment", "rendering.quick.transitions.native_scene",
+                "rendering.quick.transitions.fullscreen_pass", "rendering.quick.scene3d.motion",
+                "rendering.quick.scene3d.trails")
 
 
 def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[float, float]) -> dict:
@@ -503,7 +488,7 @@ class NativeBackgroundLayer:
         self._fields_pending: set[str] = set()
         self._clock_offset_ns = 0
         self._field_program: Any = None
-        self._warmed: dict[str, int] = {}    # the hitch rows (22 Nov): warm-up units done per transition id
+        self._resolved: set[str] = set()     # the hitch rows (22 Nov): transition ids the warm-up resolved
         self.runs = 0                    # runs the core drew
         self._waiting_kept_seen = 0      # the core's waiting_kept at the last traced run's end (--frame-trace only)
         self.ticks = 0                   # frames of a run given their progress
@@ -572,19 +557,25 @@ class NativeBackgroundLayer:
     # ---------------------------------------------------------------------------------------------- the transition
 
     def next_warm_unit(self, transition_id: str) -> Callable[[], None] | None:
-        """The next of ``NATIVE_WARM_UNITS`` not yet done for ``transition_id`` (None: nothing left, or the layer is
-        closed or drawing a run, which prepares whatever is left itself). The caller runs it at a rendered frame; it
+        """The layer's next warm-up unit for ``transition_id`` after its renderer module's (None: nothing left, or the
+        layer is closed or drawing a run, which prepares whatever is left itself): one of ``_RUN_MODULES`` not yet
+        imported, else the run's first resolve (``native_transition_renderer``: the registry, the fragment and scene
+        owners, the shared post passes' sources, the packs shipped). The caller runs it at a rendered frame; the resolve
         counts as done once run, even if it raised (a failed optional preparation never strands the warm-up)."""
         if self.closed or self._run is not None:
             return None
+        name = next((name for name in _RUN_MODULES if name not in sys.modules), None)
+        if name is not None:
+            from importlib import import_module
+
+            return lambda: import_module(name)
         key = str(transition_id)
-        done = self._warmed.get(key, 0)
-        if done >= len(NATIVE_WARM_UNITS):
+        if key in self._resolved:
             return None
 
         def unit() -> None:
-            self._warmed[key] = done + 1
-            NATIVE_WARM_UNITS[done](key)
+            self._resolved.add(key)
+            native_transition_renderer(key)
 
         return unit
 

@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
 from rendering.gl_programs.disintegrate_program import (
     DISINTEGRATE_FRAME_BLOCK,
-    DISINTEGRATE_GRAIN_BLOCK,
-    DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,
-    DISINTEGRATE_GRAIN_VERTEX_SOURCE,
     DISINTEGRATE_HOOKS,
-    DISINTEGRATE_INTACT_BLOCK,
-    DISINTEGRATE_INTACT_FRAGMENT_SOURCE,
-    DISINTEGRATE_INTACT_VERTEX_SOURCE,
     DISINTEGRATE_VERTICES,
+    disintegrate_grain_program,
     disintegrate_grid,
+    disintegrate_intact_program,
 )
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
@@ -33,19 +30,33 @@ from ..render_contract import QuickTransitionRenderFrame
 
 # N5.2f: the native scene's passes (the intact picture with the frame block merged into its pass block, the grains'
 # draw as its text is: it reads no frame block) and its population (its count and scatter packs merge the frame block
-# into the dispatch block); the grains are blended premultiplied over, the alpha kept (``blend_scope``).
+# into the dispatch block); the grains are blended premultiplied over, the alpha kept (``blend_scope``). Each is built on
+# first use (the hitch rows, 22 Nov): ``WARM_PIECES`` lists them in the order a run needs them, one warm-up unit each.
 _FRAME = DISINTEGRATE_FRAME_BLOCK.name
 _OVER = (("add", "one", "one_minus_src_alpha"), ("add", "zero", "one"))
-_SCENE_PASSES = (
-    NativeScenePass("intact", *native_one_block((DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE),
-                                                _FRAME),
-                    QUAD_MESH, "triangle_strip", 4, samplers=(("uOldTex", "old"), ("uNewTex", "new"))),
-    NativeScenePass("grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE, None,
-                    "triangle_strip", DISINTEGRATE_VERTICES, samplers=(("uOldTex", "old"),), blend=_OVER),
-)
-_POPULATION_COUNT, _POPULATION_SCATTER = population_packs(DISINTEGRATE_HOOKS, _FRAME)
-_POPULATION = NativeScenePopulation("grains", DISINTEGRATE_HOOKS, _FRAME, "grains", _POPULATION_COUNT,
-                                    _POPULATION_SCATTER)
+
+
+@functools.cache
+def _intact_pass() -> NativeScenePass:
+    vertex, fragment, _block = disintegrate_intact_program()
+    return NativeScenePass("intact", *native_one_block((vertex, fragment), _FRAME), QUAD_MESH, "triangle_strip", 4,
+                           samplers=(("uOldTex", "old"), ("uNewTex", "new")))
+
+
+@functools.cache
+def _scene_passes() -> tuple[NativeScenePass, ...]:
+    vertex, fragment, _block = disintegrate_grain_program()
+    return (_intact_pass(), NativeScenePass("grains", vertex, fragment, None, "triangle_strip", DISINTEGRATE_VERTICES,
+                                            samplers=(("uOldTex", "old"),), blend=_OVER))
+
+
+@functools.cache
+def _population() -> NativeScenePopulation:
+    count, scatter = population_packs(DISINTEGRATE_HOOKS, _FRAME)
+    return NativeScenePopulation("grains", DISINTEGRATE_HOOKS, _FRAME, "grains", count, scatter)
+
+
+WARM_PIECES = (disintegrate_intact_program, _intact_pass, disintegrate_grain_program, _scene_passes, _population)
 
 
 def disintegrate_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float]:
@@ -68,16 +79,17 @@ class QuickDisintegrateRenderer(NativeScenePasses):
 
     @classmethod
     def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
-        return _SCENE_PASSES
+        return _scene_passes()
 
     @classmethod
     def native_scene_populations(cls) -> tuple[NativeScenePopulation, ...]:
-        return (_POPULATION,)
+        return (_population(),)
 
     def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
         parameters = run.request.parameter_dict()
         disintegrate_parameters(parameters)
-        return NativeScene(_SCENE_PASSES, (), scene3d_request_samples(parameters), False, populations=(_POPULATION,))
+        return NativeScene(_scene_passes(), (), scene3d_request_samples(parameters), False,
+                           populations=(_population(),))
 
     def scene_show(self, run, sample) -> int:
         return eased_show(max(0.0, min(1.0, float(sample.eased_progress))))
@@ -93,7 +105,7 @@ class QuickDisintegrateRenderer(NativeScenePasses):
         columns, rows, _size = disintegrate_grid(int(pixels[0]), int(pixels[1]), grain)
         values = self._frame_values(progress, seed, wind, direction_vector(run.request.direction), columns, rows,
                                     logical_size)
-        values.update(population_values(_POPULATION, columns * rows, DISINTEGRATE_VERTICES))
+        values.update(population_values(_population(), columns * rows, DISINTEGRATE_VERTICES))
         return values
 
     @staticmethod
@@ -149,8 +161,8 @@ class QuickDisintegrateRenderer(NativeScenePasses):
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM),
-                   (r, "intact", DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE),
-                   (r, "grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE)]
+                   (r, "intact", *disintegrate_intact_program()[:2]),
+                   (r, "grains", *disintegrate_grain_program()[:2])]
         entries += [(r, *program) for program in population_programs("grains", DISINTEGRATE_HOOKS)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
@@ -176,14 +188,14 @@ class QuickDisintegrateRenderer(NativeScenePasses):
 
     def _draw_bound(self, frame, columns: int, rows: int) -> None:
         r = self._resources
-        program = r.program("intact", DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE)
+        program = r.program("intact", *disintegrate_intact_program()[:2])
         self._frame_block.attach(program)
         uniforms = r.uniforms("intact", self._INTACT_SAMPLERS)
         values = r.values("intact")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        with r.pass_blocks.bound(pack_block(DISINTEGRATE_INTACT_BLOCK, values)):
+        with r.pass_blocks.bound(pack_block(disintegrate_intact_program()[2], values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
@@ -195,14 +207,14 @@ class QuickDisintegrateRenderer(NativeScenePasses):
 
         with self._grains.bound():
             self._grains.update(r, "grains", DISINTEGRATE_HOOKS, population, DISINTEGRATE_VERTICES, configure)
-            program = r.program("grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE)
+            program = r.program("grains", *disintegrate_grain_program()[:2])
             uniforms = r.uniforms("grains", self._GRAIN_SAMPLERS)
             values = r.values("grains")
             bind_frame(program, uniforms, frame, values)
             values["uGrid"] = (columns, rows)
             gl.glBindVertexArray(frame.quad_vao)
             with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA), \
-                    r.pass_blocks.bound(pack_block(DISINTEGRATE_GRAIN_BLOCK, values)):
+                    r.pass_blocks.bound(pack_block(disintegrate_grain_program()[2], values)):
                 self._grains.draw(gl.GL_TRIANGLE_STRIP)
 
     def release_resources(self) -> None:

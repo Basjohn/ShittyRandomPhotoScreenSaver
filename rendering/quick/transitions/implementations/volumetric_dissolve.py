@@ -3,6 +3,7 @@ while the new one resolves through it."""
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping
 
 from OpenGL import GL as gl
@@ -11,16 +12,12 @@ from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
 from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.volumetric_dissolve_program import (
-    VOLUMETRIC_BACKDROP_BLOCK,
-    VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE,
-    VOLUMETRIC_BACKDROP_VERTEX_SOURCE,
     VOLUMETRIC_FRAME_BLOCK,
     VOLUMETRIC_HOOKS,
-    VOLUMETRIC_PARTICLE_BLOCK,
-    VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,
-    VOLUMETRIC_PARTICLE_VERTEX_SOURCE,
     VOLUMETRIC_VERTICES,
+    volumetric_backdrop_program,
     volumetric_grid,
+    volumetric_particle_program,
 )
 from rendering.quick import gl_query
 from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
@@ -41,22 +38,41 @@ _DIRECTION_CODES = frozenset(VOLUMETRIC_DIRECTIONS.values())
 # N5.2f: the native scene's passes, each with the frame block merged into its pass block, and its population (the
 # frame block merged into the count and scatter packs' dispatch block); the particles are blended premultiplied over,
 # the alpha kept (``blend_scope``). The copies are the two photo environments (Python's roles destination and source).
+# Each is built on first use (the hitch rows, 22 Nov): ``WARM_PIECES`` lists them in the order a run needs them, one
+# warm-up unit each.
 _FRAME = VOLUMETRIC_FRAME_BLOCK.name
 _OVER = (("add", "one", "one_minus_src_alpha"), ("add", "zero", "one"))
-_SCENE_PASSES = (
-    NativeScenePass("backdrop", *native_one_block((VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
-                                                  _FRAME),
-                    QUAD_MESH, "triangle_strip", 4,
-                    samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uNewCopy", "environment"),
-                              ("uOldCopy", "source_environment"))),
-    NativeScenePass("particles", *native_one_block((VOLUMETRIC_PARTICLE_VERTEX_SOURCE,
-                                                    VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE), _FRAME),
-                    None, "triangle_strip", VOLUMETRIC_VERTICES,
-                    samplers=(("uOldTex", "old"), ("uOldCopy", "source_environment")), blend=_OVER),
-)
-_POPULATION_COUNT, _POPULATION_SCATTER = population_packs(VOLUMETRIC_HOOKS, _FRAME)
-_POPULATION = NativeScenePopulation("particles", VOLUMETRIC_HOOKS, _FRAME, "particles", _POPULATION_COUNT,
-                                    _POPULATION_SCATTER)
+
+
+@functools.cache
+def _backdrop_pass() -> NativeScenePass:
+    vertex, fragment, _block = volumetric_backdrop_program()
+    return NativeScenePass("backdrop", *native_one_block((vertex, fragment), _FRAME), QUAD_MESH, "triangle_strip", 4,
+                           samplers=(("uOldTex", "old"), ("uNewTex", "new"), ("uNewCopy", "environment"),
+                                     ("uOldCopy", "source_environment")))
+
+
+@functools.cache
+def _particle_pass() -> NativeScenePass:
+    vertex, fragment, _block = volumetric_particle_program()
+    return NativeScenePass("particles", *native_one_block((vertex, fragment), _FRAME), None, "triangle_strip",
+                           VOLUMETRIC_VERTICES, samplers=(("uOldTex", "old"), ("uOldCopy", "source_environment")),
+                           blend=_OVER)
+
+
+@functools.cache
+def _scene_passes() -> tuple[NativeScenePass, ...]:
+    return (_backdrop_pass(), _particle_pass())
+
+
+@functools.cache
+def _population() -> NativeScenePopulation:
+    count, scatter = population_packs(VOLUMETRIC_HOOKS, _FRAME)
+    return NativeScenePopulation("particles", VOLUMETRIC_HOOKS, _FRAME, "particles", count, scatter)
+
+
+WARM_PIECES = (volumetric_backdrop_program, _backdrop_pass, volumetric_particle_program, _particle_pass, _scene_passes,
+               _population)
 
 
 def volumetric_parameters(parameters: Mapping[str, object]) -> tuple[int, int, float, float]:
@@ -91,17 +107,17 @@ class QuickVolumetricDissolveRenderer(NativeScenePasses):
 
     @classmethod
     def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
-        return _SCENE_PASSES
+        return _scene_passes()
 
     @classmethod
     def native_scene_populations(cls) -> tuple[NativeScenePopulation, ...]:
-        return (_POPULATION,)
+        return (_population(),)
 
     def native_scene(self, run, logical_size: tuple[float, float]) -> NativeScene:
         parameters = run.request.parameter_dict()
         volumetric_parameters(parameters)
-        return NativeScene(_SCENE_PASSES, (), scene3d_request_samples(parameters), True, source_environment=True,
-                           populations=(_POPULATION,))
+        return NativeScene(_scene_passes(), (), scene3d_request_samples(parameters), True, source_environment=True,
+                           populations=(_population(),))
 
     def scene_show(self, run, sample) -> int:
         return eased_show(max(0.0, min(1.0, float(sample.eased_progress))))
@@ -117,7 +133,7 @@ class QuickVolumetricDissolveRenderer(NativeScenePasses):
         sweep, radial = volumetric_sweep(run.request.direction)
         columns, rows, _size = volumetric_grid(int(pixels[0]), int(pixels[1]), size)
         values = self.frame_values(progress, seed, mist, depth, sweep, radial, columns, rows, logical_size)
-        values.update(population_values(_POPULATION, columns * rows, VOLUMETRIC_VERTICES))
+        values.update(population_values(_population(), columns * rows, VOLUMETRIC_VERTICES))
         return values
 
     @staticmethod
@@ -179,8 +195,8 @@ class QuickVolumetricDissolveRenderer(NativeScenePasses):
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
-                   (r, "backdrop", VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
-                   (r, "particles", VOLUMETRIC_PARTICLE_VERTEX_SOURCE, VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE)]
+                   (r, "backdrop", *volumetric_backdrop_program()[:2]),
+                   (r, "particles", *volumetric_particle_program()[:2])]
         entries += [(r, *program) for program in population_programs("particles", VOLUMETRIC_HOOKS)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
@@ -219,14 +235,14 @@ class QuickVolumetricDissolveRenderer(NativeScenePasses):
 
     def _draw_bound(self, frame, population: int) -> None:
         r = self._resources
-        program = r.program("backdrop", VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE)
+        program = r.program("backdrop", *volumetric_backdrop_program()[:2])
         self._frame_block.attach(program)
         uniforms = r.uniforms("backdrop", self._BACKDROP_SAMPLERS)
         values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        with r.pass_blocks.bound(pack_block(VOLUMETRIC_BACKDROP_BLOCK, values)):
+        with r.pass_blocks.bound(pack_block(volumetric_backdrop_program()[2], values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
@@ -237,14 +253,14 @@ class QuickVolumetricDissolveRenderer(NativeScenePasses):
 
         with self._particles.bound():
             self._particles.update(r, "particles", VOLUMETRIC_HOOKS, population, VOLUMETRIC_VERTICES, configure)
-            program = r.program("particles", VOLUMETRIC_PARTICLE_VERTEX_SOURCE, VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE)
+            program = r.program("particles", *volumetric_particle_program()[:2])
             self._frame_block.attach(program)
             uniforms = r.uniforms("particles", self._PARTICLE_SAMPLERS)
             values = r.values("particles")
             bind_frame(program, uniforms, frame, values)
             gl.glBindVertexArray(frame.quad_vao)
             with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA), \
-                    r.pass_blocks.bound(pack_block(VOLUMETRIC_PARTICLE_BLOCK, values)):
+                    r.pass_blocks.bound(pack_block(volumetric_particle_program()[2], values)):
                 self._particles.draw(gl.GL_TRIANGLE_STRIP)
 
     def release_resources(self) -> None:

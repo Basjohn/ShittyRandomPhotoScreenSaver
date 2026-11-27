@@ -20,6 +20,7 @@ to set with ``glUniform*`` (proved per program by ``tools/conventions_identity.p
 """
 from __future__ import annotations
 
+import functools
 import re
 from typing import Mapping, Sequence
 
@@ -38,6 +39,7 @@ _VARYING = re.compile(rf"{_START}([ \t]*)(?:layout\s*\(\s*location\s*=\s*\d+\s*\
 _LIST = re.compile(rf"{_START}([ \t]*)((?:(?:flat|smooth|noperspective|centroid)\s+)*)(uniform|in|out)[ \t]+(\w+)[ \t]+"
                    r"(\w+(?:[ \t]*,[ \t]*\w+)+)[ \t]*;", re.M)
 _COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
+_NOT_NEWLINE = re.compile(r"[^\n]")
 _VERSION = re.compile(r"\A[ \t]*#version[^\n]*\n")
 _SLOTS = {"mat4": 4, "mat3": 3, "mat2": 2}
 
@@ -49,9 +51,16 @@ def _const_int(source: str, name: str) -> int:
     return int(match.group(1))
 
 
+@functools.lru_cache(maxsize=32)
 def _strip_comments(source: str) -> str:
-    """Comments blanked to the same length (so offsets stay valid and nothing inside a comment matches)."""
-    return _COMMENTS.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), source)
+    """Comments blanked to the same length (so offsets stay valid and nothing inside a comment matches). Cached: one
+    conversion strips the same stage several times (the hitch rows, 22 Nov: most of a text build's cost)."""
+    return _COMMENTS.sub(_blank, source)
+
+
+def _blank(match: re.Match) -> str:
+    text = match.group(0)
+    return _NOT_NEWLINE.sub(" ", text) if "\n" in text else " " * len(text)
 
 
 def split_declaration_lists(source: str) -> str:
@@ -128,7 +137,9 @@ def _locate(source: str, direction: str, locations: Mapping[str, int] | None) ->
 
 
 def _vertex_index(source: str) -> str:
-    replaced = re.sub(r"\bgl_VertexID\b", "srpssVertexIndex", source)
+    if "gl_VertexID" not in source and "gl_InstanceID" not in source:
+        return source                             # the common case, without two word-boundary scans of the text
+    replaced =re.sub(r"\bgl_VertexID\b", "srpssVertexIndex", source)
     replaced = re.sub(r"\bgl_InstanceID\b", "srpssInstanceIndex", replaced)
     return source if replaced == source else _after_version(replaced, SRPSS_VERTEX_INDEX_GLSL)
 
