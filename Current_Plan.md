@@ -72,8 +72,19 @@ Continue the native sequence below with the repaired timing receipts. The report
    this plan sets a global order.
 
 **Resume here**
-- [ ] Live agents and where their work is (keep current). 27 Nov: **no agent is running.** All six retained worktrees
-  are clean, detached and merged into main:
+- [ ] Live agents and where their work is (keep current). 27 Nov:
+  - **Opus High `a7a8666a093ef7d48`**: N5.6 "Native record and route", **ABI 46**. Worktree
+    `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
+    `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
+    "ready for build".
+  - **Opus Medium `af79728844114c3a4`**: the N5.2f hitch box (warm-up fix). Worktree
+    `.claude/worktrees/agent-af79728844114c3a4`, branch `worktree-agent-af79728844114c3a4`, journal and evidence
+    under `<worktree>/.artifacts/` (`native_core/n5_2f/`). Stops at "ready for the rows".
+  - **Lead, unattended:** the ten N5.6 reference runs (two processes), receipts
+    `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`, arrays in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/`.
+  - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
+
+  All six retained worktrees are clean, detached and merged into main:
   - `C:/Users/Basjohn/.codex/worktrees/` `dashboard-naming`, `eb-compute-binding-limit` (N5.6 evidence, 1.5 MB),
     `eb-optical-reference`, `native-mat3-packing` and `native-viz-timing`;
   - `.claude/worktrees/agent-ac5f7832a73527151` (earlier N5.6 core and drift journal).
