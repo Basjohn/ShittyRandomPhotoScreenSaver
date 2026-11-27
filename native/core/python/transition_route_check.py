@@ -823,6 +823,9 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
 #: 1440p ones); Crossfade, timed in the same run, is the control the others are read against.
 COST_SIZES = ((2560, 1440), (3840, 2160))
 COST_FRAMES = 240
+#: The clear route control's alternating blocks (``_clear_control``): ten blocks of 24 frames a route, 240 frames each.
+CLEAR_CONTROL_BLOCKS = 10
+CLEAR_CONTROL_BLOCK_FRAMES = 24
 
 
 class _ClockTime:
@@ -873,27 +876,48 @@ def _clear_control(core, api: str, scene, host, clock, run) -> tuple[dict, dict]
     try:
         by_draw = drawn(0.5)
         neighbour = drawn(0.55)                                  # the comparison's own control: another progress
+        after = counts()
+        # Both routes timed under the same conditions (N5.2h successor): the round's main loop interleaves the Python
+        # host's frames, which this loop does not, so its figures are not comparable with the main loop's; here the
+        # pass route and the draw route alternate in blocks over the same progress span (the control is read per
+        # record), each block's samples taken after a flush.
+        timed: dict = {False: [], True: []}
         host.set_gpu_timer(True)
         host.gpu_samples()
-        for frame in range(COST_FRAMES):
-            clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))
-            scene.layer.tick()
-            scene.frames(1)
-        scene.frames(4)
-        samples = host.gpu_samples()
+        frame = 0
+        for _block in range(CLEAR_CONTROL_BLOCKS):
+            for draw_route in (False, True):
+                core.module.stage_control("surface_clear_draw", draw_route)
+                for _ in range(CLEAR_CONTROL_BLOCK_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
+                    frame += 1
+                    scene.layer.tick()
+                    scene.frames(1)
+                scene.frames(2)
+                timed[draw_route].extend(host.gpu_samples())
         host.set_gpu_timer(False)
-        after = counts()
     finally:
         core.module.stage_control("surface_clear_draw", False)
     pixels = blc.compare(by_pass, by_draw)
     control = blc.compare(by_draw, neighbour)
+
+    def stats(draw_route: bool, kind: int) -> dict:
+        return blc._ms_stats([x.nanoseconds / 1e6 for x in timed[draw_route] if x.kind == kind])
+
     record = {"available": True, "pixels_pass_against_draw": pixels, "pixels_against_next_progress": control,
               "pass_clears": [middle[0] - before[0], after[0] - middle[0]],
               "draw_clears": [middle[1] - before[1], after[1] - middle[1]],
-              "core_record_gpu_clear_draw": blc._ms_stats([x.nanoseconds / 1e6 for x in samples if x.kind == 2]),
-              "qrhi_frame_gpu_clear_draw": blc._ms_stats([x.nanoseconds / 1e6 for x in samples if x.kind == 0])}
+              # The alternating blocks: the record (kind 2) and the whole frame (kind 0) on each route.
+              "core_record_gpu_clear_pass": stats(False, 2), "core_record_gpu_clear_draw": stats(True, 2),
+              "qrhi_frame_gpu_clear_pass": stats(False, 0), "qrhi_frame_gpu_clear_draw": stats(True, 0)}
     opengl = api == "opengl"
+    pass_ms = record["core_record_gpu_clear_pass"].get("median_ms")
+    draw_ms = record["core_record_gpu_clear_draw"].get("median_ms")
     checks = {"clear_route_pixels_equal": pixels["equal"], "clear_route_control_differs": not control["equal"],
+              # OpenGL: the draw's share comes back under the control (the record's median above the pass route's);
+              # Vulkan draws on both phases, so nothing is judged there but that both were timed.
+              "clear_route_share_returns": pass_ms is not None and draw_ms is not None
+              and (draw_ms > pass_ms if opengl else True),
               # [default, control]: OpenGL clears by the pass by default and by the draw under the control; Vulkan by
               # the draw in both.
               "clear_route_counted": (record["pass_clears"][0] > 0) == opengl and record["pass_clears"][1] == 0

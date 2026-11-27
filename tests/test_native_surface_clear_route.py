@@ -81,11 +81,12 @@ def test_the_surface_is_cleared_by_its_pass_on_opengl_and_by_the_draw_under_the_
 class _Stand:
     """A stand-in core, scene and host for ``_clear_control``: counts per route and a frame that is the progress."""
 
-    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True):
+    def __init__(self, *, known=True, by_pass_on_opengl=True, same_pixels=True, share_returns=True):
         self.control = False
         self.known = known
         self.by_pass = by_pass_on_opengl
         self.same = same_pixels
+        self.share = share_returns
         self.live = {"mode_surface_pass_clears": 0, "mode_surface_draw_clears": 0}
         self.progress = 0.0
         self.module = SimpleNamespace(stage_control=self._stage_control)
@@ -115,7 +116,9 @@ class _Stand:
         pass
 
     def gpu_samples(self):
-        return [SimpleNamespace(kind=2, nanoseconds=50_000), SimpleNamespace(kind=0, nanoseconds=80_000)]
+        # The record's time with the draw back (the control on) carries the draw's share when it returns.
+        record = 50_000 + (16_000 if self.control and self.share else 0)
+        return [SimpleNamespace(kind=2, nanoseconds=record), SimpleNamespace(kind=0, nanoseconds=80_000)]
 
 
 def _run(stand, api="opengl"):
@@ -138,3 +141,9 @@ def test_the_clear_control_passes_on_the_pass_route_and_fails_on_its_negatives()
     assert _run(_Stand(known=False)) == ({"available": False}, {})
     assert not _run(_Stand(by_pass_on_opengl=False))[1]["clear_route_counted"]
     assert not _run(_Stand(same_pixels=False))[1]["clear_route_pixels_equal"]
+    # Both routes are timed in the control's own alternating blocks, and on OpenGL the draw's share must come back
+    # with the draw (a control that timed the same route twice, or a share that did not return, fails).
+    record, _checks = _run(_Stand())
+    assert record["core_record_gpu_clear_draw"]["median_ms"] > record["core_record_gpu_clear_pass"]["median_ms"]
+    assert not _run(_Stand(share_returns=False))[1]["clear_route_share_returns"]
+    assert _run(_Stand(share_returns=False, by_pass_on_opengl=False), api="vulkan")[1]["clear_route_share_returns"]
