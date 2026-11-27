@@ -80,6 +80,9 @@ Continue the native sequence below with the repaired timing receipts. The report
   - **Opus Medium `af79728844114c3a4`**: the N5.2f hitch box (warm-up fix). Worktree
     `.claude/worktrees/agent-af79728844114c3a4`, branch `worktree-agent-af79728844114c3a4`, journal and evidence
     under `<worktree>/.artifacts/` (`native_core/n5_2f/`). Stops at "ready for the rows".
+  - **Sonnet Medium `a75a706dc286f6d1a`**: Item 1 "Guard output lean" and the PNG publisher test defect. Worktree
+    `.claude/worktrees/agent-a75a706dc286f6d1a`, branch `worktree-agent-a75a706dc286f6d1a`, journal and evidence under
+    `<worktree>/.artifacts/`. No ABI.
   - **Lead, unattended:** the ten N5.6 reference runs (two processes), receipts
     `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`, arrays in `D:/Temp/Scratch/SRPSS/fast_proof/eb_n56_r251/`.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
