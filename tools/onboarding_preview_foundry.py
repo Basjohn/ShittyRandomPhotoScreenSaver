@@ -803,7 +803,7 @@ def _preview_weather(scene: _HiddenQuickScene, art: Path):
 
 def _preview_media(scene: _HiddenQuickScene, art: Path, *, borderless: bool | None = None):
     """The Media card. ``borderless`` None is the family preview; True/False renders the card the way the
-    family binder draws it with Style Overrides' Borderless latch set or clear (``widgets.global.borderless``)."""
+    family binder draws it with Widget Themes' Borderless latch set or clear (``widgets.global.borderless``)."""
     from PySide6.QtGui import QImage
     from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
     from rendering.quick.widgets.host import OverlayWidgetGeometry
@@ -1369,7 +1369,7 @@ def _build_rendered_visualizer_previews(scene: "_HiddenQuickScene", art: Path, o
         save_png_stable(onboarding_sheet_previews._with_shadow(framed), output / f"visualizer_{mode}.png")
 
 
-# Guided Setup's Borderless choice: the Media card without and with Style Overrides' Borderless latch, the two
+# Guided Setup's Borderless choice: the Media card without and with Widget Themes' Borderless latch, the two
 # stills identical in size, theme and wallpaper so only the border differs. ``borderless_off.png`` and
 # ``borderless_on.png`` are listed in the manifest under ``borderless`` by state.
 BORDERLESS_STATES: Final = (("off", False), ("on", True))

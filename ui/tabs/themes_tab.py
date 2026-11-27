@@ -37,6 +37,7 @@ from ui.widget_theme_selection import (
     synced_settings_theme_id_for_widget,
     synced_widget_theme_id_for_settings,
 )
+from core.settings.default_contract import WIDGETS_BORDERLESS_KEY, resolve_widgets_borderless
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import style_group_box
 
@@ -211,10 +212,12 @@ class ThemesTab(QWidget):
         return button
 
     @staticmethod
-    def _link_row(link_button,theme_filter) -> QHBoxLayout:
-        """The Linked / Independent button, then the type-in filter across the row's free space."""
+    def _link_row(link_button,theme_filter,*,after_link=None) -> QHBoxLayout:
+        """The Linked / Independent button, an optional matched button, then the type-in filter across the free space."""
         row=QHBoxLayout(); row.setContentsMargins(0,0,0,0); row.setSpacing(12)
         row.addWidget(link_button,0,Qt.AlignmentFlag.AlignVCenter)
+        if after_link is not None:
+            row.addWidget(after_link,0,Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(theme_filter,1,Qt.AlignmentFlag.AlignVCenter)
         return row
 
@@ -279,14 +282,45 @@ class ThemesTab(QWidget):
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.widget_keep_synced=self._make_link_button()
         self.widget_theme_list=ThemeListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        # Borderless: the one control for widgets.global.borderless (Widgets' release paths clear the key and
+        # the store's change signal brings this button back in step). It matches Linked: same class, style,
+        # width and height; its checked look is Linked's checked look.
+        self.borderless_btn=QPushButton("Borderless"); self.borderless_btn.setCheckable(True)
+        self.borderless_btn.setMinimumWidth(240)
+        shared_styles.bind_shared_styles(self.borderless_btn,"THEME_LINK_BUTTON_STYLE",base_style="")
+        self.borderless_btn.setToolTip(
+            "Hides every widget border: card, header, Media and Steam outlines. The Card "
+            "Border Width and colours are kept. Reset All Colours to Theme, editing the "
+            "border width or changing a surface choice under Widgets > General > Style Overrides releases it."
+        )
+        self.borderless_btn.setChecked(resolve_widgets_borderless(self._settings.get("widgets")))
+        self.borderless_btn.toggled.connect(self._on_borderless_toggled)
         self.widget_theme_filter=ThemeFilterField(self.widget_theme_list,height_buddy=self.widget_keep_synced)
-        group_layout.addLayout(self._link_row(self.widget_keep_synced,self.widget_theme_filter))
+        group_layout.addLayout(self._link_row(self.widget_keep_synced,self.widget_theme_filter,after_link=self.borderless_btn))
+        self._settings.settings_changed.connect(self._on_store_changed)
         self.widget_theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("widgets", theme_id))
         shared_styles.apply_settings_list_style(self.widget_theme_list)
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
         self.widget_theme_status=QLabel(""); self.widget_theme_status.setWordWrap(True)
         shared_styles.apply_shared_label_style(self.widget_theme_status,"INFO_LABEL_STYLE"); group_layout.addWidget(self.widget_theme_status)
         page_layout.addWidget(group); page_layout.addStretch(); return page
+
+    def _on_borderless_toggled(self, checked: bool) -> None:
+        self._settings.set(WIDGETS_BORDERLESS_KEY, bool(checked))
+
+    def _on_store_changed(self, key, _value) -> None:
+        if key == "*" or key == "widgets" or key.startswith("widgets."):
+            self._sync_borderless_button()
+
+    def _sync_borderless_button(self) -> None:
+        button=getattr(self,"borderless_btn",None)
+        if button is None:
+            return
+        latched=resolve_widgets_borderless(self._settings.get("widgets"))
+        if button.isChecked()!=latched:
+            blocker=QSignalBlocker(button)
+            button.setChecked(latched)
+            del blocker
 
     def _sync_link_buttons(self, checked: bool) -> None:
         """Publish one shared link state to both theme pages without recursion."""
@@ -354,6 +388,7 @@ class ThemesTab(QWidget):
         """Reset/Import edge: show the persisted selections again (the dialog has already re-derived the active
         themes). Both lists keep their items and connections; only the selection, link state and status follow."""
         resolution=resolve_persisted_settings_theme(self._settings,self._catalog)
+        self._sync_borderless_button()
         self._loading_selection=True
         try:
             self._select_theme_id(resolution.entry.theme_id)

@@ -182,7 +182,7 @@ def widget_builders():
 
 
 def apply_borderless() -> None:
-    """Draw every captured card as Style Overrides' Borderless latch wants it: the latch in the
+    """Draw every captured card as Widget Themes' Borderless latch wants it: the latch in the
     widgets mapping, each family config through ``with_borderless`` and the card shell without its
     border width (what the family binder does in the product)."""
 
@@ -467,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--materials", nargs="+", default=["normal", "glass"])
     parser.add_argument("--visualizer-materials", nargs="+", default=["normal", "glass", "acrylic"])
     parser.add_argument("--borderless", action="store_true",
-                        help="draw the widgets as Style Overrides' Borderless latch wants them")
+                        help="draw the widgets as Widget Themes' Borderless latch wants them")
     parser.add_argument("--only", nargs="+", help="widget names (or 'visualizer') to capture")
     parser.add_argument("--fill-variants", action="store_true",
                         help="also capture the Visualizer fill/material combination candidates")

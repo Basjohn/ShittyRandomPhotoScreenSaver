@@ -2,7 +2,7 @@
 
 The card is an ordinary card (shared Surface Material row, shared card controls). The pulse ring
 and, separately, the ring's inner circle each carry their own persisted material choice, and the
-ring is a special object that still draws when Style Overrides' Borderless is on.
+ring is a special object that still draws when Widget Themes' Borderless is on.
 """
 from __future__ import annotations
 

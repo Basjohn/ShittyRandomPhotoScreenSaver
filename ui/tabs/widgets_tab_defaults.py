@@ -32,6 +32,7 @@ from core.settings.default_contract import (
     CARD_BORDER_WIDTH_MIN_PX,
     admit_card_border_width_setting_px,
     resolve_card_border_width_setting_px,
+    WIDGETS_BORDERLESS_KEY,
     resolve_widgets_borderless,
 )
 
@@ -149,6 +150,7 @@ def _reset_family_color_overrides_to_theme(tab: "WidgetsTab") -> tuple[str, ...]
     # Reset Colours un-latches Borderless (the borders it hid are colours the reset restores).
     global_section = widgets.get("global")
     if isinstance(global_section, Mapping) and resolve_widgets_borderless(widgets):
+        tab._settings.set(WIDGETS_BORDERLESS_KEY, False)  # publishes, so the Themes control follows
         widgets["global"] = {**global_section, "borderless": False}
         changed.append("widgets.global.borderless")
 
@@ -934,15 +936,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     px_label.setMinimumWidth(24)
     border_row.addWidget(px_label)
     border_row.addStretch()
-    tab.borderless_btn = OutlinedButton("Borderless", role="secondary")
-    tab.borderless_btn.setCheckable(True)
-    tab.borderless_btn.setToolTip(
-        "Hides every widget border: card, header, Media and Steam outlines. The Card "
-        "Border Width and colours are kept. Reset All Colours to Theme, editing the "
-        "border width or changing a surface choice here releases it."
-    )
-    tab.borderless_btn.toggled.connect(lambda _checked, owner=tab: owner._save_settings())
-    border_row.addWidget(tab.borderless_btn)
+    # Borderless lives on Themes -> Widget Themes (ThemesTab owns the control and the write);
+    # the release paths below only clear the stored key.
 
     from rendering.quick.widgets.surface_material import SURFACE_MATERIALS, SURFACE_MATERIAL_LABELS, THEME
 
@@ -1139,12 +1134,12 @@ def _select_surface_material(tab: WidgetsTab, material: object) -> None:
 
 
 def release_borderless(tab: WidgetsTab) -> None:
-    """Un-latch Style Overrides' Borderless (the caller saves)."""
+    """Un-latch Borderless (Themes -> Widget Themes): clear the stored key now; the Themes
+    control follows the store's change signal."""
 
-    button = getattr(tab, "borderless_btn", None)
-    if button is not None and button.isChecked():
-        with QSignalBlocker(button):
-            button.setChecked(False)
+    settings = getattr(tab, "_settings", None)
+    if settings is not None and resolve_widgets_borderless(settings.get("widgets")):
+        settings.set(WIDGETS_BORDERLESS_KEY, False)
 
 
 def _on_surface_choice_changed(tab: WidgetsTab) -> None:
@@ -1261,10 +1256,6 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
     if hasattr(tab, "card_border_width_spin"):
         tab.card_border_width_spin.setValue(border_width)
-    borderless_btn = getattr(tab, "borderless_btn", None)
-    if borderless_btn is not None:
-        with QSignalBlocker(borderless_btn):
-            borderless_btn.setChecked(resolve_widgets_borderless(widgets_config))
 
 
 def collect_general_input_settings(tab: WidgetsTab) -> dict[str, bool]:
@@ -1319,11 +1310,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     )
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
-        "borderless": (
-            tab.borderless_btn.isChecked()
-            if getattr(tab, "borderless_btn", None) is not None
-            else resolve_widgets_borderless(existing_widgets)
-        ),
+        "borderless": resolve_widgets_borderless(existing_widgets),
         "card_border_width_px": admit_card_border_width_setting_px(border_width),
         "child_collision_enabled": (
             tab.widget_child_collision_enabled.isChecked()

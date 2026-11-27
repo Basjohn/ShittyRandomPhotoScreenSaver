@@ -264,7 +264,7 @@ class GamesYouFollowPresentationModel(QObject):
             info_border=(102, 192, 244, 230),
             info_text=(237, 246, 252, 245),
         ))
-        if resolve_widgets_borderless(widgets):  # Style Overrides' Borderless latch
+        if resolve_widgets_borderless(widgets):  # Widget Themes' Borderless latch
             self._header_border = (*self._header_border[:3], 0)
             self._palette = hide_borders(self._palette)
         self._display = project_followed_news(FollowedNewsSnapshot("unavailable"))

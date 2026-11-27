@@ -431,7 +431,7 @@ BORDERLESS_STILLS = (
     (False, "onboarding/borderless_off.png", "Keep Borders",
      "Widget cards keep their outlines, as they are drawn by default."),
     (True, "onboarding/borderless_on.png", "Go Borderless",
-     "Hides every widget border: card, header, Media and Steam outlines. Widgets > General > Style Overrides has "
+     "Hides every widget border: card, header, Media and Steam outlines. Themes > Widget Themes has "
      "the same Borderless setting, and your Card Border Width and colours are kept."),
 )
 
@@ -494,7 +494,7 @@ class InteractionPage(Page):
         return resolve_widgets_borderless(self.settings.get("widgets"))
 
     def _choose_borderless(self, borderless: bool) -> None:
-        # The setting Style Overrides' Borderless writes: one key, staged in the wizard's draft.
+        # The setting Themes -> Widget Themes' Borderless writes: one key, staged in the wizard's draft.
         from core.settings.default_contract import WIDGETS_BORDERLESS_KEY
         self.settings.set(WIDGETS_BORDERLESS_KEY, borderless)
         self._mark_borderless(borderless)
