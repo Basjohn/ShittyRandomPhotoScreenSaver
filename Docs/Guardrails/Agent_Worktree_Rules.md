@@ -19,6 +19,13 @@ that never started.
 - Do not call `update_plan` or `wrap_up`. Do not edit `Current_Plan.md`: the lead owns it. Your task is written there in detail and that plan item is your brief; work through its boxes in order and report box by box.
 - The one exception: where your brief asks you to edit `Current_Plan.md` (for example a line under a box saying what was built), you edit exactly that and nothing else in the file; you never tick, delete or reword a box.
 - Tests: run only the test files related to what you change, in the foreground, with `timeout 900` in front and `-p no:cacheprovider -q`. When you change a shared owner (DisplayManager, a runtime, a settings owner), grep `tests/` for the changed method and class names and run every file that hits, not only the files you edit. Never the whole suite, never `--isolated`. No background commands and no polling loops; nothing of yours may still be running when you report. New tests use the shared doubles in `tests/_display_manager_doubles.py` instead of hand-built stubs, and the real `SettingsDialog` instead of stub hosts.
+- Spend lean (operator, 27 Nov: every turn re-reads your whole context, so turns and kept output are the cost):
+  - Fewer turns: send independent tool calls together in one message (several Reads, Greps, plain git calls), and
+    put a sequence of checks or commands into one script under `.artifacts/scratch/<your task>/` run by path,
+    instead of one call per step.
+  - Lean output: long harness, render or test output goes to a file in your evidence or scratch folder; print only
+    a short summary (verdict, counts, failing items) and read the file in slices when you need a detail. Tests run
+    with `-q`; never print whole frame tables, logs or JSON reports into the conversation.
 - Load you do not start is not a load run. The operator's own use of the machine (a game, normal work) is the
   condition the product must handle (operator, 22 Nov: "This load is modest and does not excuse bad behaviour at
   all"). Run timing, hitch and cost checks under it when they are due, and record it with the figures. Never wait

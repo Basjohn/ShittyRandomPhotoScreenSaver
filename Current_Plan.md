@@ -858,7 +858,8 @@ the feature (D3D11 is not stated).
     agent id under "Live agents"). Agents never build: when the C++ for the first three sub-boxes is written and
     committed (with its Python side and tests that run without the new module), stop and report "ready for build";
     the lead builds the branch on GitHub (`build_runner.py --mode github --run --select native_module`) and resumes
-    the agent with the module for the L proof. At most two replay or identity processes at once. Audit: Opus High
+    the agent with the module for the L proof (or, if its context is past about 200k, a fresh successor from the
+    branch and journal; handbook 7a). At most two replay or identity processes at once. Audit: Opus High
     at merge (core concurrency).
     - [ ] Give the main process ownership of the named D3 mapping. Pass the name and identity to the worker and
       core. Finish each bank's seqlock write before `PacketMailbox.publish` exposes its key. Reuse a bank only
