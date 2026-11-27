@@ -79,9 +79,11 @@ Continue the native sequence below with the repaired timing receipts. The report
     "ready for build". 28 Nov: sub-boxes 1 and 2 done on the branch (`e7c0764b3` ABI 46 hold, `8d635e313`
     arena, seqlock, drift-window stream); built on GitHub from `8d635e31` (run 46075163413) and resumed for
     sub-box 3, the L proof, the arena close on a pending mode change and the ABI 46 hold check.
-  - **Opus Medium `a57f8463d6a354e23`**: N5.2h Gate (native OpenGL route cost, root cause first). Worktree
-    `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`, journal and evidence under
-    `<worktree>/.artifacts/`. Stops at "ready for build" on any C++.
+  - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
+    (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
+    `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
+    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; the lead builds the branch on GitHub
+    (28 Nov) and starts a fresh Opus Medium successor from the branch and this box.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -274,6 +276,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   fail; each passes with the default retention, so something process-scoped keeps a path into an earlier test's
   `tmp_path` (a cached preset tree or storage root). The setting was reverted. Find the cache and give each test its
   own root; this may also hide state leaking between tests.
+- [ ] Hidden-host owner guard red (N5.2h agent, 28 Nov): `tests/test_quick_backend_owner.py::
+  test_every_hidden_host_user_goes_through_the_owner` fails because `native/core/python/eb_core_check.py` and
+  `native/core/python/waveform_check.py` create hidden hosts outside the owner. Route them through the owner.
 - [ ] Order-dependent failure (lead, 28 Nov; Borderless merge run): `test_qtquick_child_lock_scene.py::
   test_child_lock_is_reset_adjacent_default_locked_and_does_not_retire_geometry` passes alone but fails after the 80
   files that name `themes_tab`/`widgets_tab_defaults`/`widget_descriptors` (twice): `customLayoutClose-clock` is
@@ -1499,13 +1504,36 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     `n52f_cost`) puts N5.2f's native OpenGL (0.53-0.77 ms) above Python's (0.27-0.46); find that route overhead first.
     Behaviour under modest load (a game running) is a target, never an excuse: hitch rows run and must pass under it.
     Proof: the proof guide's section 3, "A transition port", Performance, every bullet. Binding (lead, 28 Nov):
-    - [ ] Root cause first, on the product route, off-screen (hidden host, 3840 x 2160 and 2560 x 1440): split
+    28 Nov report (evidence `20261128_route_cost_root_cause/`, before-table `20261128_n52h_cost_before_all/`):
+    Crossfade on the same frames, Python 0.061 / native 0.104 ms at 4K (0.030 / 0.053 at 1440p). Named shares: the
+    surface's full-triangle clearing draw (0.020 ms at 4K; `mode_content.cpp` `recordPasses`; fixed on OpenGL by the
+    pass's own clear in `b483770bc`, Vulkan keeps it per rule B); the composite pass, Qt drawing the kept native
+    surface into the window (0.030 ms at 4K; `composite.cpp`; open, below); the old cost round timed Python as a bare
+    draw (fixed in `6e754c85d`: `python_product_frame_gpu` against `qrhi_frame_gpu`). CPU per frame is half Python's;
+    `mode.texture` is a per-run copy (2.35 / 4.45 ms), below Python's first run frame (25-33 ms). Ruled out: per-frame
+    sync, readback, resource or pipeline work, and a bridge copy. Fragment transitions sit about 0.047 ms above Python
+    at 4K (the same two shares); scene transitions 0.06-0.15 ms at plain settings, up to about 0.9 ms with 4x motion
+    blur and trails (`crumble_both_4x`, `glass_shatter_both_4x`).
+    - [x] Root cause first, on the product route, off-screen (hidden host, 3840 x 2160 and 2560 x 1440): split
       Crossfade's native OpenGL frame cost against Python's on the same frames into GPU (timestamps around each
       pass) and CPU (submit, state, uniform upload, sync). Name each share over 0.02 ms with its owner. Candidates to
       prove or rule out: an extra pass, clear or copy on the native route (including the wrapped-texture bridge),
       a sync or readback, per-frame resource or pipeline work, and the native `mode.texture` copy measured at
       7-13 ms per run (N5.2f agent, 27 Nov: attribute whether it is per run or per frame and where it lands). Each
       named share gets a negative control (remove it, the share goes).
+    - [ ] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
+      without the draw, clears counted by route, the draw's time back with `surface_clear_draw`), the route check's
+      pixels unchanged, and the Vulkan figures not worse.
+    - [ ] Scene transitions next (the larger gap): measure the scene targets' own clearing draw (same pattern near
+      `mode_content.cpp` line 7976) and each share that grows with motion blur, trails and 4x, by owner, with the
+      same negative controls; fix at the owner.
+    - [ ] The composite pass (lead's decision, 28 Nov; D7 row 10 stands: nothing reads the window). When no reader
+      needs the kept surface on that frame (backdrop demand zero, no capture), record the background straight into the
+      window's pass and skip the surface and its composite; when a reader needs it (D7's pyramid while demand is above
+      zero, captures), keep the surface. One route with an optional output, not a second renderer. First list every
+      reader of the kept surface (D7 pyramid, quarter-turn orientation and fades in the composite, captures, Studio,
+      idle frames that only re-composite) with what each costs either way; if a reader rules the design out, stop
+      and report before building.
     - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
       below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
       Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
