@@ -830,14 +830,22 @@ the feature (D3D11 is not stated).
     in the reference root.
     - [ ] Redraw the remaining alternates with frozen adaptive settings, single sampling and masks. Use
       `conventions_identity.mode_runs('extruded_bubble', offers=True)`. Budget 30 s per run and take, apply the
-      late-window rule below, and run at most two reference processes at once.
+      late-window rule below, and run at most two reference processes at once. Lead, 27 Nov: these ten are
+      continuous 30 s comparisons, never windowed, so none needs the whole take; the keys that get late coverage
+      windows (drift direction, collision scope, audio block size) draw their whole-take references with the
+      Coverage windows box. Running unattended (lead), receipts `.artifacts/evidence/native_core/n5_6/20261127_refs_<take>/`.
       - [ ] Display alternate SCENE (`:b`) on ragdoll and nightsolong.
       - [ ] Display lighting BEAM (`extruded_bubble_lighting_coverage=0`) on each take.
       - [ ] Display Sunlit Surface (`extruded_bubble_light_type=0`) on human and ragdoll.
       - [ ] Display BEAM emission (`extruded_bubble_emission_geometry=0`) on nightsolong.
       - [ ] Base SCENE at overscan (`extruded_bubble@overscan`) on ragdoll and nightsolong.
   - [ ] **Native record and route.** Use the [drift metadata proof](.artifacts/evidence/native_core/n5_6/20261123_drift_projection/report.md)
-    and the source reading for field and resource ownership.
+    and the source reading for field and resource ownership. **ABI 46 reserved** for this box (27 Nov, Opus High;
+    agent id under "Live agents"). Agents never build: when the C++ for the first three sub-boxes is written and
+    committed (with its Python side and tests that run without the new module), stop and report "ready for build";
+    the lead builds the branch on GitHub (`build_runner.py --mode github --run --select native_module`) and resumes
+    the agent with the module for the L proof. At most two replay or identity processes at once. Audit: Opus High
+    at merge (core concurrency).
     - [ ] Give the main process ownership of the named D3 mapping. Pass the name and identity to the worker and
       core. Finish each bank's seqlock write before `PacketMailbox.publish` exposes its key. Reuse a bank only
       after `consumed_sequence` acknowledges a successor with a different key for that family. Preserve the
@@ -1355,6 +1363,26 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     game's CPU load past 33 ms. Fix (not N5.2f-scoped): warm the next transition's module import and text build
     gradually ahead of its run (warm-up rule; audit low L6, N3.6), then retake the rows under the same running load,
     copying each per-row session folder out between runs. Volumetric Dissolve's 182.6 ms gap: trace lost, retake it.
+    Dispatched 27 Nov (Opus Medium, agent id: see "Live agents"). Binding for this box:
+    - [ ] Root cause first, on the product path: show the first-run `transition()` cost split (module import, shader
+      text build, first scene frame import) on a hidden host, with a negative control (a pre-warmed module removes
+      that share).
+    - [ ] Fix at the owner, wherever it lives (the transition controller, the renderer registry, the native
+      background, the prewarm owner): the next likely transition's module import and shader text build are warmed
+      **gradually**: one bounded unit per spaced, already-rendered frame (piggybacked on frames the window renders
+      anyway, spaced like S11's >= 0.2 s), next-likely transition first; never at startup, never in a burst, no new
+      timers, threads, polling or forced frames; a run still prepares whatever is left. An image change resolves its
+      transition only ~14 ms before its first frame, so the warm-up must not depend on that lead time. Guard test with
+      a control seen failing on the old code (the first run's `transition()` pays the import).
+    - [ ] Agent: prove the fix off-screen first: on a hidden host, the first run's `transition()` after the warm-up
+      pays no import or text build, and the warm-up units land one per spaced rendered frame (their per-frame cost
+      recorded). Then stop and report "ready for the rows" with the commit.
+    - [ ] Lead (Display 1 runs are the lead's alone): retake the hitch rows, Disintegrate and Volumetric Dissolve
+      (`preflip_pack.py --rows "transition/<id>/*" --per-row --backend native-vulkan
+      --app-arg=--graphics-backend=vulkan`; proof guide section 3, "A transition port", Performance): no gap over
+      33 ms inside a run, first run included. Copy each row's trace and session folder out before the next row.
+      The operator's own running load is no load run: measure under it, record whole-machine CPU and GPU. Never
+      while the lead's own `owner_render_parity.py` reference renders run (our load).
   - No cull fallback (lead, 22 Nov): indirect draw is core Vulkan 1.0 and OpenGL 4.0, and Python's population already
     draws with `glDrawArraysIndirect`, so no supported card lacks it; the core refuses with its reason if one ever does
     (ABI 41's facts record the answer). N4.c's one-million-sprite cost check runs on the indirect form only.

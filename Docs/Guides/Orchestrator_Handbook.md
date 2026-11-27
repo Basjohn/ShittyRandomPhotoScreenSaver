@@ -221,9 +221,10 @@ defaults, the installer script) are committed and pushed at once, silently.
   interesting its root cause. A non-blocking residual on an accepted or low-priority mode never gets a slot, an agent
   or a build (21 Nov: chasing Spline Curve's residual cost a Medium slot, two builds and a core change re-proved on
   every mode). Weigh a fix's blast radius against its priority.
-- **Auto-compaction at 70 %.** The operator's user settings set `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=70`, so the lead
-  and every agent compact themselves at 70 % of the window (operator, 21 Nov). Keep the plan's resume box current so
-  a compaction loses nothing.
+- **Compaction: the lead at 60 %, agents at 70 %** (operator, 27 Nov; 21 Nov before). The operator's user settings
+  set `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=70` for every agent. The lead reads its own context with `get_usage` each turn
+  and compacts at 60 %. An agent close to completion is left to finish instead, and an agent that will not be used
+  again is never compacted. Keep the plan's resume box current so a compaction loses nothing.
 - **Related work continues; unrelated work starts fresh.** An agent's every turn re-reads its whole context. Next
   work that builds on what an agent already holds (its branch, its findings, the proof of its own change) goes to
   that agent by `SendMessage`; it compacts itself at 70 %. Unrelated work gets a fresh agent with a short brief
