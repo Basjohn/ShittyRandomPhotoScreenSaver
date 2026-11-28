@@ -181,6 +181,8 @@ class BackgroundRenderItem(QQuickItem):
         # owning the image, its identity rule and the timing of every change; on OpenGL nothing native is made.
         self._native_layer = None
         self._native_layer_wanted = (not self._renderers_on_backend) and _native_background_wanted()
+        # N5.2h point 5: the degraded display, once the layer cannot be made (no native core on either API).
+        self._degraded = False
         self._warm_up_cancel: threading.Event | None = None
         # The hitch rows (22 Nov): a GUI-thread warm-up unit (the renderer module's import with its shader text build,
         # then the native layer's own) waits for the next frame the window renders anyway (afterRendering, queued),
@@ -266,11 +268,20 @@ class BackgroundRenderItem(QQuickItem):
             try:
                 self._native_layer = attach_native_background(self)
             except Exception:
-                self._native_layer_wanted = False   # failed closed: logged once, the window stays as before N5.7a
-                logger.error("[BACKGROUND][NATIVE] The native background layer could not be made", exc_info=True)
+                # N5.2h point 5: no layer, so the degraded display (Qt's own image node, hard cuts); the process's
+                # reason is logged once by the backend owner, a layer that failed with a core loaded here.
+                self._native_layer_wanted = False
+                self._degraded = True
+                self.update()
+                from rendering.quick.bootstrap import native_core
+
+                if native_core() is not None:
+                    logger.error("[BACKGROUND][NATIVE] The native background layer could not be made", exc_info=True)
                 return
             if self._native_layer is None:
                 self._native_layer_wanted = False
+                self._degraded = True
+                self.update()
                 return
             self.widthChanged.connect(self._native_geometry_changed)
             self.heightChanged.connect(self._native_geometry_changed)
@@ -432,6 +443,23 @@ class BackgroundRenderItem(QQuickItem):
             or self._telemetry.capture_pixels_enabled
         )
 
+    @property
+    def degraded(self) -> bool:
+        """Whether this item shows the degraded display (N5.2h point 5)."""
+        return self._degraded
+
+    def _degraded_node(self, old_node: QSGNode | None) -> QSGNode | None:
+        """The degraded display's node: the current photo through Qt's own image node (a run draws nothing; the run's
+        destination arrives as the next image, a hard cut)."""
+        from .degraded_background import DegradedBackgroundNode
+
+        window = self.window()
+        if self._presentation_image is None or window is None:
+            return None
+        node = old_node if isinstance(old_node, DegradedBackgroundNode) else DegradedBackgroundNode(window)
+        node.synchronize(self._presentation_image, (float(self.width()), float(self.height())))
+        return node
+
     def updatePaintNode(
         self,
         old_node: QSGNode | None,
@@ -442,6 +470,8 @@ class BackgroundRenderItem(QQuickItem):
         # leaked the proof palette onto real displays during startup/recreation.
         # Keep the scaffold available only when a harness explicitly calls
         # setProofProgress(). A real image/transition always remains renderable.
+        if self._degraded and not self._renderers_on_backend:
+            return self._degraded_node(old_node)
         if (
             self._presentation_image is None
             and self._transition_run is None

@@ -18,7 +18,7 @@ from typing import Any
 
 from PySide6.QtQuick import QQuickItem
 
-from .render.surface_backdrop import SurfaceBackdropSource
+
 from .widgets.surface_material import transition_refresh_interval_s
 
 # Above backgroundDimming (z 1), below the CUSTOM guide underlay (z 4) and the
@@ -30,12 +30,21 @@ def _make_source(root: QQuickItem, screen_index: int) -> tuple[Any, QQuickItem]:
     """The display's backdrop source and its item: the core's on the native background's backend, else Python's."""
     from .render.native_surface_backdrop import NativeSurfaceBackdropSource, native_backdrop_core
 
+    del screen_index
     core = native_backdrop_core()
-    if core is not None:
-        source = NativeSurfaceBackdropSource(core, root)
-        return source, source.item
-    item = SurfaceBackdropSource(root, screen_index=screen_index)
-    return item, item
+    if core is None:
+        # N5.2h: one route per API, no Python backdrop; the degraded display has none (``backdrop_available``).
+        raise RuntimeError("the surface backdrop needs the native core")
+    source = NativeSurfaceBackdropSource(core, root)
+    return source, source.item
+
+
+def backdrop_available() -> bool:
+    """Whether a display can have a backdrop (the native core loaded); on the degraded display the cards keep their
+    Normal fill (fail closed)."""
+    from .render.native_surface_backdrop import native_backdrop_core
+
+    return native_backdrop_core() is not None
 
 
 class SurfaceBackdropOwner:
@@ -150,4 +159,4 @@ class SurfaceBackdropOwner:
             source.set_parked(True)
 
 
-__all__ = ["BACKDROP_Z", "SurfaceBackdropOwner"]
+__all__ = ["BACKDROP_Z", "SurfaceBackdropOwner", "backdrop_available"]

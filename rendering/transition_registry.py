@@ -344,7 +344,7 @@ def is_transition_available(setting_name: str) -> bool:
 BACKEND_FALLBACK_TRANSITION = "Crossfade"
 #: The backends the background family runs on: its presenter, the card backdrop and every transition switch as one
 #: unit (D10 point 4). On a backend without it no background surface is created (no wallpaper yet on Vulkan).
-BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ("opengl",)
+BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ()   # N5.2h: every backend draws it natively
 
 
 def _backend(backend: str | None) -> str:

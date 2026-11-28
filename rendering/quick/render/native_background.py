@@ -461,12 +461,13 @@ def background_card(logical_size: tuple[float, float], ratio: float) -> dict:
 
 
 def native_background_wanted(backend: str | None = None) -> bool:
-    """Whether the display's background comes from the native core on ``backend`` (the process's when None): Vulkan."""
+    """Whether the display's background comes from the native core on ``backend`` (the process's when None): every
+    backend (N5.2h: OpenGL and Vulkan, one route each, no Python presenter)."""
     if backend is None:
         from rendering.quick.bootstrap import quick_backend_api
 
         backend = quick_backend_api()
-    return str(backend) == "vulkan"
+    return str(backend) in ("opengl", "vulkan")
 
 
 class NativeBackgroundLayer:
@@ -1060,7 +1061,7 @@ def attach_native_background(item: Any, backend: str | None = None) -> NativeBac
 
     core = native_core()
     if core is None:
-        raise RuntimeError("the native background layer needs the native core (start_quick_backend on Vulkan)")
+        raise RuntimeError("the native background layer needs the native core (start_quick_backend)")
     return NativeBackgroundLayer(core, item)
 
 
