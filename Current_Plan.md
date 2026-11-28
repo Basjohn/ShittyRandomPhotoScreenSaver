@@ -96,6 +96,37 @@ Continue the native sequence below with the repaired timing receipts. The report
     Open side defects for the successor: `schema.DRIFT` is one per process (two EB displays reset each other's
     projector, worker path too); raw `threading.Thread` at `packet_mailbox.py:491` from this branch's `8d635e313`
     fails `test_policy_compliance`. Retire the earlier worktrees only after the merge.
+    Fifth agent's result (28 Nov, retired at 218k; commits `9f08b7df8` listener thread, `e01f125b9` drift projector
+    per stream, `4b5025f64` arena once per run, `212964995` R-258/R-256, journal `82064c643`, pushed; no C++).
+    Evidence is under its `.artifacts/evidence/native_core/n5_6/`.
+    Done:
+    - input 0 draws on all four runs;
+    - 7 deliveries regenerated (identical at L);
+    - 30 references stored in `fast_proof/eb_n56_r251`;
+    - scene depth kept (glass needs it);
+    - lens shift adds no difference;
+    - both side defects fixed.
+    Failing, these are the three defects for the sixth agent, in this order:
+    1. **Vulkan does not render the same EB frame twice.** On a 30 s delivery, 2,576 of 2,586 frames differ across two
+       runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
+       Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
+       in offscreen frames, and target padding read but never written. This breaks rule (b) and the proof guide's
+       Vulkan byte-identity basis, so it comes first.
+    2. **Read-level cap without margin.** At aperture 1 on the 4K expanded card (3840×2112, cap 4), the read level is
+       exactly 4. A zoomed-in world reaches level 5 at about aperture ≤0.54, where native refuses and fades the mode out
+       while Python keeps drawing (`20261128_scripts/aperture_cap.py`).
+    3. **Rule (a) on the long take.** human_heavy1 60 s: 5,500/5,503 frames, max 168 levels, on bright speck glints
+       and highlight discs; the smoke still shows 2–3 level ties in the near layer's blurred bubbles.
+    Not done:
+    - turned card (needs a card-rotation harness feature);
+    - ABI 46 hold firing and the five approximations (coverage selections must be regenerated);
+    - C (1440p/4K deliveries plus a cost round);
+    - T (Display 1, the lead's, after the C++ settles);
+    - the 15-run L set;
+    - music response: human_heavy1 preset 1 youngest bubbles fell 0.91→0.73 against 22 Nov. Check after fix 3.
+    N3.9 drift history was checked by reading only: nothing registers `on_state_lost` for EB.
+    Sixth **Opus Medium** (28 Nov, own worktree, merges the fifth's branch): defects 1–3 above, then the not-done
+    items in order.
   - **N5.2h Gate merged** 28 Nov (`f12427a2e`; Opus Medium audit, should-fixes done in `a49087e7c`, harness reds in
     `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
     `.artifacts/evidence/native_core/n5_2h/`, journal `.artifacts/handover/n5_2h/JOURNAL.md`.
