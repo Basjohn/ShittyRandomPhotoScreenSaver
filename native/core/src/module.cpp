@@ -742,6 +742,8 @@ PyObject *composite_destroy(PyObject *, PyObject *args)
     return PyBool_FromLong(deleted ? 1 : 0);
 }
 
+int backdropHandleCount();
+
 PyObject *composite_live(PyObject *, PyObject *)
 {
     QJsonObject o;
@@ -775,6 +777,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("backdrop_pyramids"), backdrops.pyramids);
     o.insert(QStringLiteral("backdrop_resources"), backdrops.resources);
     o.insert(QStringLiteral("backdrop_builds"), double(backdrops.builds));
+    o.insert(QStringLiteral("backdrop_handles"), backdropHandleCount());
     // N3.1: the scene targets holding objects, their textures and bytes (every sample), the allocations and steps made,
     // and the harness's readbacks QRhi has not completed.
     const srpss_core::SceneTargetCounts scenes = srpss_core::sceneTargetCounts();
@@ -2951,6 +2954,11 @@ PyObject *frame_schemas(PyObject *, PyObject *)
 
 // ---------------------------------------------------------------- the backdrop pyramid (N5.7b, backdrop.h)
 
+// The live backdrop items by handle, kept as the composites' table is: an item leaves it when it is destroyed, by
+// backdrop_destroy or with its parent item (its QObject::destroyed). Before, an item deleted with its parent (a card or
+// scene root retired without the owner's destroy) left a null entry for the rest of the process. Handles are never
+// reused, so a handle below ``next`` and not in the table is a gone item. The table is never destroyed: a destroyed
+// signal may come during the process's exit, after the statics.
 struct Backdrops
 {
     qint64 next = 1;
@@ -2959,20 +2967,30 @@ struct Backdrops
 
 Backdrops &backdrops()
 {
-    static Backdrops b;
-    return b;
+    static Backdrops *b = new Backdrops;
+    return *b;
+}
+
+int backdropHandleCount()
+{
+    return int(backdrops().live.size());
+}
+
+bool backdropWasIssued(long long handle)
+{
+    return handle > 0 && handle < backdrops().next;
 }
 
 srpss_core::BackdropItem *backdropOf(long long handle)
 {
-    if (!backdrops().live.contains(handle)) {
-        PyErr_Format(PyExc_KeyError, "no backdrop %lld (destroyed, or never created)", handle);
-        return nullptr;
-    }
     srpss_core::BackdropItem *item = backdrops().live.value(handle).data();
-    if (!item)
-        PyErr_Format(PyExc_RuntimeError, "backdrop %lld was deleted with its parent item", handle);
-    return item;
+    if (item)
+        return item;
+    if (backdropWasIssued(handle))
+        PyErr_Format(PyExc_RuntimeError, "backdrop %lld was destroyed, or deleted with its parent item", handle);
+    else
+        PyErr_Format(PyExc_KeyError, "no backdrop %lld (never created)", handle);
+    return nullptr;
 }
 
 PyObject *backdrop_create(PyObject *, PyObject *args)
@@ -2991,6 +3009,8 @@ PyObject *backdrop_create(PyObject *, PyObject *args)
         item->setParked(true);
     const qint64 handle = backdrops().next++;
     backdrops().live.insert(handle, QPointer<srpss_core::BackdropItem>(item));
+    // GUI thread, as every delete of a QQuickItem; backdrop_destroy takes the entry first, so this finds none then.
+    QObject::connect(item, &QObject::destroyed, [handle]() { backdrops().live.remove(handle); });
     // The item's address, for the Python face's wrapper (shiboken6.wrapInstance as a QQuickItem: QML binds it as a
     // card's backdrop, MaterialSurface's texture provider).
     return Py_BuildValue("(LK)", handle, static_cast<unsigned long long>(quintptr(item)));
@@ -3097,10 +3117,11 @@ PyObject *backdrop_destroy(PyObject *, PyObject *args)
     long long handle = 0;
     if (!PyArg_ParseTuple(args, "L", &handle))
         return nullptr;
-    if (!backdrops().live.contains(handle)) {
-        PyErr_Format(PyExc_KeyError, "no backdrop %lld (destroyed, or never created)", handle);
+    if (!backdropWasIssued(handle)) {
+        PyErr_Format(PyExc_KeyError, "no backdrop %lld (never created)", handle);
         return nullptr;
     }
+    // False: the item is gone already (destroyed, or deleted with its parent item, which took its entry).
     QPointer<srpss_core::BackdropItem> item = backdrops().live.take(handle);
     const bool deleted = !item.isNull();
     delete item.data(); // GUI thread: Qt Quick releases its node (and the pyramid) on the render thread at the next sync

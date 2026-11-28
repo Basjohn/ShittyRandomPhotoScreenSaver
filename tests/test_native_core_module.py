@@ -118,6 +118,32 @@ def test_a_composite_deleted_with_its_parent_leaves_the_handle_table(core, qt_ap
     shiboken6.delete(root)
 
 
+def test_a_backdrop_deleted_with_its_parent_leaves_the_handle_table(core, qt_app):
+    """The backdrop's table, as the composites' (above): an item deleted with its parent item leaves it, so
+    ``composite_live``'s ``backdrop_handles`` return to where they were; its owner's late destroy is a no-op."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtQuick import QQuickItem
+    import shiboken6
+
+    before = core.composite_live()["backdrop_handles"]
+    root = QQuickItem()                                           # no window: nothing is built or shown
+    parent = QQuickItem(root)
+    kept = core.backdrop(root, parked=True)
+    backdrop = core.backdrop(parent, parked=True)
+    assert core.composite_live()["backdrop_handles"] == before + 2
+    shiboken6.delete(parent)                                      # the parent takes its backdrop with it
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert core.composite_live()["backdrop_handles"] == before + 1
+    with pytest.raises(RuntimeError, match="deleted with its parent"):
+        backdrop.state()
+    assert backdrop.destroy() is False
+    # The control: a backdrop whose parent lives keeps its entry until its own destroy.
+    assert isinstance(kept.state(), dict)
+    assert kept.destroy() is True
+    assert core.composite_live()["backdrop_handles"] == before
+    shiboken6.delete(root)
+
+
 def test_the_hidden_host_round_passes_on_opengl(tmp_path):
     """The harness's hidden round in its own process (Qt Quick's graphics API is process-wide): the frame edge on the
     render thread with no Python thread state, the probe against the conventions with its negative controls, detach,
