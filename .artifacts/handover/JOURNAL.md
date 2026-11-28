@@ -1,5 +1,17 @@
 # N5.2h "Switch-caused and NOT fixed" (proof run 28 Nov), agent aa3b364fd31f5d860
 
+Second pass (coordinator's a-e), 2026-11-28:
+- (a) main merged (437b8c3a4); shader readiness expects native_fields' composed propagation packs: 14 pass. 0ced3d9aa.
+- (b) 87c4a2c86: render-node smoke reads NativeBackgroundLayer + composite state + core live counts/window hosts;
+  RenderNodeTelemetry deleted (no users left); blinds/phase_c pixel wrappers + their test deleted (judged the deleted
+  node). test_qtquick_runtime's 4 window tests NOT RUN (visible windows / --isolated forbidden by the handbook): the
+  coordinator runs them; their new assertions have no negative control seen.
+- (c) 67b9aa995 (C++, needs build): composite handle table drops an item's entry on its destroyed signal (module.cpp); test
+  test_native_core_module::test_a_composite_deleted_with_its_parent_leaves_the_handle_table red on the old module
+  (2 == 1), needs a build. Backdrop table (backdrops()) has the same shape: side defect.
+- (d) test_native_scene_targets green (24 pass).
+- (e) c7f13e229: R-260 entry + index row.
+
 2026-11-28. Merged worktree-agent-aa7af460a1382fb30 (9744222bb). Module f9d4399e copied into release/native_module.
 - Item 1 (card-material pixel tests) DONE: tools/surface_material_capture.NativeHiddenScene (the scene root as the
   kept hidden native host's content; timestamps=True owns a timed host for --cost), MaterialScene.settle_background
