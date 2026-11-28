@@ -1294,7 +1294,7 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     host = blc._host(core, blc.WINDOW, dpr)
-    scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
+    scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="route")
     try:
         scene.present(photos[0][0])
         scene.settle()

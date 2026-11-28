@@ -183,7 +183,14 @@ class Scene:
             from rendering.quick.render.background_item import BackgroundRenderItem
             from rendering.quick.render.telemetry import RenderNodeTelemetry
 
+            if kind not in ("python", "route"):
+                raise ValueError(f"unknown scene kind {kind!r}")
             self.item = BackgroundRenderItem(scene, telemetry=RenderNodeTelemetry(), screen_index=0)
+            if kind == "python":
+                # The Python presenter as the reference (N5.2h: the product draws natively on both APIs; the harness
+                # keeps today's Python drawing until the references are cached, the switch's cache box).
+                self.item._renderers_on_backend = True
+                self.item._native_layer_wanted = False
             self.item.setWidth(scene.width())
             self.item.setHeight(scene.height())
 
@@ -410,7 +417,7 @@ def _route_on_vulkan(core, engine, app, images, facts) -> dict:
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     host = _host(core, WINDOW, 1.5)
-    scene = Scene(core, engine, host, 1.5, DISPLAY, kind="python")
+    scene = Scene(core, engine, host, 1.5, DISPLAY, kind="route")
     try:
         key = next(iter(_variants()))[0]
         scene.present(images[(key, 1.5)][0])

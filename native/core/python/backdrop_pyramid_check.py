@@ -27,8 +27,11 @@ Rounds (one child process per API; OpenGL first, its levels and stills kept for 
             frame driver sees no pyramid; woken: one build.
   transition D7 point 3: a Crossfade drawn on the layer (N5.2a), its clock held: one build per layer frame, the glass
             card changing with every step, nothing after the run.
-  route     ``SurfaceBackdropOwner`` on the product route: native on Vulkan (its item draws a card's material over the
-            native layer), Python on OpenGL; retire destroys the native item.
+  route     ``SurfaceBackdropOwner`` on the product route: native on both APIs since N5.2h's switch (its item draws a
+            card's material over the native layer drawn through ``BackgroundRenderItem``); retire destroys the native item.
+  blit      N5.2h (OpenGL): the native backdrop on the product route against the Python blit on the same frames (stills
+            and held transition frames): the pyramid's input and every level; stills under LEVEL_RULE_A, transition
+            frames within their input's own worst plus BLIT_ROUNDING_LEVELS; a control at another progress.
   lifetime  the item destroyed (its pyramid released on the render thread), and the host closed with a pyramid alive
             (the scene graph's invalidation releases it); nothing left.
 Facts: the frame driver's thread probe (no Python thread state), validation per phase (Vulkan).
@@ -62,7 +65,7 @@ if str(ROOT) not in sys.path:
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("levels", "cards", "cost", "rest", "transition", "route", "lifetime")
+ROUNDS = ("levels", "cards", "cost", "rest", "transition", "route", "blit", "lifetime")
 CHILD_TIMEOUT_S = 1800
 PHOTO_FOLDER = Path(r"C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET")
 PHOTOS = (("dark", "Usu_Underwater_Lab_1440p.png"), ("bright", "670483.jpg"))
@@ -274,6 +277,9 @@ class BackdropScene:
             from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
 
             self.python = SurfaceBackdropSource(self.scene, screen_index=0)
+            # The Python blit as the reference (N5.2h: no Python backdrop in the product on any API; the harness keeps
+            # it until the references are cached and the blit is deleted).
+            self.python._renderers_on_backend = True
             self.backdrop_item = self.python
         self.backdrop_item.setZ(2.0)
         self.backdrop_item.setWidth(self.scene.width())
@@ -833,6 +839,16 @@ def round_rest(core, engine, app, api: str) -> dict:
         facts["parked"] = {"live": live, "window_backdrops": driver.get("window_backdrops"),
                            "state": scene.native.state()}
         checks["parked_holds_no_qrhi_object"] = live.get("backdrop_resources") == 0
+        # Parking restores Normal exactly: the parked item draws nothing of its own, so the whole frame equals the
+        # same frame with the item hidden (the cards were unbound first, as the owner does).
+        parked_rows = scene.read()
+        scene.backdrop_item.setVisible(False)
+        scene.frames(2)
+        hidden_rows = scene.read()
+        scene.backdrop_item.setVisible(True)
+        scene.frames(1)
+        facts["parked_against_hidden_max_level"] = compare(parked_rows, hidden_rows)["max_level"]
+        checks["parked_frame_is_exactly_normal"] = facts["parked_against_hidden_max_level"] == 0
         checks["parked_is_not_recorded"] = driver.get("window_backdrops") == 0
         checks["demand_zero_builds_nothing"] = int(driver_after.get("backdrop_builds", 0)) == driver_builds
         # Woken: one build from the layer as it is.
@@ -918,20 +934,20 @@ def round_route(core, engine, app, api: str) -> dict:
     from rendering.quick import bootstrap
     from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner
 
-    vulkan = api == "vulkan"
     checks: dict = {}
     facts: dict = {}
     owner_state = bootstrap._owner
     saved = (owner_state.core, owner_state.backend)
     owner_state.core, owner_state.backend = core, bootstrap.QuickBackend(api=api, requested=api)
     host = _host(core, blc.WINDOW, 1.0)
-    scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="python", backdrop="python")
+    scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="route", backdrop="python")
     owner = None
     try:
         # The scene's own Python source stands aside: the owner makes the display's backdrop as the product does.
         scene.python.set_parked(True)
         owner = SurfaceBackdropOwner(scene.scene, screen_index=0)
-        checks["native_on_vulkan_python_on_opengl"] = owner.native is vulkan
+        # N5.2h: the owner's backdrop is the core's on both APIs (Vulkan since N5.7b, OpenGL since the switch).
+        checks["native_on_both_apis"] = owner.native is True
         scene.backdrop_item = owner.item
         scene.add_cards()
         scene.present(_photos(blc.DISPLAY)["dark"][0])
@@ -951,11 +967,155 @@ def round_route(core, engine, app, api: str) -> dict:
             card.setProperty("backdrop", None)
         owner.retire()
         scene.frames(2)
-        if vulkan:
-            checks["retire_destroys_the_native_item"] = owner.source.backdrop.destroyed
+        checks["retire_destroys_the_native_item"] = owner.source.backdrop.destroyed
     finally:
         scene.close(app)
         facts["host_close"] = _close_host(app, host)
+        owner_state.core, owner_state.backend = saved
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+# --------------------------------------------------------------------------------------------------- blit
+
+
+#: N5.2h's sub-box: transitions whose frames the blit round reads (a fullscreen pass, one with options, a camera
+#: scene, a scene with motion blur and trails), each at two held progress values.
+BLIT_VARIANTS = ("crossfade", "wipe_diagonal", "burn_options", "cube_turn", "block_spins_both")
+BLIT_PROGRESS = (0.3, 0.6)
+#: The pyramid is a chain of averaging passes with one 8-bit rounding each, so on a transition frame its levels can
+#: differ from the blit's by no more than its input does plus the still frames' own rounding (LEVEL_RULE_A's tie: 2
+#: levels). The bound is per frame: every level's worst against the input's worst plus this.
+BLIT_ROUNDING_LEVELS = 2
+
+
+def round_blit(core, engine, app, api: str, out: Path) -> dict:
+    """N5.2h, "the native backdrop against the blit on the same frames": the product's route on OpenGL (the
+    ``BackgroundRenderItem`` drawing natively, the core's pyramid) against today's (the Python presenter drawing, the
+    Python blit seeding its pyramid) on the same frames: both photos still at dpr 1 and 1.5 (and the dimmed fact), and
+    each of BLIT_VARIANTS at BLIT_PROGRESS on held clocks (the Python node's ``time`` on the round's clock, as the route
+    check's cost round). Per frame: the pyramid's input (the window as drawn under the backdrop, read back) and every
+    level. Stills: every level under LEVEL_RULE_A. Transition frames: every level within the input's own worst plus
+    BLIT_ROUNDING_LEVELS (the named bound); the input's difference is the transition's own (rule (a) of the route check).
+    Control: the native frame at one progress against the blit's at the other exceeds the bound. OpenGL only."""
+    import background_layer_check as blc
+    import numpy as np
+    import transition_route_check as trc
+    from rendering.quick import bootstrap
+    from rendering.quick.render import background_node
+
+    if api != "opengl":
+        return {"pass": True, "skipped": "the blit is OpenGL only"}
+    _install_python_capture()
+    checks: dict = {}
+    facts: dict = {"stills": {}, "transitions": {}}
+    photos = _photos(blc.DISPLAY)
+    owner_state = bootstrap._owner
+    saved = (owner_state.core, owner_state.backend)
+    clock = trc.Clock()
+    saved_time = background_node.time
+    background_node.time = trc._ClockTime(clock)
+
+    def scenes(dpr: float, dimming: float):
+        python_host = _host(core, blc.WINDOW, dpr)
+        python = BackdropScene(core, engine, python_host, dpr, blc.DISPLAY, background="python", backdrop="python",
+                               dimming=dimming)
+        owner_state.core, owner_state.backend = core, bootstrap.QuickBackend(api=api, requested=api)
+        native_host = _host(core, blc.WINDOW, dpr)
+        native = BackdropScene(core, engine, native_host, dpr, blc.DISPLAY, background="route", backdrop="native",
+                               dimming=dimming)
+        return (python_host, python), (native_host, native)
+
+    def close(pair) -> None:
+        for host, scene in pair:
+            scene.close(app)
+            facts.setdefault("host_close", []).append(_close_host(app, host))
+
+    def judged(native_input, python_input, native_levels, python_levels) -> dict:
+        entry = {"input": compare(native_input, python_input),
+                 "levels": {name: compare(native_levels[name], python_levels[name]) for name in native_levels}}
+        bound = entry["input"]["max_level"] + BLIT_ROUNDING_LEVELS
+        entry["bound_levels"] = bound
+        entry["worst_level"] = max(c["max_level"] for c in entry["levels"].values())
+        entry["within_bound"] = entry["worst_level"] <= bound
+        return entry
+
+    still_native: dict = {}
+    still_python: dict = {}
+    pair = None
+    try:
+        # Stills: both photos at both dprs, and the dimmed fact.
+        cases = [(label, dpr, 0.0) for label, _n in PHOTOS for dpr in DPRS] + [(PHOTOS[0][0], 1.0, DIMMING_FACT)]
+        for label, dpr, dimming in cases:
+            key = f"{label}@{dpr}@dim{dimming}"
+            pair = scenes(dpr, dimming)
+            (_ph, python), (_nh, native) = pair
+            python.present(photos[label][0])
+            python.frames(2)
+            python_input = python.read()
+            still_python[key] = python.python_levels()
+            native.present(photos[label][0])
+            native.settle()
+            checks.setdefault("route_made_the_layer", True)
+            checks["route_made_the_layer"] &= native.base.layer is not None
+            native_input = native.read()
+            still_native[key] = native.native_levels()
+            facts["stills"][key] = judged(native_input, python_input, still_native[key], still_python[key])
+            close(pair)
+            pair = None
+        undimmed = [key for key in still_native if key.endswith("dim0.0")]
+        facts["stills_rule_a"] = judge_levels_rule_a(still_native, still_python, undimmed)
+        checks["stills_every_level_within_rule_a"] = facts["stills_rule_a"]["pass"]
+        checks["stills_input_equal"] = all(facts["stills"][key]["input"]["max_level"] <= 1 for key in undimmed)
+        # Transitions on held clocks.
+        frames: dict = {}
+        tiles = []
+        for index, variant in enumerate(BLIT_VARIANTS):
+            run = trc.production_run(variant, [photos[PHOTOS[0][0]][0], photos[PHOTOS[1][0]][0]], index + 1)
+            pair = scenes(1.0, 0.0)
+            (_ph, python), (_nh, native) = pair
+            python.present(photos[PHOTOS[0][0]][0])
+            python.frames(2)
+            native.present(photos[PHOTOS[0][0]][0])
+            native.settle()
+            layer = native.base.layer
+            layer._clock_ns = clock
+            clock.at(run, BLIT_PROGRESS[0])
+            python.base.item.set_transition_run(run)
+            python.frames(8)                                     # its per-run resources made
+            native.base.item.set_transition_run(run)             # the route hands the run to the layer
+            native.settle()
+            native.frames(4)
+            for progress in BLIT_PROGRESS:
+                clock.at(run, progress)
+                python.base.item.update()
+                python.frames(2)
+                python_input = python.read()
+                python_levels = python.python_levels()
+                layer.tick()
+                native.frames(2)
+                native_input = native.read()
+                native_levels = native.native_levels()
+                key = f"{variant}@{progress}"
+                frames[key] = (native_input, python_input, native_levels, python_levels)
+                facts["transitions"][key] = judged(native_input, python_input, native_levels, python_levels)
+            tiles.append([_tile(python_input), _tile(native_input), _tile(python_levels["light"]),
+                          _tile(native_levels["light"])])
+            python.base.item.set_transition_run(None)
+            native.base.item.set_transition_run(None)
+            close(pair)
+            pair = None
+        checks["transition_levels_within_the_input_bound"] = all(e["within_bound"]
+                                                                 for e in facts["transitions"].values())
+        # Control: the native frame at the first progress against the blit's at the second (Crossfade).
+        first, second = frames[f"crossfade@{BLIT_PROGRESS[0]}"], frames[f"crossfade@{BLIT_PROGRESS[1]}"]
+        control = judged(first[0], first[1], first[2], second[3])
+        facts["control_other_progress"] = {"worst_level": control["worst_level"], "bound": control["bound_levels"]}
+        checks["control_other_progress_exceeds_the_bound"] = not control["within_bound"]
+        _sheet(out / "blit_transitions_opengl.png", tiles)
+    finally:
+        if pair is not None:
+            close(pair)
+        background_node.time = saved_time
         owner_state.core, owner_state.backend = saved
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
@@ -1074,6 +1234,8 @@ def child(args) -> dict:
                     record[name] = round_transition(core, engine, app, args.api)
                 elif name == "route":
                     record[name] = round_route(core, engine, app, args.api)
+                elif name == "blit":
+                    record[name] = round_blit(core, engine, app, args.api, out)
                 else:
                     record[name] = round_lifetime(core, engine, app, args.api)
             except Exception:
