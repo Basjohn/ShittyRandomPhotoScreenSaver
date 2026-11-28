@@ -1535,47 +1535,28 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     - [x] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
       without the draw, clears counted by route, the draw's time back with `surface_clear_draw`), the route check's
       pixels unchanged, and the Vulkan figures not worse.
-    - [ ] Scene transitions next (the larger gap): measure the scene targets' own clearing draw (same pattern near
-      `mode_content.cpp` line 7976) and each share that grows with motion blur, trails and 4x, by owner, with the
-      same negative controls; fix at the owner. 28 Nov (`9cf898348` harness, `5025acb09` C++, ready for build; evidence
-      `<successor worktree>/.artifacts/evidence/native_core/n5_2h/`): Crossfade after the surface clear, OpenGL 4K native
-      0.085-0.097 ms against Python 0.056-0.059 (gap about the composite pass); Vulkan not worse; route check pixels
-      unchanged (g4's `route_variant_drawn` FAIL: the group has no variant). Scene targets on OpenGL now clear by
-      their pass where a raw GL probe measured it cheaper (plain 1x 0.020 -> 0.002 ms at 4K); multisampled
-      non-RGBA8 targets keep the draw (`glClear` measured slower there). Open: the about 0.9 ms 4x motion+trails gap
-      at 4K is mostly not the clears; it needs per-pass timing.
-    - [ ] The composite pass (lead's decision, 28 Nov; D7 row 10 stands: nothing reads the window). When no reader
-      needs the kept surface on that frame (backdrop demand zero, no capture), record the background straight into the
-      window's pass and skip the surface and its composite; when a reader needs it (D7's pyramid while demand is above
-      zero, captures), keep the surface. One route with an optional output, not a second renderer. First list every
-      reader of the kept surface (D7 pyramid, quarter-turn orientation and fades in the composite, captures, Studio,
-      idle frames that only re-composite) with what each costs either way; if a reader rules the design out, stop
-      and report before building. Guards (operator asked, 28 Nov: no overwork, no contention, no drawing when not
-      needed):
-      - Repaint frames with a still background (the window redraws for a widget while the photo is idle): the direct
-        draw must cost no more GPU than today's composite of the kept surface (both are one full-screen textured
-        pass for a still); measure it. If the still's draw is heavier than the composite (fit, effects), keep the
-        surface for idle frames and go direct only while a transition runs.
-      - A demand flip (a glass card appears or goes) never allocates: the surface stays resident, and the first frame
-        that needs it records it once. No per-frame toggling: the route changes only when demand or a reader changes.
-      - The window pass and the surface pass have different render-pass formats, so each pipeline the background
-        uses must exist for both. Warm the second variant gradually (one unit per spaced, rendered frame, next-likely
-        first), never on first use; a hitch row covers a demand flip mid-transition.
-      - No new threads, timers or polling; the same render thread records either route.
-      - No flicker (operator asked, 28 Nov). Three ways this could flicker:
-        - A flip frame reads a resident surface that still holds an older frame. Fix: the surface is recorded before
-          any reader samples it, in the same frame.
-        - The direct route leans on swapchain contents surviving between frames; they are undefined on Vulkan and on
-          a flip-model swapchain. Fix: every direct frame clears and draws in full.
-        - The two routes don't match pixel for pixel. Causes: surface format against swapchain format, sRGB handling,
-          alpha, orientation, or the fade maths moving into a different pass.
-        Proof: read back every frame across demand flips (glass card in and out, mid-transition and at idle) on both
-        APIs. Each frame is identical to the kept-surface route's frame, and no frame shows the older photo.
-    - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
-      below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
-      Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
+    - [x] Scene-target clears (28 Nov, `5025acb09` built, harness fix `613e82d58`; evidence `<N5.2h worktree>/.artifacts/
+      evidence/native_core/n5_2h/20261128_n52h_cost_built_5025*`, `20261128_n52h_route_built_5025/`): OpenGL scene
+      targets clear by their pass where measured cheaper; multisampled R16F targets keep the draw. `--cost` and the
+      full route check (validation layers) pass on both APIs; Vulkan unchanged.
+    - [ ] The scene-pass gap (the real one; lead, 28 Nov). On the built module at 4K, `crumble_both_4x` native 1.495 ms
+      against Python 0.929 (1440p 0.746 / 0.300); `crumble_plain` 0.204 / 0.146. Core record time is nearly all of
+      the native frame, so the gap is inside the core's scene passes, not the route or the composite. Time each pass
+      (GPU timestamps per pass: scene, motion-blur taps, trails, resolve, 4x) for `crumble_both_4x` and
+      `glass_shatter_both_4x` against Python's same work on the same frames; name every share over 0.02 ms with its
+      owner and a negative control; fix at the owner. Any C++ change: "ready for build".
+    - [x] The composite pass: decided, not built (lead, 28 Nov). D5.2 stands: the core's output reaches the window as a
+      texture, never as a draw inside Qt's pass (QRhi cannot record into the window before Qt's pass, which clears it,
+      so a direct route would need an underlay or render node). The composite, Qt drawing the kept surface, is the
+      architecture's fixed share: about 0.030 ms at 4K, owner `composite.cpp`. It is not removed; box 6 names it on
+      each row. Kept on record if ever revisited: the five guards (no overwork on still repaints, no allocation or
+      per-frame toggling on demand flips, both pass variants warmed gradually, no new threads/timers/polling, no
+      flicker with per-frame readback across flips), plus the reader list in the N5.2h journal.
+    - [x] Crossfade: native 0.088 / Python 0.054 ms at 4K (1440p 0.032 / 0.027); the remaining gap equals the
+      composite's fixed share above, so it is named rather than fixed.
     - [ ] Then every transition: native OpenGL against Python OpenGL on the same frames (`--cost`, 1440p and 4K),
-      one table, each row at or below Python's or named with its own share and owner.
+      one table, each row at or below Python's or named with its own share and owner (the composite's
+      0.030 ms at 4K is named on every row).
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
