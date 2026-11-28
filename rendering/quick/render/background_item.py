@@ -117,10 +117,11 @@ class BackgroundRenderItem(QQuickItem):
             self.widthChanged.connect(self._native_geometry_changed)
             self.heightChanged.connect(self._native_geometry_changed)
             self._native_layer.on_failure(self._native_layer_failed)
-        elif self._degraded and image is not None and self._native_layer.drawing:
-            # The layer draws again and has been opaque over the degraded photo since: the degraded node goes under it
-            # with nothing visible changing (a new photo is drawn by the layer).
-            self._degraded = False
+            self._native_layer.on_recovered(self._native_layer_recovered)
+        elif self._degraded and image is not None and self._native_layer.opaque:
+            # The layer draws again and has finished fading in over the degraded photo (never while it still fades:
+            # the photo under it would go early): the degraded node goes, with nothing visible changing.
+            self._drop_degraded()
         self._native_layer.present(image)
 
     def _native_layer_failed(self) -> None:
@@ -130,6 +131,16 @@ class BackgroundRenderItem(QQuickItem):
         if not self._degraded:
             self._degraded = True
             self.update()
+
+    def _native_layer_recovered(self) -> None:
+        """The layer that failed has faded fully back in over the degraded photo (its frame edge, once its fade ended):
+        the degraded node goes now, not at the next photo."""
+        self._drop_degraded()
+
+    def _drop_degraded(self) -> None:
+        if self._degraded:
+            self._degraded = False
+            self.update()                        # the scene graph releases the node and its texture at the next sync
 
     def _native_geometry_changed(self) -> None:
         if self._native_layer is not None:

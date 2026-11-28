@@ -272,6 +272,32 @@ def clocked_layer(monkeypatch):
     return made, mode, calls, window, now
 
 
+def test_a_layer_that_draws_again_is_opaque_and_recovered_only_once_its_fade_in_has_ended(clocked_layer):
+    """Audit low: the item cleared its degraded photo as the fade-in began. The layer is opaque (and tells the item once,
+    on a frame edge it keeps arming while the fade renders) only after its fade ended."""
+    made, mode, calls, _window, now = clocked_layer
+    armed: list = []
+    made._arm = armed.append
+    told: list = []
+    made.on_recovered(lambda: told.append(now["ns"]))
+    made.present(_image("a"))
+    made._fail("probe: the content failed")
+    assert made.failed and not made.drawing and not made.opaque
+    mode.composite.content_status = lambda: SimpleNamespace(draws=1, failures=0, refused_run=0, failing=False)
+    now["ns"] = 1_000
+    armed.clear()
+    made._verdict()                                           # it draws again: fading in over the degraded photo
+    assert made.drawing and not made.opaque and told == [] and set(armed) == {"afterRendering"}
+    now["ns"] = 1_000 + 100 * 1_000_000                       # mid-fade (the fade is 250 ms)
+    made._verdict()
+    assert not made.opaque and told == []
+    now["ns"] = 1_000 + 250 * 1_000_000
+    made._verdict()
+    assert made.opaque and told == [now["ns"]]
+    made._verdict()
+    assert told == [now["ns"]]                                # once
+
+
 def test_a_run_is_drawn_by_the_core_from_its_own_pack_and_the_python_renderers_values(clocked_layer):
     from rendering.native.mode import MODE_CORE_MEMBERS
     from rendering.quick.render import native_background as nb
@@ -579,9 +605,12 @@ def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
     runs: list = []
 
     class _Layer:
-        drawing = True
+        drawing = opaque = True
 
         def on_failure(self, _callback) -> None:
+            pass
+
+        def on_recovered(self, _callback) -> None:
             pass
 
         def present(self, image) -> None:
@@ -623,9 +652,12 @@ def test_the_item_makes_the_layer_only_on_the_native_backend_at_its_first_image(
         def __init__(self) -> None:
             self.images: list = []
             self.closed = False
-            self.drawing = True
+            self.drawing = self.opaque = True
 
         def on_failure(self, _callback) -> None:
+            pass
+
+        def on_recovered(self, _callback) -> None:
             pass
 
         def present(self, image) -> None:

@@ -510,6 +510,10 @@ class NativeBackgroundLayer:
         self._shown = False
         self._failure: str | None = None
         self._on_failure: Callable[[], None] | None = None   # N5.2h: the item's degraded display (on_failure)
+        # After a failure the layer fades back in over the degraded photo: the clock time its fade ends (None: not
+        # fading back in) and the item's callback for that edge (on_recovered).
+        self._opaque_at_ns: int | None = None
+        self._on_recovered: Callable[[], None] | None = None
         self._edges: dict[str, Any] = {}
         self.closed = False
         self.sent = 0                    # images handed to the core
@@ -932,6 +936,11 @@ class NativeBackgroundLayer:
         item shows the degraded display under it, so the layer fades to the photo, never to nothing."""
         self._on_failure = callback
 
+    def on_recovered(self, callback: Callable[[], None] | None) -> None:
+        """N5.2h: called once when a layer that failed has faded back in over the degraded photo (fully opaque, on the
+        frame edge after its fade ended): the item's degraded node goes then, with nothing visible changing."""
+        self._on_recovered = callback
+
     @property
     def failed(self) -> bool:
         return self._failure is not None
@@ -940,6 +949,11 @@ class NativeBackgroundLayer:
     def drawing(self) -> bool:
         """Shown and not failed (it draws the photo)."""
         return self._shown and self._failure is None
+
+    @property
+    def opaque(self) -> bool:
+        """Drawing and, after a failure, faded fully back in (the degraded photo under it is covered)."""
+        return self.drawing and (self._opaque_at_ns is None or self._clock_ns() >= self._opaque_at_ns)
 
     def photo_drawn(self) -> bool:
         """Whether the layer, shown with a photo and not failed, has had a frame recorded with its passes: the core
@@ -960,6 +974,7 @@ class NativeBackgroundLayer:
             logger.error("[BACKGROUND][NATIVE] %s; the layer fades out to the degraded display until it draws again",
                          message, exc_info=exc)
         self._failure = message
+        self._opaque_at_ns = None                  # a fade back in that was running is over
         callback = self._on_failure
         if first and callback is not None:
             try:
@@ -977,14 +992,31 @@ class NativeBackgroundLayer:
         if self._mode is None:
             return
         status = self._mode.composite.content_status()
-        if status is None:
+        if status is not None:
+            if status.failing:
+                self._fail(f"the background layer's content failed to build ({status.failures} failure(s))")
+            elif self._failure is not None and status.draws > 0 and self._image is not None:
+                logger.info("[BACKGROUND][NATIVE] The background layer draws again; it fades back in")
+                self._failure = None
+                self._opaque_at_ns = self._clock_ns() + _fade_ms() * 1_000_000
+                self._sync(force=True)
+        self._settle_recovery()
+
+    def _settle_recovery(self) -> None:
+        """A layer fading back in over the degraded photo: the frame edge repeats (the fade renders frames, so it fires)
+        until the fade has ended, then the item is told once that the layer is opaque."""
+        if self._opaque_at_ns is None or self._failure is not None:
             return
-        if status.failing:
-            self._fail(f"the background layer's content failed to build ({status.failures} failure(s))")
-        elif self._failure is not None and status.draws > 0 and self._image is not None:
-            logger.info("[BACKGROUND][NATIVE] The background layer draws again; it fades back in")
-            self._failure = None
-            self._sync(force=True)
+        if self._clock_ns() < self._opaque_at_ns:
+            self._arm("afterRendering")
+            return
+        self._opaque_at_ns = None
+        callback = self._on_recovered
+        if callback is not None:
+            try:
+                callback()
+            except Exception:
+                logger.debug("[BACKGROUND][NATIVE] the recovery's degraded display step failed", exc_info=True)
 
     def _textures_lost(self, names: list[str]) -> None:
         """The core lost the photo's texture (a node made again): it is sent again from the image the item keeps."""
