@@ -285,7 +285,20 @@ class BackgroundRenderItem(QQuickItem):
                 return
             self.widthChanged.connect(self._native_geometry_changed)
             self.heightChanged.connect(self._native_geometry_changed)
+            self._native_layer.on_failure(self._native_layer_failed)
+        elif self._degraded and image is not None and self._native_layer.drawing:
+            # The layer draws again and has been opaque over the degraded photo since: the degraded node goes under it
+            # with nothing visible changing (a new photo is drawn by the layer).
+            self._degraded = False
         self._native_layer.present(image)
+
+    def _native_layer_failed(self) -> None:
+        """N5.2h (lead decision): a layer that fails after it was made (the core's verdict, or a step that raised) fades
+        out over the degraded display, shown under it from this edge on, so the display fades to the photo and never
+        stays faded out. The layer logs the failure once; it fades back in over the photo if it draws again."""
+        if not self._degraded:
+            self._degraded = True
+            self.update()
 
     def _native_geometry_changed(self) -> None:
         if self._native_layer is not None:

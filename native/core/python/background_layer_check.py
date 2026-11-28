@@ -31,6 +31,9 @@ Rounds (one child process per API; OpenGL first, its frames kept for Vulkan's co
             drivers in one frame; its control, the count before M1, was [1, 2, 3, 4]).
   cost      at 2560 x 1440: QRhi's whole-frame GPU time and the frame's wall time at rest, the native layer against the
             protected retained-background path (the Python presenter, OpenGL) and an empty scene (control).
+  fail      N5.2h: the product route's layer failing after it was made (the core's verdict) fades to the degraded
+            display (the photo through Qt's own image node), never to nothing, and fades back in when it draws again;
+            the control (the degraded display unhooked) fades to black.
   lifetime  the lost edge (the node made again: the layer sends its photo again and draws it); teardown with the upload
             job in flight; nothing left (items, surfaces, textures, jobs).
 Facts: the frame driver's and the job thread's thread probes (no Python thread state), validation per phase (Vulkan).
@@ -38,7 +41,7 @@ Facts: the frame driver's and the job thread's thread probes (no Python thread s
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/background_layer_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds draw change rest edges cost lifetime] [--label n57a_background_layer]
+  [--apis opengl vulkan] [--rounds draw change rest edges cost fail lifetime] [--label n57a_background_layer]
 Evidence: .artifacts/evidence/native_core/n5_7a/<date>_<label>/ (summary.json; one PNG sheet per API; the OpenGL frames
 for Vulkan's comparison in work/). Exit 0 whenever the harness ran; the verdict is the last printed line
 ("N57A VERDICT PASS" or "N57A VERDICT FAIL: ...").
@@ -66,7 +69,7 @@ if str(ROOT) not in sys.path:
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("draw", "change", "rest", "edges", "cost", "lifetime")
+ROUNDS = ("draw", "change", "rest", "edges", "cost", "fail", "lifetime")
 CHILD_TIMEOUT_S = 1800
 PHOTO_FOLDER = Path(r"C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET")
 #: (label, file, fits): a landscape at the display's aspect, a landscape FILL crops, a portrait, an odd aspect (3:1).
@@ -197,7 +200,7 @@ class Scene:
     def present(self, image) -> float:
         """The image handed over (the product's call); returns the GUI thread's milliseconds for it."""
         started = time.perf_counter()
-        if self.layer is not None:
+        if self.kind == "layer":
             self.layer.present(image)
         else:
             self.item.set_presentation_image(image)
@@ -691,6 +694,86 @@ def round_lifetime(core, engine, app, api: str) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# --------------------------------------------------------------------------------------------------- failure
+
+
+def _fail_on_route(core, engine, app, photos, *, degrade: bool) -> dict:
+    """One product route (``BackgroundRenderItem``) drawing the first photo, then the core's verdict failing: frames
+    through the layer's fade and after it. ``degrade`` False is the control (the item's degraded display unhooked: the
+    layer fades to nothing). Then the content draws again and a second photo follows."""
+    from rendering.native.composite import ContentStatus
+
+    host = _host(core, WINDOW)
+    scene = Scene(core, engine, host, 1.0, DISPLAY, kind="route")
+    facts: dict = {}
+    try:
+        scene.present(photos[0][0])
+        scene.settle()
+        layer = scene.layer
+        facts["before"] = compare(scene.display_rows(scene.read()), photos[0][1])
+        if not degrade:
+            layer.on_failure(None)
+        composite = layer.mode.composite
+        composite.content_status = lambda: ContentStatus(draws=0, failures=1, refused_run=0, failing=True)
+        layer._edge_fired("afterRendering")          # the edge the layer reads the core's verdict on
+        facts["degraded_after_verdict"] = bool(scene.item.degraded)
+        during, worst = [], 0
+        deadline = time.monotonic() + 10.0
+        while composite.state().get("fading") and time.monotonic() < deadline:
+            scene.frames(1)
+            result = compare(scene.display_rows(scene.read()), photos[0][1])
+            worst = max(worst, result["max_level"])
+            during.append(result["max_level"])
+            app.processEvents()
+        scene.frames(3)
+        facts["fade_frames"] = len(during)
+        facts["fade_worst_level"] = worst
+        facts["after"] = compare(scene.display_rows(scene.read()), photos[0][1])
+        facts["layer_visible_after"] = bool(composite.state().get("visible"))
+        if degrade:
+            del composite.content_status                 # the core's own verdict again: it draws
+            layer._edge_fired("afterRendering")
+            scene.settle()
+            facts["drawing_again"] = layer.drawing
+            scene.present(photos[1][0])
+            facts["degraded_after_next_photo"] = bool(scene.item.degraded)
+            scene.settle()
+            facts["next_photo"] = compare(scene.display_rows(scene.read()), photos[1][1])
+    finally:
+        scene.close(app)
+        facts["host_close"] = _close_host(app, host)
+    return facts
+
+
+def round_fail(core, engine, app, api: str) -> dict:
+    """N5.2h (lead decision): a layer that fails after it was made fades to the degraded display (the photo through
+    Qt's own image node under it), never to nothing; it fades back in when it draws again, and the degraded node goes
+    at the next photo under the opaque layer. Control: the degraded display unhooked leaves the window black."""
+    from rendering.quick import bootstrap
+
+    photos = [processed(PHOTO_FOLDER / PHOTOS[i][1], "fill", DISPLAY) for i in (0, 1)]
+    owner = bootstrap._owner
+    saved = (owner.core, owner.backend)
+    owner.core, owner.backend = core, bootstrap.QuickBackend(api=api, requested=api)
+    try:
+        run = _fail_on_route(core, engine, app, photos, degrade=True)
+        control = _fail_on_route(core, engine, app, photos, degrade=False)
+    finally:
+        owner.core, owner.backend = saved
+    checks = {
+        "drawn_before": run["before"]["equal"],
+        "degraded_at_the_verdict": run["degraded_after_verdict"],
+        "the_layer_faded_over_frames": run["fade_frames"] >= 2 and not run["layer_visible_after"],
+        "photo_through_the_fade_within_1": run["fade_worst_level"] <= 1,
+        "photo_after_the_fade_exact": run["after"]["equal"],
+        "draws_again": run["drawing_again"] is True,
+        "degraded_node_gone_at_the_next_photo": run["degraded_after_next_photo"] is False,
+        "next_photo_exact": run["next_photo"]["equal"],
+        "control_without_the_degraded_display_fades_to_black": control["after"]["max_level"] > 32,
+    }
+    return {"pass": all(checks.values()), "checks": checks, "facts": {"run": run, "control": control}}
+
+
 # --------------------------------------------------------------------------------------------------- the child
 
 
@@ -753,6 +836,8 @@ def child(args) -> dict:
                     record[name] = round_edges(core, engine, app)
                 elif name == "cost":
                     record[name] = round_cost(core, engine, app, args.api)
+                elif name == "fail":
+                    record[name] = round_fail(core, engine, app, args.api)
                 else:
                     record[name] = round_lifetime(core, engine, app, args.api)
             except Exception:

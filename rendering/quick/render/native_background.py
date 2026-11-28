@@ -17,7 +17,8 @@ keeps. On OpenGL nothing here is created: production keeps the Python presenter 
   or the item's size changed; Qt composites the retained texture, opaque, in its opaque pass as it does the retained
   image node (``opaque``), and the frame driver records the layer before every other surface (``layer``, D5.2).
 - Fade, never vanish: the layer fades in with its first photo and out when the item's image goes or the core's content
-  fails; a lost texture (a node made again) is sent again from the image the item keeps.
+  fails; a failure first puts the item's degraded display under it (``on_failure``), so the layer fades to the photo
+  and never stays faded out; a lost texture (a node made again) is sent again from the image the item keeps.
 - Transitions (N5.2a): the item's run is drawn by the core from the transition's own product fragment (its pack baked
   from the Python renderer's text, ``transition_pack_path``), as data: the two photos are the item's two texture slots
   (the destination uploaded into the other one by its job), every value is the Python renderer's own
@@ -508,6 +509,7 @@ class NativeBackgroundLayer:
         self._placed: tuple | None = None
         self._shown = False
         self._failure: str | None = None
+        self._on_failure: Callable[[], None] | None = None   # N5.2h: the item's degraded display (on_failure)
         self._edges: dict[str, Any] = {}
         self.closed = False
         self.sent = 0                    # images handed to the core
@@ -925,11 +927,32 @@ class NativeBackgroundLayer:
             self._mode.composite.set(visible=False, fade_ms=_fade_ms())   # fade, never vanish
             self._shown = False
 
+    def on_failure(self, callback: Callable[[], None] | None) -> None:
+        """N5.2h: called once per failure (the core's verdict or a step that raised), before the layer fades out: the
+        item shows the degraded display under it, so the layer fades to the photo, never to nothing."""
+        self._on_failure = callback
+
+    @property
+    def failed(self) -> bool:
+        return self._failure is not None
+
+    @property
+    def drawing(self) -> bool:
+        """Shown and not failed (it draws the photo)."""
+        return self._shown and self._failure is None
+
     def _fail(self, message: str, exc: BaseException | None = None) -> None:
-        if self._failure is None:
-            logger.error("[BACKGROUND][NATIVE] %s; the layer fades out until it draws again", message,
-                         exc_info=exc)
+        first = self._failure is None
+        if first:
+            logger.error("[BACKGROUND][NATIVE] %s; the layer fades out to the degraded display until it draws again",
+                         message, exc_info=exc)
         self._failure = message
+        callback = self._on_failure
+        if first and callback is not None:
+            try:
+                callback()
+            except Exception:
+                logger.debug("[BACKGROUND][NATIVE] the failure's degraded display failed", exc_info=True)
         try:
             self._hide()
         except Exception:

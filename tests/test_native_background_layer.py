@@ -619,6 +619,11 @@ def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
     runs: list = []
 
     class _Layer:
+        drawing = True
+
+        def on_failure(self, _callback) -> None:
+            pass
+
         def present(self, image) -> None:
             pass
 
@@ -659,6 +664,10 @@ def test_the_item_makes_the_layer_only_on_the_native_backend_at_its_first_image(
         def __init__(self) -> None:
             self.images: list = []
             self.closed = False
+            self.drawing = True
+
+        def on_failure(self, _callback) -> None:
+            pass
 
         def present(self, image) -> None:
             self.images.append(image)
