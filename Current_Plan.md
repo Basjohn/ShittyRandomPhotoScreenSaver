@@ -107,7 +107,11 @@ Continue the native sequence below with the repaired timing receipts. The report
     - lens shift adds no difference;
     - both side defects fixed.
     Failing, these are the three defects for the sixth agent, in this order:
-    1. **Vulkan does not render the same EB frame twice.** On a 30 s delivery, 2,576 of 2,586 frames differ across two
+    1. **Vulkan does not render the same EB frame twice.** FIXED by the sixth agent, `7a089950b` (no C++): the glass
+       shader's marine-snow exit left `gl_FragDepth` undefined, so the depth test rejected snow at random. It now writes
+       `sceneSphereDepth`; the `.qsb` files are rebaked, with an every-exit test. Two Vulkan runs are byte-identical on
+       400 inputs. R-259.
+       Before the fix: On a 30 s delivery, 2,576 of 2,586 frames differ across two
        runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
        Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
        in offscreen frames, and target padding read but never written. This breaks rule (b) and the proof guide's
