@@ -1556,7 +1556,7 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       evidence/native_core/n5_2h/20261128_n52h_cost_built_5025*`, `20261128_n52h_route_built_5025/`): OpenGL scene
       targets clear by their pass where measured cheaper; multisampled R16F targets keep the draw. `--cost` and the
       full route check (validation layers) pass on both APIs; Vulkan unchanged.
-    - [ ] The scene-pass gap (the real one; lead, 28 Nov). On the built module at 4K, `crumble_both_4x` native 1.495 ms
+    - [x] The scene-pass gap (the real one; lead, 28 Nov). On the built module at 4K, `crumble_both_4x` native 1.495 ms
       against Python 0.929 (1440p 0.746 / 0.300); `crumble_plain` 0.204 / 0.146. Core record time is nearly all of
       the native frame, so the gap is inside the core's scene passes, not the route or the composite. Time each pass
       (GPU timestamps per pass: scene, motion-blur taps, trails, resolve, 4x) for `crumble_both_4x` and
@@ -1582,9 +1582,31 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       flicker with per-frame readback across flips), plus the reader list in the N5.2h journal.
     - [x] Crossfade: native 0.088 / Python 0.054 ms at 4K (1440p 0.032 / 0.027); the remaining gap equals the
       composite's fixed share above, so it is named rather than fixed.
-    - [ ] Then every transition: native OpenGL against Python OpenGL on the same frames (`--cost`, 1440p and 4K),
+      Closed 28 Nov (fourth agent; `5359b9264` velocity one RGBA16F read as .xy, `121087442` OpenGL pass clear of
+      multisampled RGBA16F, built; R-253): 4K `crumble_both_4x` OpenGL 0.717 against Python 0.923, Vulkan 0.711;
+      `glass_shatter_both_4x` 0.848 / 1.040 / 0.820. Named, not fixed: the RGBA16F velocity moves twice RG16F's bytes
+      (QRhi has no RG16F; RG16 would clamp an unbounded velocity; a packed R32 needs a packed-average resolve in C++),
+      +0.039 ms pieces and +0.022 resolve at 1440p crumble.
+    - [x] Then every transition: native OpenGL against Python OpenGL on the same frames (`--cost`, 1440p and 4K),
       one table, each row at or below Python's or named with its own share and owner (the composite's
-      0.030 ms at 4K is named on every row).
+      0.030 ms at 4K is named on every row). Done 28 Nov, 89 variants x 2 sizes (evidence
+      `n5_2h/20261128_n52h_box6_a/`, `_b/` with `box6.py`, `_repeat/` overriding): 70 rows at or under Python, 94 over by
+      at most the composite (0.0154 ms 1440p, 0.0297 4K; measured per pass on the two scene rows, the same full-screen
+      pass on every other row), 13 by the composite plus under 0.013 ms (noise band), one named beyond: 1440p
+      `crumble_both_4x` +0.043 (composite plus the RGBA16F share). Python's own figures swing up to 0.2 ms between runs.
+      Lead's Vulkan hitch row passed (above). Gate closes on the checkpoint audit and merge.
+  - [ ] The switch (after the Gate merges; decompose here before dispatch). Order:
+    - [ ] Production route: OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
+      does; one route per API, no Python fallback kept. List every caller of the Python presenter, Python
+      transitions, the blit backdrop and the wrapped-texture bridge first (product, Studio, release-media and capture
+      tools, tests), with what replaces each.
+    - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
+    - [ ] Delete in the same change: the Python presenter, Python transitions, the blit backdrop and the bridge. Tests
+      that only pinned them go; tests of behaviour retarget to the native route. The frozen Python references stay
+      only where the proof cache needs them (the proof guide says which); nothing in the product imports them.
+    - [ ] Proof: the route check and `--cost` on both APIs, a Display 1 run on native OpenGL (wallpaper folder +
+      recorded clip), the hitch rows for the five-transition load set on both APIs, and the isolated suite at the
+      milestone. Audit: Opus Medium, High if the deletion touches core lifetime.
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
