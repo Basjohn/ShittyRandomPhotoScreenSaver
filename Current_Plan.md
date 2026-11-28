@@ -943,6 +943,8 @@ the feature (D3D11 is not stated).
     in tick-to-publish; the tail is heavier (frames over 16.7 ms 27, 39, 27 against 11, 16, 18), all of it after
     rendering ends, not sync or recording. Evidence `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`,
     `.../bubble/live_check/20261121_layer_t_root_cause/figures.txt` (agent aac773583ad93e2ab).
+    Lead, 28 Nov: Bubble's parity (L and P) is accepted and its median and p90 match; this heavier tail is a post-port
+    optimisation item, not a parity gate. It waits behind the ports with the rest of this box's timing and cost rows.
     - [ ] Attribute the residual Vulkan late frames at the Qt request and frame boundaries. The 23 Nov paired HUD
       suppression showed no consistent reduction. Compare the request-to-frame gap with recorded GPU clocks when
       the residual repeats. Measure GUI sync before considering changes there. See the timing receipt in

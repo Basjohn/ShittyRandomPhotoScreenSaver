@@ -229,6 +229,17 @@ defaults, the installer script) are committed and pushed at once, silently.
   operator to compact near 250k. An agent close to completion is left to finish instead, and an agent that will not
   be used again is never compacted. Journals, the plan and evidence on disk carry what compaction drops; keep the
   plan's resume box current.
+- **Turns per brief, not context size** (lead, 28 Nov, operator's question "is rebuilding context worse?"; 29
+  agents, 122M weighted tokens, script over the subagent transcripts). A fresh successor rebuilds its context for
+  120-135k (1-3 % of its own spend). The 41 compactions cost 5.9 % directly, plus 305 re-reads of files already read
+  (27 % of all reads, mostly in the two longest agents). The fixed prefix (system prompt, every tool schema incl.
+  unused MCP tools, memory index: about 58k, measured on an empty Haiku agent) is 27 % of all spend. Three agents with
+  488-1018 turns were 39 % of it. A bigger window is worse: the average context per turn is about (58k + cap) / 2, so
+  a 500k cap reads about 80 % more per turn to save under 10 %, and quality falls with input length (Chroma "Context
+  Rot", 2025; arXiv 2510.05381). So: one brief is one box or one defect with its stop point; an agent that has
+  compacted twice is retired at its next stop and a fresh successor starts from its journal; long proof sweeps stay
+  on the cheap slot. Open: test whether an agent definition restricted to Read/Edit/Write/Bash/Grep/Glob drops the
+  58k prefix (definitions load at session start, so at the next session); adopt it only if the measured prefix falls.
 - **Mechanical proof sweeps go to the cheap slot** (lead, 27 Nov). Once a box's design, root cause and fix are done
   and one take of its proof has passed, running the named commands over the remaining takes, keys and APIs and
   collecting the figures is mechanical. Hand it, with the branch and journal, to Sonnet 5.5 Medium or Haiku 5.5
