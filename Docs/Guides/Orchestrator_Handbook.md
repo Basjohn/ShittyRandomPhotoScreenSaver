@@ -30,7 +30,12 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   never block the lead, and are paused whenever the operator has disabled Codex delegation (out of quota);
   their CLI and setup are in `C:\Users\Basjohn\.local\share\codex-claude-bridge\README.md`.
 
-  Normally one high-end task, one medium task and one audit run at once, unless the operator changes the cap.
+  The cap (operator, 28 Nov): at most three agents at once, two Opus 5.5 Medium drivers and Sonnet 5.5 Medium or
+  Haiku 5.5 High workhorses; High only where it truly pays. Plus one **fourth, cheap-only slot** (operator, 28 Nov):
+  Haiku 5.5 High or Sonnet 5.5 Medium, mechanical runs whose result does not depend on machine load only (layer L
+  sweeps, layer P against references, test suites, reference regeneration, recordings). It never designs or fixes,
+  and it never runs while a timing, cost or hitch run (T, C, hitch rows) is going: those runs keep the machine to
+  themselves apart from the operator's own load. Display-bound runs still share one Visualizer on screen at a time.
   The cap counts agents running at once. When it shrinks, nobody busy is stopped: they finish, or hand over safely
   (journal current, work committed). New work starts only once the plans are in logical order and the open
   worries are solved.
