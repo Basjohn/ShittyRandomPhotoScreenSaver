@@ -480,7 +480,7 @@ Do not restore retired mosaic assumptions: Crumble owns weighted parent release 
 ## 4. Transition request/uniform and GL-state tests
 
 Direct parameter -> uniform wiring and common GL-state-fence coverage are ordinary focused pytest
-regressions. They supplement rather than replace the real-GL wrappers.
+regressions. They supplement the core's hidden-host transition tests (`NativeTransitionCapture`).
 
 The common fence includes the exception path where renderer execution raises.
 
