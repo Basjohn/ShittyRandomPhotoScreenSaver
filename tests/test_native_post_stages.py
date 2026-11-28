@@ -426,3 +426,37 @@ def test_n31_per_attachment_check_reads_the_core_device_facts() -> None:
     facts = (CORE / "src" / "vulkan_context.cpp").read_text(encoding="utf-8")
     assert 'facts.insert(QStringLiteral("independent_blend"), f2.features.independentBlend == VK_TRUE);' in facts
     assert "f2.features.independentBlend = VK_FALSE; // N3.4, harness only" in facts
+
+
+def test_the_gl_errors_round_is_a_proof_only_on_a_debug_context_with_an_empty_log() -> None:
+    """post_stage_check's gl_errors verdict (N5.2h): a message fails it, and so does a run that could not read the log
+    (no debug context, no logger, nothing drawn): a log nobody read proves nothing."""
+    import sys
+
+    sys.path.insert(0, str(CORE / "python"))
+    import post_stage_check as psc
+
+    clean = {"debug_context": True, "logger": True,
+             "cases": {"eb_4x": {"samples": 4, "frames": 4, "messages": []},
+                       "eb_1x": {"samples": 1, "frames": 4, "messages": []}}}
+    assert psc.gl_errors_verdict(clean)["pass"]
+    logged = json.loads(json.dumps(clean))
+    logged["cases"]["eb_4x"]["messages"] = ["frame 0: id 1280: GL_INVALID_ENUM error generated."]
+    assert not psc.gl_errors_verdict(logged)["pass"]
+    for fact in ("debug_context", "logger"):
+        assert not psc.gl_errors_verdict(dict(clean, **{fact: False}))["pass"], fact
+    assert not psc.gl_errors_verdict(dict(clean, cases={}))["pass"]
+    undrawn = json.loads(json.dumps(clean))
+    undrawn["cases"]["eb_1x"]["frames"] = 0
+    assert not psc.gl_errors_verdict(undrawn)["pass"]
+
+
+def test_the_resolves_bound_to_multisampled_textures_adopt_their_sampler_state_on_opengl() -> None:
+    """N5.2h: both draws that read a multisampled texture through a sampler (the transparency resolve, the nearest
+    resolve) hand their bindings to adoptMultisampleSamplerState before Qt binds them, and it acts on OpenGL alone."""
+    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert "adoptMultisampleSamplerState(rhi, p.bindings.get());" in source
+    assert "adoptMultisampleSamplerState(n.pipeline->rhi(), n.bindings.get());" in source
+    helper = (CORE / "src" / "gl_sampler_state.cpp").read_text(encoding="utf-8")
+    assert "rhi->backend() != QRhi::OpenGLES2" in helper and "texture->sampleCount() <= 1" in helper
+    assert "src/gl_sampler_state.cpp" in (CORE / "CMakeLists.txt").read_text(encoding="utf-8")
