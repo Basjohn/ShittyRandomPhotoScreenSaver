@@ -3747,8 +3747,6 @@ class QuickSceneController(QObject):
     def _on_scene_graph_invalidated(self) -> None:
         self._publish_readiness(
             scene_graph_initialized=False,
-            background_renderer_ready=False,
-            intentional_base_frame_ready=False,
             scene_graph_invalidated=True,
         )
         self._trace_surface_event("scene_graph_invalidated", probe_frames=3)

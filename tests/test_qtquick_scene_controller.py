@@ -329,21 +329,22 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
     qt_app.processEvents()
 
 
-def test_scene_readiness_preserves_generation_zero_and_requires_intentional_frame():
+def test_scene_readiness_preserves_generation_zero_and_requires_a_presented_frame():
     initial = QuickSceneReadiness(screen_index=0, runtime_generation=0)
-    ready = replace(
-        initial,
-        qml_root_created=True,
-        scene_graph_initialized=True,
-        background_renderer_ready=True,
-        intentional_base_frame_ready=True,
-    )
+    presentable = replace(initial, qml_root_created=True, scene_graph_initialized=True)
+    ready = replace(presentable, frame_presented=True)
 
-    assert initial.ready_for_reveal is False
+    def reveal(readiness):  # DisplayManager._startup_reveal_admits's rule
+        return readiness.scene_presentable and readiness.frame_presented
+
+    assert reveal(initial) is False
+    assert reveal(presentable) is False
     assert ready.runtime_generation == 0
-    assert ready.ready_for_reveal is True
-    assert replace(ready, admission_open=False).ready_for_reveal is False
-    assert replace(ready, scene_graph_invalidated=True).ready_for_reveal is False
+    assert reveal(ready) is True
+    assert reveal(replace(ready, admission_open=False)) is False
+    assert reveal(replace(ready, scene_graph_invalidated=True)) is False
+    assert reveal(replace(ready, qml_objects_retired=True)) is False
+    assert reveal(replace(ready, error="failed")) is False
 
 
 @pytest.mark.parametrize("backend", ["vulkan", "opengl"])
@@ -372,7 +373,10 @@ def test_presented_frame_is_published_on_every_backend(backend, qt_app, monkeypa
             qt_app.processEvents()
         assert controller.readiness.frame_presented is True
         assert [state.frame_presented for state in published] == [True]
-        assert controller.readiness.background_renderer_ready is False     # no background fact is invented
+        # N5.2h: the readiness carries no background renderer facts; the presented frame is the reveal's input.
+        assert not {"background_renderer_ready", "intentional_base_frame_ready", "ready_for_reveal"} & set(
+            controller.readiness.as_dict()
+        )
     finally:
         controller.quiesce_for_retirement()
         window.deleteLater()

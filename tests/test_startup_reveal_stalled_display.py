@@ -50,8 +50,7 @@ def _ready(screen_index: int) -> QuickSceneReadiness:
         runtime_generation=GENERATION,
         qml_root_created=True,
         scene_graph_initialized=True,
-        background_renderer_ready=True,
-        intentional_base_frame_ready=True,
+        frame_presented=True,
     )
 
 
