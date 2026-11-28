@@ -22,5 +22,10 @@ Order: 1 reveal waits for first wallpaper; 2 hidden-host owner guard; 3 fullscre
   failure test (control: degrade branch fails it). 24/24 owner file. Evidence 20261128_audit_item4_owner_tests.
   Side note: the exit probe's stop hits a LIFECYCLE_BARRIER timeout (QuickDisplayRuntime 1 live, the probe's own
   global `runtime` ref) before finalizing.
+- Item 5 DONE: exit routes parametrized on api (vulkan+opengl, 28 cases; bare control holds on OpenGL: window alive,
+  host 1); docstrings (probe + test, bare = counts not crash; R-260 symptom line). test_quit_request_render_thread_gil
+  retargeted: Python updatePaintNode on the kept hidden host's render thread (painted_off_main), quit requested, exits,
+  both APIs. NO failing control on Windows: the synchronous app.quit() contrast also exits (the wedge was Linux/Xvfb
+  only; the original test had no Windows control either) - log 20261128_audit_item5_exit_routes.
 
 ---- previous agent's journal (aa3b364) is in git history of .artifacts/handover/JOURNAL.md ----

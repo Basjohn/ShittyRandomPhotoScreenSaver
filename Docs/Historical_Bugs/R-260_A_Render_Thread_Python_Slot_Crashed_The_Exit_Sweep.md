@@ -9,7 +9,8 @@ f12427a2e tree and comparing it with the switch's tree. It was not bisected.
 
 ## Symptom
 
-`tests/test_quick_exit_routes.py` runs each exit route in its own child process on the native core's Vulkan device.
+`tests/test_quick_exit_routes.py` runs each exit route in its own child process on the native core's Vulkan device
+(and, since the switch audit's fix on 28 Nov, on OpenGL too, where the window is hosted on the core as well).
 Its `bare` variant reproduces R-209's defect: the loop ends while the window is still alive and its host is still open.
 
 - Up to f12427a2e, that variant ended with 0xC0000005 at interpreter exit. R-209 used this crash as its control.

@@ -1,15 +1,15 @@
 """Child process for ``tests/test_quick_exit_routes.py`` (not collected: no ``test_`` prefix).
 
-One real ``QuickDisplayRuntime`` on Vulkan, rendering on the native core's device and kept off screen (a 64x64
-transparent tool window at opacity 0, as ``tests/test_quick_backend_owner.py`` keeps its windows). At its first
-presented frame the route's real product code runs; the process ends with a normal interpreter exit, so a Quick
-window still alive when the loop ends shows as the process's crash.
+One real ``QuickDisplayRuntime`` on ``api`` (Vulkan or OpenGL; N5.2h: hosted on the native core on both), kept off
+screen (a 64x64 transparent tool window at opacity 0). At its first presented frame the route's real product code runs;
+the process ends with a normal interpreter exit. The report gives the window and its host at the loop's end.
 
-usage: python tests/_quick_exit_route_probe.py <state_dir> <route> <fixed|bare>
+usage: python tests/_quick_exit_route_probe.py <state_dir> <route> <fixed|bare> [vulkan|opengl]
 
 ``bare`` is the negative control: the code before the fix. The window release is skipped (the exit runs at once, as
 the bare ``QCoreApplication.exit(1)`` did) and the second exiting stop does not see the terminal drain (so it cancels
-it, as it did).
+it, as it did). Its loop ends with the window alive and its host open (R-209's defect; R-260: no crash follows since
+N5.2h deleted the render-thread Python slot that crashed the exit sweep).
 """
 from __future__ import annotations
 
@@ -35,7 +35,8 @@ def main() -> int:
     from rendering.quick import bootstrap
 
     state_dir, route, variant = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-    bootstrap.configure_quick_graphics(reason="exit-route-probe", backend="vulkan", start_state_dir=state_dir)
+    api = sys.argv[4] if len(sys.argv) > 4 else "vulkan"
+    bootstrap.configure_quick_graphics(reason="exit-route-probe", backend=api, start_state_dir=state_dir)
     app = QApplication(sys.argv[:1])
     bootstrap.start_quick_backend()
     from engine import engine_handlers, engine_lifecycle

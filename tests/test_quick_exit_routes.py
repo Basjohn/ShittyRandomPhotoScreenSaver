@@ -6,7 +6,9 @@ monitor teardown, a failed replacement), the terminal barrier's timeout and a se
 terminal drain each ended the loop with the generation's Quick window still alive; on Vulkan the process then
 crashed at interpreter exit (0xC0000005). Each route runs in its own child process
 (``tests/_quick_exit_route_probe.py``) on one real ``QuickDisplayRuntime`` hosted on the native core, kept off
-screen. ``bare`` is the code before the fix in the same process shape: it must crash, or the test proves nothing.
+screen, on each API (N5.2h: OpenGL windows are hosted on the core too). ``bare`` is the code before the fix in the same
+process shape: its loop must end with the window alive and its host open, or the test proves nothing (R-260: the
+crash that once followed is gone with the render-thread Python slot N5.2h deleted; the counts are the control).
 
 Needs the built module (``release/native_module``, a GitHub build); skips without it.
 """
@@ -39,8 +41,8 @@ ROUTES = [
 EXIT_CODE = {"terminal_barrier_timeout": 0, "second_exiting_stop": 0}
 
 
-def _run(route: str, variant: str, state_dir: Path) -> tuple[dict, int]:
-    done = subprocess.run([sys.executable, str(PROBE), str(state_dir), route, variant], cwd=ROOT,
+def _run(route: str, variant: str, state_dir: Path, api: str = "vulkan") -> tuple[dict, int]:
+    done = subprocess.run([sys.executable, str(PROBE), str(state_dir), route, variant, api], cwd=ROOT,
                           env=os.environ.copy(), text=True, capture_output=True, check=False, timeout=90)
     lines = [line for line in done.stdout.splitlines() if line.startswith("PROBE ")]
     assert lines, done.stdout + done.stderr
@@ -50,9 +52,10 @@ def _run(route: str, variant: str, state_dir: Path) -> tuple[dict, int]:
 @pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout: no release/native_module")
 @pytest.mark.parametrize("variant", ["fixed", "bare"])
 @pytest.mark.parametrize("route", ROUTES)
-def test_the_route_releases_its_vulkan_window_before_the_loop_ends(route, variant, tmp_path):
-    report, returncode = _run(route, variant, tmp_path)
-    assert report["api"] == "Vulkan" and "timeout" not in report
+@pytest.mark.parametrize("api", ["vulkan", "opengl"])
+def test_the_route_releases_its_window_before_the_loop_ends(api, route, variant, tmp_path):
+    report, returncode = _run(route, variant, tmp_path, api)
+    assert report["api"] == {"vulkan": "Vulkan", "opengl": "OpenGL"}[api] and "timeout" not in report
     assert report["exec_code"] == EXIT_CODE.get(route, 1)
     if variant == "fixed":
         assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
@@ -60,7 +63,7 @@ def test_the_route_releases_its_vulkan_window_before_the_loop_ends(route, varian
     else:
         # The negative control: the loop ended with the window alive and its host unreleased (R-209's defect itself).
         # The 0xC0000005 at interpreter exit no longer follows (measured 28 Nov: the f12427a2e tree crashes, the
-        # switch's tree exits 0). On Vulkan no Python background node ever existed; what N5.2h deleted from this
+        # switch's tree exits 0, on both APIs). On Vulkan no Python background node ever existed; what N5.2h deleted from this
         # window is BackgroundRenderItem's sceneGraphInvalidated slot, connected direct (_RenderNodeRetirement), so
         # PySide's exit sweep destroying the live window ran Python on Qt's render thread during interpreter
         # finalization (attributed by reading the f12427a2e tree: the probe window's only render-thread Python slot;
