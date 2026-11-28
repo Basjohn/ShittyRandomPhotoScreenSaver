@@ -91,6 +91,33 @@ def test_the_window_host_takes_a_quick_window_and_refuses_anything_else(core, qt
         window.deleteLater()
 
 
+def test_a_composite_deleted_with_its_parent_leaves_the_handle_table(core, qt_app):
+    """A composite item deleted with its parent item (a scene's root retired without the owner's ``destroy``) leaves the
+    core's handle table: ``composite_live``'s handles return to where they were. Before, its entry stayed as a null
+    pointer for the rest of the process. The handle then reads as gone, and its owner's late destroy is a no-op."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtQuick import QQuickItem
+    import shiboken6
+
+    before = core.composite_live()["handles"]
+    root = QQuickItem()                                           # no window: nothing is drawn or shown
+    parent = QQuickItem(root)
+    kept = core.composite(root)
+    composite = core.composite(parent)
+    assert core.composite_live()["handles"] == before + 2
+    shiboken6.delete(parent)                                      # the parent takes its composite with it
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert core.composite_live()["handles"] == before + 1
+    with pytest.raises(RuntimeError, match="deleted with its parent"):
+        composite.state()
+    assert composite.destroy() is False
+    # The control: a composite whose parent lives keeps its entry until its own destroy.
+    assert isinstance(kept.state(), dict)
+    assert kept.destroy() is True
+    assert core.composite_live()["handles"] == before
+    shiboken6.delete(root)
+
+
 def test_the_hidden_host_round_passes_on_opengl(tmp_path):
     """The harness's hidden round in its own process (Qt Quick's graphics API is process-wide): the frame edge on the
     render thread with no Python thread state, the probe against the conventions with its negative controls, detach,
