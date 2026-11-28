@@ -67,6 +67,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import pixel_tolerance as pt  # noqa: E402
+import transition_references as refs  # noqa: E402  (native/core/python)
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("draw", "change", "rest", "edges", "cost", "fail", "lifetime")
@@ -318,6 +319,34 @@ def _variants():
             yield f"{label}_{fit}", PHOTO_FOLDER / name, fit
 
 
+def presenter_references(core, engine, app, dpr: float, images: dict, stale, facts: dict) -> dict:
+    """Rule (a)'s references at ``dpr``: the Python presenter's window per photo and fit (and, at 1.5, the stale image),
+    from the reference cache (``transition_references``; drawn live and stored with ``--python-references record``)."""
+    shown = {(key, dpr): images[(key, dpr)] for key, _path, _fit in _variants()}
+    if dpr == 1.5:
+        shown[("stale", dpr)] = stale
+    cases = {key: {"photo": key[0], "dpr": float(dpr), "window": list(WINDOW), "display": list(DISPLAY),
+                   "picture": refs.arrays_digest([rows])} for key, (_image, rows) in shown.items()}
+
+    def draw() -> dict:
+        # The reference: the Python presenter, in a host of its own (Python runs at its sync there).
+        drawn = {}
+        host = _host(core, WINDOW, dpr)
+        scene = Scene(core, engine, host, dpr, DISPLAY, kind="python")
+        try:
+            for key, (image, _rows) in shown.items():
+                scene.present(image)
+                host.frames(2)
+                drawn[key] = {"frame": scene.read()}
+        finally:
+            scene.close(app)
+            facts.setdefault("host_close", []).append(_close_host(app, host))
+        return drawn
+
+    stored = refs.references("background_layer_check", cases, draw)
+    return {key: stored[key]["frame"] for key in cases}
+
+
 def round_draw(core, engine, app, api: str, work: Path, out: Path) -> dict:
     import numpy as np
 
@@ -336,21 +365,7 @@ def round_draw(core, engine, app, api: str, work: Path, out: Path) -> dict:
     tiles = []
     for dpr in DPRS:
         if not vulkan:
-            # The reference: the Python presenter, in a host of its own (Python runs at its sync there).
-            host = _host(core, WINDOW, dpr)
-            scene = Scene(core, engine, host, dpr, DISPLAY, kind="python")
-            try:
-                for key, _path, _fit in _variants():
-                    scene.present(images[(key, dpr)][0])
-                    host.frames(2)
-                    reference[(key, dpr)] = scene.read()
-                if dpr == 1.5:
-                    scene.present(stale[0])
-                    host.frames(2)
-                    reference[("stale", dpr)] = scene.read()
-            finally:
-                scene.close(app)
-                facts.setdefault("host_close", []).append(_close_host(app, host))
+            reference.update(presenter_references(core, engine, app, dpr, images, stale, facts))
         host = _host(core, WINDOW, dpr)
         scene = Scene(core, engine, host, dpr, DISPLAY, kind="layer")
         try:
@@ -613,9 +628,10 @@ def round_cost(core, engine, app, api: str) -> dict:
     """QRhi's whole-frame GPU time and the frame's wall time at rest at COST_SIZE: the native layer against the
     protected retained-background path (OpenGL's Python presenter) and an empty scene."""
     vulkan = api == "vulkan"
-    photo = processed(PHOTO_FOLDER / PHOTOS[0][1], "fill", COST_SIZE)[0]
+    photo, photo_rows = processed(PHOTO_FOLDER / PHOTOS[0][1], "fill", COST_SIZE)
     results: dict = {}
-    kinds = ("empty", "layer") if vulkan else ("empty", "python", "layer")
+    live_python = not vulkan and refs.mode() == "record"
+    kinds = ("empty", "python", "layer") if live_python else ("empty", "layer")
     for kind in kinds:
         host = _host(core, COST_SIZE, 1.0, timestamps=True)
         scene = Scene(core, engine, host, 1.0, COST_SIZE, kind="layer" if kind == "layer" else "python")
@@ -642,7 +658,13 @@ def round_cost(core, engine, app, api: str) -> dict:
             _close_host(app, host)
     checks = {"layer_records_nothing_at_rest": results["layer"]["core_surface_passes"] == 0}
     if not vulkan:
-        # A fact for the lead, not a pass gate: the layer's rest frame against the protected path's, same session.
+        # The protected path's rest frame: timed live beside the layer's (record) or its stored baseline (cache).
+        case = {"round": "cost", "kind": "python", "size": list(COST_SIZE), "frames": TIMED_FRAMES,
+                "picture": refs.arrays_digest([photo_rows])}
+        results["python"] = refs.cost_figures("background_layer_check", {"python": case},
+                                              lambda: {"python": results["python"]})["python"]
+        # A fact for the lead, not a pass gate: the layer's rest frame against the protected path's (same session when
+        # recorded live).
         results["layer_minus_python_gpu_median_ms"] = round(
             results["layer"]["qrhi_frame_gpu"].get("median_ms", 0.0) - results["python"]["qrhi_frame_gpu"].get(
                 "median_ms", 0.0), 4)
@@ -782,6 +804,7 @@ def child(args) -> dict:
     import vk_validation
 
     root = host_check._root(args.repo)
+    refs.configure_from(args)
     out = Path(args.out_dir)
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
@@ -891,6 +914,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    refs.add_arguments(parser)
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -924,7 +948,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds]
+                   "--rounds", *args.rounds, *refs.child_arguments(args)]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))

@@ -63,6 +63,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import pixel_tolerance as pt  # noqa: E402
+import transition_references as refs  # noqa: E402  (native/core/python)
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("levels", "cards", "cost", "rest", "transition", "route", "blit", "lifetime")
@@ -462,19 +463,28 @@ def round_levels(core, engine, app, api: str, work: Path, out: Path) -> dict:
     cases.append((f"{PHOTOS[0][0]}@1.0@dim{DIMMING_FACT}", PHOTOS[0][0], 1.0, DIMMING_FACT, blc.WINDOW, blc.DISPLAY,
                   blc.OFFSET))
     photos = {display: _photos(display) for display in {c[5] for c in cases}}
+    if not vulkan:
+        def draw() -> dict:
+            drawn = {}
+            for key, label, dpr, dimming, window, display, offset in cases:
+                host = _host(core, window, dpr)
+                scene = BackdropScene(core, engine, host, dpr, display, background="python", backdrop="python",
+                                      dimming=dimming, offset=offset)
+                try:
+                    scene.present(photos[display][label][0])
+                    scene.frames(2)
+                    drawn[key] = scene.python_levels()
+                finally:
+                    scene.close(app)
+                    facts.setdefault("host_close", []).append(_close_host(app, host))
+            return drawn
+
+        described = {c[0]: {"round": "levels", "case": c[0], "dpr": float(c[2]), "dimming": float(c[3]),
+                            "window": list(c[4]), "display": list(c[5]), "offset": list(c[6]),
+                            "picture": refs.arrays_digest([photos[c[5]][c[1]][1]])} for c in cases}
+        reference.update(refs.references("backdrop_pyramid_check", described, draw))
     for key, label, dpr, dimming, window, display, offset in cases:
         photo = photos[display][label]
-        if not vulkan:
-            host = _host(core, window, dpr)
-            scene = BackdropScene(core, engine, host, dpr, display, background="python", backdrop="python",
-                                  dimming=dimming, offset=offset)
-            try:
-                scene.present(photo[0])
-                scene.frames(2)
-                reference[key] = scene.python_levels()
-            finally:
-                scene.close(app)
-                facts.setdefault("host_close", []).append(_close_host(app, host))
         host = _host(core, window, dpr)
         scene = BackdropScene(core, engine, host, dpr, display, background="layer", backdrop="native",
                               dimming=dimming, offset=offset)
@@ -570,24 +580,47 @@ def round_cards(core, engine, app, api: str, work: Path, out: Path) -> dict:
     normals: dict = {}
     kinds = (("native",) if vulkan else ("python", "native"))
     photos = _photos(blc.DISPLAY)
-    for kind in kinds:
+    if not vulkan:
+        def draw_today() -> dict:
+            drawn = {}
+            for label, _n in PHOTOS:
+                host = _host(core, blc.WINDOW, 1.0)
+                scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="python", backdrop="python")
+                try:
+                    scene.add_cards()
+                    scene.present(photos[label][0])
+                    scene.settle()
+                    scene.refresh_python()
+                    scene.frames(2)
+                    # Today's steady backdrop: a second refresh. The first publish against it is a fact (Qt's one-time
+                    # generateMips overwrote the heavy level until R-NEW's fix; 0 levels since).
+                    first = scene.read()
+                    scene.refresh_python()
+                    scene.frames(2)
+                    drawn[label] = {"first": first, "frame": scene.read(),
+                                    **{f"normal|{m}": rows for m, rows in scene.normal_regions().items()}}
+                finally:
+                    scene.close(app)
+                    facts.setdefault("host_close", []).append(_close_host(app, host))
+            return drawn
+
+        described = {label: {"round": "cards", "photo": label, "window": list(blc.WINDOW),
+                             "display": list(blc.DISPLAY), "picture": refs.arrays_digest([photos[label][1]])}
+                     for label, _n in PHOTOS}
+        for label, entry in refs.references("backdrop_pyramid_check", described, draw_today).items():
+            frames[f"python_first|{label}"] = entry["first"]
+            frames[f"python|{label}"] = entry["frame"]
+            normals[f"python|{label}"] = {k.split("|", 1)[1]: v for k, v in entry.items() if k.startswith("normal|")}
+    for kind in ("native",):
         for label, _n in PHOTOS:
             host = _host(core, blc.WINDOW, 1.0)
-            scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY,
-                                  background="python" if kind == "python" else "layer", backdrop=kind)
+            scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="layer", backdrop=kind)
             try:
                 scene.add_cards()
                 scene.present(photos[label][0])
                 scene.settle()
                 scene.refresh_python()
                 scene.frames(2)
-                if kind == "python":
-                    # Today's steady backdrop: a second refresh. The first publish against it is a fact (Qt's one-time
-                    # generateMips overwrote the heavy level until R-NEW's fix; 0 levels since).
-                    first = scene.read()
-                    scene.refresh_python()
-                    scene.frames(2)
-                    frames[f"python_first|{label}"] = first
                 frames[f"{kind}|{label}"] = scene.read()
                 normals[f"{kind}|{label}"] = scene.normal_regions()
             finally:
@@ -1022,15 +1055,17 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
     saved_time = background_node.time
     background_node.time = trc._ClockTime(clock)
 
-    def scenes(dpr: float, dimming: float):
-        python_host = _host(core, blc.WINDOW, dpr)
-        python = BackdropScene(core, engine, python_host, dpr, blc.DISPLAY, background="python", backdrop="python",
-                               dimming=dimming)
+    def python_scene(dpr: float, dimming: float):
+        owner_state.core, owner_state.backend = saved          # today's route: the Python presenter and blit
+        host = _host(core, blc.WINDOW, dpr)
+        return [(host, BackdropScene(core, engine, host, dpr, blc.DISPLAY, background="python", backdrop="python",
+                                     dimming=dimming))]
+
+    def native_scene(dpr: float, dimming: float):
         owner_state.core, owner_state.backend = core, bootstrap.QuickBackend(api=api, requested=api)
-        native_host = _host(core, blc.WINDOW, dpr)
-        native = BackdropScene(core, engine, native_host, dpr, blc.DISPLAY, background="route", backdrop="native",
-                               dimming=dimming)
-        return (python_host, python), (native_host, native)
+        host = _host(core, blc.WINDOW, dpr)
+        return [(host, BackdropScene(core, engine, host, dpr, blc.DISPLAY, background="route", backdrop="native",
+                                     dimming=dimming))]
 
     def close(pair) -> None:
         for host, scene in pair:
@@ -1052,17 +1087,65 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
     still_native: dict = {}
     still_python: dict = {}
     pair = None
-    try:
-        # Stills: both photos at both dprs, and the dimmed fact.
-        cases = [(label, dpr, 0.0) for label, _n in PHOTOS for dpr in DPRS] + [(PHOTOS[0][0], 1.0, DIMMING_FACT)]
+    cases = [(label, dpr, 0.0) for label, _n in PHOTOS for dpr in DPRS] + [(PHOTOS[0][0], 1.0, DIMMING_FACT)]
+
+    def draw_today() -> dict:
+        """Today's frames (the Python presenter drawing, the Python blit seeding its pyramid): the input and every
+        level of each still and of each BLIT_VARIANTS run at BLIT_PROGRESS on the held clock."""
+        nonlocal pair
+        drawn = {}
         for label, dpr, dimming in cases:
-            key = f"{label}@{dpr}@dim{dimming}"
-            pair = scenes(dpr, dimming)
-            (_ph, python), (_nh, native) = pair
+            pair = python_scene(dpr, dimming)
+            python = pair[0][1]
             python.present(photos[label][0])
             python.frames(2)
-            python_input = python.read()
-            still_python[key] = python.python_levels()
+            drawn[f"{label}@{dpr}@dim{dimming}"] = {"input": python.read(), **python.python_levels()}
+            close(pair)
+            pair = None
+        for index, variant in enumerate(BLIT_VARIANTS):
+            run = trc.production_run(variant, [photos[PHOTOS[0][0]][0], photos[PHOTOS[1][0]][0]], index + 1)
+            pair = python_scene(1.0, 0.0)
+            python = pair[0][1]
+            python.present(photos[PHOTOS[0][0]][0])
+            python.frames(2)
+            clock.at(run, BLIT_PROGRESS[0])
+            python.base.item.set_transition_run(run)
+            python.frames(8)                                     # its per-run resources made
+            for progress in BLIT_PROGRESS:
+                clock.at(run, progress)
+                python.base.item.update()
+                python.frames(2)
+                drawn[f"{variant}@{progress}"] = {"input": python.read(), **python.python_levels()}
+            python.base.item.set_transition_run(None)
+            close(pair)
+            pair = None
+        return drawn
+
+    pictures = refs.arrays_digest(rows for _image, rows in photos.values())
+    described = {f"{label}@{dpr}@dim{dimming}": {"round": "blit", "still": label, "dpr": float(dpr),
+                                                   "dimming": float(dimming), "window": list(blc.WINDOW),
+                                                   "display": list(blc.DISPLAY), "photos": pictures}
+                 for label, dpr, dimming in cases}
+    for index, variant in enumerate(BLIT_VARIANTS):
+        parameters = trc.production_run(variant, [photos[PHOTOS[0][0]][0], photos[PHOTOS[1][0]][0]],
+                                        index + 1).request.parameter_dict()
+        for progress in BLIT_PROGRESS:
+            described[f"{variant}@{progress}"] = {"round": "blit", "variant": variant, "parameters": parameters,
+                                                  "progress": progress, "window": list(blc.WINDOW),
+                                                  "display": list(blc.DISPLAY), "photos": pictures}
+    try:
+        today = refs.references("backdrop_pyramid_check", described, draw_today)
+
+        def today_levels(key: str) -> dict:
+            return {name: rows for name, rows in today[key].items() if name != "input"}
+
+        # Stills: both photos at both dprs, and the dimmed fact.
+        for label, dpr, dimming in cases:
+            key = f"{label}@{dpr}@dim{dimming}"
+            pair = native_scene(dpr, dimming)
+            native = pair[0][1]
+            python_input = today[key]["input"]
+            still_python[key] = today_levels(key)
             native.present(photos[label][0])
             native.settle()
             checks.setdefault("route_made_the_layer", True)
@@ -1081,26 +1164,20 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
         tiles = []
         for index, variant in enumerate(BLIT_VARIANTS):
             run = trc.production_run(variant, [photos[PHOTOS[0][0]][0], photos[PHOTOS[1][0]][0]], index + 1)
-            pair = scenes(1.0, 0.0)
-            (_ph, python), (_nh, native) = pair
-            python.present(photos[PHOTOS[0][0]][0])
-            python.frames(2)
+            pair = native_scene(1.0, 0.0)
+            native = pair[0][1]
             native.present(photos[PHOTOS[0][0]][0])
             native.settle()
             layer = native.base.layer
             layer._clock_ns = clock
             clock.at(run, BLIT_PROGRESS[0])
-            python.base.item.set_transition_run(run)
-            python.frames(8)                                     # its per-run resources made
             native.base.item.set_transition_run(run)             # the route hands the run to the layer
             native.settle()
             native.frames(4)
             for progress in BLIT_PROGRESS:
                 clock.at(run, progress)
-                python.base.item.update()
-                python.frames(2)
-                python_input = python.read()
-                python_levels = python.python_levels()
+                python_input = today[f"{variant}@{progress}"]["input"]
+                python_levels = today_levels(f"{variant}@{progress}")
                 layer.tick()
                 native.frames(2)
                 native_input = native.read()
@@ -1110,7 +1187,6 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
                 facts["transitions"][key] = judged(native_input, python_input, native_levels, python_levels)
             tiles.append([_tile(python_input), _tile(native_input), _tile(python_levels["light"]),
                           _tile(native_levels["light"])])
-            python.base.item.set_transition_run(None)
             native.base.item.set_transition_run(None)
             close(pair)
             pair = None
@@ -1211,6 +1287,7 @@ def child(args) -> dict:
     from rendering.native import NativeCoreUnavailable, load
 
     root = host_check._root(args.repo)
+    refs.configure_from(args)
     try:
         core = load((root / args.module_dir) if not Path(args.module_dir).is_absolute() else Path(args.module_dir))
     except NativeCoreUnavailable as exc:
@@ -1296,6 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--compare-only", action="store_true",
                         help="no child: Vulkan against OpenGL (levels, cards) and the review sheets from the label's "
                              "existing work folder (each API run alone under the same label first)")
+    refs.add_arguments(parser)
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -1344,7 +1422,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds]
+                   "--rounds", *args.rounds, *refs.child_arguments(args)]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
