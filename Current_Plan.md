@@ -1730,6 +1730,36 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     - [ ] Proof: the route check and `--cost` on both APIs, a Display 1 run on native OpenGL (wallpaper folder +
       recorded clip), the hitch rows for the five-transition load set on both APIs, and the isolated suite at the
       milestone. Audit: Opus Medium, High if the deletion touches core lifetime.
+      Proof run 28 Nov (Sonnet, module `f9d4399e`, the `ad3b55fd` line merged; evidence
+      `<proof wt>/.artifacts/evidence/native_core/n5_2h/20261128_n52h_proof_route2/` and `..._proof_cost/`):
+      - Route check, both APIs, validation on: PASS (`N52A VERDICT PASS`). `--cost` both APIs: PASS (opengl, vulkan).
+      - Hitch rows: NOT RUN. `preflip_pack.py` rows are Display 1 only (`display 1 is not present (present: [0])`, 28 of
+        28 skipped, nothing stored); they wait for Display 1 with the D1 run, on both APIs.
+      - Isolated suite (`run_chunked.py --isolated`, 1213 files, 24 failed). Against the Gate merge `f12427a2e` the same
+        24 files give 9 red already (so predating the switch, recorded, not fixed): `test_foundry_nav_and_eb_postport_20261119`
+        (a plan heading it reads is gone), `test_qtquick_family_product_actions` (`core.mc` import),
+        `test_qtquick_visualizer_custom_geometry_regressions` (`_Unit.screen_index`), `test_settings_input_foreground`
+        (palette colours), `test_shader_derivatives` (`waveform_ribbon` unbound), `test_test_suite_durability`
+        (two literals, `test_achievement_pulse_ring_surface_ownership.py:260`, `test_native_scene_transitions.py:529`),
+        `test_visualizer_prepared_reveal` (`_Uniforms._locations`), `tests/unit/test_policy_compliance.py` (a raw
+        `threading.Thread`, `packet_mailbox.py:472`), and `test_vulkan_shader_readiness`'s disintegrate bake.
+        Switch-caused and fixed, a commit each: the four tests that read the deleted retained background node
+        (`b106bfd42`), the scene orientation test's `capture.textures` (`OffscreenRenderTarget` has none),
+        the slide test that drew the deleted renderer, the tooling inventory rows for `native_transition_capture.py` and
+        `transition_references.py`, and `test_quick_exit_routes` (its negative control demanded a 0xC0000005 at exit that
+        the switch's tree no longer produces; window and host counts stay the control, cause of the vanished crash
+        unattributed).
+        Switch-caused and NOT fixed (each needs a retarget, not an edit): (1) the card-material pixel tests,
+        `test_achievement_pulse_ring_backdrop_fidelity`, `test_card_surface_panels`, `test_hidden_scene_retirement`,
+        `test_surface_material_style`, `test_surface_opacity_adjust`, `test_visualizer_card_clip_contract` (38 tests):
+        `tools/surface_material_capture.py`'s `MaterialScene` draws through `_HiddenQuickScene` (a QRenderControl GL
+        texture), which has no native core, so `SurfaceBackdropOwner` raises "the surface backdrop needs the native core";
+        it needs the hidden native host like `NativeTransitionCapture` (N5.8's tool part). (2) `test_qtquick_runtime`
+        (2 tests): `tools/qtquick_render_node_smoke.py` asserts the Python render node's telemetry (GL initialised,
+        image uploads, transition samples) and calls `BackgroundRenderItem.setProofProgress`, both deleted; the
+        lifecycle half should be kept on the native layer's own evidence. (3) `test_vulkan_shader_readiness` (3 tests):
+        the population and propagation composers' only resolved call sites were the deleted transitions' GL code, so
+        discovery no longer evaluates them; it needs to read their native-pack call sites (`native_scene.py`).
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
