@@ -726,9 +726,10 @@ def _connect_quit_edge(app: Any) -> None:
 
 
 def close_native_hidden_host() -> None:
-    """Close the process's kept hidden host (a no-op when there is none). The application's quit edge calls it; a
-    tool or test process that never runs an event loop (so never quits) registers it for its exit instead, and a
-    capture that needs another size closes the host first (the next request creates it again)."""
+    """Close the process's kept hidden host (a no-op when there is none), on either API. The application's quit edge
+    calls it (``native_hidden_host`` connects that edge when it makes the host); a capture that needs another size or
+    timing closes the host first, and the next request creates it again (a started process that runs the degraded
+    display has no core, so none is made)."""
     host, _owner.hidden_host = _owner.hidden_host, None
     _owner.hidden_host_size = None
     if host is not None:
@@ -778,12 +779,13 @@ def _close_window_host(handle: int) -> None:
 
 
 def host_quick_window(window: Any) -> Any:
-    """On Vulkan: hand ``window`` (a product ``QQuickWindow``, before its first show) to the native core, whose
-    device it then renders on (D6); returns its ``rendering.native.WindowHost``, closed when the window is destroyed.
-    The first frame any hosted window presents completes the Vulkan start. On OpenGL nothing happens (None). A failure
-    is remembered (the next start runs OpenGL) and raised. N5.2h: on OpenGL the window is hosted too (the core's frame
-    driver records the background layer at its edge); a failure there leaves that window alone on the degraded
-    display (None, ``window_hosted`` False, logged once per window), the core loaded for every other window."""
+    """Hand ``window`` (a product ``QQuickWindow``, before its first show) to the native core on either API (N5.2h:
+    the core's frame driver records the background layer at the window's edge); returns its
+    ``rendering.native.WindowHost``, closed when the window is destroyed. On Vulkan the window renders on the core's
+    device (D6) and the first frame any hosted window presents completes the Vulkan start; a failure there is
+    remembered (the next start runs OpenGL) and raised. On OpenGL a failure leaves that window alone on the degraded
+    display (None, ``window_hosted`` False, logged once per window), the core loaded for every other window; a process
+    without a core returns None."""
     core = _owner.core
     if _owner.backend.api != "vulkan":
         if core is None or window in _owner.unhosted_windows:

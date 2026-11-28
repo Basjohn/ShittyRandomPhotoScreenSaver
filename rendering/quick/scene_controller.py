@@ -3790,7 +3790,7 @@ class QuickSceneController(QObject):
             visualizer_item.close_native_route()
         background_item = self._background_item
         if background_item is not None and _qobject_is_alive(background_item):
-            # N5.7a: the native background layer's item goes while its window still lives (Vulkan only; else a no-op).
+            # N5.7a: the native background layer's item goes while its window still lives (a no-op where no layer was made: the degraded display).
             background_item.close_native_layer()
         root = self._scene_root
         context = self._context
