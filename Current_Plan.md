@@ -77,13 +77,19 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a7a8666a093ef7d48`, branch `worktree-agent-a7a8666a093ef7d48`, journal
     `<worktree>/.artifacts/handover/JOURNAL.md`, evidence `<worktree>/.artifacts/evidence/native_core/n5_6/`. Stops at
     "ready for build". 28 Nov: sub-boxes 1 and 2 done on the branch (`e7c0764b3` ABI 46 hold, `8d635e313`
-    arena, seqlock, drift-window stream); built on GitHub from `8d635e31` (run 46075163413) and resumed for
-    sub-box 3, the L proof, the arena close on a pending mode change and the ABI 46 hold check.
+    arena, seqlock, drift-window stream); built from `8d635e31`, resumed. Second stop 28 Nov: `29cb8317c` (program,
+    worker record, route settings), `950465ab3` (arena close), `3fd93cc3a` (ABI 46 hold round), `24893c036` (C++,
+    **ABI 47 reserved for N5.6**: a glass pass may sample the owner's capture, live attachments still refused). The
+    lead built `24893c03` (module in that worktree's `release/native_module/`); successor **Opus High
+    `a29135bafeaab65bb`** (28 Nov), worktree `.claude/worktrees/agent-a29135bafeaab65bb`, branch
+    `worktree-agent-a29135bafeaab65bb` (merges the first branch). Retire the first worktree only after its merge.
   - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
     (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
     `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
-    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; the lead builds the branch on GitHub
-    (28 Nov) and starts a fresh Opus Medium successor from the branch and this box.
+    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; built on GitHub from `b483770b`
+    (module in that worktree's `release/native_module/`). Successor **Opus Medium `a0c4a0b53ffc18f96`** (28 Nov),
+    worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
+    branch). Retire the first worktree only after the successor's merge.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -870,10 +876,15 @@ the feature (D3D11 is not stated).
       --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
-        find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes); prove the hold on the built
-        module with an `eb_core_check.py` round, and measure whether it ever fires on the long takes.
-      - A link closed while a mode change waits for its reply never closes the arena prepared for it (a leaked
-        named mapping). Close it on that path, with a test.
+        find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built
+        module (`3fd93cc3a`, `20261128_abi46_hold/summary.json`); open: whether it ever fires on the long takes (L runs).
+      - Done (`950465ab3`, test seen failing): the arena prepared for a pending mode change closes with the link.
+      - Registering the mode needs `program["buffers"]` passed to the item in `rendering/quick/visualizer/native_route.py`.
+        Edit it: the "hash" is only Bubble's evidence provenance (`_bubble_native_components.py` records its sha256),
+        not a lock; Bubble's next component receipt simply carries the new hash.
+      - Known approximations to rule on with L and P: a rebase's old steps run at the smaller capacity; the
+        `drift_out` relayout edge; the probe cube has no depth; a held geometry key leaves draws reading stale
+        `drift_out`; the near layer's edge with no shells.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
@@ -1521,24 +1532,31 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       a sync or readback, per-frame resource or pipeline work, and the native `mode.texture` copy measured at
       7-13 ms per run (N5.2f agent, 27 Nov: attribute whether it is per run or per frame and where it lands). Each
       named share gets a negative control (remove it, the share goes).
-    - [ ] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
+    - [x] Successor, after the build: `--cost` on both APIs with Crossfade's clear check passing (same pixels with and
       without the draw, clears counted by route, the draw's time back with `surface_clear_draw`), the route check's
       pixels unchanged, and the Vulkan figures not worse.
-    - [ ] Scene transitions next (the larger gap): measure the scene targets' own clearing draw (same pattern near
-      `mode_content.cpp` line 7976) and each share that grows with motion blur, trails and 4x, by owner, with the
-      same negative controls; fix at the owner.
-    - [ ] The composite pass (lead's decision, 28 Nov; D7 row 10 stands: nothing reads the window). When no reader
-      needs the kept surface on that frame (backdrop demand zero, no capture), record the background straight into the
-      window's pass and skip the surface and its composite; when a reader needs it (D7's pyramid while demand is above
-      zero, captures), keep the surface. One route with an optional output, not a second renderer. First list every
-      reader of the kept surface (D7 pyramid, quarter-turn orientation and fades in the composite, captures, Studio,
-      idle frames that only re-composite) with what each costs either way; if a reader rules the design out, stop
-      and report before building.
-    - [ ] Fix at the owner, wherever it lives (C++ core, QRhi route, Python host). Crossfade's native OpenGL at or
-      below Python's on the same frames, Vulkan not made slower; pixels unchanged (`--cost` and the route check).
-      Any C++ change: stop and report "ready for build" with the commit; the lead builds and resumes.
+    - [x] Scene-target clears (28 Nov, `5025acb09` built, harness fix `613e82d58`; evidence `<N5.2h worktree>/.artifacts/
+      evidence/native_core/n5_2h/20261128_n52h_cost_built_5025*`, `20261128_n52h_route_built_5025/`): OpenGL scene
+      targets clear by their pass where measured cheaper; multisampled R16F targets keep the draw. `--cost` and the
+      full route check (validation layers) pass on both APIs; Vulkan unchanged.
+    - [ ] The scene-pass gap (the real one; lead, 28 Nov). On the built module at 4K, `crumble_both_4x` native 1.495 ms
+      against Python 0.929 (1440p 0.746 / 0.300); `crumble_plain` 0.204 / 0.146. Core record time is nearly all of
+      the native frame, so the gap is inside the core's scene passes, not the route or the composite. Time each pass
+      (GPU timestamps per pass: scene, motion-blur taps, trails, resolve, 4x) for `crumble_both_4x` and
+      `glass_shatter_both_4x` against Python's same work on the same frames; name every share over 0.02 ms with its
+      owner and a negative control; fix at the owner. Any C++ change: "ready for build".
+    - [x] The composite pass: decided, not built (lead, 28 Nov). D5.2 stands: the core's output reaches the window as a
+      texture, never as a draw inside Qt's pass (QRhi cannot record into the window before Qt's pass, which clears it,
+      so a direct route would need an underlay or render node). The composite, Qt drawing the kept surface, is the
+      architecture's fixed share: about 0.030 ms at 4K, owner `composite.cpp`. It is not removed; box 6 names it on
+      each row. Kept on record if ever revisited: the five guards (no overwork on still repaints, no allocation or
+      per-frame toggling on demand flips, both pass variants warmed gradually, no new threads/timers/polling, no
+      flicker with per-frame readback across flips), plus the reader list in the N5.2h journal.
+    - [x] Crossfade: native 0.088 / Python 0.054 ms at 4K (1440p 0.032 / 0.027); the remaining gap equals the
+      composite's fixed share above, so it is named rather than fixed.
     - [ ] Then every transition: native OpenGL against Python OpenGL on the same frames (`--cost`, 1440p and 4K),
-      one table, each row at or below Python's or named with its own share and owner.
+      one table, each row at or below Python's or named with its own share and owner (the composite's
+      0.030 ms at 4K is named on every row).
 - [ ] N5.9 True glass over the Visualizer (D7 point 7; D8 plus 5): after the Visualizer layer and the backdrop
   are both native; `Docs/Architecture/Card_Surface_Materials.md` section 2 invariant 6 amended for the native
   core in the same change.
