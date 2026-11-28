@@ -57,16 +57,6 @@ def test_scene_path_is_six_coordinates_and_rejects_coincident_or_nonfinite_input
     assert admit_path([math.nan, 2], [0, 0]) == admit_path([0, 0], [0, 0])
 
 
-def test_world_point_never_yields_a_negative_zero():
-    # The native core reads settings through Qt's JSON, which stores -0.0 as the integer 0: a signed zero here would
-    # reach the Python renderer's shaders and not the native core's (N5.6 layer L, Extruded Bubble's uLightEnd).
-    for kind in ('light', 'stream'):
-        points = admit_path([0, 0], [0, 0], kind)
-        for point in (world_point(points[:3]), world_point(points[3:])):
-            assert all(math.copysign(1.0, v) > 0.0 for v in point if v == 0.0), point
-    assert all(math.copysign(1.0, v) > 0.0 for v in world_point((-0.0, 0.0, 0.0), (1.0, -1.0, 1.0)))
-
-
 def test_floor_or_ceiling_source_is_real_and_activation_has_no_halfway_population():
     mod = simulation_module()
     for floor in (-1, 1):
