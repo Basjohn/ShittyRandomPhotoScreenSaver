@@ -228,6 +228,30 @@ Continue the native sequence below with the repaired timing receipts. The report
     aeba3: warm each next transition's native GL pipelines gradually (warm-up rule), negative control, retake the GL
     rows. Vulkan: mid-run gaps (Exploding Tiles 79.2, Crossfade control 76.8 ms) with the control failing too = load,
     not the switch; retaken with the GL rows. Store the retaken rows in `tools/baselines/preflip/`.
+    aeba3 result (28 Nov, retired at 243k, branch `worktree-agent-aeba3f08a60b6a572` at `642847a5a`, pushed, no C++):
+    fixes 1-6 done, one commit each (`cc8464553` reveal, `14bc05af9` owner guard, `e2c386a79` capture import,
+    `1c775673d` owner tests + Vulkan-fails-to-OpenGL test, `614b784b9` exit routes on OpenGL, `8d455fecf` per-window
+    degrade, one-way); each control fails on the old code, except the retargeted quit test, which has no failing control
+    on Windows (the wedge was Linux/Xvfb only). `eb_core_check`/`waveform_check` stay allowlisted (each needs its own
+    validated Vulkan instance and sizes the owner's host cannot give; reason in the test). Evidence
+    `<aeba3 worktree>/.artifacts/evidence/native_core/n5_2h/20261128_audit_item{1..6}_*`.
+    - [ ] Fix 7, in-process pipeline warm-up (Opus Medium, C++, ABI bump if the module API grows). Root cause:
+      N3.6's "built ahead and warmed gradually" was never built in-process. The only gradual warm-up is the display
+      manager's idle warm (`display_manager.py` ~4985 → `BackgroundRenderItem.schedule_warm_step` →
+      `NativeBackgroundLayer.next_warm_unit`, `native_background.py:573`), whose units are Python only; pipelines are
+      built only in `ModeContent::ensure` → `build` (`mode_content.cpp:5918`) at the run's first record
+      (`mode_content.cpp:7751` still says "N3.6 will schedule the product's warm-up units"). Design: a core entry
+      (`NativeMode.warm(passes, settings)` or equal) builds one pass's pipelines per call without drawing; the run's
+      later `program(...)` reuses them; the layer's last warm units call it for the next likely transition, one unit
+      per already-rendered frame. Backend-neutral (OpenGL and Vulkan). First attribute how much of the 204 ms is
+      pipeline building against meshes, fields and targets. Control: a first-run child test where the warmed run's first
+      record builds 0 pipelines and the unwarmed one builds some.
+    - [ ] The audit's lows below (Sonnet Medium), minus the PhotoEnvironment box (Backlog), plus the two side defects:
+      the owner exit probe's lifecycle barrier timeout (one QuickDisplayRuntime still live, probably the probe's own
+      global), and the backdrop and Visualizer taking the core on an unhosted window (no window check; they draw
+      nothing). Leave the warm-up code to fix 7.
+    - [ ] Then: one build, D1 reveal rerun, GL and Vulkan hitch rows retaken and stored in `tools/baselines/preflip/`,
+      merge, retire worktrees a5767, ac12d, ac5eb, a6b16, acd91, ad3b5, aa7af, aa3b, aeba3.
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
     with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
