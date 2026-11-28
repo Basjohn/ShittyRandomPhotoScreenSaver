@@ -1616,9 +1616,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
          guide section 3 gains the transition rule in the same change (side defect found by the caller list).
       2. `release_media.py` and `onboarding_preview_foundry.py` capture only through `TransitionCapture` →
          `QuickTransitionRenderHost`. Operator 28 Nov: "Release media transitions do not need rerenders same with
-         onboarding." The shipped WebPs and preview assets stay as they are; native capture stays in N5.8. At the
-         deletion, the two tools' transition paths refuse with a one-line pointer to N5.8 (their other paths keep
-         working), with a test.
+         onboarding." Then: "The tools should still be updated for long term value, but re-rendering is a
+         waste." The two tools move to native capture before the deletion, so they never break. That is N5.8's tool
+         part, pulled forward; the Studio preview host stays in N5.8. Proof is a short capture of a few transitions
+         into scratch, compared by eye against the shipped WebP or preview. Shipped WebPs and preview assets are never
+         regenerated or committed.
       3. The Python transition classes stay as value owners (`block_values`, `scene_values`, `native_scene`,
          `regen_qrc.py:442-501` pack baking); only their GL draw code and `render_host.py` are deleted.
       4. `TransitionCapture` as the generic offscreen GL context (~45 tests, ~12 tools) moves to
@@ -1631,7 +1633,8 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
       changes per the caller list.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
-    - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; the `TransitionCapture` → `OffscreenRenderTarget` move
+    - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; native capture for the two
+      media tools (point 2: scratch capture only, no asset rerender); the `TransitionCapture` → `OffscreenRenderTarget` move
       (point 4).
     - [ ] Delete: the Python presenter, Python transitions' GL draw code and `render_host.py`, the blit backdrop and the
       bridge. Tests that only pinned them go; tests of behaviour retarget to the native route. A test that nothing in
