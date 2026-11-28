@@ -1897,6 +1897,14 @@ meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K bu
   icons and its own extra rows (Custom rows, ScenePath inspectors); each adapter's schema identical before and after
   (compare `build_schema()` output per mode), drift resolved to one rule. Then a new mode's adapter is its bucket
   map, extras, evaluator and recorded inputs.
+- [ ] Studio camera saving has two buttons (operator, 28 Nov, later work): "I think there is duplication in save
+  camera. The save camera button works well but there is a second button that claims to be involved with saving a
+  camera (And tick mark glyph I think?) which is either useless or poorly explained." The second is the toolbar's
+  tick, `keepViewButton` ("Keep View", `StudioShell.qml` near line 2961, `controller.keep_view`). It commits the
+  previewed lens (FOV) as an undoable edit, and the orbit only when the store's camera policy allows; dolly and pan
+  stay previews. Save Camera (`saveCameraButton`, `controller.saveCamera`) writes the preset's starting camera.
+  Decide one model: either fold Keep View into Save Camera, or give it a name and tooltip that say what it keeps and
+  how that differs. Then check every orbiting mode's round trip (`test_framed_camera_home_round_trip.py`).
 - [ ] New native-core modes in this order: **Reactive Liquid / Audio Melt Pool, then Concrete Rain** (section 7,
   lab and mock-fidelity proof first). Usu Moonscape remains a later, separately admitted long-horizon concept;
   it does not block SMP re-evaluation just because it is listed after Concrete Rain.
