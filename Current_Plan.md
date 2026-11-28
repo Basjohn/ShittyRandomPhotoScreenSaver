@@ -1629,7 +1629,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
          native OpenGL as today's API fallback; a module that fails to load on both shows the photos through Qt's own
          `Image` with hard cuts and no transitions, logged as an error once (degraded display, not a second renderer),
          with a test.
-    - [ ] Production route: OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
+    - [ ] Production route (built `5c81280f4`, finished `88f6bd2eb`/`39e01c6f4`; backdrop vs blit `9ef7ec49d`, OpenGL
+      only so far). Lead D1 run 28 Nov on native OpenGL (wallpaper pair + recorded clip, 70 s, displays on): wallpaper
+      and transitions drawn by the core, no faults, clean exit
+      (`<a5767 wt>/.artifacts/evidence/display/d1_run/20261128_n52h_switch_gl_native/`). Side defects sent to the
+      agent: stale reveal log wording (`display_manager.py:5375`), GL `v_uv`/`vUv` varying-name warning, five
+      window-showing probes in `test_quick_backend_owner.py`, offscreen env leak into pixel wrappers, Cube Turn input
+      53-59 levels vs Python. OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
       does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
       changes per the caller list.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
