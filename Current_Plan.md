@@ -84,20 +84,16 @@ Continue the native sequence below with the repaired timing receipts. The report
     `a29135bafeaab65bb`** (28 Nov), worktree `.claude/worktrees/agent-a29135bafeaab65bb`, branch
     `worktree-agent-a29135bafeaab65bb` (merges the first branch) retired from use at 213k; `14d763931` built on GitHub
     (module in its `release/native_module/`). Third **Opus High `ae9dbc46b60681ac3`** (28 Nov), worktree
-    `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47.
-    Retire the earlier worktrees only after its merge.
-  - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
-    (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
-    `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
-    First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; built on GitHub from `b483770b`
-    (module in that worktree's `release/native_module/`). Successor **Opus Medium `a0c4a0b53ffc18f96`** (28 Nov),
-    worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
-    branch) retired from use at 211k; its branch holds `ff29e64ee` (built, module in its `release/native_module/`) and
-    `d5e9371ab`. Third agent **Opus `ab7f236afc86eb6b2`** (28 Nov), worktree `.claude/worktrees/agent-ab7f236afc86eb6b2`,
-    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second) retired from use at 206k; `9add8a67d` (run-parts
-    timer) built on GitHub, module in its `release/native_module/`. Fourth agent **Opus `a7162539fc47dd8dc`** (28 Nov),
-    worktree `.claude/worktrees/agent-a7162539fc47dd8dc`, branch `worktree-agent-a7162539fc47dd8dc` (merges the
-    third). Retire the earlier worktrees only after the merge.
+    `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47,
+    retired from use at 230k after L subset and coverage. Fourth **Opus High `ac0cda3c82727c8cd`** (28 Nov), worktree
+    `.claude/worktrees/agent-ac0cda3c82727c8cd`, branch `worktree-agent-ac0cda3c82727c8cd` (merges the third), ABI 47:
+    reference key, native player, P/T/C; signed-zero entry numbered R-254. Retire the earlier worktrees only after its
+    merge.
+  - **N5.2h Gate merged** 28 Nov (`f12427a2e`; Opus Medium audit, should-fixes done in `a49087e7c`, harness reds in
+    `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
+    `.artifacts/evidence/native_core/n5_2h/`, journal `.artifacts/handover/n5_2h/JOURNAL.md`.
+  - **Opus Medium `acd9164542fb33bfc`**: N5.2h "The switch" (28 Nov), worktree `.claude/worktrees/agent-acd9164542fb33bfc`,
+    branch `worktree-agent-acd9164542fb33bfc`, ABI 45, journal `<worktree>/.artifacts/handover/JOURNAL.md`.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -910,6 +906,16 @@ the feature (D3D11 is not stated).
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
+    - [ ] First (lead, 28 Nov): the Python reference key. `python_references._source_files` hashes the whole
+      `rendering/quick/visualizer` package, so a native-only edit (`native_route.py`, `8c0cbad9c`) re-keys every mode's
+      references, and N5.6's 18 references sit at three producer revisions (12 `23f88094`, 5 `eb776f4d`, 1 `9d34c13b`).
+      Decided: key each reference on the repo modules its drawing process actually imported (recorded with the entry;
+      a lookup rehashes that recorded set; a new import arrives through an importer whose bytes changed), plus the
+      composed shaders, QML and harness sources as now. Native-only files then never enter. Tests: a native-only edit
+      keeps the key, an edit to an imported Python module changes it, each with its control. Re-key once; redraw
+      only the references whose recorded sources really differ, at one revision (a pure run, Haiku/Sonnet if separate).
+      Then the native player and its `owner_render_parity --native` entry (pattern: `native_record_identity.py`
+      registration near line 436).
     - [ ] Verify shaft and backdrop placement through the complete route at nonzero lens shift and odd,
       padded targets. The [ABI 45 component proof](.artifacts/evidence/native_core/n5_6/20261123_abi45_matrix_and_targets/report.md)
       validates the writer, blur and sampling. Reuse the core's scene-item matrix for the backdrop vertex under
@@ -1526,7 +1532,7 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 - [ ] N5.2h The background family switches on OpenGL (D10 point 4): presenter, backdrop and all 28 transitions
   native in production; the native backdrop compared with the blit on the same frames; the Python presenter, the
   Python transitions, the blit backdrop and the wrapped-texture bridge deleted in that change.
-  - [ ] Gate (operator, 22 Nov: a start below Python OpenGL is a bad place to start; general optimisation stays its own
+  - [x] Gate (operator, 22 Nov: a start below Python OpenGL is a bad place to start; general optimisation stays its own
     phase after the flip): every transition's native OpenGL cost at or below Python's own on the same frames before the
     switch. Known: the native OpenGL route's fixed cost (Crossfade control 0.15 ms against Python's 0.04 at 4K,
     `n52f_cost`) puts N5.2f's native OpenGL (0.53-0.77 ms) above Python's (0.27-0.46); find that route overhead first.
@@ -1594,16 +1600,36 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       at most the composite (0.0154 ms 1440p, 0.0297 4K; measured per pass on the two scene rows, the same full-screen
       pass on every other row), 13 by the composite plus under 0.013 ms (noise band), one named beyond: 1440p
       `crumble_both_4x` +0.043 (composite plus the RGBA16F share). Python's own figures swing up to 0.2 ms between runs.
-      Lead's Vulkan hitch row passed (above). Gate closes on the checkpoint audit and merge.
+      Lead's Vulkan hitch row passed (above). Gate closed: audited and merged 28 Nov (`f12427a2e`).
   - [ ] The switch (after the Gate merges; decompose here before dispatch). Order:
+    - [x] Caller list (28 Nov, `acd9164542fb33bfc`): `<wt>/.artifacts/evidence/native_core/n5_2h/20261128_switch_caller_list/caller_list.txt`.
+      Five callers rule out deleting in the same change as the route; lead decided each (28 Nov):
+      1. Python transition references are drawn live by `transition_route_check.py` (rule (a) `:456-485`, `--cost`
+         `:818-845`), `fullscreen_pass_check`, `background_layer_check`, `backdrop_pyramid_check`. **Cache them once
+         before deleting**: frames per check case into the proof cache (keyed like the Visualizer references), Python
+         cost figures as stored baselines under `tools/baselines/preflip/`. No frozen Python GL code is kept. The proof
+         guide section 3 gains the transition rule in the same change (side defect found by the caller list).
+      2. `release_media.py` and `onboarding_preview_foundry.py` capture only through `TransitionCapture` →
+         `QuickTransitionRenderHost`. **N5.8's native capture for these two tools is pulled forward** into this box,
+         before the deletion (the Studio preview host stays in N5.8).
+      3. The Python transition classes stay as value owners (`block_values`, `scene_values`, `native_scene`,
+         `regen_qrc.py:442-501` pack baking); only their GL draw code and `render_host.py` are deleted.
+      4. `TransitionCapture` as the generic offscreen GL context (~45 tests, ~12 tools) moves to
+         `tools/labs/render_target.py` `OffscreenRenderTarget`: mechanical, a Sonnet Medium slice.
+      5. `start_quick_backend` (`bootstrap.py:652`) loads the core on OpenGL too. A failed Vulkan start falls back to
+         native OpenGL as today's API fallback; a module that fails to load on both shows the photos through Qt's own
+         `Image` with hard cuts and no transitions, logged as an error once (degraded display, not a second renderer),
+         with a test.
     - [ ] Production route: OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
-      does; one route per API, no Python fallback kept. List every caller of the Python presenter, Python
-      transitions, the blit backdrop and the wrapped-texture bridge first (product, Studio, release-media and capture
-      tools, tests), with what replaces each.
+      does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
+      changes per the caller list.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
-    - [ ] Delete in the same change: the Python presenter, Python transitions, the blit backdrop and the bridge. Tests
-      that only pinned them go; tests of behaviour retarget to the native route. The frozen Python references stay
-      only where the proof cache needs them (the proof guide says which); nothing in the product imports them.
+    - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; native capture for the two
+      media tools (point 2), judged on the showcase WebPs; the `TransitionCapture` → `OffscreenRenderTarget` move
+      (point 4).
+    - [ ] Delete: the Python presenter, Python transitions' GL draw code and `render_host.py`, the blit backdrop and the
+      bridge. Tests that only pinned them go; tests of behaviour retarget to the native route. A test that nothing in
+      the product or tools imports the deleted modules.
     - [ ] Proof: the route check and `--cost` on both APIs, a Display 1 run on native OpenGL (wallpaper folder +
       recorded clip), the hitch rows for the five-transition load set on both APIs, and the isolated suite at the
       milestone. Audit: Opus Medium, High if the deletion touches core lifetime.
