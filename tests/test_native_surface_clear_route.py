@@ -94,7 +94,7 @@ def scene_clear_is_the_passes(mode_cpp: str, scene_cpp: str) -> bool:
             and "decl.cube || decl.transparency()" in helper and "if (a.borrowed)" in helper
             and "a.clear[c] != 0.0f && a.clear[c] != 1.0f" in helper
             and "known[c] && value[c] != a.clear[c]" in helper
-            and "if (samples > 1 && a.format != TargetFormat::RGBA8)" in helper)
+            and "if (samples > 1 && a.format != TargetFormat::RGBA8 && a.format != TargetFormat::RGBA16F)" in helper)
 
 
 def test_scene_targets_are_cleared_by_their_pass_on_opengl_and_by_the_draw_under_the_control():
@@ -117,9 +117,12 @@ def test_scene_targets_are_cleared_by_their_pass_on_opengl_and_by_the_draw_under
         "rhi->backend() == QRhi::OpenGLES2 && scenePassClearColour", "scenePassClearColour"))
     assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
         "a.clear[c] != 0.0f && a.clear[c] != 1.0f", "false"))
-    # ... and one that pass-cleared a multisampled R16F attachment (measured slower than the draw).
+    # ... and one that pass-cleared a multisampled R16F attachment (measured slower than the draw), or one that kept
+    # the draw for the motion scene's multisampled RGBA16F velocity (N5.2h: 0.022 ms by the pass, 0.058 by the draw).
     assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
-        "if (samples > 1 && a.format != TargetFormat::RGBA8)", "if (false)"))
+        "if (samples > 1 && a.format != TargetFormat::RGBA8 && a.format != TargetFormat::RGBA16F)", "if (false)"))
+    assert not scene_clear_is_the_passes(mode_cpp, scene_cpp.replace(
+        "if (samples > 1 && a.format != TargetFormat::RGBA8 && a.format != TargetFormat::RGBA16F)", "if (samples > 1 && a.format != TargetFormat::RGBA8)"))
 
 
 # ------------------------------------------------------------------------------------ the harness's control

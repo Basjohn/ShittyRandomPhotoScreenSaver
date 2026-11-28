@@ -201,6 +201,13 @@ def velocity_is_one_attachment(target: dict) -> bool:
     return len(colour) == 2 and colour[1]["format"] == "rgba16f"
 
 
+def clears_as_one(target: dict) -> bool:
+    """N5.2h: every attachment of the target clears to the same four values, so OpenGL can clear the multisampled
+    target by its pass (one clear colour for every attachment) instead of by the clearing draw."""
+    clears = {tuple(a.get("clear", [0.0, 0.0, 0.0, 0.0])) for a in target["colour"]}
+    return len(clears) == 1
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(variant):
     from rendering.native.mode import CompositeStep, EnvironmentStep, ModePass, program_json
@@ -281,6 +288,11 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
         pair = dict(target, colour=[target["colour"][0], {"name": "vx", "format": "r16f"},
                                     {"name": "vy", "format": "r16f"}])
         assert not velocity_is_one_attachment(pair)
+        assert clears_as_one(target)
+        # Negative control: a velocity whose alpha differs from the colour's (the first form, with bloom) fails.
+        alpha = target["colour"][0].get("clear", [0.0, 0.0, 0.0, 0.0])[3]
+        apart = dict(target, colour=[target["colour"][0], dict(target["colour"][1], clear=[0.0, 0.0, 0.0, 1.0 - alpha])])
+        assert not clears_as_one(apart)
     else:
         assert len(target["colour"]) == 1
     own_vertex = [p for p in drawn if p.geometry is not None]

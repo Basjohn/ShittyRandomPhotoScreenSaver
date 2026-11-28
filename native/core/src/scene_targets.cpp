@@ -202,8 +202,9 @@ bool scenePassClearColour(const TargetDeclaration &decl, int samples, QColor *co
         // Measured (N5.2h, RTX 4090, raw GL at 4K): a multisampled R16F attachment clears slower by glClear than by
         // the draw (0.143 against 0.077 ms for two at 4x, any clear value, glClearBufferfv too), while every other
         // shape measured clears faster or equal. A multisampled target keeps the draw unless all its attachments are
-        // RGBA8 (4x RGBA8 and depth: 0.008 against 0.017).
-        if (samples > 1 && a.format != TargetFormat::RGBA8)
+        // RGBA8 (4x RGBA8 and depth: 0.008 against 0.017) or RGBA16F (the motion scene's RGBA8 colour, RGBA16F
+        // velocity and depth at 4x: 0.022 against 0.058 by the draw).
+        if (samples > 1 && a.format != TargetFormat::RGBA8 && a.format != TargetFormat::RGBA16F)
             return false;
         const bool single = a.format == TargetFormat::R16F || a.format == TargetFormat::R32F
             || a.format == TargetFormat::R8;

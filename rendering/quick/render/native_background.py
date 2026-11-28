@@ -252,9 +252,10 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     if motion:
         # N5.2h: one RGBA16F, not two R16F attachments (x and y, as before): on OpenGL the pair cost 0.42 ms a 4K frame
         # at 4x for crumble_both_4x (their clearing draw, the pieces' writes and QRhi's resolve blits; a raw-GL probe of
-        # the same shape: two R16F 0.86 ms, one RGBA16F 0.51, Python's RG16F 0.38). Cleared as Python's glClear clears
-        # its RG16F (0, 0, 0, 1); only .xy is read.
-        colour += [TargetAttachment("velocity", "rgba16f", clear=(0.0, 0.0, 0.0, 1.0))]
+        # the same shape: two R16F 0.86 ms, one RGBA16F 0.51, Python's RG16F 0.38). Only .xy is read (cleared to 0 as
+        # Python clears its RG16F); its alpha is the colour's, so both share the one clear colour that lets OpenGL clear
+        # the multisampled target by its pass (scene_targets.cpp scenePassClearColour: 0.022 ms at 4K, 0.058 by draw).
+        colour += [TargetAttachment("velocity", "rgba16f", clear=(0.0, 0.0, 0.0, colour[0].clear[3]))]
         geometry = motion_geometry(pixels if pixels is not None else destination_size)
         images.append(StorageImage(SCENE_MOTION_TILES, geometry.tiles, "rgba16f"))
         velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.velocity", "nearest"),)
