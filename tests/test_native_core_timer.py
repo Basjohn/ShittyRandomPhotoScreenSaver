@@ -194,7 +194,7 @@ def test_the_frame_driver_brackets_every_pass_it_records():
 # N5.2h: under the harness's time_scene_passes a surface's record is timed per unit (GpuPassKind::ScenePass) in place of
 # its whole Surface figure, and under time_scene_run_parts a scene run in parts (OpenGL). What the record does is judged
 # on the built module by the cost round (transition_route_check.py ``_scene_passes``: scene_passes_replace_the_record,
-# scene_passes_control_has_none, run_parts_on_opengl_only, run_parts_sum_is_the_units; their harness logic in
+# scene_passes_control_has_none, run_parts_on_opengl_only, run_parts_cover_the_units; their harness logic in
 # test_native_surface_clear_route.py), not by matching the source.
 
 

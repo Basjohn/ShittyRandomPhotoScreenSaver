@@ -134,11 +134,12 @@ class _UnitStand:
     units; ``always``: one whose units ignore the switch."""
 
     def __init__(self, *, known=True, nested=False, always=False, parts_known=False, parts_leak=False,
-                 resolve_ns=30_000):
+                 resolve_ns=30_000, draw_ns=50_000):
         self.known, self.nested, self.always = known, nested, always
         # N5.2h successor: a module with time_scene_run_parts, whose run (pass 0) is then timed in three parts summing
-        # to its unit (``resolve_ns`` other than 30_000: a sum off the unit); ``parts_leak``: parts in the units block.
-        self.parts_known, self.parts_leak, self.resolve_ns = parts_known, parts_leak, resolve_ns
+        # to its unit (``resolve_ns`` above 30_000: the brackets' overhead; ``draw_ns`` 0: the run's draw left
+        # untimed); ``parts_leak``: parts in the units block.
+        self.parts_known, self.parts_leak, self.resolve_ns, self.draw_ns = parts_known, parts_leak, resolve_ns, draw_ns
         self.units = False
         self.parts = False
         self.edge = 0
@@ -162,7 +163,7 @@ class _UnitStand:
         self.edge += 1
         e = self.edge
         if (self.units or self.always) and (self.parts or (self.parts_leak and self.units)):
-            self.pending += [GpuSample(5, e, e + 1, 20_000, 0, 5), GpuSample(5, e, e + 1, 50_000, 0, 6),
+            self.pending += [GpuSample(5, e, e + 1, 20_000, 0, 5), GpuSample(5, e, e + 1, self.draw_ns, 0, 6),
                              GpuSample(5, e, e + 1, self.resolve_ns, 0, 7), GpuSample(5, e, e + 1, 300_000, 1, 0),
                              GpuSample(5, e, e + 1, 50_000, 1, 1)]
         elif self.units or self.always:
@@ -205,15 +206,32 @@ def test_the_scene_pass_round_names_each_unit_and_fails_on_its_negatives():
 
 def test_the_run_parts_block_names_each_part_and_fails_on_its_negatives():
     """N5.2h successor: under ``time_scene_run_parts`` (OpenGL) a scene run is timed as its opening, each pass and its
-    end-of-pass resolves; the parts sum to the run timed whole, none appears in the units block, none on Vulkan."""
+    end-of-pass resolves; the parts cover the run timed whole (their overhead reported, not judged), none appears in
+    the units block, none on Vulkan."""
     record, checks = _units(_UnitStand(parts_known=True))
     assert record["available"] and all(checks.values()), checks
     assert {"0:underlay:run_open", "0:underlay:run_draw", "0:underlay:run_resolve"} <= set(record["run_parts"])
     assert abs(record["run_parts_sum_per_frame"]["median_ms"] - 0.45) < 1e-9
-    assert record["run_parts_sum_against_units"] == 1.0
+    assert record["run_parts_sum_against_units"] == 1.0 and record["run_parts_overhead_ms"] == 0.0
+    # The brackets' own overhead (the parts above the units) is a figure, not a failure.
+    over, over_checks = _units(_UnitStand(parts_known=True, resolve_ns=130_000))
+    assert over_checks["run_parts_cover_the_units"] and abs(over["run_parts_overhead_ms"] - 0.1) < 1e-9
     # A module without the control runs the two blocks of before and judges no part.
     assert "run_parts" not in _units(_UnitStand())[0]
-    # Negatives: parts in the units block; parts whose sum is not the unit's; parts reported on Vulkan.
+    # Negatives: parts in the units block; parts that leave part of the run untimed; parts reported on Vulkan.
     assert not _units(_UnitStand(parts_known=True, parts_leak=True))[1]["run_parts_control_has_none"]
-    assert not _units(_UnitStand(parts_known=True, resolve_ns=130_000))[1]["run_parts_sum_is_the_units"]
+    assert not _units(_UnitStand(parts_known=True, draw_ns=0))[1]["run_parts_cover_the_units"]
     assert not _units(_UnitStand(parts_known=True), api="vulkan")[1]["run_parts_on_opengl_only"]
+
+
+def test_the_vulkan_route_is_judged_only_for_a_selection_holding_a_route_variant():
+    """A ``--variants`` selection without a route variant judges no route (it passes); one holding a route variant
+    the round did not draw fails ``route_variant_drawn``; drawn, the variant's own checks run."""
+    import transition_route_check as trc
+
+    facts: dict = {}
+    assert trc._route_on_vulkan(None, None, None, {}, facts, ("crumble_both_4x", "crossfade")) == {}
+    assert facts["route_variants"] == []
+    route = trc.ROUTE_VARIANTS[0]
+    assert trc._route_on_vulkan(None, None, None, {}, {}, ("crossfade", route)) == {"route_variant_drawn": False}
+    assert trc._route_on_vulkan(None, None, None, {}, {}, trc.ROUTE_VARIANTS) == {"route_variant_drawn": False}
