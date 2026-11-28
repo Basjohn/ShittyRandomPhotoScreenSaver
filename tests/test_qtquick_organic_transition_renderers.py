@@ -27,7 +27,7 @@ def test_melt_drip_requires_one_resolved_melt_origin(origin, expected):
             melt_drip_parameters({**valid, field: float("nan")}, origin)
 
 
-def test_the_melt_renderer_is_a_lazy_local_surface():
+def test_the_melt_renderer_is_a_value_owner_with_no_python_gl_draw():
     renderer = QuickMeltDripRenderer()
     assert renderer.transition_id == "melt_drip"
-    assert not renderer.has_resources
+    assert callable(renderer.block_values) and not hasattr(renderer, "render")

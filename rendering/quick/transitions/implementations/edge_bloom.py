@@ -4,20 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from OpenGL import GL as gl
 
 from rendering.gl_programs.edge_bloom_program import (
-    EDGE_BLOOM_BLOCK,
     EDGE_BLOOM_FRAGMENT_SOURCE,
     EDGE_BLOOM_LINE_TEXELS,
     EDGE_BLOOM_SETTLED,
-    EDGE_BLOOM_VERTEX_SOURCE,
     edge_bloom_thresholds,
 )
 from rendering.gl_programs.photo_colour import photo_accent_colour, photo_glow_colour
-from rendering.gl_programs.portable import pack_block
-from rendering.quick.scene3d.edge_field import EdgeField, edge_field_size, edge_field_warm_entries
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from rendering.quick.scene3d.edge_field import edge_field_size
 from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass, NativeFieldRequest
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -68,6 +63,9 @@ class QuickEdgeBloomRenderer(NativeFragmentPass):
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # the fields' samplers are bound in the source; values in EDGE_BLOOM_BLOCK
 
+    def __init__(self) -> None:
+        self._colours: dict[tuple, tuple[float, float, float]] = {}
+
     @classmethod
     def native_field_sources(cls) -> dict[str, str]:
         from rendering.quick.scene3d.native_fields import edge_field_sources
@@ -96,47 +94,6 @@ class QuickEdgeBloomRenderer(NativeFragmentPass):
                 "uLineWidth": EDGE_BLOOM_LINE_TEXELS / edge_field_size(size)[1], "uGlow": glow,
                 "uSeed": float(seed), "uColor": new, "uOldColor": old, "uShow": _shown(progress)}
 
-    def __init__(self) -> None:
-        self._resources = MeshResources("Quick Edge Bloom Reveal")
-        self._old_field = EdgeField("Quick Edge Bloom Reveal old picture")
-        self._new_field = EdgeField("Quick Edge Bloom Reveal new picture")
-        self._colours: dict[tuple, tuple[float, float, float]] = {}   # (run, image) -> glow colour
-
-    @property
-    def has_resources(self) -> bool:
-        return self._resources.has_resources or self._old_field.has_resources or self._new_field.has_resources
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        color, source, glow, detail, seed = edge_bloom_parameters(frame.run.request.parameter_dict())
-        try:
-            if progress <= 0.0:
-                self._resources.draw_image(frame, frame.source_texture_id)
-                return
-            if progress >= EDGE_BLOOM_SETTLED:
-                self._resources.draw_image(frame, frame.destination_texture_id)
-                return
-            self._draw(frame, progress, *self._glow_colours(frame, color, source), glow, detail, seed)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing and, given the render
-        ``size`` in device pixels, allocate nothing (the fields are built, not allocated, then)."""
-        edge_bloom_parameters(parameters)
-        r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, "edge_bloom", EDGE_BLOOM_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE),
-                   *edge_field_warm_entries(r)]
-        if not warm_programs(entries):
-            return False
-        if size and size[0] > 0 and size[1] > 0:
-            if not warm_pass_blocks(r, size) or not self._new_field.warm(size):
-                return False
-            return self._old_field.warm(size)
-        return True
-
     def _picture_glow(self, frame, image) -> tuple[float, float, float]:
         """A picture's accent colour made luminous, found once per run."""
         key = (frame.run.run_id, image.identity)
@@ -154,55 +111,6 @@ class QuickEdgeBloomRenderer(NativeFragmentPass):
         request = frame.run.request
         new = self._picture_glow(frame, request.destination_image)
         return new, (new if source == "next" else self._picture_glow(frame, request.source_image))
-
-    def park(self) -> None:
-        """Drop the run's edge fields and picture colours; the programs stay warm."""
-        self._colours = {}
-        try:
-            self._new_field.release()
-        finally:
-            self._old_field.release()
-
-    def _draw(self, frame, progress: float, color, old_color, glow: float, detail: float, seed: int) -> None:
-        r = self._resources
-        low, high = edge_bloom_thresholds(detail)
-        request = frame.run.request
-        size = tuple(frame.viewport[2:])
-        new_field = self._new_field.texture(r, frame.destination_texture_id, size,
-                                            (frame.run.run_id, request.destination_image.identity), low, high)
-        old_field = self._old_field.texture(r, frame.source_texture_id, size,
-                                            (frame.run.run_id, request.source_image.identity), low, high)
-        program = r.program("edge_bloom", EDGE_BLOOM_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("edge_bloom", self._SAMPLERS)
-        values = r.values("edge_bloom")
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame, values)
-        gl.glActiveTexture(gl.GL_TEXTURE0 + _OLD_FIELD_UNIT)
-        inherited = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D))
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTextureUnit(_NEW_FIELD_UNIT, new_field)       # the program's sampler bindings
-        gl.glBindTextureUnit(_OLD_FIELD_UNIT, old_field)
-        values["uProgress"] = progress
-        values["uTime"] = progress * request.duration_ms / 1000.0
-        values["uLineWidth"] = EDGE_BLOOM_LINE_TEXELS / edge_field_size(size)[1]
-        values["uGlow"] = glow
-        values["uSeed"] = float(seed)
-        values["uColor"] = color
-        values["uOldColor"] = old_color
-        values["uShow"] = SHOW_EFFECT              # N5.2g: the native core's ends (this renderer draws its own)
-        gl.glBindVertexArray(frame.quad_vao)
-        try:
-            with r.pass_blocks.bound(pack_block(EDGE_BLOOM_BLOCK, values)):
-                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        finally:
-            gl.glBindTextureUnit(_OLD_FIELD_UNIT, inherited)
-
-    def release_resources(self) -> None:
-        try:
-            self.park()
-        finally:
-            self._resources.release_resources()
 
 
 def create_transition_renderer() -> QuickEdgeBloomRenderer:

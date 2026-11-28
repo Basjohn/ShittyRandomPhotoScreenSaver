@@ -13,7 +13,7 @@ from rendering.gl_programs.shockwave_grid_program import (
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
 from rendering.quick.scene3d.stream import StreamRing
 from tests.test_scene3d_heightfield import _VERTEX
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
@@ -27,7 +27,7 @@ class _SurfaceProbe:
     def __init__(self, terrain):
         from rendering.quick.render.gl_resources import compile_program
 
-        self.capture = TransitionCapture(self.SIZE, self.SIZE)
+        self.capture = OffscreenRenderTarget(self.SIZE, self.SIZE)
         self.texture = HeightfieldTexture("basin reaction probe", components=2)
         self.stream = StreamRing("basin reaction events")
         self.terrain = terrain

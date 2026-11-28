@@ -21,7 +21,7 @@ from rendering.quick.transitions.request_resolution import resolve_quick_transit
 from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 from rendering.transition_registry import get_transition_descriptor_for_runtime_identity
 from rendering.transition_settings import BLOCK_SPIN_DIRECTIONS, transition_settings
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 pytestmark = pytest.mark.qt
 
@@ -91,7 +91,7 @@ def _run(capture, transition_id, section, values, duration_ms):
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -115,7 +115,7 @@ def test_the_new_picture_shows_first_on_the_side_the_label_starts_from(
 
 @pytest.fixture
 def plain_capture(qt_app):
-    capture = TransitionCapture(W, H, Image.new("RGB", (W, H), (200, 200, 200)),
+    capture = NativeTransitionCapture(W, H, Image.new("RGB", (W, H), (200, 200, 200)),
                                 Image.new("RGB", (W, H), (60, 200, 60)))
     yield capture
     capture.close()

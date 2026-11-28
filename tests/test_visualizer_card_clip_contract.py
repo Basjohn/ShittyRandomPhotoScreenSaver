@@ -57,6 +57,7 @@ from tools import card_clip_contract as contract
 from tools.card_clip_contract import TOLERANCE
 
 DISPLAY = (960, 600)
+WALLPAPER = (0x0B, 0x0D, 0x10, 255)   # the hidden host's window colour, as a photo the backdrop is built from
 FRAMES = 150               # replayed frames before the first check (every mode has drawn by then)
 OFF_GRID = contract.OFF_GRID
 CARD = contract.CONTRACT_CARD
@@ -137,6 +138,8 @@ def host(qt_app, dpr):
 
     display = HiddenDisplayHost(*DISPLAY, dpr=dpr)
     try:
+        # The display's photo (N5.2h: Glass is built from the native background layer): the window's own colour.
+        display.set_wallpaper(WALLPAPER)
         yield display
     finally:
         display.close()

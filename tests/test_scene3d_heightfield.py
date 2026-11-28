@@ -18,7 +18,7 @@ from rendering.gl_programs.heightfield import (
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.quick.scene3d import heightfield as texture_module
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 
@@ -188,7 +188,7 @@ def _texture_internal_format(texture_id: int) -> int:
 
 
 def test_gpu_bilinear_samples_match_cpu_and_only_authored_zero_is_water(qt_app):
-    capture = TransitionCapture(9, 9)
+    capture = OffscreenRenderTarget(9, 9)
     texture = HeightfieldTexture("heightfield sampler probe")
     terrain = _field(
         0.0, 0.25, 0.0,
@@ -215,7 +215,7 @@ def test_gpu_bilinear_samples_match_cpu_and_only_authored_zero_is_water(qt_app):
 
 
 def test_gpu_curve_samples_match_cpu_while_bilinear_zero_remains_water(qt_app):
-    capture = TransitionCapture(9, 9)
+    capture = OffscreenRenderTarget(9, 9)
     texture = HeightfieldTexture("heightfield curve sampler probe")
     terrain = _field(
         0.0, 0.25, 0.0,
@@ -248,7 +248,7 @@ def test_gpu_curve_samples_match_cpu_while_bilinear_zero_remains_water(qt_app):
 
 
 def test_flat_curve_wire_keeps_open_plateau_between_grid_lines(qt_app):
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     texture = HeightfieldTexture("flat heightfield curve wire probe")
     flat = _field(*([0.0] * 9))
     try:
@@ -267,7 +267,7 @@ def test_flat_curve_wire_keeps_open_plateau_between_grid_lines(qt_app):
 
 
 def test_texture_storage_and_upload_are_skipped_for_unchanged_frames(qt_app, monkeypatch):
-    capture = TransitionCapture(32, 32)
+    capture = OffscreenRenderTarget(32, 32)
     texture = HeightfieldTexture("heightfield upload probe")
     calls = {"create": 0, "storage": 0, "upload": 0}
     original_create = texture_module.gl.glCreateTextures
@@ -313,7 +313,7 @@ def test_texture_storage_and_upload_are_skipped_for_unchanged_frames(qt_app, mon
 
 
 def test_unpack_and_bound_texture_state_restore_even_when_sampling_raises(qt_app):
-    capture = TransitionCapture(32, 32)
+    capture = OffscreenRenderTarget(32, 32)
     texture = HeightfieldTexture("heightfield state probe")
     pbo = int(gl.glGenBuffers(1))
     sentinel_texture = int(gl.glGenTextures(1))
@@ -374,7 +374,7 @@ def test_unpack_and_bound_texture_state_restore_even_when_sampling_raises(qt_app
 
 
 def test_release_failure_is_loud_and_keeps_the_texture_for_retry(qt_app, monkeypatch):
-    capture = TransitionCapture(32, 32)
+    capture = OffscreenRenderTarget(32, 32)
     texture = HeightfieldTexture("heightfield release probe")
     data = heightfield_bytes(_field(0.0, 0.25, 0.5, 0.75, 1.0, 0.5, 0.25, 0.1, 0.0))
     try:
@@ -404,7 +404,7 @@ def test_release_failure_is_loud_and_keeps_the_texture_for_retry(qt_app, monkeyp
 
 
 def test_rg_surface_texture_upload_samples_both_authored_channels_and_reuses_storage(qt_app):
-    capture = TransitionCapture(32, 32)
+    capture = OffscreenRenderTarget(32, 32)
     terrain = _field(
         0.0, 0.0, 0.0,
         0.0, 0.75, 0.0,
@@ -509,7 +509,7 @@ def test_rg_surface_texture_upload_samples_both_authored_channels_and_reuses_sto
 
 
 def test_rg_shader_keeps_lowest_admitted_normal_float32_out_of_water_class(qt_app):
-    capture = TransitionCapture(16, 16)
+    capture = OffscreenRenderTarget(16, 16)
     minimum_normal = 2.0 ** -126
     terrain = normalize_heightfield({
         "version": 1,

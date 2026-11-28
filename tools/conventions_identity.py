@@ -5,7 +5,7 @@ N1.4 routes the shaders' OpenGL assumptions (``gl_FragCoord`` as a texel or uv, 
 the winding choice) through one include whose OpenGL values make every function an identity of today's arithmetic.
 That is proved here, bitwise: record before the change, record after, compare.
 
-- **Transitions** (``TransitionCapture``, the production transition host on an offscreen target): every showcase case
+- **Transitions** (``NativeTransitionCapture``, the native core's frames as the product draws them; hashes only): every showcase case
   of the release-media catalogue, plus, for each transition whose Settings page has Motion Blur or Motion Trails, the
   same run with both on (the motion-blur gather and the trail edges are drawn only then). ``FRAMES`` progress points in
   order on one run (trails and motion read the frames before).
@@ -110,40 +110,32 @@ def transition_cases():
 
 
 def record_transitions(out: Path, only, summary: dict) -> None:
+    """Every transition case drawn by the native core as the product draws it (``NativeTransitionCapture``). Only the
+    frames' hashes and one still are recorded: the native frame's GL calls are the core's own, not Python's. On OpenGL
+    a multisampled scene is not bit-reproducible run to run (the two-run noise floor decided for the core), so a
+    transition whose hashes differ between two recordings of the same code is judged by that floor, not as a change."""
     import numpy as np
 
-    from tools.compute_pass_identity import counting
-    from tools.transition_contact_sheet import TransitionCapture
-    from tools.visualizer_replay.owner_render_parity import single_sample_scene_targets
+    from tools.native_transition_capture import NativeTransitionCapture
 
-    capture = TransitionCapture(*TRANSITION_SIZE)
+    capture = NativeTransitionCapture(*TRANSITION_SIZE)
     try:
         for name, identity, settings, duration_ms in transition_cases():
             if only and name not in only and identity not in only:
                 continue
             run = capture.production_run(identity, duration_ms, settings, seed=713)
-            hashes, calls = [], []
+            hashes = []
             still = None
-            counter: dict = {}
-            binding = {"held": 0, "lost": 0}
-            with single_sample_scene_targets(), counting(counter):
-                for index in range(FRAMES):
-                    before = _frame_calls(counter)
-                    image, _ms = capture.render(run, index / (FRAMES - 1))
-                    calls.append(_frame_calls(counter) - before)
-                    with capture._target.current():
-                        _check_conventions_binding(binding)
-                    pixels = np.asarray(image)
-                    hashes.append(hashlib.sha256(pixels.tobytes()).hexdigest())
-                    if index == FRAMES // 2:
-                        still = image
-            capture.host.park()
+            for index in range(FRAMES):
+                image, _ms = capture.render(run, index / (FRAMES - 1))
+                hashes.append(hashlib.sha256(np.asarray(image).tobytes()).hexdigest())
+                if index == FRAMES // 2:
+                    still = image
             key = f"transition:{name}"
-            summary["items"][key] = {"hashes": hashes, "gl_calls": calls,
-                                     "gl_calls_by_name": dict(sorted(counter.items())), "conventions_binding": binding}
+            summary["items"][key] = {"hashes": hashes}
             if still is not None:
                 still.convert("RGB").save(out / f"transition_{name.replace('/', '_')}.png")
-            print(f"{key}: {len(set(hashes))} distinct of {len(hashes)} frames, GL calls/frame {calls}", flush=True)
+            print(f"{key}: {len(set(hashes))} distinct of {len(hashes)} frames", flush=True)
     finally:
         capture.close()
 
@@ -788,11 +780,14 @@ def compare(before: Path, after: Path) -> int:
         differing = [i for i, (p, q) in enumerate(zip(x["hashes"], y["hashes"])) if p != q]
         same = not differing and len(x["hashes"]) == len(y["hashes"])
         identical &= same
-        calls = (f"GL calls/frame median {_median(x['gl_calls'])} -> {_median(y['gl_calls'])}, "
-                 f"total {sum(x['gl_calls'])} -> {sum(y['gl_calls'])}")
-        changed = {name: (x["gl_calls_by_name"].get(name, 0), y["gl_calls_by_name"].get(name, 0))
-                   for name in set(x["gl_calls_by_name"]) | set(y["gl_calls_by_name"])
-                   if x["gl_calls_by_name"].get(name, 0) != y["gl_calls_by_name"].get(name, 0)}
+        if "gl_calls" in x and "gl_calls" in y:
+            calls = (f"GL calls/frame median {_median(x['gl_calls'])} -> {_median(y['gl_calls'])}, "
+                     f"total {sum(x['gl_calls'])} -> {sum(y['gl_calls'])}")
+            changed = {name: (x["gl_calls_by_name"].get(name, 0), y["gl_calls_by_name"].get(name, 0))
+                       for name in set(x["gl_calls_by_name"]) | set(y["gl_calls_by_name"])
+                       if x["gl_calls_by_name"].get(name, 0) != y["gl_calls_by_name"].get(name, 0)}
+        else:                                       # a native transition records its frames' hashes only
+            calls, changed = "frames only", {}
         held = y.get("conventions_binding")
         if held and held["lost"]:
             identical = False

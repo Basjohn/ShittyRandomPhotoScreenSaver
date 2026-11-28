@@ -31,7 +31,7 @@ from rendering.gl_programs.page_curl_program import (
     page_curl_span,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 pytestmark = pytest.mark.qt
 
@@ -130,7 +130,7 @@ def test_the_roll_matches_its_mirror_on_the_gpu(qt_app):
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -230,33 +230,6 @@ def test_gloss_changes_only_the_peeled_sheet(capture):
     near, far = page_curl_span(direction, ASPECT)
     line = page_curl_line(0.45, near, far, roll)
     assert not changed[_along(direction) > line + 1.3 * page_curl_end_radius(near, far, roll) + 0.03].any()
-
-
-def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("page_curl", direction="left", settings={"scene3d_detail": "High"}, duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("page_curl", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 50
-        renderer = capture.host._implementations["page_curl"]
-        meshes = dict(renderer._resources._meshes)
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated
-        assert renderer._resources._meshes == meshes            # the tier's grid was ready too
-        capture.host.park()
-        assert not renderer._target.has_resources and not renderer._environment.has_resources
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_origins_and_repairs_values():

@@ -133,6 +133,8 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
     assert barriers[0]["next_generation_started"] is True
     assert barriers[0]["next_generation_started_after_crossing"] is True
     assert barriers[1]["next_generation_started"] is False
+    assert report["native_core_loaded"] is True
+    assert all(barrier["native_resources_released"] is True for barrier in barriers)
 
     object_names = []
     for generation, window in enumerate(report["windows"]):
@@ -164,17 +166,24 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
         assert cycle["resumed_runtime_state"]["phase"] == "visible"
         assert cycle["resumed_runtime_state"]["window"]["visible"] is True
         assert cycle["resumed_runtime_state"]["frame_pacer"]["active"] is True
-        assert cycle["resumed_runtime_state"]["scene_readiness"][
-            "ready_for_reveal"
-        ] is True
+        resumed_readiness = cycle["resumed_runtime_state"]["scene_readiness"]
+        assert resumed_readiness["frame_presented"] is True
+        assert resumed_readiness["scene_graph_initialized"] is True
+        assert resumed_readiness["scene_graph_invalidated"] is False
+        # The hide invalidates the scene graph: the layer's node goes and a new one draws the photo at the show.
+        assert cycle["hidden"]["nodes"] == 0
+        assert cycle["resumed"]["nodes"] == 1
+        assert cycle["resumed"]["draws"] > cycle["hidden"]["draws"]
         assert cycle["qml_root_preserved_while_hidden"] is True
         assert cycle["qml_root_preserved_after_resume"] is True
         assert cycle["resumed_runtime_state"]["runtime_generation"] == generation
         assert window["final_scene_state"]["readiness"]["qml_objects_retired"] is True
-        assert window["final"]["initialize_count"] == 2
-        assert window["final"]["release_count"] == 2
-        assert window["final"]["release_thread_id"] == window["final"]["render_thread_id"]
-        assert window["final"]["invalidation_count"] >= 1
+        # N5.2h: the background is the core's native layer; its close and the core's live counts replace the
+        # deleted Python node's GL initialise/release counts.
+        assert window["final"]["layer_kept"] is True
+        assert window["final"]["layer_closed"] is True
+        assert window["final"]["layer_mode_released"] is True
+        assert window["final"]["item_dropped_layer"] is True
 
     assert object_names == [
         "srpss-quick-display-0-generation-0",
@@ -222,6 +231,7 @@ def test_threaded_runtime_input_exit_retires_complete_display_set():
     assert barriers[0]["expected_runtime_roots"] == report["concurrent_windows"]
     assert barriers[0]["destroyed_runtime_roots"] == report["concurrent_windows"]
     assert barriers[0]["next_generation_started"] is False
+    assert barriers[0]["native_resources_released"] is True
 
     exit_sequence = report["exit_sequence"]
     assert exit_sequence["source_screen_index"] == 0
@@ -255,9 +265,12 @@ def test_threaded_runtime_input_exit_retires_complete_display_set():
         assert runtime["transition"]["closed"] is True
         assert runtime["transition"]["completion_count"] == 1
         assert runtime["input"]["admission_open"] is False
-        assert window["final"]["release_thread_id"] == window["final"][
-            "render_thread_id"
-        ]
+        # N5.2h: the background is the core's native layer; its close and the core's live counts replace the
+        # deleted Python node's GL initialise/release counts.
+        assert window["final"]["layer_kept"] is True
+        assert window["final"]["layer_closed"] is True
+        assert window["final"]["layer_mode_released"] is True
+        assert window["final"]["item_dropped_layer"] is True
 
 
 def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
@@ -304,6 +317,10 @@ def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
     assert report["created_windows"] == 2
     assert report["physical_screens"] >= 2
     assert report["requested_hide_show_cycles"] == 0
+    assert all(
+        barrier["native_resources_released"] is True
+        for barrier in report["runtime_root_destruction_barriers"]
+    )
 
     for index, (window, identity) in enumerate(zip(report["windows"], expected)):
         actual = window["display_identity"]
@@ -323,11 +340,12 @@ def test_threaded_runtime_uses_exact_identity_for_two_physical_displays(qt_app):
         )
         assert window["hide_show_cycles"] == []
         assert window["runtime_state"]["phase"] == "retired"
-        assert window["final"]["initialize_count"] == 1
-        assert window["final"]["release_count"] == 1
-        assert window["final"]["release_thread_id"] == window["final"][
-            "render_thread_id"
-        ]
+        # N5.2h: the background is the core's native layer; its close and the core's live counts replace the
+        # deleted Python node's GL initialise/release counts.
+        assert window["final"]["layer_kept"] is True
+        assert window["final"]["layer_closed"] is True
+        assert window["final"]["layer_mode_released"] is True
+        assert window["final"]["item_dropped_layer"] is True
 
 
 def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
@@ -492,16 +510,19 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     generation2_screen1 = screen_records[(2, 1)]
     assert topology[0]["unexpected_screen_displacement"] == displacement
     assert generation1_screen1["replayed_from_generation"] == 0
-    assert generation1_screen1["proof_progress_on_construction"] == pytest.approx(
-        generation0_screen1["retired_proof_progress"]
+    assert (
+        generation1_screen1["presentation_identity_on_construction"]
+        == generation0_screen1["retired_presentation_identity"]
     )
     assert generation2_screen0["replayed_from_generation"] == 0
-    assert generation2_screen0["proof_progress_on_construction"] == pytest.approx(
-        generation0_screen0["retired_proof_progress"]
+    assert (
+        generation2_screen0["presentation_identity_on_construction"]
+        == generation0_screen0["retired_presentation_identity"]
     )
     assert generation2_screen1["replayed_from_generation"] == 1
-    assert generation2_screen1["proof_progress_on_construction"] == pytest.approx(
-        generation1_screen1["retired_proof_progress"]
+    assert (
+        generation2_screen1["presentation_identity_on_construction"]
+        == generation1_screen1["retired_presentation_identity"]
     )
 
     removal, addition = report["topology_replacements"]
@@ -523,6 +544,7 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     barriers = report["runtime_root_destruction_barriers"]
     assert [barrier["expected_runtime_roots"] for barrier in barriers] == [2, 1, 2]
     assert all(barrier["crossed"] is True for barrier in barriers)
+    assert all(barrier["native_resources_released"] is True for barrier in barriers)
     assert all(
         barrier["destroyed_runtime_roots"]
         == barrier["expected_runtime_roots"]
@@ -530,10 +552,12 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     )
     for window in report["windows"]:
         assert window["runtime_state"]["phase"] == "retired"
-        assert window["final"]["release_count"] == 1
-        assert window["final"]["release_thread_id"] == window["final"][
-            "render_thread_id"
-        ]
+        # N5.2h: the background is the core's native layer; its close and the core's live counts replace the
+        # deleted Python node's GL initialise/release counts.
+        assert window["final"]["layer_kept"] is True
+        assert window["final"]["layer_closed"] is True
+        assert window["final"]["layer_mode_released"] is True
+        assert window["final"]["item_dropped_layer"] is True
     displaced_final = next(
         window
         for window in report["windows"]

@@ -67,6 +67,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import pixel_tolerance as pt  # noqa: E402
+import transition_references as refs  # noqa: E402  (native/core/python)
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("shape", "draw", "textures", "timing")
@@ -477,6 +478,26 @@ class Scene:
 
 
 def python_frames(images, size: tuple[int, int], variants: Mapping[str, Mapping[str, Any]]) -> dict:
+    """The Python renderer's frames and its block values per variant and progress (``draw_python_frames``), from the
+    reference cache (``transition_references``; drawn live and stored with ``--python-references record``)."""
+    import numpy as np
+
+    pictures = refs.arrays_digest(np.asarray(image, dtype=np.uint8) for image in images)
+    cases = {}
+    for variant, overrides in variants.items():
+        transition_id = variant_transition(variant)
+        parameters = _run_without_gl(transition_id, overrides, images, size).request.parameter_dict()
+        for progress in PROGRESS:
+            cases[(variant, progress)] = {"variant": variant, "overrides": dict(overrides), "parameters": parameters,
+                                          "duration_ms": DURATION_MS, "progress": progress, "size": list(size),
+                                          "photos": pictures}
+    stored = refs.references("fullscreen_pass_check", cases, lambda: {
+        key: {"frame": frame, "values": values}
+        for key, (frame, values) in draw_python_frames(images, size, variants).items()})
+    return {key: (stored[key]["frame"], stored[key]["values"]) for key in cases}
+
+
+def draw_python_frames(images, size: tuple[int, int], variants: Mapping[str, Mapping[str, Any]]) -> dict:
     """The Python renderer's frames (the production GL host) and its block values, per variant and progress."""
     import numpy as np
 
@@ -998,6 +1019,7 @@ def child(args) -> dict:
     import vk_validation
 
     root = host_check._root(args.repo)
+    refs.configure_from(args)
     out = Path(args.out_dir)
     photo_paths = tuple(Path(p) for p in args.photos)
     record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False,
@@ -1116,6 +1138,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    refs.add_arguments(parser)
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -1148,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds, "--photos", *args.photos]
+                   "--rounds", *args.rounds, "--photos", *args.photos, *refs.child_arguments(args)]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))

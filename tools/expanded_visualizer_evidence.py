@@ -34,6 +34,7 @@ import argparse
 import hashlib
 import json
 import sys
+import time
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -324,6 +325,13 @@ class HiddenDisplayHost:
         self.window.setGraphicsDevice(QQuickGraphicsDevice.fromOpenGLContext(self.context))
         if not self.control.initialize():
             raise RuntimeError("hidden render control did not initialize")
+        # N5.2h: as every product display window, hosted on the native core (its frame driver records the background
+        # layer and the card surface backdrop at the window's edge; without it the cards have no material).
+        from rendering.quick import bootstrap
+
+        if bootstrap.native_core() is None:
+            bootstrap.start_quick_backend()
+        self.native = bootstrap.host_quick_window(self.window)
         self._current()
         self.texture = int(gl.glGenTextures(1))
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture)
@@ -344,6 +352,33 @@ class HiddenDisplayHost:
     def _current(self) -> None:
         if not self.context.makeCurrent(self.surface):
             raise RuntimeError("hidden render GL context could not be made current")
+
+    def set_wallpaper(self, rgba: tuple[int, int, int, int], identity: str = "hidden-display-wallpaper",
+                      timeout_s: float = 10.0) -> None:
+        """The display's photo: one flat colour over the whole display, drawn by the native background layer (N5.2h:
+        the card surface backdrop is built from that layer, so a material needs a photo under it, as every product
+        display has). Returns once the photo is uploaded, drawn and the layer's fade-in has ended (a harness's wait)."""
+        from PySide6.QtCore import QCoreApplication, QEventLoop
+
+        from rendering.quick.bootstrap import native_core
+        from rendering.quick.image_state import PresentationImage
+
+        width, height = self.pixels
+        image = PresentationImage(identity, identity, (float(width), float(height)), 1.0, (width, height), width * 4,
+                                  bytes(rgba) * (width * height))
+        self.scene.set_presentation_image(image)
+        self.render()
+        core = native_core()
+        if core is not None and not core.wait_jobs_idle(20000):
+            raise RuntimeError("the native upload jobs did not finish within 20 s")
+        self.render()
+        layer = self.scene.background_item.native_layer
+        mode = None if layer is None else layer.mode
+        deadline = time.monotonic() + timeout_s
+        while mode is not None and time.monotonic() < deadline and mode.composite.state().get("fading"):
+            QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 16)
+            self.render()
+        self.render()
 
     def render(self) -> None:
         self.app.processEvents()
@@ -367,6 +402,11 @@ class HiddenDisplayHost:
     def close(self) -> None:
         from PySide6.QtCore import QCoreApplication, QEvent
 
+        if self.native is not None:
+            # The core's frame driver goes while Qt's QRhi and the context live: a window host releases in the
+            # frame after its detach.
+            self.native.close()
+            self.render()
         self._current()
         self.control.invalidate()          # render nodes release their GL with the context current
         self.scene._retire_qml_objects()   # the scene's own QML retirement (what admission closure triggers)

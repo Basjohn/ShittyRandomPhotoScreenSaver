@@ -1,15 +1,21 @@
-"""Production-shaped standalone threaded Qt Quick runtime lifecycle smoke."""
+"""Production-shaped standalone threaded Qt Quick runtime lifecycle smoke.
+
+N5.2h: the background is the native core's layer (``NativeBackgroundLayer``) on both APIs, so the smoke loads the
+core as the product does (``start_quick_backend``) and reads the layer's own evidence: made, shown, the photos sent,
+the runs drawn and their ticks, its composite's live node, rect and draws (the node goes at every scene-graph
+invalidation and comes back at the next show), its close with the generation, and the core's live counts and window
+hosts after each generation's runtime roots are destroyed. The deleted Python node's telemetry (GL counts, pixel
+samples, midpoint colours) is gone with it; the transitions' pixels are judged on the core's own hidden host
+(``tools/native_transition_capture.py``). Opens real windows: operator-run (Transitions.md), never an agent probe."""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 import json
-import math
 import os
 from pathlib import Path
 import sys
-import threading
 import time
 from typing import Any
 
@@ -17,9 +23,11 @@ import sys as _sys  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from rendering.quick import bootstrap as quick_bootstrap
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,
+    start_quick_backend,
 )
 
 
@@ -45,10 +53,6 @@ from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 
 from rendering.quick.image_boundary import capture_qimage  # noqa: E402
 from rendering.quick.image_state import PresentationImage  # noqa: E402
-from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
-from rendering.quick.render.background_node import (  # noqa: E402
-    TRANSITION_DENSE_SAMPLE_AXIS_COUNT,
-)
 from rendering.quick.runtime import QuickDisplayRuntime  # noqa: E402
 from rendering.quick.scene_controller import (  # noqa: E402
     QuickSceneController,
@@ -103,83 +107,14 @@ _TRANSITION_DIRECTION_CHOICES = tuple(
         }
     )
 )
-# The shared sparse grid the geometry-precise transition oracles are tuned to.
-# Do not change: block_spins encodes 5x5 geometry (divmod(index, 5)).
-_SAMPLE_FRACTIONS = (1.0 / 12.0, 0.25, 0.5, 0.75, 11.0 / 12.0)
-_TRANSITION_SAMPLE_COORDINATES = tuple(
-    (sample_x, 1.0 - readback_y)
-    for readback_y in _SAMPLE_FRACTIONS
-    for sample_x in _SAMPLE_FRACTIONS
-)
-# The dense midpoint grid, mirroring the render node's dense readback exactly so
-# each dense colour lines up with its coordinate. Consumed only by the Phase-C
-# effect oracles (see qtquick_phase_c_effect_smoke), never by the geometry
-# oracles above.
-_DENSE_SAMPLE_FRACTIONS = tuple(
-    (index + 0.5) / TRANSITION_DENSE_SAMPLE_AXIS_COUNT
-    for index in range(TRANSITION_DENSE_SAMPLE_AXIS_COUNT)
-)
-_TRANSITION_DENSE_SAMPLE_COORDINATES = tuple(
-    (sample_x, 1.0 - readback_y)
-    for readback_y in _DENSE_SAMPLE_FRACTIONS
-    for sample_x in _DENSE_SAMPLE_FRACTIONS
-)
-# Transition ids whose midpoint oracle consumes the dense grid. The block slab
-# transition is validated on the dense grid because the production telemetry
-# captures the first transition frame in its wide [0.30, 0.75] window, which on
-# dense frame cadence lands early (~0.35) where the thin slab void is not
-# resolvable on the coarse 5x5 sparse grid. The Phase-C effect smoke wrapper adds
-# further ids via _install_contract.
-_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = {"block_spins"}
-_DIRECTIONAL_PALETTE_RGB = {
-    "initial": (
-        (12, 32, 120),
-        (16, 48, 145),
-        (20, 64, 170),
-        (24, 80, 195),
-        (28, 96, 220),
-        (32, 112, 235),
-    ),
-    "replacement": (
-        (120, 24, 12),
-        (145, 32, 16),
-        (170, 40, 20),
-        (195, 48, 24),
-        (220, 56, 28),
-        (235, 64, 32),
-    ),
-}
-_TRANSITION_PALETTE_RGB = {
-    "crossfade": {
-        "initial": (
-            (16, 52, 120),
-            (22, 108, 184),
-            (28, 168, 192),
-            (64, 188, 128),
-            (154, 206, 72),
-            (230, 220, 54),
-        ),
-        "replacement": (
-            (212, 40, 52),
-            (230, 82, 42),
-            (236, 132, 36),
-            (206, 66, 132),
-            (150, 54, 176),
-            (92, 60, 188),
-        ),
-    },
-    "slide": _DIRECTIONAL_PALETTE_RGB,
-    "wipe": _DIRECTIONAL_PALETTE_RGB,
-    "warp_dissolve": _DIRECTIONAL_PALETTE_RGB,
-    "block_spins": _DIRECTIONAL_PALETTE_RGB,
-}
 _TRANSITION_SMOKE_PARAMETERS: dict[str, dict[str, object]] = {}
-_TRANSITION_PIXEL_PROBES = {
-    "block_spins": (0.42, 0.50, 0.60),
-}
 _TRANSITION_SMOKE_DURATIONS_MS = {
     "block_spins": 600,
 }
+# The core's live counts that every retired generation leaves at zero (the background layer's item, its surface, its
+# QRhi objects and its photos).
+_NATIVE_LIVE_COUNTS = ("handles", "items", "surfaces", "surface_resources", "mode_sources", "mode_resources",
+                       "mode_textures")
 
 
 @dataclass
@@ -190,19 +125,20 @@ class _WindowProbe:
     runtime: QuickDisplayRuntime
     window: QuickDisplayWindow
     scene: QuickSceneController
-    telemetry: RenderNodeTelemetry
     qml_object_name: str
     qml_runtime_role: str
     qml_screen_index: int
     qml_runtime_generation: int | None
     target_geometry: tuple[int, int, int, int]
     qml_root_identity: int
-    proof_progress_on_construction: float
+    presentation_identity_on_construction: str
     presentation_state_replayed: bool
     replayed_from_generation: int | None
     presentation_image: PresentationImage
     replacement_image: PresentationImage
-    retired_proof_progress: float | None = None
+    retired_presentation_identity: str | None = None
+    # The background item's native layer, kept from the first capture (the item drops it at its close).
+    layer: Any = None
     initial_capture: dict[str, Any] | None = None
     resized_capture: dict[str, Any] | None = None
     replacement_capture: dict[str, Any] | None = None
@@ -287,288 +223,73 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     return args
 
 
-def _capture_from_snapshot(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
-    return {
-        "size": list(snapshot.render_target_size),
-        "viewport": list(snapshot.viewport),
-        "device_pixel_ratio": float(snapshot.device_pixel_ratio),
-        "sample_count": int(snapshot.pixel_sample_count),
-        "colors": sorted(set(snapshot.sample_colors)),
-        "ordered_colors": list(snapshot.sample_colors),
-        "active_image_identity": snapshot.active_image_identity,
-        "image_upload_count": int(snapshot.image_upload_count),
-        "image_release_count": int(snapshot.image_release_count),
+def _layer_facts(probe: "_WindowProbe") -> dict[str, Any]:
+    """The background's native layer as the core reports it (N5.2h): the layer's own state and its composite's live
+    node, rect and draws."""
+    item = probe.scene.background_item
+    facts: dict[str, Any] = {
+        "degraded": bool(item.degraded),
+        "item_size": [float(item.width()), float(item.height())],
+        "presentation_identity": (
+            None if item.presentation_image is None else item.presentation_image.identity
+        ),
     }
+    layer = item.native_layer
+    if layer is None:
+        facts["layer"] = False
+        return facts
+    state = layer.state()
+    composite = state.get("composite") or {}
+    facts.update(
+        layer=True,
+        made=bool(state.get("made")),
+        closed=bool(state.get("closed")),
+        shown=bool(state.get("shown")),
+        failure=state.get("failure"),
+        sent=int(state.get("sent", 0)),
+        resent=int(state.get("resent", 0)),
+        run=state.get("run"),
+        runs=int(state.get("runs", 0)),
+        ticks=int(state.get("ticks", 0)),
+        rect=[float(value) for value in (composite.get("config") or {}).get("rect") or ()],
+        nodes=int(composite.get("nodes", 0)),
+        draws=int(composite.get("draws", 0)),
+        composite_error=str(composite.get("error") or ""),
+    )
+    return facts
 
 
-def _argb_components(color: object) -> tuple[int, int, int, int]:
-    text = str(color)
-    if len(text) != 9 or not text.startswith("#"):
-        raise ValueError(f"invalid ARGB sample: {text!r}")
-    return tuple(int(text[index : index + 2], 16) for index in (1, 3, 5, 7))
+def _layer_draws(facts: dict[str, Any]) -> bool:
+    """The layer is made, shown, not failed, its node live and drawing."""
+    return bool(
+        facts.get("layer")
+        and not facts.get("degraded")
+        and facts.get("made")
+        and not facts.get("closed")
+        and facts.get("shown")
+        and facts.get("failure") is None
+        and not facts.get("composite_error")
+        and facts.get("nodes") == 1
+        and facts.get("draws", 0) >= 1
+    )
 
 
-def _matches_crossfade_samples(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    _direction: object = None,
-    *,
-    tolerance: int = 4,
-) -> bool:
-    if not all(isinstance(value, (tuple, list)) for value in (
-        source,
-        destination,
-        midpoint,
-    )):
-        return False
-    if not source or len(source) != len(destination) or len(source) != len(midpoint):
-        return False
-    amount = max(0.0, min(1.0, float(progress)))
-    for old_color, new_color, mixed_color in zip(
-        source,
-        destination,
-        midpoint,
-        strict=True,
-    ):
-        old = _argb_components(old_color)
-        new = _argb_components(new_color)
-        mixed = _argb_components(mixed_color)
-        expected = tuple(
-            round(old_channel * (1.0 - amount) + new_channel * amount)
-            for old_channel, new_channel in zip(old, new, strict=True)
-        )
-        if any(
-            abs(actual - target) > tolerance
-            for actual, target in zip(mixed, expected, strict=True)
-        ):
-            return False
-    return True
+def _reveal_ready(readiness: Any) -> bool:
+    """The product's reveal rule (``DisplayManager._startup_reveal_admits``, N5.2h): presentable and presented."""
+    return bool(readiness.scene_presentable and readiness.frame_presented)
 
 
-def _slide_color_domain(color: object) -> str | None:
-    _alpha, red, _green, blue = _argb_components(color)
-    if blue - red >= 48:
-        return "source"
-    if red - blue >= 48:
-        return "destination"
-    return None
-
-
-def _matches_slide_samples(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    direction: object,
-) -> bool:
-    if not all(
-        isinstance(value, (tuple, list))
-        for value in (source, destination, midpoint)
-    ):
-        return False
-    if not source or not destination or not midpoint or not 0.0 < progress < 1.0:
-        return False
-    if len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES):
-        return False
-    if {_slide_color_domain(color) for color in source} != {"source"}:
-        return False
-    if {_slide_color_domain(color) for color in destination} != {"destination"}:
-        return False
-    direction_text = str(direction)
-    if direction_text not in {"left", "right", "up", "down"}:
-        return False
-
-    compared = 0
-    expected_domains: set[str] = set()
-    for color, (sample_x, sample_y) in zip(
-        midpoint,
-        _TRANSITION_SAMPLE_COORDINATES,
-        strict=True,
-    ):
-        axis = sample_x if direction_text in {"left", "right"} else sample_y
-        boundary = 1.0 - progress if direction_text in {"left", "up"} else progress
-        if abs(axis - boundary) <= 0.025:
-            continue
-        if direction_text in {"left", "up"}:
-            destination_owns = axis >= boundary
-        else:
-            destination_owns = axis < boundary
-        expected = "destination" if destination_owns else "source"
-        expected_domains.add(expected)
-        if _slide_color_domain(color) != expected:
-            return False
-        compared += 1
-    return compared >= 16 and expected_domains == {"source", "destination"}
-
-
-_WIPE_AXES = {
-    "left_to_right": lambda x, y: x,
-    "right_to_left": lambda x, y: 1.0 - x,
-    "top_to_bottom": lambda x, y: y,
-    "bottom_to_top": lambda x, y: 1.0 - y,
-    "diag_tl_br": lambda x, y: (x + y) * 0.5,
-    "diag_tr_bl": lambda x, y: ((1.0 - x) + y) * 0.5,
-}
-
-
-def _matches_wipe_samples(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    direction: object,
-) -> bool:
-    if not all(
-        isinstance(value, (tuple, list))
-        for value in (source, destination, midpoint)
-    ):
-        return False
-    if not source or not destination or not midpoint or not 0.0 < progress < 1.0:
-        return False
-    if len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES):
-        return False
-    if {_slide_color_domain(color) for color in source} != {"source"}:
-        return False
-    if {_slide_color_domain(color) for color in destination} != {"destination"}:
-        return False
-    axis_for = _WIPE_AXES.get(str(direction))
-    if axis_for is None:
-        return False
-
-    compared = 0
-    expected_domains: set[str] = set()
-    for color, (sample_x, sample_y) in zip(
-        midpoint,
-        _TRANSITION_SAMPLE_COORDINATES,
-        strict=True,
-    ):
-        axis = axis_for(sample_x, sample_y)
-        if abs(axis - progress) <= 0.025:
-            continue
-        expected = "destination" if axis < progress else "source"
-        expected_domains.add(expected)
-        if _slide_color_domain(color) != expected:
-            return False
-        compared += 1
-    return compared >= 16 and expected_domains == {"source", "destination"}
-
-
-def _matches_warp_samples(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    _direction: object = None,
-) -> bool:
-    if not all(
-        isinstance(value, (tuple, list))
-        for value in (source, destination, midpoint)
-    ):
-        return False
-    if (
-        not source
-        or len(source) != len(destination)
-        or len(source) != len(midpoint)
-        or len(midpoint) != len(_TRANSITION_SAMPLE_COORDINATES)
-        or not 0.35 <= progress <= 0.65
-    ):
-        return False
-    if {_slide_color_domain(color) for color in source} != {"source"}:
-        return False
-    if {_slide_color_domain(color) for color in destination} != {"destination"}:
-        return False
-
-    # The centre has fully dissolved by this stage in the canonical shader.
-    # A plain Crossfade would still be purple here, so this is a strong real
-    # Warp-vs-fallback discriminator in addition to the spatial samples below.
-    centre_index = len(midpoint) // 2
-    if _slide_color_domain(midpoint[centre_index]) != "destination":
-        return False
-
-    materially_non_crossfade = 0
-    largest_error = 0
-    amount = max(0.0, min(1.0, float(progress)))
-    for old_color, new_color, warped_color in zip(
-        source,
-        destination,
-        midpoint,
-        strict=True,
-    ):
-        old = _argb_components(old_color)
-        new = _argb_components(new_color)
-        warped = _argb_components(warped_color)
-        crossfade = tuple(
-            round(old_channel * (1.0 - amount) + new_channel * amount)
-            for old_channel, new_channel in zip(old, new, strict=True)
-        )
-        error = max(
-            abs(actual - fallback)
-            for actual, fallback in zip(warped, crossfade, strict=True)
-        )
-        largest_error = max(largest_error, error)
-        if error >= 18:
-            materially_non_crossfade += 1
-    return materially_non_crossfade >= 8 and largest_error >= 48
-
-
-def _matches_block_slab_dense_midpoint(
-    source: object,
-    destination: object,
-    midpoint: object,
-    progress: float,
-    _direction: object,
-) -> bool:
-    """Cadence-tolerant proof that the real rotated block slab rendered.
-
-    Production telemetry captures the first transition frame in its wide
-    ``[0.30, 0.75]`` window; on dense frame cadence that lands early (~0.35),
-    where a real block slab's dark rotation void/edge is thin and the coarse 5x5
-    sparse grid resolves zero void samples (or an early diagonal projection the
-    retired per-tile UV oracle mis-modelled). The dense 15x15 grid resolves it
-    reliably. This proves the invariant these smokes exist to protect: the
-    retained render node draws the genuine perspective slab -- its dark rotation
-    void/edge *and* a visible textured face are both present -- at whatever
-    progress the scheduler captured. Exact per-tile rotation/projection UVs are a
-    real-GPU/eyes-on destination concern, not a headless offscreen one.
-    """
-
-    dense = _TRANSITION_DENSE_SAMPLE_COORDINATES
-    sparse = _TRANSITION_SAMPLE_COORDINATES
-    if not all(
-        isinstance(value, (tuple, list))
-        for value in (source, destination, midpoint)
-    ):
-        return False
-    if (
-        len(source) != len(sparse)
-        or len(destination) != len(sparse)
-        or len(midpoint) != len(dense)
-        or not 0.30 <= float(progress) <= 0.75
-    ):
-        return False
-    if {_slide_color_domain(color) for color in source} != {"source"}:
-        return False
-    if {_slide_color_domain(color) for color in destination} != {"destination"}:
-        return False
-    void = sum(max(_argb_components(color)[1:]) <= 14 for color in midpoint)
-    face = len(midpoint) - void
-    return bool(void >= 3 and face >= 3)
-
-
-_TRANSITION_MIDPOINT_ORACLES = {
-    "crossfade": _matches_crossfade_samples,
-    "slide": _matches_slide_samples,
-    "wipe": _matches_wipe_samples,
-    "warp_dissolve": _matches_warp_samples,
-    "block_spins": _matches_block_slab_dense_midpoint,
-}
-# Exact per-tile block-slab UV/projection probe geometry is validated on the
-# real-GPU/eyes-on destination gate; the retired headless probe-sequence oracle
-# over-fit a ~0.5 sample and a diagonal projection model that rejected the
-# confirmed-correct render.
-_TRANSITION_PROBE_ORACLES: dict[str, Any] = {}
+def _native_release() -> dict[str, Any]:
+    """The core's live counts and window hosts (every one 0 once a generation's windows are gone)."""
+    core = quick_bootstrap.native_core()
+    live = {} if core is None else core.composite_live()
+    counts = {key: int(live.get(key, -1)) for key in _NATIVE_LIVE_COUNTS}
+    hosts = len(quick_bootstrap._owner.window_hosts)
+    return {
+        "live": counts,
+        "window_hosts": hosts,
+        "released": core is not None and hosts == 0 and all(value == 0 for value in counts.values()),
+    }
 
 
 def _presentation_image(
@@ -576,56 +297,23 @@ def _presentation_image(
     screen_index: int,
     generation: int,
     variant: str,
-    transition_id: str,
 ) -> PresentationImage:
-    if transition_id == "block_spins":
-        image = QImage(32, 24, QImage.Format.Format_RGBA8888)
-        for x in range(image.width()):
-            normalized_x = x / max(1, image.width() - 1)
-            for y in range(image.height()):
-                normalized_y = y / max(1, image.height() - 1)
-                if variant == "initial":
-                    color = QColor(
-                        round(32 + 96 * normalized_x),
-                        round(32 + 96 * normalized_y),
-                        220,
-                    )
-                else:
-                    color = QColor(
-                        220,
-                        round(32 + 96 * normalized_x),
-                        round(32 + 96 * normalized_y),
-                    )
-                image.setPixelColor(x, y, color)
-        return capture_qimage(
-            image,
-            identity=(
-                f"quick-smoke:g{generation}:screen{screen_index}:variant:{variant}"
-            ),
-            source_path=f"synthetic://quick-smoke/{variant}",
-        )
-
-    colors = tuple(
-        QColor(*rgb)
-        for rgb in _TRANSITION_PALETTE_RGB[transition_id][variant]
-    )
-    image = QImage(12, 8, QImage.Format.Format_RGBA8888)
+    """One synthetic gradient per variant (blue-led initial, red-led replacement), distinct identities."""
+    image = QImage(32, 24, QImage.Format.Format_RGBA8888)
     for x in range(image.width()):
-        base = colors[min(len(colors) - 1, x // 2)]
+        normalized_x = x / max(1, image.width() - 1)
         for y in range(image.height()):
-            color = base if y >= image.height() // 2 else base.lighter(145)
+            normalized_y = y / max(1, image.height() - 1)
+            if variant == "initial":
+                color = QColor(round(32 + 96 * normalized_x), round(32 + 96 * normalized_y), 220)
+            else:
+                color = QColor(220, round(32 + 96 * normalized_x), round(32 + 96 * normalized_y))
             image.setPixelColor(x, y, color)
     return capture_qimage(
         image,
-        identity=(
-            f"quick-smoke:g{generation}:screen{screen_index}:variant:{variant}"
-        ),
+        identity=f"quick-smoke:g{generation}:screen{screen_index}:variant:{variant}",
         source_path=f"synthetic://quick-smoke/{variant}",
     )
-
-
-def _snapshot_dict(snapshot: RenderNodeSnapshot) -> dict[str, Any]:
-    return asdict(snapshot)
 
 
 class _SmokeRunner(QObject):
@@ -634,7 +322,7 @@ class _SmokeRunner(QObject):
         self._app = app
         self._args = args
         self._probes: list[_WindowProbe] = []
-        self._initial_snapshots: list[RenderNodeSnapshot] = []
+        self._initial_layer_facts: list[dict[str, Any]] = []
         self._reports: list[dict[str, Any]] = []
         self._errors: list[str] = []
         self._scene_factory = QuickSceneFactory(self)
@@ -655,6 +343,7 @@ class _SmokeRunner(QObject):
         self._runtime_root_destruction_barriers: list[dict[str, Any]] = []
         self._active_runtime_root_barrier: dict[str, Any] | None = None
         self._presentation_state_by_screen_key: dict[str, dict[str, Any]] = {}
+        self._replayed_images: dict[str, PresentationImage] = {}
         self._topology_generations: list[dict[str, Any]] = []
         self._topology_replacements: list[dict[str, Any]] = []
         self._active_topology_generation: dict[str, Any] | None = None
@@ -690,7 +379,7 @@ class _SmokeRunner(QObject):
         self._cycle_token += 1
         token = self._cycle_token
         self._probes = []
-        self._initial_snapshots = []
+        self._initial_layer_facts = []
         self._retired_runtime_ids = set()
         self._hide_show_cycle = 0
         self._active_hide_records = {}
@@ -760,14 +449,6 @@ class _SmokeRunner(QObject):
         generation: int,
         accepts_focus: bool,
     ) -> _WindowProbe:
-        telemetry = RenderNodeTelemetry(
-            gui_thread_id=threading.get_ident(),
-            capture_pixels=True,
-            transition_probe_progresses=_TRANSITION_PIXEL_PROBES.get(
-                self._args.transition_id,
-                (),
-            ),
-        )
         runtime = QuickDisplayRuntime(
             screen_index=index,
             runtime_generation=generation,
@@ -778,7 +459,6 @@ class _SmokeRunner(QObject):
                 accepts_focus=accepts_focus,
                 blank_cursor=False,
             ),
-            telemetry=telemetry,
             parent=self,
         )
         runtime.retirement_completed.connect(
@@ -792,7 +472,7 @@ class _SmokeRunner(QObject):
                 lambda runtime=runtime: self._on_runtime_exit_requested(runtime)
             )
         window = runtime.window
-        # Real, exposed and GPU-rendered, never on screen (pixels are captured inside the render node).
+        # Real, exposed and GPU-rendered on the native core, never on screen.
         keep_off_screen(window)
         window.setColor(QColor("#080b14"))
 
@@ -807,23 +487,20 @@ class _SmokeRunner(QObject):
         screen_key = runtime.display_identity.screen_key
         saved_state = self._presentation_state_by_screen_key.get(screen_key)
         if saved_state is None:
-            proof_progress = 0.36 + (0.08 * index)
+            presentation_image = _presentation_image(
+                screen_index=index,
+                generation=generation,
+                variant="initial",
+            )
             replayed_from_generation = None
         else:
-            proof_progress = float(saved_state["proof_progress"])
+            # The replacement scene opens on the photo this screen's retired generation ended on.
+            presentation_image = self._replayed_images[screen_key]
             replayed_from_generation = int(saved_state["generation"])
-        scene.set_background_proof_progress(proof_progress)
-        presentation_image = _presentation_image(
-            screen_index=index,
-            generation=generation,
-            variant="initial",
-            transition_id=self._args.transition_id,
-        )
         replacement_image = _presentation_image(
             screen_index=index,
             generation=generation,
             variant="replacement",
-            transition_id=self._args.transition_id,
         )
         runtime.set_presentation_image(presentation_image)
         scene_root = scene.scene_root
@@ -834,14 +511,13 @@ class _SmokeRunner(QObject):
             runtime=runtime,
             window=window,
             scene=scene,
-            telemetry=telemetry,
             qml_object_name=scene_root.objectName(),
             qml_runtime_role=str(scene_root.property("runtimeRole")),
             qml_screen_index=int(scene_root.property("screenIndex")),
             qml_runtime_generation=scene_root.property("runtimeGeneration"),
             target_geometry=target_geometry,
             qml_root_identity=id(scene_root),
-            proof_progress_on_construction=proof_progress,
+            presentation_identity_on_construction=presentation_image.identity,
             presentation_state_replayed=saved_state is not None,
             replayed_from_generation=replayed_from_generation,
             presentation_image=presentation_image,
@@ -884,14 +560,14 @@ class _SmokeRunner(QObject):
                     "display_identity": probe.runtime.display_identity.as_dict(),
                     "window_object_name": probe.window.objectName(),
                     "qml_runtime_generation": probe.qml_runtime_generation,
-                    "proof_progress_on_construction": (
-                        probe.proof_progress_on_construction
+                    "presentation_identity_on_construction": (
+                        probe.presentation_identity_on_construction
                     ),
                     "presentation_state_replayed": (
                         probe.presentation_state_replayed
                     ),
                     "replayed_from_generation": probe.replayed_from_generation,
-                    "retired_proof_progress": None,
+                    "retired_presentation_identity": None,
                 }
                 for probe in self._probes
             ],
@@ -932,13 +608,11 @@ class _SmokeRunner(QObject):
         if token != self._cycle_token:
             return
         initial_ready = all(
-            probe.runtime.scene_readiness.ready_for_reveal
-            and probe.telemetry.snapshot().render_count >= 1
-            and probe.telemetry.snapshot().pixel_sample_count >= 1
-            and probe.telemetry.snapshot().image_upload_count == 1
-            and probe.telemetry.snapshot().active_image_identity
-            == probe.presentation_image.identity
-            for probe in self._probes
+            _reveal_ready(probe.runtime.scene_readiness)
+            and _layer_draws(facts)
+            and facts.get("sent") == 1
+            and facts.get("presentation_identity") == probe.presentation_image.identity
+            for probe, facts in ((probe, _layer_facts(probe)) for probe in self._probes)
         )
         if not initial_ready and time.monotonic() < self._visibility_deadline:
             QTimer.singleShot(10, lambda token=token: self._capture_initial(token))
@@ -949,14 +623,14 @@ class _SmokeRunner(QObject):
             )
         try:
             for probe in self._probes:
-                snapshot = probe.telemetry.snapshot()
-                probe.initial_capture = _capture_from_snapshot(snapshot)
+                facts = _layer_facts(probe)
+                probe.layer = probe.scene.background_item.native_layer
+                probe.initial_capture = facts
                 probe.initial_scene_state = probe.scene.describe_scene_state()
-                self._initial_snapshots.append(snapshot)
+                self._initial_layer_facts.append(facts)
                 # Re-admit the same immutable identity and force further frames;
-                # the render owner must not upload it again.
+                # the layer must not send it to the core again.
                 probe.runtime.set_presentation_image(probe.presentation_image)
-                probe.scene.set_background_proof_progress(0.68)
                 probe.window.resize(
                     probe.window.width() + 80,
                     probe.window.height() + 45,
@@ -970,19 +644,20 @@ class _SmokeRunner(QObject):
     def _capture_resized(self, token: int) -> None:
         if token != self._cycle_token:
             return
-        resized_ready = len(self._initial_snapshots) == len(self._probes) and all(
+        resized_ready = len(self._initial_layer_facts) == len(self._probes) and all(
             (
-                probe.telemetry.snapshot().render_target_size
-                != self._initial_snapshots[position].render_target_size
-                and probe.telemetry.snapshot().pixel_sample_count
-                > self._initial_snapshots[position].pixel_sample_count
-                and probe.telemetry.snapshot().image_upload_count
-                == self._initial_snapshots[position].image_upload_count
-                and probe.telemetry.snapshot().active_image_identity
-                == probe.presentation_image.identity
-                and probe.runtime.scene_readiness.ready_for_reveal
+                _layer_draws(facts)
+                and facts.get("rect") != initial.get("rect")
+                and facts.get("rect") == [0.0, 0.0, *facts.get("item_size", [])]
+                and facts.get("draws", 0) > initial.get("draws", 0)
+                and facts.get("sent") == initial.get("sent")
+                and facts.get("presentation_identity") == probe.presentation_image.identity
+                and _reveal_ready(probe.runtime.scene_readiness)
             )
-            for position, probe in enumerate(self._probes)
+            for probe, facts, initial in (
+                (probe, _layer_facts(probe), self._initial_layer_facts[position])
+                for position, probe in enumerate(self._probes)
+            )
         )
         if not resized_ready and time.monotonic() < self._visibility_deadline:
             QTimer.singleShot(10, lambda token=token: self._capture_resized(token))
@@ -993,19 +668,14 @@ class _SmokeRunner(QObject):
             )
         try:
             for probe in self._probes:
-                probe.resized_capture = _capture_from_snapshot(
-                    probe.telemetry.snapshot()
-                )
+                probe.resized_capture = _layer_facts(probe)
                 request = TransitionRequest(
                     runtime_generation=probe.generation,
                     transition_id=self._args.transition_id,
                     requested_name=self._args.transition_id,
                     selected_from_random=False,
-                    # The fixture owns this timeline.  The transition must
-                    # remain open through a bounded per-display readback
-                    # opportunity even when the GUI event queue briefly stalls.
-                    # Three phase intervals leave the render thread a broad
-                    # interior window without changing production cadence.
+                    # The fixture owns this timeline: three phase intervals keep the run open across several frames
+                    # of the slowest selected display without changing production cadence.
                     duration_ms=max(
                         _TRANSITION_SMOKE_DURATIONS_MS.get(
                             self._args.transition_id,
@@ -1055,27 +725,19 @@ class _SmokeRunner(QObject):
             return
         replacement_ready = all(
             probe.resized_capture is not None
-            and probe.telemetry.snapshot().image_upload_count
-            == int(probe.resized_capture["image_upload_count"]) + 1
-            and probe.telemetry.snapshot().active_image_identity
-            == probe.replacement_image.identity
-            and probe.telemetry.snapshot().pixel_sample_count
-            > int(probe.resized_capture["sample_count"])
-            and probe.telemetry.snapshot().sampled_sync_count
-            == probe.telemetry.snapshot().sync_count
-            and probe.telemetry.snapshot().transition_sample_count >= 1
-            and probe.telemetry.snapshot().last_transition_run_id
-            == probe.transition_run_id
-            and probe.telemetry.snapshot().last_transition_generation
-            == probe.generation
-            and probe.telemetry.snapshot().last_transition_id
-            == self._args.transition_id
+            and _layer_draws(facts)
+            # The destination was sent once for the run; at its end it is the photo drawn (nothing sent again).
+            and facts.get("sent") == int(probe.resized_capture.get("sent", 0)) + 1
+            and facts.get("runs") == 1
+            and facts.get("ticks", 0) >= 1
+            and facts.get("run") is None
+            and facts.get("presentation_identity") == probe.replacement_image.identity
             and probe.transition_completion is not None
             and not probe.runtime.transition_controller.is_active
             and probe.scene.background_item.transition_run is None
             and probe.scene.presentation_image == probe.replacement_image
-            and probe.runtime.scene_readiness.ready_for_reveal
-            for probe in self._probes
+            and _reveal_ready(probe.runtime.scene_readiness)
+            for probe, facts in ((probe, _layer_facts(probe)) for probe in self._probes)
         )
         if not replacement_ready and time.monotonic() < self._visibility_deadline:
             QTimer.singleShot(
@@ -1095,15 +757,12 @@ class _SmokeRunner(QObject):
                     and not probe.scene.set_transition_run(run)
                     and probe.scene.background_item.transition_run is None
                 )
-                probe.replacement_capture = _capture_from_snapshot(
-                    probe.telemetry.snapshot()
-                )
+                probe.replacement_capture = _layer_facts(probe)
         except Exception as exc:
             self._errors.append(
                 f"replacement capture failed: {type(exc).__name__}: {exc}"
             )
         if self._args.topology_recreate and not self._errors:
-            self._advance_topology_presentation_state()
             if self._generation == 0:
                 self._begin_topology_displacement(token)
                 return
@@ -1143,11 +802,10 @@ class _SmokeRunner(QObject):
                 # Keep a real continuous Quick demand active across the
                 # hide/show stress without inventing a visualizer polling owner.
                 probe.runtime.frame_pacer.set_transition_active(True)
-                before = probe.telemetry.snapshot()
                 geometry = probe.window.geometry()
                 self._active_hide_records[id(probe)] = {
                     "cycle": self._hide_show_cycle,
-                    "before": _snapshot_dict(before),
+                    "before": _layer_facts(probe),
                     "resume_geometry": list(geometry.getRect()),
                 }
                 probe.runtime.hide()
@@ -1166,19 +824,16 @@ class _SmokeRunner(QObject):
             return
         hidden_ready = True
         for probe in self._probes:
-            record = self._active_hide_records[id(probe)]
-            before = record["before"]
-            snapshot = probe.telemetry.snapshot()
+            facts = _layer_facts(probe)
             readiness = probe.runtime.scene_readiness
             if (
                 probe.window.isVisible()
                 or probe.runtime.phase.value != "paused"
                 or not readiness.scene_graph_invalidated
-                or snapshot.invalidation_count <= before["invalidation_count"]
-                or snapshot.release_count <= before["release_count"]
-                or snapshot.image_release_count <= before["image_release_count"]
-                or snapshot.active_image_identity is not None
-                or snapshot.pending_image_release_count != 0
+                # The layer stays (its item, its photo), its node and the node's GPU objects go with the scene graph.
+                or not facts.get("made")
+                or facts.get("closed")
+                or facts.get("nodes") != 0
             ):
                 hidden_ready = False
                 break
@@ -1197,7 +852,7 @@ class _SmokeRunner(QObject):
         try:
             for probe in self._probes:
                 record = self._active_hide_records[id(probe)]
-                record["hidden"] = _snapshot_dict(probe.telemetry.snapshot())
+                record["hidden"] = _layer_facts(probe)
                 record["hidden_runtime_state"] = (
                     probe.runtime.describe_runtime_state()
                 )
@@ -1223,16 +878,16 @@ class _SmokeRunner(QObject):
         resumed_ready = True
         for probe in self._probes:
             record = self._active_hide_records[id(probe)]
-            before = record["before"]
-            snapshot = probe.telemetry.snapshot()
+            hidden = record.get("hidden", {})
+            facts = _layer_facts(probe)
             if (
                 not probe.window.isVisible()
                 or probe.runtime.phase.value != "visible"
-                or not probe.runtime.scene_readiness.ready_for_reveal
-                or snapshot.initialize_count <= before["initialize_count"]
-                or snapshot.render_count <= before["render_count"]
-                or snapshot.image_upload_count <= before["image_upload_count"]
-                or snapshot.active_image_identity
+                or not _reveal_ready(probe.runtime.scene_readiness)
+                # A new node, drawing the photo the item kept.
+                or not _layer_draws(facts)
+                or facts.get("draws", 0) <= hidden.get("draws", 0)
+                or facts.get("presentation_identity")
                 != probe.replacement_image.identity
                 or not probe.runtime.frame_pacer.is_active()
             ):
@@ -1252,10 +907,7 @@ class _SmokeRunner(QObject):
 
         for probe in self._probes:
             record = self._active_hide_records[id(probe)]
-            record["resumed"] = _snapshot_dict(probe.telemetry.snapshot())
-            record["resumed_capture"] = _capture_from_snapshot(
-                probe.telemetry.snapshot()
-            )
+            record["resumed"] = _layer_facts(probe)
             record["resumed_runtime_state"] = probe.runtime.describe_runtime_state()
             record["qml_root_preserved_after_resume"] = (
                 id(probe.scene.scene_root) == probe.qml_root_identity
@@ -1382,16 +1034,6 @@ class _SmokeRunner(QObject):
     def _visibility_timeout_deadline(self) -> float:
         timeout_ms = max(1500, self._args.phase_delay_ms * 8)
         return time.monotonic() + (timeout_ms / 1000.0)
-
-    def _advance_topology_presentation_state(self) -> None:
-        """Change per-screen model state so replacement must replay, not default."""
-
-        for probe in self._probes:
-            progress = round(
-                0.61 + (0.07 * self._generation) + (0.03 * probe.index),
-                6,
-            )
-            probe.scene.set_background_proof_progress(progress)
 
     def _begin_topology_displacement(self, token: int) -> None:
         """Exercise Qt moving one live window onto another physical screen."""
@@ -1557,23 +1199,23 @@ class _SmokeRunner(QObject):
             else {}
         )
         for probe in self._probes:
-            try:
-                progress = float(probe.scene.background_item.getProofProgress())
-            except Exception as exc:
+            image = probe.scene.presentation_image
+            if image is None:
                 self._errors.append(
                     f"generation{probe.generation} screen{probe.index} "
-                    f"presentation-state capture failed: {type(exc).__name__}: {exc}"
+                    "presentation-state capture found no photo"
                 )
                 continue
-            probe.retired_proof_progress = progress
+            probe.retired_presentation_identity = image.identity
             screen_key = probe.runtime.display_identity.screen_key
             self._presentation_state_by_screen_key[screen_key] = {
                 "generation": probe.generation,
-                "proof_progress": progress,
+                "presentation_identity": image.identity,
             }
+            self._replayed_images[screen_key] = image
             screen_record = screens_by_index.get(probe.index)
             if screen_record is not None:
-                screen_record["retired_proof_progress"] = progress
+                screen_record["retired_presentation_identity"] = image.identity
 
     def _on_runtime_retired(
         self,
@@ -1608,16 +1250,21 @@ class _SmokeRunner(QObject):
     def _finish_generation(self, token: int) -> None:
         if token != self._cycle_token:
             return
-        for position, probe in enumerate(self._probes):
-            initial = self._initial_snapshots[position]
-            final = probe.telemetry.snapshot()
+        for probe in self._probes:
+            final = {
+                "layer_kept": probe.layer is not None,
+                "layer_closed": probe.layer is not None and bool(probe.layer.closed),
+                "layer_mode_released": probe.layer is not None and probe.layer.mode is None,
+                # A retired scene has released its item; a live item must have dropped its layer.
+                "item_dropped_layer": getattr(probe.scene, "_background_item", None) is None
+                or probe.scene._background_item.native_layer is None,
+            }
             initial_capture = probe.initial_capture or {}
             resized_capture = probe.resized_capture or {}
             replacement_capture = probe.replacement_capture or {}
             runtime_state = probe.runtime.describe_runtime_state()
             errors = self._validate_probe(
                 probe,
-                initial,
                 final,
                 initial_capture,
                 resized_capture,
@@ -1637,8 +1284,7 @@ class _SmokeRunner(QObject):
                     "window_state": runtime_state.get("window"),
                     "initial_scene_state": probe.initial_scene_state,
                     "final_scene_state": runtime_state.get("scene"),
-                    "initial": _snapshot_dict(initial),
-                    "final": _snapshot_dict(final),
+                    "final": final,
                     "initial_capture": initial_capture,
                     "resized_capture": resized_capture,
                     "replacement_capture": replacement_capture,
@@ -1649,14 +1295,16 @@ class _SmokeRunner(QObject):
                         probe.stale_transition_rejected
                     ),
                     "hide_show_cycles": probe.hide_show_cycles,
-                    "proof_progress_on_construction": (
-                        probe.proof_progress_on_construction
+                    "presentation_identity_on_construction": (
+                        probe.presentation_identity_on_construction
                     ),
                     "presentation_state_replayed": (
                         probe.presentation_state_replayed
                     ),
                     "replayed_from_generation": probe.replayed_from_generation,
-                    "retired_proof_progress": probe.retired_proof_progress,
+                    "retired_presentation_identity": (
+                        probe.retired_presentation_identity
+                    ),
                     "errors": errors,
                 }
             )
@@ -1664,11 +1312,8 @@ class _SmokeRunner(QObject):
             self._active_topology_generation["retirement_complete"] = all(
                 probe.runtime.phase.value == "retired" for probe in self._probes
             )
-            self._active_topology_generation["render_resources_released"] = all(
-                probe.telemetry.snapshot().release_count
-                == 1 + self._args.hide_show_cycles
-                for probe in self._probes
-            )
+            # Read again once the runtime roots are destroyed (_complete_generation).
+            self._active_topology_generation["render_resources_released"] = False
         self._pending_runtime_root_ids = {
             id(probe.runtime) for probe in self._probes
         }
@@ -1678,6 +1323,8 @@ class _SmokeRunner(QObject):
             "expected_runtime_roots": len(self._pending_runtime_root_ids),
             "destroyed_runtime_roots": 0,
             "crossed": False,
+            "native_release": None,
+            "native_resources_released": False,
             "next_generation_started": False,
             "next_generation_started_after_crossing": False,
         }
@@ -1742,6 +1389,16 @@ class _SmokeRunner(QObject):
             self._finish_report()
             return
 
+        # Every window of the generation is destroyed: the core holds none of its layers and no window host.
+        release = _native_release()
+        barrier["native_release"] = release
+        barrier["native_resources_released"] = release["released"]
+        if self._active_topology_generation is not None:
+            self._active_topology_generation["render_resources_released"] = release["released"]
+        if not release["released"]:
+            self._errors.append(
+                f"generation{self._generation} left native resources: {release}"
+            )
         self._completed_generations += 1
         if self._errors or self._completed_generations >= self._args.generations:
             self._finish_report()
@@ -1776,6 +1433,7 @@ class _SmokeRunner(QObject):
             "presentation_state_by_screen_key": (
                 self._presentation_state_by_screen_key
             ),
+            "native_core_loaded": quick_bootstrap.native_core() is not None,
             "completed_generations": self._completed_generations,
             "physical_screens": len(QGuiApplication.screens()),
             "created_windows": len(self._reports),
@@ -1809,7 +1467,7 @@ class _SmokeRunner(QObject):
         if len(self._topology_generations) != len(expected_indices):
             return ["topology recreate did not complete all three generations"]
 
-        retired_progress: dict[tuple[int, str], float] = {}
+        retired_identity: dict[tuple[int, str], str] = {}
         window_names: list[str] = []
         for expected_generation, (record, indices) in enumerate(
             zip(self._topology_generations, expected_indices)
@@ -1852,23 +1510,23 @@ class _SmokeRunner(QObject):
                 if screen.get("qml_runtime_generation") != expected_generation:
                     errors.append("topology QML generation identity is stale")
                 window_names.append(str(screen.get("window_object_name")))
-                retired = screen.get("retired_proof_progress")
+                retired = screen.get("retired_presentation_identity")
                 if retired is None:
                     errors.append("topology presentation state was not captured")
                 else:
-                    retired_progress[
+                    retired_identity[
                         (expected_generation, str(screen["screen_key"]))
-                    ] = float(retired)
+                    ] = str(retired)
                 replayed_from = screen.get("replayed_from_generation")
                 if replayed_from is None:
                     if expected_generation != 0:
                         errors.append("replacement scene did not replay presentation state")
                     continue
-                source = retired_progress.get(
+                source = retired_identity.get(
                     (int(replayed_from), str(screen["screen_key"]))
                 )
-                applied = float(screen["proof_progress_on_construction"])
-                if source is None or abs(source - applied) > 1e-6:
+                applied = screen["presentation_identity_on_construction"]
+                if source is None or source != applied:
                     errors.append("replacement scene replayed stale presentation state")
 
         if len(window_names) != len(set(window_names)):
@@ -2023,8 +1681,7 @@ class _SmokeRunner(QObject):
     def _validate_probe(
         self,
         probe: _WindowProbe,
-        initial: RenderNodeSnapshot,
-        final: RenderNodeSnapshot,
+        final: dict[str, Any],
         initial_capture: dict[str, Any],
         resized_capture: dict[str, Any],
         replacement_capture: dict[str, Any],
@@ -2032,8 +1689,18 @@ class _SmokeRunner(QObject):
     ) -> list[str]:
         prefix = f"generation{probe.generation}.screen{probe.index}"
         errors: list[str] = []
-        if final.error:
-            errors.append(f"{prefix} render error: {final.error}")
+        for name, capture in (
+            ("initial", initial_capture),
+            ("resized", resized_capture),
+            ("replacement", replacement_capture),
+        ):
+            if capture.get("degraded") or not capture.get("layer"):
+                errors.append(f"{prefix} {name}: the background had no native layer (degraded display)")
+            elif capture.get("failure") or capture.get("composite_error"):
+                errors.append(
+                    f"{prefix} {name}: native layer failed: "
+                    f"{capture.get('failure') or capture.get('composite_error')}"
+                )
         if probe.qml_object_name != "displaySceneRoot":
             errors.append(f"{prefix} did not instantiate DisplayScene.qml")
         if probe.qml_runtime_role != "display-scene":
@@ -2043,9 +1710,13 @@ class _SmokeRunner(QObject):
         if probe.qml_runtime_generation != probe.generation:
             errors.append(f"{prefix} QML runtime generation is incorrect")
         initial_scene = probe.initial_scene_state or {}
+        if not _reveal_ready(probe.runtime.scene_readiness) and not initial_capture:
+            errors.append(f"{prefix} scene never reached explicit reveal readiness")
         initial_readiness = initial_scene.get("readiness", {})
-        if not isinstance(initial_readiness, dict) or not initial_readiness.get(
-            "ready_for_reveal"
+        if not isinstance(initial_readiness, dict) or not (
+            initial_readiness.get("frame_presented")
+            and initial_readiness.get("qml_root_created")
+            and initial_readiness.get("scene_graph_initialized")
         ):
             errors.append(f"{prefix} scene never reached explicit reveal readiness")
         initial_image_state = initial_scene.get("presentation_image")
@@ -2121,150 +1792,43 @@ class _SmokeRunner(QObject):
             or final_completion.get("run_id") != probe.transition_run_id
         ):
             errors.append(f"{prefix} transition controller did not retire cleanly")
-        if (
-            final.transition_sample_count < 1
-            or final.last_transition_run_id != probe.transition_run_id
-            or final.last_transition_generation != probe.generation
-            or final.last_transition_id != self._args.transition_id
-        ):
-            errors.append(f"{prefix} render node did not sample the transition run")
-        if (
-            final.transition_draw_count < 1
-            or final.last_transition_renderer_id != self._args.transition_id
-        ):
-            errors.append(
-                f"{prefix} {self._args.transition_id} renderer did not draw the run"
-            )
-        midpoint_progress = final.transition_midpoint_eased_progress
-        uses_dense_midpoint = (
-            self._args.transition_id in _DENSE_MIDPOINT_TRANSITION_IDS
-        )
-        midpoint_colors_for_oracle = (
-            final.transition_midpoint_dense_colors
-            if uses_dense_midpoint
-            else final.transition_midpoint_colors
-        )
-        if (
-            final.transition_midpoint_run_id != probe.transition_run_id
-            or midpoint_progress is None
-            or not final.transition_midpoint_colors
-            or (uses_dense_midpoint and not final.transition_midpoint_dense_colors)
-        ):
-            errors.append(
-                f"{prefix} {self._args.transition_id} midpoint was not captured"
-            )
-        elif not _TRANSITION_MIDPOINT_ORACLES[self._args.transition_id](
-            resized_capture.get("ordered_colors"),
-            replacement_capture.get("ordered_colors"),
-            midpoint_colors_for_oracle,
-            midpoint_progress,
-            self._args.transition_direction,
-        ):
-            errors.append(
-                f"{prefix} {self._args.transition_id} midpoint pixels are incorrect"
-            )
-        probe_oracle = _TRANSITION_PROBE_ORACLES.get(self._args.transition_id)
-        if probe_oracle is not None and not probe_oracle(
-            resized_capture.get("ordered_colors"),
-            replacement_capture.get("ordered_colors"),
-            final.transition_probe_eased_progresses,
-            final.transition_probe_colors,
-            self._args.transition_direction,
-        ):
-            errors.append(
-                f"{prefix} {self._args.transition_id} authored pixel probes are "
-                "incorrect"
-            )
+        if replacement_capture.get("runs") != 1 or replacement_capture.get("ticks", 0) < 1:
+            errors.append(f"{prefix} native layer did not draw the transition run")
+        if replacement_capture.get("run") is not None:
+            errors.append(f"{prefix} native layer kept a finished run")
         if final_scene.get("transition_run") is not None:
             errors.append(f"{prefix} scene retained a finalized transition run")
         if final_scene.get("last_transition_run_id") != probe.transition_run_id:
             errors.append(f"{prefix} scene lost its stale-run fence")
         if not probe.stale_transition_rejected:
             errors.append(f"{prefix} scene re-admitted a stale transition run")
-        if initial.render_thread_id is None:
-            errors.append(f"{prefix} never rendered")
-        elif initial.render_thread_id == initial.gui_thread_id:
-            errors.append(f"{prefix} render callback ran on the GUI thread")
-        expected_resource_cycles = 1 + self._args.hide_show_cycles
-        if final.initialize_count != expected_resource_cycles:
-            errors.append(
-                f"{prefix} GL initialized {final.initialize_count} times; "
-                f"expected {expected_resource_cycles}"
-            )
-        if final.render_count < 2 + self._args.hide_show_cycles:
-            errors.append(f"{prefix} rendered only {final.render_count} frames")
-        if final.release_count != expected_resource_cycles:
-            errors.append(
-                f"{prefix} GL released {final.release_count} times; "
-                f"expected {expected_resource_cycles}"
-            )
-        if final.release_thread_id != final.render_thread_id:
-            errors.append(f"{prefix} GL release did not run on its render thread")
-        expected_image_cycles = 2 + self._args.hide_show_cycles
-        if final.image_upload_count != expected_image_cycles:
-            errors.append(
-                f"{prefix} image uploaded {final.image_upload_count} times; "
-                f"expected {expected_image_cycles}"
-            )
-        if final.image_release_count != expected_image_cycles:
-            errors.append(
-                f"{prefix} image released {final.image_release_count} times; "
-                f"expected {expected_image_cycles}"
-            )
-        if final.image_upload_thread_id != final.render_thread_id:
-            errors.append(f"{prefix} image upload did not run on its render thread")
-        if final.image_release_thread_id != final.render_thread_id:
-            errors.append(f"{prefix} image release did not run on its render thread")
-        if final.active_image_identity is not None:
-            errors.append(f"{prefix} retained an active image after retirement")
-        if final.pending_image_release_count:
-            errors.append(f"{prefix} retained pending image texture deletion")
-        if final.image_upload_bytes <= 0:
-            errors.append(f"{prefix} did not account uploaded image bytes")
-        if final.image_upload_bytes != final.image_release_bytes:
-            errors.append(f"{prefix} image byte ownership did not balance")
-        if final.invalidation_count < expected_resource_cycles:
-            errors.append(
-                f"{prefix} scene graph invalidated {final.invalidation_count} times; "
-                f"expected at least {expected_resource_cycles}"
-            )
-        if final.invalidation_thread_id != final.render_thread_id:
-            errors.append(f"{prefix} invalidation did not run on its render thread")
-        if not final.gl_version:
-            errors.append(f"{prefix} did not report a live GL context/version")
-        if initial.logical_size == final.logical_size:
-            errors.append(f"{prefix} item geometry did not follow window resize")
-        if initial.device_pixel_ratio <= 0.0 or final.device_pixel_ratio <= 0.0:
-            errors.append(f"{prefix} reported an invalid DPR")
-        if initial_capture.get("sample_count", 0) < 1:
-            errors.append(f"{prefix} initial render-thread pixel sample was missing")
-        if resized_capture.get("sample_count", 0) < 2:
-            errors.append(f"{prefix} resized render-thread pixel sample was missing")
-        if replacement_capture.get("sample_count", 0) < 3:
-            errors.append(f"{prefix} replacement image pixel sample was missing")
-        if initial_capture.get("image_upload_count") != 1:
-            errors.append(f"{prefix} initial image was not uploaded exactly once")
-        if resized_capture.get("image_upload_count") != 1:
-            errors.append(f"{prefix} stable image was re-uploaded during resize")
-        if replacement_capture.get("image_upload_count") != 2:
-            errors.append(f"{prefix} replacement identity did not upload once")
+        if not final.get("layer_kept"):
+            errors.append(f"{prefix} never made its native layer")
+        elif not (final.get("layer_closed") and final.get("layer_mode_released")):
+            errors.append(f"{prefix} native layer was not closed with its generation")
+        if not final.get("item_dropped_layer"):
+            errors.append(f"{prefix} background item retained its native layer after retirement")
+        if initial_capture.get("nodes") != 1 or resized_capture.get("nodes") != 1:
+            errors.append(f"{prefix} native layer did not keep one live node")
+        if initial_capture.get("sent") != 1:
+            errors.append(f"{prefix} initial image was not sent exactly once")
+        if resized_capture.get("sent") != 1:
+            errors.append(f"{prefix} stable image was sent again during resize")
+        if replacement_capture.get("sent") != 2:
+            errors.append(f"{prefix} replacement identity was not sent once")
         if (
-            replacement_capture.get("active_image_identity")
+            replacement_capture.get("presentation_identity")
             != probe.replacement_image.identity
         ):
-            errors.append(f"{prefix} replacement identity did not reach render state")
-        if len(initial_capture.get("colors", ())) < 2:
-            errors.append(f"{prefix} initial capture did not contain deterministic bands")
-        if len(resized_capture.get("colors", ())) < 2:
-            errors.append(f"{prefix} resized capture did not contain deterministic bands")
-        if len(replacement_capture.get("colors", ())) < 2:
-            errors.append(
-                f"{prefix} replacement capture did not contain deterministic bands"
-            )
-        if initial_capture.get("colors") == replacement_capture.get("colors"):
-            errors.append(f"{prefix} replacement image did not change rendered pixels")
-        if initial_capture.get("size") == resized_capture.get("size"):
-            errors.append(f"{prefix} physical capture size did not change after resize")
+            errors.append(f"{prefix} replacement identity did not reach the layer's item")
+        if initial_capture.get("rect") == resized_capture.get("rect"):
+            errors.append(f"{prefix} native layer was not placed again after resize")
+        if resized_capture.get("rect") != [0.0, 0.0, *resized_capture.get("item_size", [])]:
+            errors.append(f"{prefix} native layer rect does not cover the resized item")
+        if initial_capture.get("item_size") == resized_capture.get("item_size"):
+            errors.append(f"{prefix} item geometry did not follow window resize")
+        if not resized_capture.get("draws", 0) > initial_capture.get("draws", 0):
+            errors.append(f"{prefix} native layer did not draw after resize")
         if len(probe.hide_show_cycles) != self._args.hide_show_cycles:
             errors.append(
                 f"{prefix} completed {len(probe.hide_show_cycles)} hide/show cycles; "
@@ -2273,7 +1837,7 @@ class _SmokeRunner(QObject):
         for cycle_index, cycle in enumerate(probe.hide_show_cycles):
             cycle_prefix = f"{prefix}.hide_show{cycle_index}"
             hidden_runtime = cycle.get("hidden_runtime_state", {})
-            hidden_snapshot = cycle.get("hidden", {})
+            hidden_layer = cycle.get("hidden", {})
             hidden_window = hidden_runtime.get("window", {})
             hidden_scene = hidden_runtime.get("scene_readiness", {})
             hidden_pacer = hidden_runtime.get("frame_pacer", {})
@@ -2302,19 +1866,19 @@ class _SmokeRunner(QObject):
                 errors.append(f"{cycle_prefix} did not preserve paused frame demand")
             if not cycle.get("qml_root_preserved_while_hidden"):
                 errors.append(f"{cycle_prefix} replaced its QML root while hidden")
-            if hidden_snapshot.get("release_thread_id") != hidden_snapshot.get(
-                "render_thread_id"
-            ):
-                errors.append(f"{cycle_prefix} released off its render thread")
-            if hidden_snapshot.get("active_image_identity") is not None:
-                errors.append(f"{cycle_prefix} retained an image while invalidated")
-            if hidden_snapshot.get("pending_image_release_count"):
-                errors.append(f"{cycle_prefix} left image deletion pending")
+            if hidden_layer.get("nodes") != 0:
+                errors.append(f"{cycle_prefix} kept its native node while invalidated")
+            if not hidden_layer.get("made") or hidden_layer.get("closed"):
+                errors.append(f"{cycle_prefix} lost its native layer while hidden")
             if resumed_runtime.get("phase") != "visible" or not resumed_window.get(
                 "visible"
             ):
                 errors.append(f"{cycle_prefix} did not become visible again")
-            if not resumed_scene.get("ready_for_reveal"):
+            if not (
+                resumed_scene.get("frame_presented")
+                and resumed_scene.get("scene_graph_initialized")
+                and not resumed_scene.get("scene_graph_invalidated")
+            ):
                 errors.append(f"{cycle_prefix} did not regain reveal readiness")
             if (
                 resumed_pacer.get("paused")
@@ -2324,29 +1888,16 @@ class _SmokeRunner(QObject):
                 errors.append(f"{cycle_prefix} did not resume frame demand")
             if not cycle.get("qml_root_preserved_after_resume"):
                 errors.append(f"{cycle_prefix} replaced its QML root on resume")
-            resumed_snapshot = cycle.get("resumed", {})
+            resumed_layer = cycle.get("resumed", {})
             if (
-                resumed_snapshot.get("active_image_identity")
+                resumed_layer.get("presentation_identity")
                 != probe.replacement_image.identity
             ):
-                errors.append(f"{cycle_prefix} did not recreate its image texture")
-            if cycle.get("resumed_capture", {}).get("sample_count", 0) < 3:
-                errors.append(f"{cycle_prefix} did not render resumed pixels")
-        viewport_size = list(final.viewport[2:])
-        if viewport_size != list(final.render_target_size):
-            errors.append(
-                f"{prefix} viewport {viewport_size} does not match render target "
-                f"{list(final.render_target_size)}"
-            )
-        capture_size = resized_capture.get("size", [0, 0])
-        if any(
-            viewport_extent < capture_extent
-            for viewport_extent, capture_extent in zip(viewport_size, capture_size)
-        ):
-            errors.append(
-                f"{prefix} viewport {viewport_size} did not contain item pixels "
-                f"{capture_size}"
-            )
+                errors.append(f"{cycle_prefix} did not keep its photo across the invalidation")
+            if not _layer_draws(resumed_layer) or not (
+                resumed_layer.get("draws", 0) > hidden_layer.get("draws", 0)
+            ):
+                errors.append(f"{cycle_prefix} did not draw its photo again on a new node")
         return errors
 
     def _finish_with_error(self, message: str) -> None:
@@ -2360,6 +1911,21 @@ def main(argv: list[str] | None = None) -> int:
     app = QGuiApplication(sys.argv[:1])
     app.setApplicationName("SRPSSQuickRenderNodeSmoke")
     app.setQuitOnLastWindowClosed(False)
+    start_quick_backend()
+    if quick_bootstrap.native_core() is None:
+        print(
+            json.dumps(
+                {
+                    "valid": False,
+                    "errors": [
+                        "the native core did not load: "
+                        f"{quick_bootstrap.degraded_reason() or 'no reason given'}"
+                    ],
+                }
+            ),
+            flush=True,
+        )
+        return 1
 
     if QQuickWindow.graphicsApi() != QSGRendererInterface.GraphicsApi.OpenGL:
         print(

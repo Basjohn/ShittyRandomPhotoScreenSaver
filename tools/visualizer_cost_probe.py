@@ -114,10 +114,10 @@ def measure(mode: str, parameters: dict[str, object], size: tuple[int, int], fra
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.bench_stability import PairedBench, crossfade_control
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     width, height = size
-    capture = TransitionCapture(width, height)
+    capture = OffscreenRenderTarget(width, height)
     host = QuickVisualizerRenderHost()
     try:
         snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)

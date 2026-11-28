@@ -20,7 +20,6 @@ from rendering.gl_programs.blockspin_program import (
 )
 from rendering.quick.transitions.implementation_registry import (
     iter_quick_transition_implementations,
-    resolve_quick_transition_renderer,
 )
 from rendering.quick.transitions.implementations.block_spins import (
     _block_spin_direction_state,
@@ -31,7 +30,6 @@ from rendering.quick.transitions.implementations.slide import (
     _slide_partition_sample,
 )
 from rendering.quick.transitions.implementations.wipe import _wipe_mode
-from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -384,18 +382,6 @@ def test_block_spins_owns_a_real_thin_box_mesh_without_quad_fallback():
             BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
         )
     )
-    assert {position[2] for position in positions} == {0.0, -0.05}
-    renderer_source = (
-        ROOT
-        / "rendering"
-        / "quick"
-        / "transitions"
-        / "implementations"
-        / "block_spins.py"
-    ).read_text(encoding="utf-8")
-    assert "gl.GL_TRIANGLES" in renderer_source
-    assert "BLOCK_SPIN_BOX_VERTEX_COUNT" in renderer_source
-    assert "box_vao and" not in renderer_source
 
 
 def test_block_spins_keeps_linear_run_input_and_authored_cubic_spin_timing():
@@ -413,15 +399,6 @@ def test_block_spins_opposite_directions_move_side_highlight_opposite_ways():
     assert block_spin_specular_band_center(0.75, -1.0) == pytest.approx(0.295)
     assert "uSpecDirection < 0.0" in BLOCK_SPIN_FRAGMENT_SOURCE
     assert "? 1.0 - timeline" in BLOCK_SPIN_FRAGMENT_SOURCE
-    renderer_source = (
-        ROOT
-        / "rendering"
-        / "quick"
-        / "transitions"
-        / "implementations"
-        / "block_spins.py"
-    ).read_text(encoding="utf-8")
-    assert 'values["uSpecDirection"] = spin_direction' in renderer_source
 
 
 def test_block_spins_shader_uses_quick_geometry_depth_and_authored_face_uvs():
@@ -537,61 +514,3 @@ def test_wipe_mode_defaults_left_to_right_and_rejects_unknown_direction():
     assert _wipe_mode("LEFT_TO_RIGHT") == 0
     with pytest.raises(ValueError, match="unknown canonical Wipe direction"):
         _wipe_mode("Random")
-
-
-def test_common_runtime_owners_have_no_transition_specific_dispatch_tree():
-    paths = (
-        ROOT / "rendering" / "quick" / "render" / "background_node.py",
-        ROOT / "rendering" / "quick" / "transitions" / "render_host.py",
-        ROOT / "rendering" / "quick" / "transitions" / "controller.py",
-        ROOT / "rendering" / "quick" / "scene_controller.py",
-    )
-    source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
-
-    assert "transition_id ==" not in source
-    assert "transition_id in (" not in source
-    assert "GLCompositorWidget" not in source
-    assert "DisplayWidget" not in source
-
-
-class _OwnedRenderer:
-    transition_id = "crossfade"
-
-    def __init__(self) -> None:
-        self.live = True
-        self.release_count = 0
-
-    @property
-    def has_resources(self) -> bool:
-        return self.live
-
-    def render(self, _frame) -> None:
-        raise AssertionError("disabled renderer must not draw")
-
-    def release_resources(self) -> None:
-        self.release_count += 1
-        self.live = False
-
-
-def test_disabling_releases_resolved_surface_and_reenable_resolves_cleanly():
-    host = QuickTransitionRenderHost(enabled_transition_ids={"crossfade"})
-    owned = _OwnedRenderer()
-    host._implementations["crossfade"] = owned  # type: ignore[assignment]
-
-    host.set_enabled_transition_ids(set())
-
-    assert owned.release_count == 1
-    assert host.resolved_transition_ids == frozenset()
-    assert host.enabled_transition_ids == frozenset()
-    assert resolve_quick_transition_renderer(
-        "crossfade",
-        enabled_transition_ids=host.enabled_transition_ids,
-    ) is None
-
-    host.set_enabled_transition_ids({"crossfade"})
-    replacement = resolve_quick_transition_renderer(
-        "crossfade",
-        enabled_transition_ids=host.enabled_transition_ids,
-    )
-    assert replacement is not None
-    assert type(replacement).__name__ == "QuickCrossfadeRenderer"

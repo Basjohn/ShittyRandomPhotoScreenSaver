@@ -230,8 +230,20 @@ class CallSite:
 
 def _composers() -> dict[object, str]:
     """{function object: "<module>.<name>"} for every module-level function that builds a shader."""
+    return _composer_graph()[0]
+
+
+def composer_parts() -> dict[str, frozenset[str]]:
+    """{composer: the composers it calls}: a composition forwarded from its caller's parameters is checked through
+    its parts where another composer reaches them with the product's own text (``covered_composers``)."""
+    return _composer_graph()[1]
+
+
+@functools.lru_cache(maxsize=1)
+def _composer_graph() -> tuple[dict[object, str], dict[str, frozenset[str]]]:
     functions = {}
     reads = {}
+    local = {}
     for module_name, path in _candidate_modules():
         module = _import(module_name)
         for node in _tree(path).body:
@@ -246,10 +258,14 @@ def _composers() -> dict[object, str]:
                     literal = True
                 elif isinstance(leaf, ast.Name):
                     names.add(leaf.id)
+
             builds = literal or any(_is_shader_text(getattr(module, name, None)) for name in names)
             functions[function] = f"{module_name}.{node.name}"
             reads[function] = (builds, [value for value in (getattr(module, name, None) for name in names)
                                         if callable(value)])
+            # The parts only (never what makes a composer): the composers it also imports in its own body.
+            local[function] = [value for value in (_scope_import(name, node) for name in names)
+                               if value is not _UNRESOLVED and callable(value)]
     composers = {function for function, (builds, _) in reads.items() if builds}
     changed = True
     while changed:
@@ -258,7 +274,24 @@ def _composers() -> dict[object, str]:
             if function not in composers and any(_hashable(callee) and callee in composers for callee in called):
                 composers.add(function)
                 changed = True
-    return {function: functions[function] for function in composers}
+    parts = {functions[function]: frozenset(functions[callee] for callee in reads[function][1] + local[function]
+                                            if _hashable(callee) and callee in composers)
+             for function in composers}
+    return {function: functions[function] for function in composers}, parts
+
+
+def covered_composers(sites) -> set[str]:
+    """The composers evaluated with the product's own text: those resolved or swept at a call site, and every composer
+    they reach through their parts (a native pack composes ``population.py``'s count source inside its own block)."""
+    parts = composer_parts()
+    covered = {site.composer for site in sites if site.status in ("resolved", "swept")}
+    frontier = list(covered)
+    while frontier:
+        for part in parts.get(frontier.pop(), ()):
+            if part not in covered:
+                covered.add(part)
+                frontier.append(part)
+    return covered
 
 
 def _hashable(value) -> bool:
@@ -297,6 +330,18 @@ def _resolve(node: ast.AST, module, scope: ast.FunctionDef | None):
         if owner is _UNRESOLVED or owner is _FORWARDED:
             return owner
         return getattr(owner, node.attr, _UNRESOLVED)
+    return _UNRESOLVED
+
+
+def _scope_import(name: str, scope: ast.FunctionDef | None):
+    """The object a function imports as ``name`` in its own body (``from x import name``), or ``_UNRESOLVED``."""
+    if scope is None:
+        return _UNRESOLVED
+    for leaf in ast.walk(scope):
+        if isinstance(leaf, ast.ImportFrom) and leaf.module and leaf.level == 0:
+            for alias in leaf.names:
+                if (alias.asname or alias.name) == name:
+                    return getattr(_import(leaf.module), alias.name, _UNRESOLVED)
     return _UNRESOLVED
 
 
@@ -370,6 +415,15 @@ def _composed_sources() -> tuple[list[ShaderSource], list[CallSite]]:
                 for leaf in ast.walk(node):
                     if isinstance(leaf, ast.Call):
                         scopes.setdefault(leaf, node)    # walk order: the outermost function first
+        fed = set()      # calls inside a composer call's arguments: intermediates that composer converts
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and node in scopes:
+                callee = _resolve(node.func, module, None)
+                if callee is _UNRESOLVED and isinstance(node.func, ast.Name):
+                    callee = _scope_import(node.func.id, scopes[node])
+                if _hashable(callee) and callee in composers:
+                    for argument in node.args + [k.value for k in node.keywords]:
+                        fed.update(leaf for leaf in ast.walk(argument) if isinstance(leaf, ast.Call))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
@@ -377,17 +431,23 @@ def _composed_sources() -> tuple[list[ShaderSource], list[CallSite]]:
             if scope is None:
                 continue     # a module-level composition: its result is a module-level name, found above
             function = _resolve(node.func, module, None)
+            if function is _UNRESOLVED and isinstance(node.func, ast.Name):
+                function = _scope_import(node.func.id, scope)
             if not _hashable(function) or function not in composers:
                 continue
-            outer = getattr(module, scope.name, None)
-            if _hashable(outer) and outer in composers:
-                continue     # composed inside another composer: checked through that composer's call sites
             values = [_resolve(argument, module, scope) for argument in node.args]
             keywords = {k.arg: _resolve(k.value, module, scope) for k in node.keywords if k.arg}
-            text = _call_text(node)
-            caller, name = f"{module_name}:{node.lineno}", composers[function]
             every = values + list(keywords.values())
             complete = len(keywords) == len(node.keywords)
+            outer = getattr(module, scope.name, None)
+            if _hashable(outer) and outer in composers and (
+                    node in fed or not complete or any(value is _FORWARDED or value is _UNRESOLVED for value in every)):
+                continue     # composed from another composer's parameters, or an intermediate another composer
+                # converts: checked through that composer's call sites
+            # (A composer's own call with constant arguments whose result is used as it is, such as a native pack
+            # composed once from the module's hooks inside a cached builder, is the product's text: resolved here.)
+            text = _call_text(node)
+            caller, name = f"{module_name}:{node.lineno}", composers[function]
             if (not complete or any(value is _FORWARDED or value is _UNRESOLVED for value in every)) \
                     and _sweepable(function):
                 sites.append(CallSite(caller, name, text, "swept"))

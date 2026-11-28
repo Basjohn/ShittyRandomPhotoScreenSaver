@@ -14,7 +14,7 @@ from rendering.quick.scene3d.motion import MotionBlur
 from rendering.quick.scene3d.post import BloomChain
 from rendering.quick.scene3d.target import SceneTarget
 from rendering.quick.scene3d.trails import MotionTrails
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
 
@@ -47,7 +47,7 @@ def _owned_textures(owner) -> tuple[int, ...]:
 
 def test_fixed_scene_allocations_are_immutable_and_preserve_unrelated_host_bindings(qt_app):
     """All target/post/blur/trail creation is named: it cannot replace Quick's bindings."""
-    capture = TransitionCapture(256, 144)
+    capture = OffscreenRenderTarget(256, 144)
     target, trails = SceneTarget("DSA target test"), MotionTrails("DSA trails test")
     sentinel = int(gl.glGenTextures(1))
     try:
@@ -103,7 +103,7 @@ def test_fixed_scene_allocations_are_immutable_and_preserve_unrelated_host_bindi
 def test_partial_fixed_target_allocations_stay_owned_for_release_retry(qt_app, monkeypatch, owner_type, fail_symbol,
                                                                         prepare):
     """A named allocation that fails after a texture still has one retrying deletion owner."""
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     owner = owner_type("DSA cleanup test")
     original = getattr(gl, fail_symbol)
     try:

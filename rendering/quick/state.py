@@ -122,20 +122,18 @@ class QuickSceneReadiness:
     runtime_generation: int | None
     qml_root_created: bool = False
     scene_graph_initialized: bool = False
-    background_renderer_ready: bool = False
-    intentional_base_frame_ready: bool = False
     scene_graph_invalidated: bool = False
     admission_open: bool = True
     qml_objects_retired: bool = False
     error: str | None = None
-    # A frame of this scene was presented. Published only on a backend without the background family's renderers
-    # (the Vulkan rehearsal, D10), where it is the reveal's input instead of the background facts above; on OpenGL
-    # the scene never sets it (DisplayManager._startup_reveal_admits holds the one rule).
+    # A frame of this scene was presented, published once on every backend (D10, N5.2h): with the presentable scene
+    # it is the reveal's one input (DisplayManager._startup_reveal_admits). The native background layer fades its first
+    # photo in by itself, so no background renderer or base frame fact exists to wait for.
     frame_presented: bool = False
 
     @property
     def scene_presentable(self) -> bool:
-        """Every fact of the reveal but the background's: the scene exists, renders and is admitted."""
+        """The scene exists, renders and is admitted (the reveal adds only its presented frame)."""
         return bool(
             self.qml_root_created
             and self.scene_graph_initialized
@@ -145,18 +143,8 @@ class QuickSceneReadiness:
             and self.error is None
         )
 
-    @property
-    def ready_for_reveal(self) -> bool:
-        return bool(
-            self.scene_presentable
-            and self.background_renderer_ready
-            and self.intentional_base_frame_ready
-        )
-
     def as_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["ready_for_reveal"] = self.ready_for_reveal
-        return payload
+        return asdict(self)
 
 
 def _rect_tuple(rect: QRect) -> RectTuple:

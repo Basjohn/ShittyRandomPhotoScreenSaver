@@ -91,6 +91,59 @@ def test_the_window_host_takes_a_quick_window_and_refuses_anything_else(core, qt
         window.deleteLater()
 
 
+def test_a_composite_deleted_with_its_parent_leaves_the_handle_table(core, qt_app):
+    """A composite item deleted with its parent item (a scene's root retired without the owner's ``destroy``) leaves the
+    core's handle table: ``composite_live``'s handles return to where they were. Before, its entry stayed as a null
+    pointer for the rest of the process. The handle then reads as gone, and its owner's late destroy is a no-op."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtQuick import QQuickItem
+    import shiboken6
+
+    before = core.composite_live()["handles"]
+    root = QQuickItem()                                           # no window: nothing is drawn or shown
+    parent = QQuickItem(root)
+    kept = core.composite(root)
+    composite = core.composite(parent)
+    assert core.composite_live()["handles"] == before + 2
+    shiboken6.delete(parent)                                      # the parent takes its composite with it
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert core.composite_live()["handles"] == before + 1
+    with pytest.raises(RuntimeError, match="deleted with its parent"):
+        composite.state()
+    assert composite.destroy() is False
+    # The control: a composite whose parent lives keeps its entry until its own destroy.
+    assert isinstance(kept.state(), dict)
+    assert kept.destroy() is True
+    assert core.composite_live()["handles"] == before
+    shiboken6.delete(root)
+
+
+def test_a_backdrop_deleted_with_its_parent_leaves_the_handle_table(core, qt_app):
+    """The backdrop's table, as the composites' (above): an item deleted with its parent item leaves it, so
+    ``composite_live``'s ``backdrop_handles`` return to where they were; its owner's late destroy is a no-op."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtQuick import QQuickItem
+    import shiboken6
+
+    before = core.composite_live()["backdrop_handles"]
+    root = QQuickItem()                                           # no window: nothing is built or shown
+    parent = QQuickItem(root)
+    kept = core.backdrop(root, parked=True)
+    backdrop = core.backdrop(parent, parked=True)
+    assert core.composite_live()["backdrop_handles"] == before + 2
+    shiboken6.delete(parent)                                      # the parent takes its backdrop with it
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert core.composite_live()["backdrop_handles"] == before + 1
+    with pytest.raises(RuntimeError, match="deleted with its parent"):
+        backdrop.state()
+    assert backdrop.destroy() is False
+    # The control: a backdrop whose parent lives keeps its entry until its own destroy.
+    assert isinstance(kept.state(), dict)
+    assert kept.destroy() is True
+    assert core.composite_live()["backdrop_handles"] == before
+    shiboken6.delete(root)
+
+
 def test_the_hidden_host_round_passes_on_opengl(tmp_path):
     """The harness's hidden round in its own process (Qt Quick's graphics API is process-wide): the frame edge on the
     render thread with no Python thread state, the probe against the conventions with its negative controls, detach,
@@ -148,3 +201,25 @@ def test_the_import_check_passes_the_built_module(core, tmp_path, monkeypatch):
         assert report["ok"] and report["runtime_info"]["abi"] == loader.EXPECTED_ABI
     finally:
         sys.modules.pop("import_check", None)
+
+
+def test_a_validation_on_opengl_frame_logs_no_gl_errors(tmp_path):
+    """N5.2h (found by N5.6): Qt 6.12.0's OpenGL backend set sampler state on the multisampled textures the core's
+    resolves read per sample (GL_INVALID_ENUM at each texture's first bind). post_stage_check's gl_errors round in its
+    own process on a debug context: every control-free case at one and four samples, the driver's log after each frame
+    holds no error. The negative control is the module before gl_sampler_state.cpp (f475358aa): eb_4x logs 20."""
+    import subprocess
+
+    record_path = tmp_path / "child.json"
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "native" / "core" / "python" / "post_stage_check.py"), "--child", "--api",
+         "opengl", "--rounds", "gl_errors", "--repo", str(ROOT), "--module-dir", str(MODULE_DIR), "--out-dir",
+         str(tmp_path), "--child-json", str(record_path)],
+        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert not record.get("error"), record.get("error")
+    entry = record["gl_errors"]
+    assert any(case["samples"] > 1 for case in entry.get("cases", {}).values()), entry
+    messages = {name: case["messages"] for name, case in (entry.get("cases") or {}).items() if case["messages"]}
+    assert entry["pass"], {"checks": entry.get("checks"), "error": entry.get("error"), "messages": messages}

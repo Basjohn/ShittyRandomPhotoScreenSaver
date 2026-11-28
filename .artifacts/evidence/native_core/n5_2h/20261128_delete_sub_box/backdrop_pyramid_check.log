@@ -1,0 +1,11 @@
+opengl: PASS
+opengl build at 2560x1440: GPU {'n': 60, 'median_ms': 0.1014, 'p90_ms': 0.2857, 'max_ms': 0.299}, render thread {'n': 60, 'median_ms': 0.0048, 'p90_ms': 0.0091, 'max_ms': 0.0199} (budget 0.3 ms)
+opengl build at 3840x2160: GPU {'n': 60, 'median_ms': 0.1208, 'p90_ms': 0.3983, 'max_ms': 0.5396}, render thread {'n': 60, 'median_ms': 0.0046, 'p90_ms': 0.0073, 'max_ms': 0.0115} (budget 0.6 ms)
+opengl rule (a) levels exact: False; dimmed worst 1 levels
+vulkan: PASS
+vulkan build at 2560x1440: GPU {'n': 60, 'median_ms': 0.0255, 'p90_ms': 0.0274, 'max_ms': 0.035}, render thread {'n': 60, 'median_ms': 0.0084, 'p90_ms': 0.0147, 'max_ms': 0.0303} (budget 0.3 ms)
+vulkan build at 3840x2160: GPU {'n': 60, 'median_ms': 0.0351, 'p90_ms': 0.0367, 'max_ms': 0.039}, render thread {'n': 60, 'median_ms': 0.0083, 'p90_ms': 0.0097, 'max_ms': 0.0269} (budget 0.6 ms)
+evidence: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.claude\worktrees\agent-ac5eb8a969947d272\.artifacts\evidence\native_core\n5_7b\20261128_n52h_delete_backdrop_pyramid_check\summary.json
+N57B VERDICT PASS
+
+--- stderr

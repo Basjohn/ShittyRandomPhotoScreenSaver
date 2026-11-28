@@ -66,7 +66,6 @@ class _RecordingGL:
 @pytest.fixture
 def queries(monkeypatch):
     from rendering.quick import gl_query
-    from rendering.quick.render import background_node
     from rendering.quick.visualizer import clip_host, gl_state, render_host
     seen: list = []
 
@@ -77,7 +76,7 @@ def queries(monkeypatch):
                          ("get_bool", lambda n: True), ("get_bools", lambda n, c: (True,) * c),
                          ("is_enabled", lambda n: False), ("get_floats", lambda n, c: (0.0,) * c)):
         monkeypatch.setattr(gl_query, name, lambda *a, _answer=answer: record("gl_query", a[0]) or _answer(*a))
-    for module in (clip_host, gl_state, render_host, background_node):
+    for module in (clip_host, gl_state, render_host):
         monkeypatch.setattr(module, "gl", _RecordingGL(record))
     # The former private ctypes readers in gl_state (present on the old code only).
     for name in ("_glGetIntegerv", "_glGetBooleanv"):
@@ -109,14 +108,3 @@ def test_render_host_capture(queries):
     InheritedGlState.capture_render_host()
     _check(queries, RENDER_HOST, "render-host capture")
 
-
-def test_background_base_draw_fence(queries):
-    from rendering.quick.render.background_node import BackgroundRenderNode
-    import contextlib
-
-    # The base program's values travel in its pass block (N1.6), which reads no GL state back: a scope that writes
-    # nothing stands in for its ring here.
-    node = SimpleNamespace(_program=0, _vao=0, _blocks=SimpleNamespace(bound=lambda _data: contextlib.nullcontext()),
-                           _logical_size=(4.0, 4.0), _state=SimpleNamespace(progress=0.0))
-    BackgroundRenderNode._draw_base(node, texture_id=0, viewport=(0, 0, 4, 4), matrix_values=(1.0,) * 16)
-    _check(queries, BACKGROUND_BASE, "background base draw")

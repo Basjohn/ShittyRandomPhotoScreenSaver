@@ -21,7 +21,7 @@ def support(qt_app):
     from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS, SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     prefix = SHAFT_FRAGMENT.rsplit('void main()', 1)[0]
@@ -31,7 +31,7 @@ def support(qt_app):
 layout(location = 0) out vec2 vNdc;
 void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); vNdc=p*2.-1.; gl_Position=vec4(vNdc,0.,1.); }
 '''
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     program = compile_program(vertex, fragment, label='scene light support')
     gl.register(program, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)
     texture = int(gl.glGenTextures(1))
@@ -122,12 +122,12 @@ def test_sunlit_scene_shafts_stay_visible_from_the_side(qt_app):
                                                                SHAFT_FRAGMENT)
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     constant = 'const float SCENE_SIDE_SCATTER = 2.0;'
     assert SHAFT_FRAGMENT.count(constant) == 1
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     texture = int(gl.glGenTextures(1))
     results = []
     try:

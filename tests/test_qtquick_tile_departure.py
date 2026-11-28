@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,7 +122,7 @@ def test_the_blast_sits_where_the_pieces_fly_away_from():
 def test_the_blast_opens_the_picture_at_the_detonation(qt_app):
     # Negative control: the rejected ease-in moved the centre by under 1 grey
     # level at this point (0.87); the blast has torn it open.
-    capture = TransitionCapture(256, 144)
+    capture = NativeTransitionCapture(256, 144)
     try:
         effect = _effect()
         detonation = effect.EXPLODING_TILES_DETONATION
@@ -143,7 +143,7 @@ def test_the_far_wall_rumbles_late_and_slowly_at_an_authored_duration(qt_app):
     # progress rendered one 60 fps frame later in real time isolates it (every other
     # part of the effect follows progress). Negative control, the rejected 8-15 Hz
     # rumble from cracking: 1.9 at p=0.085 and up to 3.5 grey levels per frame.
-    capture = TransitionCapture(640, 360)
+    capture = NativeTransitionCapture(640, 360)
     try:
         corner = (slice(0, 72), slice(0, 128))
 
@@ -166,7 +166,7 @@ def test_the_far_wall_rumbles_late_and_slowly_at_an_authored_duration(qt_app):
 def test_weak_force_geometry_clears_portrait_and_wide_viewports_before_retirement(
     qt_app, size
 ):
-    capture = TransitionCapture(*size)
+    capture = NativeTransitionCapture(*size)
     try:
         destination = np.asarray(capture.images[1], dtype=np.int16)
         parameters = {"force": 0.5, "thickness": 1.0, "depth": 1.5}

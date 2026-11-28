@@ -25,7 +25,9 @@ from tools.vulkan_shader_readiness import (
     _qsb,
     check,
     compile_source,
+    composer_parts,
     compute_modules,
+    covered_composers,
     discover,
     group_of,
     qsb_targets,
@@ -42,14 +44,19 @@ _CONVERTED_MODULES = frozenset({
     "rendering.quick.scene3d.edge_field",
     "rendering.quick.scene3d.motion",
     "rendering.quick.scene3d.population",
-    "rendering.quick.scene3d.propagation_field",
+    # propagation_field's raw passes are its own composer's inputs (437b8c3a4 skips them), so they ship, and are
+    # discovered, as the core's propagation packs composed in native_fields.
+    "rendering.quick.scene3d.native_fields",
     "rendering.quick.visualizer.implementations.extruded_bubble_drift_solver",
 })
 
 # The composers whose runtime sources N1.3 brought under the check (they must keep producing discovered sources).
+# Since N5.2h the product draws them as the core's packs: the population count/scatter packs (``population.py``'s
+# sources in the transition's dispatch block) and the propagation packs (the Capillary seed), composed with the
+# product's own hooks and cost.
 _RUNTIME_COMPOSERS = (
-    "rendering.quick.scene3d.population.population_programs(",
-    "rendering.quick.scene3d.propagation_field.PropagationField(",
+    "rendering.quick.transitions.native_scene.population_packs(",
+    "rendering.quick.scene3d.native_fields.propagation_sources(",
 )
 
 
@@ -120,11 +127,15 @@ def test_every_composer_call_site_is_resolved_swept_or_forwarded():
     assert sites
     unresolved = [site for site in sites if site.status.startswith("unresolved")]
     assert not unresolved, f"a composed shader whose arguments cannot be resolved is never checked: {unresolved}"
-    # A composition forwarded from a method's parameters must also be called with the product's own text somewhere.
-    resolved = {site.composer for site in sites if site.status in ("resolved", "swept")}
+    # A composition forwarded from a method's parameters must also be called with the product's own text somewhere:
+    # itself, or every composer it is built from, reached from a resolved call (the Python population host forwards
+    # population_programs; the product's count and scatter sources are composed into the native packs).
+    covered, parts = covered_composers(sites), composer_parts()
     for site in sites:
         if site.status == "forwarded":
-            assert site.composer in resolved, f"{site.composer} is only ever forwarded ({site.caller})"
+            built_from = parts.get(site.composer, frozenset())
+            assert site.composer in covered or (built_from and built_from <= covered), (
+                f"{site.composer} is only ever forwarded ({site.caller})")
 
 
 def test_no_shader_is_built_where_discovery_cannot_see_it():

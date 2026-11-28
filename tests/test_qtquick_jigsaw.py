@@ -33,7 +33,7 @@ from rendering.quick.transitions.piece_layout import (
     piece_order,
     piece_vertices,
 )
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 
@@ -212,7 +212,7 @@ def test_every_piece_lands_and_every_cut_line_is_gone_by_the_end(count):
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -246,39 +246,6 @@ def test_the_order_corner_turns_to_the_new_picture_first(capture, label):
         return float(np.abs(frame[region] - source[region]).mean() - np.abs(frame[region] - destination[region]).mean())
 
     assert newness(near) > 10 and newness(far) < -10
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from rendering.quick.transitions.run_geometry import prepare_run_geometry
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("jigsaw", settings={"scene3d_detail": "High"}, duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        # Production prepares the layout on COMPUTE when the batch resolves.
-        prepare_run_geometry("jigsaw", parameters, (capture.width / capture.height,), None)
-        steps = 0
-        while not capture.host.warm_step("jigsaw", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 50
-        renderer = capture.host._implementations["jigsaw"]
-        assert renderer._resources.has_mesh("pieces")
-        meshes = dict(renderer._resources._meshes)
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated
-        assert renderer._resources._meshes == meshes
-        capture.host.park()
-        assert not renderer._target.has_resources and not renderer._environment.has_resources
-        assert not renderer._resources.has_mesh("pieces")
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_orders_and_repairs_values():

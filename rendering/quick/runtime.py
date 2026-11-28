@@ -16,7 +16,6 @@ from .cursor_controller import QuickCursorController
 from .frame_pacer import QuickFramePacer
 from .image_state import PresentationImage
 from .input_controller import QuickInputController
-from .render import RenderNodeTelemetry
 from .scene_controller import QuickSceneController, QuickSceneFactory
 from .state import (
     QuickDisplayBindingLoss,
@@ -89,7 +88,6 @@ class QuickDisplayRuntime(QObject):
         screen: QScreen,
         scene_factory: QuickSceneFactory,
         window_policy: QuickWindowPolicy,
-        telemetry: RenderNodeTelemetry | None = None,
         interaction_mode_enabled: bool = False,
         ctrl_state_publisher: Callable[[bool], None] | None = None,
         custom_layout_active_provider: Callable[[], bool] | None = None,
@@ -99,7 +97,6 @@ class QuickDisplayRuntime(QObject):
         self._screen_index = int(screen_index)
         self._runtime_generation = int(runtime_generation)
         self._phase = QuickRuntimePhase.CONSTRUCTED
-        self._telemetry = telemetry or RenderNodeTelemetry()
         self._window: QuickDisplayWindow | None = QuickDisplayWindow(
             screen_index=self._screen_index,
             runtime_generation=self._runtime_generation,
@@ -132,7 +129,6 @@ class QuickDisplayRuntime(QObject):
         self._scene: QuickSceneController | None = QuickSceneController(
             window=self._window,
             factory=scene_factory,
-            telemetry=self._telemetry,
         )
         self._scene_readiness = self._scene.readiness
         self._auxiliary: QuickAuxiliaryController | None = QuickAuxiliaryController(
@@ -323,10 +319,6 @@ class QuickDisplayRuntime(QObject):
     @property
     def scene_readiness(self) -> QuickSceneReadiness:
         return self._scene_readiness
-
-    @property
-    def telemetry(self) -> RenderNodeTelemetry:
-        return self._telemetry
 
     @property
     def window(self) -> QuickDisplayWindow:

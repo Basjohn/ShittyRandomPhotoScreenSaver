@@ -1,14 +1,12 @@
 """The card surface backdrop on the native core (Current_Plan.md N5.7b; D7 points 2 to 6).
 
-On the native background's backend (Vulkan: ``native_background.native_background_wanted``) the display's wallpaper is
-the core's background layer (N5.7a) and the Python backdrop (``surface_backdrop.SurfaceBackdropSource``, an OpenGL
-render node reading Qt Quick's window target) cannot run, so ``SurfaceBackdropOwner`` takes this source instead: the
-core's pyramid (``rendering.native.backdrop``), built from the layer in the frame the layer drew a new frame and only
+On both APIs (``native_background.native_background_wanted``; the Python blit backdrop is deleted, N5.2h) the display's
+wallpaper is the core's background layer (N5.7a), and ``SurfaceBackdropOwner`` takes this source: the core's pyramid (``rendering.native.backdrop``), built from the layer in the frame the layer drew a new frame and only
 while the owner's demand is above zero. Its ``item`` is the texture provider every ``MaterialSurface`` samples,
 unchanged; before its first build, or while the window has no layer frame, the cards show their Normal fill (fail
-closed). On OpenGL nothing here is made: the Python pyramid stays.
+closed).
 
-It speaks the owner's side of ``SurfaceBackdropSource`` (``request_refresh``, ``set_continuous``, ``set_parked``,
+It speaks the owner's side of the backdrop source (``request_refresh``, ``set_continuous``, ``set_parked``,
 ``parked``, ``armed``):
 - ``request_refresh`` (the owner's one-shot edges: an image published, the dimming, the geometry, the owner made) only
   hands the core the dimming over the wallpaper (DisplayScene's ``backgroundDimming``; the core builds once when it
