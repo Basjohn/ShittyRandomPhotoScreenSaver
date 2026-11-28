@@ -129,6 +129,10 @@ def program(variant: tuple) -> dict:
 
     light = BlendState(("add", "one", "one"), ("add", "zero", "one"))      # rgb ONE, ONE; alpha ZERO, ONE
     maximum = BlendState(("max", "one", "one"), ("max", "one", "one"))
+    # Replace declared as an enabled blend (ONE, ZERO): on OpenGL an attachment with blending off beside a blended one
+    # drew blended with the funcs the previous pipeline left (the light blend's alpha ZERO, ONE), so the backdrop's
+    # alpha stayed the cleared 0 and the scene composed as glass over nothing (28 Nov, R-256).
+    replace = BlendState(("add", "one", "zero"), ("add", "one", "zero"))
     linear = dict(filter="linear", wrap="clamp")
     background = PassSampler("uBackground", f"{SCENE}.capture_colour", **linear)
     probe = PassSampler("uProbe", f"{PROBE}.colour", "linear", "clamp", "linear")
@@ -154,7 +158,7 @@ def program(variant: tuple) -> dict:
     # The scene: colour replaced and emission added (``SceneTarget.emission_writes``); the scope leaves the depth test
     # off, so neither the backdrop nor the specks write depth.
     passes += [ModePass("backdrop", qsb("eb_backdrop.frag"), "replace", target=SCENE,
-                        outputs=(PassOutput(True, "replace"), PassOutput(True, "additive")), geometry=full("backdrop"),
+                        outputs=(PassOutput(True, replace), PassOutput(True, "additive")), geometry=full("backdrop"),
                         samplers=(PassSampler("uShafts", f"{SHAFTS_A}.colour", **linear),)),
                ModePass("specks", qsb("eb_specks.frag"), light, target=SCENE,
                         outputs=(PassOutput(True, light), PassOutput(True, "additive")),
