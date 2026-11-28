@@ -132,6 +132,10 @@ Continue the native sequence below with the repaired timing receipts. The report
        **Opus Medium `a361796892595810b`** (own worktree, merges afdd4's): attribute the glass-interior speckle (inner-speck hash precision, refracted
        background sample or mip chain), fix at the owner, then the OpenGL speck run-to-run residual if it shares the
        cause; plus the two side defects.
+       Operator, 28 Nov: "Alright let EB try and find/fix this shortfall so we hopefully get parity but it honestly
+       sounds close to acceptance or acceptable. If we can get that closer but still fall a tiny bit short with correct
+       reactivity hashes then it should be accepted." So: one bounded attempt; if layer L (the reactivity hashes) is
+       correct and P is closer but still a little short, N5.6's P is accepted with the residual recorded in D12.
        Before the fix: On a 30 s delivery, 2,576 of 2,586 frames differ across two
        runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
        Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
