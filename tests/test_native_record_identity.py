@@ -48,7 +48,7 @@ def _pass_names(declaration) -> set:
 
 
 @needs_module
-@pytest.mark.parametrize("mode", ["spectrum", "devcurve", "bubble", "oscilloscope"])
+@pytest.mark.parametrize("mode", ["spectrum", "devcurve", "bubble", "oscilloscope", "extruded_bubble"])
 def test_the_native_path_receives_what_the_python_renderer_uses(qt_app, mode):
     report = _run(mode)
     halves = report["halves"]
@@ -88,7 +88,7 @@ def test_a_run_of_the_widened_set_is_judged_under_its_own_settings(qt_app):
 
 
 @needs_module
-@pytest.mark.parametrize("mode", ["bubble", "oscilloscope"])
+@pytest.mark.parametrize("mode", ["bubble", "oscilloscope", "extruded_bubble"])
 @pytest.mark.parametrize("kind,level", [("setting", "settings"), ("block", "block")])
 def test_a_perturbed_setting_and_a_perturbed_block_member_are_caught_at_their_input(qt_app, mode, kind, level):
     # Audit 9 L4: the settings and block levels are standing controls, as the record level's are.
@@ -129,3 +129,20 @@ def test_the_oscilloscope_catches_a_one_ulp_record_change_and_a_dropped_frame_at
     assert first["level"] == "record" and first["native"] != first["python"]
     if kind == "ulp":
         assert first["field"] == MODES["oscilloscope"].ulp_field and first["element"] is None
+
+
+@needs_module
+@pytest.mark.parametrize("kind", ["ulp", "drop"])
+def test_extruded_bubble_catches_a_one_ulp_record_change_and_a_dropped_frame_at_their_input(qt_app, kind):
+    # Extruded Bubble's record changes every frame (its clock), so a dropped frame shows at the record level too.
+    from tools.visualizer_replay.native_record_identity import MODES
+
+    report = _run("extruded_bubble", controls=[(kind, AT)])
+    applied = report["controls_applied"][kind]
+    assert applied >= AT
+    assert not report["identical"]
+    assert [entry["input"] for entry in report["mismatches"]] == [applied]
+    first = report["mismatches"][0]["first"]
+    assert first["level"] == "record" and first["native"] != first["python"]
+    if kind == "ulp":
+        assert first["field"] == MODES["extruded_bubble"].ulp_field

@@ -121,6 +121,20 @@ def test_values_without_a_defined_conversion_are_refused_and_bools_in_lists_read
 
 
 @pytest.mark.qt
+def test_a_negative_zero_setting_reaches_the_block_with_its_sign(core, probe_pack, qt_app):
+    # N5.6: Qt's JSON stores -0.0 as the integer 0, so settings_json writes it as "-0" and the core reads that back as
+    # -0.0 (Extruded Bubble's uLightEnd and uLightTravel); a plain 0.0 stays +0.0 and any other string is refused.
+    data, facts = core.program_block_pack(probe_pack, "Probe", {"f": [-0.0, 0.0, -1.5, -0.0], "v": [0.0, -0.0, 0, 1]})
+    rows = _members(facts)
+    stride = rows["f"][4]
+    signs = [struct.unpack_from("<I", data, rows["f"][2] + k * stride)[0] >> 31 for k in range(4)]
+    assert signs == [1, 0, 1, 1]
+    assert [word >> 31 for word in struct.unpack_from("<4I", data, rows["v"][2])] == [0, 1, 0, 0]
+    with pytest.raises(ValueError):
+        core.module.program_block_pack(probe_pack, "Probe", '{"f": ["-1", 0, 0, 0]}')
+
+
+@pytest.mark.qt
 def test_a_mode_is_packed_by_name_and_its_unknown_and_unfilled_members_refused(core, tmp_path, qt_app):
     import probe_rings as pr
 

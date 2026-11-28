@@ -118,7 +118,7 @@ class EngineSession:
                  seed: int | None = None, order: str = "production",
                  cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
                  interval_s: float | None = None, activation: Any = None, publish_stamps: bool = False,
-                 payload: str = "codec") -> None:
+                 payload: str = "codec", geometry_arena: Any = None) -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
@@ -194,6 +194,13 @@ class EngineSession:
                 wake_sender.close()               # opened here by name, and the mailbox never took it
             raise
         self._stack.callback(self.mailbox.close)
+        # ``geometry_arena`` (N5.6, D3): the main process's arena for Extruded Bubble's drift geometry (its owner's
+        # ``transfer``), attached by name; every publish writes a frame's new keys into it before the slot names them.
+        # A hidden activation may hand a larger one (``request_mode``).
+        self._geometry_writer: Any = None
+        self._stack.callback(self._close_geometry_writer)      # LIFO: before the mailbox, after the cadence
+        if geometry_arena is not None:
+            self._attach_geometry_arena(geometry_arena)
         self._live = inputs == "live"
         if self._live:
             import threading
@@ -782,7 +789,8 @@ class EngineSession:
         return {attr: getattr(state, attr, None) for attr in VIEW_RECORD_ATTRS}
 
     def request_mode(self, mode: str, *, preset: int = 0, settings: Any = None, activation: Any = None,
-                     at_once: bool = False, capacity_change: dict | None = None) -> tuple[int, int] | None:
+                     at_once: bool = False, capacity_change: dict | None = None,
+                     geometry_arena: dict | None = None) -> tuple[int, int] | None:
         """An in-session activation, applied at the next tick boundary (the newest request wins): the owner's
         activation commit (``logical_edges.commit_logical_activation``) on the existing engine and controller, never a
         rebuild. Another mode is a mode activation; the current mode with its ``preset`` / ``settings`` is the
@@ -794,13 +802,29 @@ class EngineSession:
         if capacity_change is not None and self.mapping_name != capacity_change['previous_mapping']:
             raise ValueError('stale capacity activation')
         self._pending_mode = (str(mode), int(preset), settings, None if activation is None else dict(activation),
-                              capacity_change)
+                              capacity_change, geometry_arena)
         if self._paced or at_once:
             # The owner's activation stops its runtime (the tick boundary), commits and restarts it: at once, as the
             # owner does on the GUI thread. A failure here may have half-applied (the runtime stopped, the engine
             # transaction, the capture settle), so ``VIS_SET_MODE`` closes the session (A6-M2).
             return self._apply_pending_mode()
         return None
+
+    def _attach_geometry_arena(self, transfer: dict) -> None:
+        from core.visualizer_engine.geometry_arena import GeometryArenaWriter
+        from widgets.spotify_visualizer.extruded_bubble_drift_log import FAMILIES
+
+        writer = GeometryArenaWriter(str(transfer["name"]), families=FAMILIES)
+        previous, self._geometry_writer = self._geometry_writer, writer
+        self.mailbox.set_geometry_writer(writer)
+        if previous is not None:
+            previous.close()
+
+    def _close_geometry_writer(self) -> None:
+        writer, self._geometry_writer = self._geometry_writer, None
+        if writer is not None:
+            self.mailbox.set_geometry_writer(None)
+            writer.close()
 
     def validate_mode_request(self, mode: str) -> None:
         """Refuse a mode request before anything is applied (the session stays as it was)."""
@@ -818,7 +842,7 @@ class EngineSession:
 
         if self._pending_mode is None:
             return None
-        mode, preset, settings, activation, capacity_change = self._pending_mode
+        mode, preset, settings, activation, capacity_change, geometry_arena = self._pending_mode
         self._pending_mode = None
         controller = self._controller
         request = activation if activation is not None else offline_activation_request(mode, preset, None, settings)
@@ -830,6 +854,10 @@ class EngineSession:
             self.mailbox.attach_capacity(capacity_change)
             self.mailbox.write_identity(runtime_generation=self._controller.runtime_generation,
                                         engine_generation=generation, activation_id=activation_id, mode=mode)
+        if geometry_arena is not None:
+            # N5.6 (D3): the activation's larger arena, attached once the previous producer was joined (no publish
+            # writes the old one past this point); the old writer's view goes, the main process retires its owner.
+            self._attach_geometry_arena(geometry_arena)
         # Render admission for the committed identity (the owner binds it into its scene).
         controller.begin_render_activation(engine_generation=generation, activation_id=activation_id)
         self.mode = mode
