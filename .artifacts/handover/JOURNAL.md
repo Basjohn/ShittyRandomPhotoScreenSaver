@@ -2,6 +2,27 @@
 
 started 2026-11-28. Newest first.
 
+- 28 Nov (7, successor 4): R-259 entry + index row, commit c22cdaac2. OpenGL two-run re-measure on
+  l_human_heavy1_base 400 inputs (n5_6/20261128_opengl_self_after_snow_fix): NOT 0. Fixed: 324/400 differ, p50 254
+  px, mostly 1-7 levels (two at 30, 38), scattered speck/glint pixels; with the snow fix reverted: 342/400, up to 255
+  levels (most 114-164). So the snow cause hit GL too; an OpenGL-only remainder is a separate cause (not chased).
+  Defect 2 FIXED in C++, commit 5396351bb (NEEDS BUILD): defocusReadLevelCap = chain's last level less two (was the
+  even-built levels less two), mirror post_stages.read_level_cap, decisions doc marks the 15 Nov line superseded (an own
+  downsample would differ from Python's glGenerateTextureMipmap on GL too). 4K expanded card: cap 4 -> 9. Refusal now
+  only below aperture ~1/60. Test test_the_defocus_read_level_cap_is_the_layers_chain_and_admits_every_level_python_
+  reads (sweep FOV ends x cards x apertures down to 1/32; control: the even-built cap refuses 3840x2112 at 0.5;
+  failed on the pre-change source). Evidence n5_6/20261128_defocus_cap_chain. Defect 3 not started (waits on build).
+
+- 28 Nov (6, successor 4): defect 1 (Vulkan run-to-run) FIXED, commit 7a089950b, Python + packs only, no C++.
+  Cause: BUBBLE_FRAGMENT writes gl_FragDepth, but its marine-snow exit (#ifndef NEAR_LAYER, vExtra.y) returned
+  without writing it -> undefined depth (GLSL) -> the glass pass's "less" test against the scene depth rejected snow
+  at random. Chain: snow-only still differed; fixed snow inputs still differed; forcing the test to pass (FragDepth 0,
+  gl_FragCoord.z, beads depth "always") made runs 8/8 identical; sync validation clean (only Qt VUID-12478). Fix:
+  snow writes sceneSphereDepth(front, uProjection). Test: test_every_exit_of_a_depth_writing_glass_fragment_writes
+  _its_depth (negative control failed pre-fix: BUBBLE_FRAGMENT, eb_beads, eb_shells 1 unwritten exit each). Proof:
+  two Vulkan runs on l_human_heavy1_base, 400 inputs, identical 400/400
+  (n5_6/20261128_vulkan_self_identical). Not verified: GL 3 px floor re-measure, P vs ref after fix.
+
 - 28 Nov (5): noise floor on fresh 30 s delivery (n5_6/20261128_rule_b_noise_floor_30s): GL floor p50 0 max 3 px
   1 level; Vulkan self 2576/2586 frames past 1 level (p50 68 px, max 149); rule (b) p50 4,310 px max 150: FAIL.
   Refs: lane 1 done (hh1 60 + 30 x5 + 4 alternates, ragdoll block sizes, ns dd 6,7), lane 2 done but ns dd 0,2,3
