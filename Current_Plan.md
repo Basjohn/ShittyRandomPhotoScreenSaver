@@ -218,6 +218,8 @@ Continue the native sequence below with the repaired timing receipts. The report
     - The GL modules in `SHARED_RENDERER_MODULES` (`implementation_registry.py`): drop them if not needed.
     - The dead PhotoEnvironment/MotionTrails/trails code needs a deletion box: Backlog.
     - The `qtquick_render_node_smoke` assertions have never been seen failing: run one inverted control. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
+    **Opus Medium `aeba3f08a60b6a572`** (28 Nov, own worktree, merges aa3b's): this fix list. **Sonnet `ac55fd94250f2d20c`**:
+    D1 runs (GL, Vulkan) + hitch rows on `c9b9f0a6`; the reveal part is rerun by the lead after fix 1.
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
     with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
