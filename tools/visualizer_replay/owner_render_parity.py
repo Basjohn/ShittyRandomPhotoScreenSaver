@@ -283,6 +283,10 @@ class SceneMirror:
         #: ``frames``: each frame's region with the cleared rectangle as it stood before the clear (``under_frame``).
         self.under = _SpilledFrames() if _UNDER_CAPTURE["active"] else None
         self._fbo = 0
+        #: GL error codes the drawn frames left pending, by code (``_read`` takes them before its own calls). Qt's GL
+        #: backend applies sampler state to a multisample texture a binding samples (the core's transparency resolve),
+        #: which the driver refuses with GL_INVALID_ENUM and ignores; PyOpenGL would report it at the read's first call.
+        self.left_gl_errors: dict[int, int] = {}
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
         self._saved: dict = {}
@@ -342,6 +346,11 @@ class SceneMirror:
         host = self.host
         gl = host._gl
         host._current()
+        for _ in range(64):                              # the frame's own errors, not the read's (``left_gl_errors``)
+            code = int(gl.glGetError())
+            if code == gl.GL_NO_ERROR:
+                break
+            self.left_gl_errors[code] = self.left_gl_errors.get(code, 0) + 1
         previous = int(gl.glGetIntegerv(gl.GL_READ_FRAMEBUFFER_BINDING))
         if not self._fbo:
             self._fbo = int(gl.glGenFramebuffers(1))
@@ -967,6 +976,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     report["native_published"] = mirror.native_published
     report["mapping"] = {"compared": mirror.mapping_compared, "identical": mirror.mapping_identical}
     report["outer_origin"] = mirror.first_outer_origin
+    report["left_gl_errors"] = {hex(code): count for code, count in mirror.left_gl_errors.items()}
     return report
 
 
@@ -1609,6 +1619,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "outer_origin": origin, "outer_origin_device_fraction": fraction, "dpr": dpr,
                "frames_drawn": [len(python["pixels"]), len(native["pixels"])],
                "native_frames": native["native_frames"], "native_published": native["native_published"],
+               "left_gl_errors": native["left_gl_errors"],
                "switch_input": switch_input, "paths": paths, "differing_inputs": len(rows),
                "differing_pixels_total": sum(row["pixels"] for row in rows),
                "max_level": max((row["max_level"] for row in rows), default=0),
