@@ -251,7 +251,7 @@ Continue the native sequence below with the repaired timing receipts. The report
     on Windows (the wedge was Linux/Xvfb only). `eb_core_check`/`waveform_check` stay allowlisted (each needs its own
     validated Vulkan instance and sizes the owner's host cannot give; reason in the test). Evidence
     `<aeba3 worktree>/.artifacts/evidence/native_core/n5_2h/20261128_audit_item{1..6}_*`.
-    - [ ] Fix 7, in-process pipeline warm-up (**Opus Medium `a37b0453cae98f514`**, own worktree, merges aeba3's; C++, ABI bump if the module API grows). Root cause:
+    - Superseded by the attribution below: fix 7, in-process pipeline warm-up (**Opus Medium `a37b0453cae98f514`**, own worktree, merges aeba3's; C++, ABI bump if the module API grows). Root cause:
       N3.6's "built ahead and warmed gradually" was never built in-process. The only gradual warm-up is the display
       manager's idle warm (`display_manager.py` ~4985 → `BackgroundRenderItem.schedule_warm_step` →
       `NativeBackgroundLayer.next_warm_unit`, `native_background.py:573`), whose units are Python only; pipelines are
