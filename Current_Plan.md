@@ -944,6 +944,10 @@ the feature (D3D11 is not stated).
     - [ ] Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) on the
       Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
       [the archived 22 Nov response trace](.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen.zip).
+    - Built (agent ac0cda3c82727c8cd, 28 Nov): reference key format 2 (77ca27c7e); harness drift arena (d76b1174b),
+      GL block names (097e5eb7b, R-255), backdrop replace blend (504042eb1, R-256), placed scene passes (389f230ba,
+      R-257), rule (a) single-sampled native scene (19d5525ea); the core defocus gather's taps step by the layer's rows
+      (ABI 47, shaders + sceneAnchor; awaits a module build). Rule (a)/(b) runs, T, C and the L set not yet done.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction

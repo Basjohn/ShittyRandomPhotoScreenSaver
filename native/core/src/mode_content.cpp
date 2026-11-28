@@ -178,6 +178,9 @@ bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &
                  QSize *sceneSize)
 {
     *sceneCard = card;
+    // N5.6: a pass into the scene (the defocus step's gather) reads u_scene_rows_up as the composite does: the program's
+    // scene rows, which its scene and near layer hold alike.
+    sceneCard->sceneRowsUp = program.sceneRowsUp();
     *sceneSize = surface;
     if (!card.valid || !card.hasSceneItem || bloomAtTargetOrigin())
         return false;

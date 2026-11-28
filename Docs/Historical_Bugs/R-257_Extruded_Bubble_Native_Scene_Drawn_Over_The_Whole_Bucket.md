@@ -48,9 +48,14 @@ targets and are unchanged.
   Its controls are the texts with nothing placed, and the unplaced arithmetic reaching the bucket's corner.
 - On the whole 6 s human_heavy1 rule (a) smoke (594 frames), the differing pixels fell from 99.8M to 8.1M in total.
   Per frame they are now p50 6.7k and p99 17.5k, almost all one level apart
-  (`.artifacts/evidence/native_core/n5_6/20261128_rule_a_placed/`). What remains sits on the near layer's content,
-  the case decision H (Native_Core_P3_Decisions.md) left "judged and reported" at an unaligned card. It is outside
-  this bug and is followed in Current_Plan.md's N5.6 "P, T and C".
+  (`.artifacts/evidence/native_core/n5_6/20261128_rule_a_placed/`). What remains is outside this bug and is followed
+  in Current_Plan.md's N5.6 "P, T and C".
+- Correction (28 Nov, later): what remains is not decision H's case. Two things cause it. First, the harness compared
+  the core's 4x scene with Python's single-sampled one (fixed in owner_render_parity's single-sample block,
+  19d5525ea). Second, the core's defocus gather mirrored its taps for a layer that holds OpenGL's rows, as Extruded
+  Bubble's near layer does. That fix is in the core's shader and waits for a module build. The near layer's content
+  before the gather matches Python's (mean 0.00000, max 0.062). With Python's taps mirrored the same way, the run
+  matches the run with no near layer.
 
 ## Rule
 

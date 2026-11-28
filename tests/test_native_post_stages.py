@@ -183,14 +183,48 @@ def test_the_core_clip_is_pythons() -> None:
         != python
 
 
-def test_the_core_gather_is_pythons_with_its_taps_mirrored() -> None:
+_TAP_ROWS = "float tapRows = u_scene_rows_up > 0.5 ? 1.0 : -1.0"
+
+
+def _gather_core(source: str) -> list[str]:
+    return [s for s in _main(source) if s not in ("float uMaxRadius = u_defocus_radius", _TAP_ROWS)]
+
+
+def test_the_core_gather_is_pythons_with_its_taps_in_the_layers_rows() -> None:
+    """The taps' row step follows the layer's rows (N5.6): Python's +sin(a) where the layer holds OpenGL's rows
+    (u_scene_rows_up 1: Extruded Bubble's near layer), mirrored where it holds the core's top-first rows."""
     from rendering.quick.scene3d import defocus
 
-    python = [s.replace("vec2(cos(a), sin(a))", "vec2(cos(a), -sin(a))") for s in _main(defocus._GATHER)]
-    core = [s for s in _main(_shader("defocus_gather.frag")) if s != "float uMaxRadius = u_defocus_radius"]
-    assert core == python
-    # Negative control: Python's taps unmirrored are not the core's.
-    assert _main(defocus._GATHER) != core
+    gather = _shader("defocus_gather.frag")
+    python = [s.replace("vec2(cos(a), sin(a))", "vec2(cos(a), tapRows * sin(a))") for s in _main(defocus._GATHER)]
+    assert _gather_core(gather) == python
+    assert _TAP_ROWS in _main(gather)
+    assert "float u_scene_rows_up;" in gather
+    # Negative controls: the taps mirrored whatever the rows (the core before N5.6), and the rows' sign turned, are
+    # caught.
+    mirrored = gather.replace("vec2(cos(a), tapRows * sin(a))", "vec2(cos(a), -sin(a))")
+    assert _gather_core(mirrored) != python
+    assert _TAP_ROWS not in _main(gather.replace("? 1.0 : -1.0", "? -1.0 : 1.0"))
+
+
+def test_the_defocus_shaders_declare_one_block_and_the_scene_card_carries_the_rows() -> None:
+    """The clip, the gather and the sprites bind one SceneDefocus block (the gather's reflected size), so each declares
+    the same members; the defocus step draws onto the scene under the scene's card (sceneAnchor), which carries the
+    program's rows as the composite's card does (packFrame), else its u_scene_rows_up read 0 for Extruded Bubble."""
+    def block(name: str) -> list[str]:
+        text = re.sub(r"//[^\n]*", "", _shader(name))
+        body = text[text.index("uniform SceneDefocus {") + len("uniform SceneDefocus {"):]
+        return [re.sub(r"\s+", " ", s).strip() for s in body[:body.index("}")].split(";") if s.strip()]
+
+    members = ["float u_defocus_radius", "float u_defocus_highlight", "int u_defocus_level", "float u_scene_rows_up"]
+    for name in ("defocus_gather.frag", "defocus_clip.frag", "defocus_sprites.vert"):
+        assert block(name) == members, name
+    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    anchor = source[source.index("bool sceneAnchor(const ModeProgram &program"):]
+    anchor = anchor[:anchor.index("\n}\n")]
+    assert "sceneCard->sceneRowsUp = program.sceneRowsUp();" in anchor
+    # The line precedes every early return (an unanchored scene card is still the one read).
+    assert anchor.index("sceneCard->sceneRowsUp") < anchor.index("return false;")
 
 
 def test_the_core_sprites_are_pythons() -> None:

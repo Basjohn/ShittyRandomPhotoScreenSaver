@@ -274,5 +274,9 @@
 // 47 (N5.6, Extruded Bubble's program; awaiting the lead's reservation): a pass between a transparency target's first
 // pass and its resolve may sample the owner's capture (<owner>.capture_colour / capture_depth: its own texture, copied
 // before the first pass, which no capture of the owner follows there); the owner's attachments stay refused. Backward
-// compatible for every earlier program (it only admits more).
+// compatible for every earlier program (it only admits more). And the defocus step's gather reads the core member
+// u_scene_rows_up (its block, the clip's and the sprites' alike) and steps its taps' rows by it: Python's +sin(a)
+// where the program's scene holds OpenGL's rows (Extruded Bubble's near layer), mirrored as before where it holds the
+// core's top-first rows; the scene's card (sceneAnchor) carries the program's rows as the composite's does. Backward
+// compatible for every earlier program (no defocus step before Extruded Bubble's reads a scene in OpenGL's rows).
 #define SRPSS_NATIVE_CORE_ABI 47
