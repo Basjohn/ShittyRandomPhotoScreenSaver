@@ -98,7 +98,12 @@ Continue the native sequence below with the repaired timing receipts. The report
     `a5767acce80d30d07`** (28 Nov), worktree `.claude/worktrees/agent-a5767acce80d30d07`, branch
     `worktree-agent-a5767acce80d30d07` (merges the first): finish the route (9 red tests, window-free
     `test_quick_backend_owner`, degraded-display negative control, a failed live layer fades to the degraded display),
-    then the backdrop against the blit.
+    then the backdrop against the blit. Done through the reference cache (`a7c321e82`: Python frames cached in
+    `D:/Temp/Scratch/SRPSS/fast_proof/transition_references/`, cost baselines `tools/baselines/preflip/python_cost_*`,
+    proof guide section 3 rule). Now: Membrane/Volumetric Dissolve native run-to-run difference (side defect), then the
+    media tools' native capture.
+  - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
+    worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
