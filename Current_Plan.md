@@ -879,6 +879,13 @@ the feature (D3D11 is not stated).
       read spans, streams and positional members. Prove L frame by frame for each take and graphics key with
       `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
       --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
+      28 Nov (successor `a29135bafeaab65bb`, `3df2b64fd` MODES entry and identity tests, `14d763931` C++ ready for
+      build, ABI 47): smoke IDENTICAL (359 frames). The only L difference over 15 runs is signed zero: Qt's JSON
+      stores `-0.0` as integer 0, so the native settings path dropped the sign Python packs (`uLightEnd`, stream and
+      speck source/end, light_type 0's travel/axis). Fixed in the transport (`settingNumber` reads `"-0"`;
+      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). All 15
+      runs redo on the rebuilt module (scripts in that worktree's `.artifacts/scratch/n56rr/`); then the R-NNN entry
+      (silent since settings went through JSON).
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
         find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built
@@ -890,6 +897,8 @@ the feature (D3D11 is not stated).
       - Known approximations to rule on with L and P: a rebase's old steps run at the smaller capacity; the
         `drift_out` relayout edge; the probe cube has no depth; a held geometry key leaves draws reading stale
         `drift_out`; the near layer's edge with no shells.
+        L never reaches them (it runs without a worker or arena, and every L frame had shells); they and the ABI 46
+        hold's firing on long takes go to P and T.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
