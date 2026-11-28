@@ -584,30 +584,6 @@ def test_audio_analysis_trace_brackets_compute_and_python_smoothing() -> None:
     )
 
 
-def test_background_render_trace_is_explicit_and_pre_visualizer_attribution_ready() -> None:
-    root = Path(__file__).resolve().parents[1]
-    item = (root / "rendering" / "quick" / "render" / "background_item.py").read_text(
-        encoding="utf-8"
-    )
-    node = (root / "rendering" / "quick" / "render" / "background_node.py").read_text(
-        encoding="utf-8"
-    )
-    scene = (root / "rendering" / "quick" / "scene_controller.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "self._frame_trace = current_frame_trace()" in item
-    assert "screen_index=self._window.screen_index" in scene
-    render_body = node.split("def render(", 1)[1].split("def releaseResources", 1)[0]
-    assert "if trace is not None:" in render_body
-    assert "FrameTraceEvent.BACKGROUND_RENDER_BEGIN" in render_body
-    assert "FrameTraceEvent.BACKGROUND_RENDER_READY" in render_body
-    draw_body = node.split("def _draw(", 1)[1].split("def _draw_base", 1)[0]
-    assert "FrameTraceEvent.BACKGROUND_TEXTURE_READY" in draw_body
-    assert "FrameTraceEvent.BACKGROUND_DRAW_BEGIN" in draw_body
-    assert "FrameTraceEvent.BACKGROUND_DRAW_READY" in draw_body
-
-
 def test_report_splits_background_idle_transition_and_render_entry_overlap(tmp_path: Path) -> None:
     trace_path = tmp_path / "trace.bin"
     header = struct.Struct("<8sHHI")

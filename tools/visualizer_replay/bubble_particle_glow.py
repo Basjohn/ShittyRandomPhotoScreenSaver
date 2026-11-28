@@ -577,7 +577,7 @@ def cmd_perf(args) -> dict:
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.bench_stability import BenchCase, PairedBench, crossfade_control
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     report = {"variant": args.variant, "set": args.set or [], "cases": {}}
     for extent_name in args.extent_list:
@@ -588,7 +588,7 @@ def cmd_perf(args) -> dict:
         _clip, result = _snapshots(args.clip, args.recordings, args.preset, extent, frames, _overrides(args.set))
         snapshots = [result["snapshots"][i] for i in frames]
         stripped = [strip_particles(s) for s in snapshots]
-        capture = TransitionCapture(width, height)
+        capture = OffscreenRenderTarget(width, height)
         hosts = {"glow": QuickVisualizerRenderHost(), "no_particles": QuickVisualizerRenderHost()}
         matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
 

@@ -21,7 +21,7 @@ def _debris_instances(seed, shards, amount):
 from rendering.quick.transitions.fracture_geometry import fracture_cells
 import numpy as np
 import pytest
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 
 def test_crumble_requires_explicit_volume_controls_and_preserves_weight_modes():
@@ -73,7 +73,7 @@ def test_debris_metadata_is_bounded_seeded_and_tied_to_static_fracture():
 
 @pytest.mark.qt
 def test_real_driver_fall_has_continuous_late_departure_without_an_endpoint_cut(qt_app):
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         run = capture.run("crumble")
         source = np.asarray(capture.images[0], dtype=np.int16)
@@ -199,7 +199,7 @@ def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, valu
     # Compare against the pinned baseline these deltas were calibrated on, not
     # the moving product defaults (e89f357a raised complexity/debris to 1.8/0.85,
     # which left 2.0/1.0 barely different -- or, for complexity, identical).
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         base = np.asarray(
             capture.render(capture.run("crumble", parameters=_CALIBRATED), 0.53)[0],
@@ -244,34 +244,9 @@ def test_crumble_preserves_fractional_seed_identity_and_seam_origins():
         assert on_edge
 
 
-def test_crumble_failed_instance_deletion_keeps_handle_and_releases_other_resources(
-    monkeypatch,
-):
-    from rendering.quick.transitions.implementations import crumble
-    import pytest
-
-    renderer = crumble.QuickCrumbleRenderer()
-    renderer._debris_vbo = 71
-    released = []
-    monkeypatch.setattr(
-        renderer._resources, "release_resources", lambda: released.append(True)
-    )
-
-    def fail(*args):
-        raise RuntimeError("injected instance deletion failure")
-
-    monkeypatch.setattr(crumble.gl, "glDeleteBuffers", fail)
-    with pytest.raises(RuntimeError, match="cleanup incomplete"):
-        renderer.release_resources()
-    assert renderer._debris_vbo == 71 and released == [True]
-    monkeypatch.setattr(crumble.gl, "glDeleteBuffers", lambda *args: None)
-    renderer.release_resources()
-    assert renderer._debris_vbo == 0 and released == [True, True]
-
-
 @pytest.mark.qt
 def test_cracks_grow_before_the_intact_wall_or_debris_moves(qt_app):
-    capture=TransitionCapture(640,360)
+    capture=NativeTransitionCapture(640,360)
     try:
         run=capture.run("crumble",parameters={**_CALIBRATED,"weight_mode":0.0})
         source=np.asarray(capture.images[0],dtype=np.int16)

@@ -1,9 +1,9 @@
 """The native backdrop pyramid's Python face (Current_Plan.md N5.7b; D7 points 2 to 6; ``native/core/src/backdrop.h``).
 
 The card materials sample one blurred backdrop per display (``Docs/Architecture/Card_Surface_Materials.md`` section
-3). On the native background's backend the pyramid is the core's: built from the core's background layer (N5.7a) in the
-frame the layer drew a new frame, only while the item is not parked (the owner's demand above zero), level for level the
-Python pyramid's (``rendering/quick/render/surface_backdrop.py``). Its item is a texture provider: ``item`` is a
+3). The pyramid is the core's on both APIs: built from the core's background layer (N5.7a) in the frame the layer drew a
+new frame, only while the item is not parked (the owner's demand above zero), level for level the Python pyramid's that
+it replaced (deleted at N5.2h's switch; its frames live on as the reference cache). Its item is a texture provider: ``item`` is a
 ``QQuickItem`` that ``MaterialSurface`` takes as its ``backdrop``, unchanged; until its first build (or while the
 window has no layer frame) it hands out a transparent texture or none, so the cards show their Normal fill.
 

@@ -1,14 +1,12 @@
 """N5.7a, the display's background layer on the native core (D7 point 1): GPU-free.
 
-- The presenter's fit and crop has one owner (``rendering.quick.background_placement``), read by the Python presenter's
-  retained ``QSGImageNode`` and by the native layer's pass settings: a change of the owner moves both (the negative
-  control: neither path keeps a copy of the rule).
+- The background's fit and crop has one owner (``rendering.quick.background_placement``), read by the native layer's
+  pass settings: a change of the owner moves them (the negative control: the layer keeps no copy of the rule).
 - The layer (``rendering.quick.render.native_background``) over a stand-in core: a still, opaque, background-layer
   composite with the product pack's one pass sampling the photo; each new image sent once, the same image never again;
   the first photo fades in, the item's image going fades it out; a lost texture is sent again from the item's image; the
   close retires and destroys it.
-- ``BackgroundRenderItem`` makes the layer only on the native background's backend, and only at its first image; on
-  OpenGL nothing native is made (production keeps the Python presenter).
+- ``BackgroundRenderItem`` makes the layer only where the native background is wanted, and only at its first image.
 
 The drawn proof is ``native/core/python/background_layer_check.py`` (the hidden host, both backends, real photos).
 """
@@ -42,56 +40,18 @@ def test_the_placement_is_the_whole_photo_over_the_whole_item():
         background_placement((0, 10), (10.0, 10.0))
 
 
-def test_the_python_presenter_and_the_native_layer_read_the_one_owner(qt_app, monkeypatch):
-    from PySide6.QtQuick import QSGNode
-
-    from rendering.quick.render import background_image_node
-    from rendering.quick.render.background_image_node import RetainedBackgroundSceneNode
+def test_the_native_layer_reads_the_one_placement_owner(monkeypatch):
     from rendering.quick.render.native_background import background_layer_settings
-    from rendering.quick.render.telemetry import RenderNodeTelemetry
 
-    rects: dict = {}
-
-    class _FakeImageNode(QSGNode):
-        def setOwnsTexture(self, _owns) -> None:  # noqa: N802
-            pass
-
-        def setFiltering(self, _filtering) -> None:  # noqa: N802
-            pass
-
-        def setTexture(self, _texture) -> None:  # noqa: N802
-            pass
-
-        def setSourceRect(self, rect) -> None:  # noqa: N802
-            rects["source"] = (rect.x(), rect.y(), rect.width(), rect.height())
-
-        def setRect(self, rect) -> None:  # noqa: N802
-            rects["target"] = (rect.x(), rect.y(), rect.width(), rect.height())
-
-    class _Window:
-        def createImageNode(self):  # noqa: N802
-            return _FakeImageNode()
-
-        def createTextureFromImage(self, _image, _options):  # noqa: N802
-            return object()
-
-    monkeypatch.setattr(background_image_node, "validate_or_quit_current_opengl_context", lambda **_kwargs: None)
-    node = RetainedBackgroundSceneNode(window=_Window(), telemetry=RenderNodeTelemetry(gui_thread_id=1),
-                                       screen_index=0, frame_trace=None)
-    node._synchronize_native_image(_image("a"), logical_size=(8.0, 4.0))
-    assert rects == {"source": (0.0, 0.0, 8.0, 4.0), "target": (0.0, 0.0, 8.0, 4.0)}
     assert background_layer_settings((8, 4), (8.0, 4.0)) == {"u_source_uv": [0.0, 0.0, 1.0, 1.0]}
 
-    # Negative control: another rule in the owner moves both paths (neither keeps a copy of it).
+    # Negative control: another rule in the owner moves the layer (it keeps no copy of it).
     def cropped(pixel_size, logical_size):
         return placement_module.BackgroundPlacement(pixel_size=tuple(pixel_size), source_rect=(2.0, 1.0, 4.0, 2.0),
                                                     target_rect=(0.0, 0.0, float(logical_size[0]),
                                                                  float(logical_size[1])))
 
-    monkeypatch.setattr(background_image_node, "background_placement", cropped)
     monkeypatch.setattr(placement_module, "background_placement", cropped)
-    node._synchronize_native_image(_image("b"), logical_size=(8.0, 4.0))
-    assert rects["source"] == (2.0, 1.0, 4.0, 2.0)
     assert background_layer_settings((8, 4), (8.0, 4.0)) == {"u_source_uv": [0.25, 0.25, 0.5, 0.5]}
 
 
@@ -619,6 +579,11 @@ def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
     runs: list = []
 
     class _Layer:
+        drawing = True
+
+        def on_failure(self, _callback) -> None:
+            pass
+
         def present(self, image) -> None:
             pass
 
@@ -632,7 +597,6 @@ def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
             pass
 
     monkeypatch.setattr(native_background, "attach_native_background", lambda _item, backend=None: _Layer())
-    monkeypatch.setattr(background_item, "background_family_available_on_backend", lambda: False)
     monkeypatch.setattr(background_item, "_native_background_wanted", lambda: True)
     item = background_item.BackgroundRenderItem()
     source, destination = _image("a"), _image("b")
@@ -659,6 +623,10 @@ def test_the_item_makes_the_layer_only_on_the_native_backend_at_its_first_image(
         def __init__(self) -> None:
             self.images: list = []
             self.closed = False
+            self.drawing = True
+
+        def on_failure(self, _callback) -> None:
+            pass
 
         def present(self, image) -> None:
             self.images.append(image)
@@ -675,14 +643,13 @@ def test_the_item_makes_the_layer_only_on_the_native_backend_at_its_first_image(
 
     monkeypatch.setattr(native_background, "attach_native_background", attach)
 
-    # OpenGL (production): the Python presenter only.
+    # No native background wanted: nothing native is made.
     monkeypatch.setattr(background_item, "_native_background_wanted", lambda: False)
     item = background_item.BackgroundRenderItem()
     item.set_presentation_image(_image("a"))
     assert made == [] and item.native_layer is None
 
-    # The native background's backend (no Python renderer there): the layer at the first image, and every change.
-    monkeypatch.setattr(background_item, "background_family_available_on_backend", lambda: False)
+    # The native background's backend: the layer at the first image, and every change.
     monkeypatch.setattr(background_item, "_native_background_wanted", lambda: True)
     item = background_item.BackgroundRenderItem()
     assert made == []                                         # nothing before an image

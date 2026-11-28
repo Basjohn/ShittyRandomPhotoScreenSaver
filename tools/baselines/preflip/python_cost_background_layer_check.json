@@ -1,0 +1,33 @@
+{
+ "0f74e088e779d7393531b8a5441433e8": {
+  "digest": "36e589881e23404a9a969395fc23740c293c26d5ac28b07065af9fb381f66ff5",
+  "figures": {
+   "core_surface_passes": 0,
+   "frame_wall": {
+    "max_ms": 1.7094,
+    "median_ms": 0.1382,
+    "n": 120,
+    "p90_ms": 0.1695
+   },
+   "qrhi_frame_gpu": {
+    "max_ms": 0.0256,
+    "median_ms": 0.0133,
+    "n": 74,
+    "p90_ms": 0.0133
+   }
+  },
+  "made_at": "f475358aa26d22310052bf26a59f538eb44e9509",
+  "made_of": {
+   "check": "background_layer_check",
+   "format": 1,
+   "frames": 120,
+   "kind": "python",
+   "picture": "b22d5109d8184c6144f3fb0bfb4e7467c3c7157c1ea9a0afd056ebb2b6344bb8",
+   "round": "cost",
+   "size": [
+    2560,
+    1440
+   ]
+  }
+ }
+}

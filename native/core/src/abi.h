@@ -265,5 +265,7 @@
 // 44 (N5.6, Extruded Bubble drift): the program can declare up to 16 storage buffers, including geometry buffers.
 // The existing limit of 8 storage bindings per compute entry still applies. Earlier programs remain valid.
 // 45 (N5.6): reflected column-major mat3 members, including arrays, take nine numbers per matrix in settings and
-// f64 record fields. Columns use the qsb matrix stride.
+// f64 record fields. Columns use the qsb matrix stride. Within 45 (N5.2h residuals, backward compatible): a composite
+// or backdrop item deleted with its parent item leaves its handle table (destroy then returns False, a second destroy
+// too); composite_live's backdrop_handles.
 #define SRPSS_NATIVE_CORE_ABI 45

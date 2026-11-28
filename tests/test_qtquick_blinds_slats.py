@@ -14,7 +14,7 @@ import pytest
 
 from rendering.gl_programs.blinds_slats_program import blinds_slat_lift, blinds_slat_phase
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 pytestmark = pytest.mark.qt
 
@@ -31,7 +31,7 @@ def _pixels(image) -> np.ndarray:
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -113,44 +113,6 @@ def test_the_schedule_mirror_is_bounded_and_ends_exactly():
             assert blinds_slat_lift(0.0, i, count) == 0.0 and blinds_slat_lift(1.0, i, count) == 0.0
             assert 0.0 <= blinds_slat_lift(0.5, i, count) <= 1.0
         assert blinds_slat_phase(0.3, 0, count) > blinds_slat_phase(0.3, count - 1, count)
-
-
-def test_flat_style_stays_dormant(capture):
-    run = capture.run("blinds", settings={"blinds": {"style": "Flat", "direction": "Vertical"}}, duration_ms=4000)
-    # The flat program's two warm-up steps: its compile, then its pass block's ring (N1.6).
-    parameters = run.request.parameter_dict()
-    assert [capture.host.warm_step("blinds", parameters, (W, H)) for _ in range(3)] == [False, False, True]
-    for progress in (0.0, 0.3, 0.7, 1.0):
-        capture.render(run, progress)
-    renderer = capture.host._implementations["blinds"]
-    assert not renderer._resources.has_resources and not renderer._target.has_resources
-    assert not renderer._environment.has_resources
-
-
-def test_warmed_slats_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("blinds", settings=_settings(direction="Horizontal"), duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("blinds", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 50
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated
-        renderer = capture.host._implementations["blinds"]
-        capture.host.park()
-        assert not renderer._target.has_resources and not renderer._environment.has_resources
-        assert renderer._resources.has_resources        # programs and the slat mesh stay warm
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_an_axis_for_slats_and_repairs_choices():

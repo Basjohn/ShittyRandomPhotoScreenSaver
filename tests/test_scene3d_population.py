@@ -25,7 +25,7 @@ from rendering.quick.scene3d.population import (
     CompactedPopulation,
 )
 from rendering.quick.scene3d.resources import MeshResources
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
 
@@ -58,7 +58,7 @@ def _read(buffer: int, count: int, dtype) -> np.ndarray:
 
 @pytest.fixture
 def context(qt_app):
-    capture = TransitionCapture(16, 16)
+    capture = OffscreenRenderTarget(16, 16)
     yield capture
     capture.close()
 

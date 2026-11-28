@@ -26,7 +26,7 @@ from rendering.gl_programs.beam_program import (
     beam_sweep_end,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 pytestmark = pytest.mark.qt
 
@@ -68,7 +68,7 @@ def test_a_longer_cure_takes_longer_and_the_beam_crosses_sooner():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -175,32 +175,6 @@ def test_sparks_fly_mid_run_and_are_gone_before_the_end(capture):
     # Even on a short run (where a long-lived spark would still be on screen), none is left.
     for duration_ms in (1000, 3500):
         assert np.array_equal(frame(True, 0.97, duration_ms), frame(False, 0.97, duration_ms))
-
-
-def test_warmed_runs_compile_nothing_and_beam_allocates_nothing(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("beam", direction="right", duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("beam", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 20
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        # Beam allocates nothing per run: the warm-up's one allocation is its pass blocks' ring (N1.6), and the
-        # run's first frames allocate nothing more.
-        assert work.total == warmed and work.allocations == allocated == ["StreamRing._allocate"]
-        renderer = capture.host._implementations["beam"]
-        capture.host.park()
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_directions_and_repairs_values():

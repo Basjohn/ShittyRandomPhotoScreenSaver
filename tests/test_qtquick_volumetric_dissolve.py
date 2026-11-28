@@ -24,7 +24,7 @@ from rendering.gl_programs.volumetric_dissolve_program import (
 )
 from rendering.quick import gl_query
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 
@@ -55,7 +55,7 @@ def test_the_grid_stays_bounded():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -96,61 +96,6 @@ def test_centre_out_reveals_the_centre_first(capture):
     centre = new[H // 3: 2 * H // 3, W // 3: 2 * W // 3].mean()
     corners = np.concatenate([new[: H // 6, : W // 6].ravel(), new[-H // 6:, -W // 6:].ravel()]).mean()
     assert centre > corners + 0.3
-
-
-@pytest.mark.qt
-def test_mist_touches_only_the_passed_front_never_the_ends_and_unit_3_is_handed_back(capture):
-    sentinel = int(gl.glGenTextures(1))
-    try:
-        frames = {}
-        for mist in (0.0, 1.0):
-            gl.glActiveTexture(gl.GL_TEXTURE3)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, sentinel)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            run = capture.run("volumetric_dissolve", direction="right",
-                              settings={"volumetric_dissolve": {"mist": mist}}, duration_ms=7000)
-            frames[mist] = [_pixels(capture.render(run, p)[0]) for p in (0.003, 0.12, 0.4, 0.96)]
-            gl.glActiveTexture(gl.GL_TEXTURE3)
-            assert gl_query.get_int(gl.GL_TEXTURE_BINDING_2D) == sentinel
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-        assert np.array_equal(frames[0.0][0], frames[1.0][0]) and np.array_equal(frames[0.0][3], frames[1.0][3])
-        far = np.s_[:, int(W * 0.72):]
-        assert np.array_equal(frames[0.0][1][far], frames[1.0][1][far])
-        assert np.abs(frames[0.0][2] - frames[1.0][2]).mean() > 1.0
-    finally:
-        gl.glActiveTexture(gl.GL_TEXTURE3)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glDeleteTextures([sentinel])
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("volumetric_dissolve", direction="left", settings={"scene3d_detail": "High"},
-                          duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("volumetric_dissolve", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 60
-        renderer = capture.host._implementations["volumetric_dissolve"]
-        assert renderer._particles.has_resources
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated
-        capture.host.park()
-        assert not renderer._target.has_resources and not renderer._environment.has_resources
-        assert not renderer._particles.has_resources
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_directions_and_repairs_values():

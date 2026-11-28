@@ -97,9 +97,3 @@ def test_pixel_accretion_shader_translates_microquads_toward_one_event_vector() 
     assert "(uProgress - start) / .28" in source
     assert "sceneProjectAt(uMatrix, uItemSize, world, 3.0)" in source  # the shared camera at its authored distance
     assert "vUv = (cell + aUv) / uGrid" in source
-    renderer = (ROOT / "rendering/quick/transitions/implementations/pixel_accretion.py").read_text(encoding="utf-8")
-    assert "glDrawArraysInstanced" in renderer
-    assert "PIXEL_ACCRETION_MAX_INSTANCES" not in renderer
-    assert "draw_image(frame, frame.source_texture_id)" in renderer
-    assert "draw_image(frame, frame.destination_texture_id)" in renderer
-    assert "glBufferData" not in renderer

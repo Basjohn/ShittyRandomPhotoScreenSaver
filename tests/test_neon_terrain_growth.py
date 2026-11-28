@@ -405,11 +405,11 @@ def _picture(overrides: dict, size=(960, 540)) -> np.ndarray:
     from core.settings.default_contract import require_canonical_default
     from tools.neon_lake_capture import _draw
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     settings = {**require_canonical_default("widgets.spotify_visualizer"), "mode": MODE, **overrides}
     snapshot = _build_spectrum_preview_snapshot(width=size[0], height=size[1], mode=MODE, settings=settings)
-    target = TransitionCapture(*size)
+    target = OffscreenRenderTarget(*size)
     host = QuickVisualizerRenderHost()
     try:
         rgba, _matrix = _draw(host, target, snapshot, size[0], size[1], size)

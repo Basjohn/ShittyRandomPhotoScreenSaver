@@ -113,6 +113,7 @@ set(_sources
     src/program_blocks.cpp
     src/packet_reader.cpp
     src/targets.cpp
+    src/gl_sampler_state.cpp
     src/conventions.cpp
     src/vulkan_context.cpp
     src/thread_probe.cpp

@@ -18,7 +18,7 @@ from rendering.gl_programs.blockspin_program import (
     block_spin_progress,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_block_spins_parameters
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 WIDTH, HEIGHT = 512, 288
 _GLASS = tuple(choice for choice in BLOCK_SPIN_EDGE_GLASS_CHOICES if choice != "Off")
@@ -32,7 +32,8 @@ def _frames(capture, choice, progresses, direction="left"):
 
 def _side_faces(capture, run, progress) -> list[tuple[float, float]]:
     """Screen columns each side face covers for a spin about the vertical axis (2 px of slack)."""
-    angle = math.pi * block_spin_progress(capture.frame(run, progress).sample.eased_progress)
+    sample = run.sample(run.start_ns + round(progress * (run.end_ns - run.start_ns)))
+    angle = math.pi * block_spin_progress(sample.eased_progress)
     faces = []
     for side in (-1.0, 1.0):
         front = side * math.cos(angle)
@@ -43,7 +44,7 @@ def _side_faces(capture, run, progress) -> list[tuple[float, float]]:
 
 @pytest.mark.qt
 def test_edge_glass_changes_only_the_edges_and_keeps_the_sheen_and_gloss(qt_app):
-    capture = TransitionCapture(WIDTH, HEIGHT)
+    capture = NativeTransitionCapture(WIDTH, HEIGHT)
     try:
         progresses = (0.4, 0.47, 0.5, 0.56)
         run, plain = _frames(capture, "Off", progresses)
@@ -66,7 +67,7 @@ def test_edge_glass_changes_only_the_edges_and_keeps_the_sheen_and_gloss(qt_app)
 @pytest.mark.qt
 @pytest.mark.parametrize("choice", BLOCK_SPIN_EDGE_GLASS_CHOICES)
 def test_edge_glass_keeps_exact_endpoints_on_every_axis(qt_app, choice):
-    capture = TransitionCapture(256, 144)
+    capture = NativeTransitionCapture(256, 144)
     try:
         source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
         for direction in ("left", "up", "diag_tl_br", "diag_tr_bl"):

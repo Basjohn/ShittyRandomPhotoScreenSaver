@@ -16,7 +16,7 @@ duration and included in the manifest's total animation duration. No window, mic
 cadence starts. The existing deterministic replay clock owns recorded-feature timing.
 
 Transition identities come from `rendering.transition_registry`; unavailable identities are excluded. Frames go through
-`tools.transition_contact_sheet.TransitionCapture`, production request parameter resolution and `QuickTransitionRenderHost`.
+`tools.native_transition_capture.NativeTransitionCapture` (the native core's frame, as the product draws it) and production request parameter resolution.
 The same authored seed and deterministic fixture images are reused; lossless endpoint captures must exactly match those
 photographs. There is currently no separate curated transition
 preset catalogue. Canonical appearance is captured for every identity; Blinds' authored styles and Block Spins' edge-glass

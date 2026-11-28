@@ -2,9 +2,10 @@
 
 Record one before and one after any major architecture addition (a shared primitive, a new
 pass, a host change) and compare: an addition should leave everything that does not use it
-unchanged. Each case renders through the production render host on one offscreen GL 4.6
-context (no window, no runtime): transitions as their release-showcase cases (canonical
-settings at High detail, fixture photographs), Visualizer modes as their Guided Setup preview
+unchanged. Transitions are drawn by the native core as the product draws them (``tools/native_transition_capture.py``, no
+window): their release-showcase cases (canonical settings at High detail, fixture photographs), one wall-time figure
+per frame relative to the native Crossfade control. Visualizer modes render through the production render host on one
+offscreen GL 4.6 context (no window, no runtime) as their Guided Setup preview
 snapshots (``tools/visualizer_cost_probe.visualizer_case``); how to run it, read it and what to expect:
 ``Docs/Reference/Benchmarks.md``. Per frame it records CPU submit (render
 thread Python + GL calls) as wall time and as the thread's own CPU time, and GPU time
@@ -42,10 +43,9 @@ hint, not proof. Takes about two minutes on a quiet machine, longer on a busy on
 Visualizer modes go through the same round-robin, control-relative passes (one production
 Visualizer host on the shared context, each mode's Guided Setup preview snapshot) and record GL
 calls through the probe's counter (its renderer modules) and Python calls like transitions.
-The ``node_path`` case adds the per-frame fences the render-host cases never reach: the background
-node's base draw, then the Visualizer clip host's begin, one mode render (Spectrum) and end, as the
-retained render nodes run them. Its GL count includes every GL state read (``gl_query`` and any
-private reader), so moving a read between helpers never hides or adds a call.
+(N5.2h: the ``surfaces`` and ``node_path`` cases measured the Python blit backdrop and background node, deleted at
+the switch; the core's own costs are the reference checks' ``--cost`` rounds. A comparison against an older baseline
+lists their rows as removed.)
 """
 from __future__ import annotations
 
@@ -64,128 +64,69 @@ sys.path.insert(0, str(ROOT))
 # checking off before OpenGL.GL is first imported, as main.py does, and refuses otherwise).
 import tools.visualizer_cost_probe  # noqa: E402,F401
 from tools.bench_stability import (  # noqa: E402
-    BenchCase, PairedBench, crossfade_control, environment_differs,
+    PairedBench, crossfade_control, environment_differs,
 )
 
 OUT = ROOT / "tools" / "baselines" / "overhead"
 GPU_FLAG = (0.20, 0.05)     # ratio, ms
 CPU_FLAG = (0.50, 0.15)
-COUNT_FRAMES = 8
+
+
+NATIVE_NOISE_FLAG = (0.20, 2.0)     # a transition is flagged above 20% of its control-relative cost and 2x its noise
+NATIVE_CONTROL_FRAMES = 6
+
+
+def _median(values: list[float]) -> float:
+    return statistics.median(values) if values else 0.0
 
 
 def measure_transitions(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
-    """Every showcase transition case (release-showcase settings, fixture photographs)."""
+    """Every showcase transition case (release-showcase settings, fixture photographs), drawn by the native core as
+    the product draws it (``NativeTransitionCapture``: the native background layer in the process's hidden host).
+
+    The figure is the frame's wall milliseconds (draw, submit and readback, ``NativeTransitionCapture.render``), not a
+    GPU query: the core draws in its own context and thread. Each pass measures the native Crossfade control first and
+    every case after it (round-robin, the order rotating each pass); a case's ``native_rel`` is its median over that
+    pass's control median, so a busy machine moves case and control alike. The best (lowest) pass is kept and
+    ``native_noise`` is the spread of the passes' relative figures. The core's own GPU cost is the reference checks'
+    ``--cost`` rounds (``native/core/python/transition_route_check.py``)."""
+    from tools.native_transition_capture import NativeTransitionCapture
     from tools.release_media import catalogue
 
-    gl, capture = bench.gl, bench.capture
-    cases = {}
-    for run_id, case in enumerate((c for c in catalogue() if c.kind == "transition"), start=2):
-        run = capture.production_run(case.identity, case.duration_ms, case.settings, run_id=run_id)
-
-        def point(index, run=run):
-            frame = capture.frame(run, 0.05 + 0.9 * index / max(1, frames - 1))
-            return lambda: capture.host.render(frame)
-
-        def warm(run=run):
-            # A renderer switching runs on the shared host rebuilds per-run state here, untimed.
-            for progress in (0.2, 0.5, 0.8):
-                capture.render(run, progress)
-
-        cases[f"{case.identity}/{case.variant}"] = BenchCase(point, warm, lambda run=run: _transition_counts(gl, capture, run))
-    return bench.measure("transition", cases, frames, passes, max_rounds)
-
-
-class _GLCounter:
-    """Counts every call to an ``OpenGL.GL`` function while installed (renderers call through
-    the module object, so wrapping its attributes sees them all)."""
-
-    def __init__(self, gl) -> None:
-        self.gl, self.count, self._saved = gl, 0, {}
-
-    def __enter__(self):
-        for name in dir(self.gl):
-            value = getattr(self.gl, name)
-            if name.startswith("gl") and callable(value):
-                self._saved[name] = value
-                setattr(self.gl, name, self._wrap(value))
-        return self
-
-    def _wrap(self, function):
-        def call(*args, **kwargs):
-            self.count += 1
-            return function(*args, **kwargs)
-        return call
-
-    def __exit__(self, *_exc):
-        for name, value in self._saved.items():
-            setattr(self.gl, name, value)
-        self._saved.clear()
-
-
-def _transition_counts(gl, capture, run) -> dict[str, float]:
-    """Median GL and Python calls per frame over ``COUNT_FRAMES`` frames (deterministic)."""
-    gl_counts, py_counts = [], []
-    for index in range(COUNT_FRAMES):
-        progress = 0.05 + 0.9 * index / max(1, COUNT_FRAMES - 1)
-        frame = capture.frame(run, progress)
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        calls = [0]
-
-        def profile(_frame, event, _arg):
-            if event in ("call", "c_call"):
-                calls[0] += 1
-
-        with _GLCounter(gl) as counter:
-            sys.setprofile(profile)
-            try:
-                capture.host.render(frame)
-            finally:
-                sys.setprofile(None)
-        gl_counts.append(counter.count)
-        py_counts.append(calls[0])
-    gl.glFinish()
-    return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
-
-
-def measure_surfaces(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
-    """The card surface backdrop refresh (Docs/Architecture/Card_Surface_Materials.md): one blit and
-    blur pyramid of the whole target, as the production node runs it when it refreshes. It runs only
-    while some surface is not Normal (dormant otherwise), on image edges and during transitions."""
-    from rendering.quick.render.surface_backdrop import BackdropPipeline
-
-    gl, capture = bench.gl, bench.capture
-    pipeline = BackdropPipeline()
-    def point(_index):
-        def render():
-            pipeline.refresh(capture.fbo, capture.width, capture.height)
-        return render
-
-    def warm():
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        pipeline.refresh(capture.fbo, capture.width, capture.height)
-
-    def counts():
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        calls = [0]
-
-        def profile(_frame, event, _arg):
-            if event in ("call", "c_call"):
-                calls[0] += 1
-
-        with _GLCounter(gl) as counter:
-            sys.setprofile(profile)
-            try:
-                pipeline.refresh(capture.fbo, capture.width, capture.height)
-            finally:
-                sys.setprofile(None)
-        gl.glFinish()
-        return {"gl_calls": counter.count, "py_calls": calls[0]}
-
+    width, height = bench.capture.width, bench.capture.height
+    capture = NativeTransitionCapture(width, height)
+    keys = [c for c in catalogue() if c.kind == "transition" and (not bench.match or bench.match in f"{c.identity}/{c.variant}")]
+    samples: dict[str, list[tuple[float, float, float, float]]] = {}
     try:
-        return bench.measure("surface", {"backdrop/refresh": BenchCase(point, warm, counts)},
-                             frames, passes, max_rounds)
+        control = capture.production_run("crossfade", 1000, {}, run_id=1)
+        runs = {f"{c.identity}/{c.variant}": capture.production_run(c.identity, c.duration_ms, c.settings,
+                                                                    run_id=index) for index, c in
+                enumerate(keys, start=2)}
+        progresses = [0.05 + 0.9 * index / max(1, frames - 1) for index in range(frames)]
+        for pass_index in range(passes):
+            capture.render(control, 0.5)                                     # the control's run started, untimed
+            control_ms = _median([capture.render(control, 0.5)[1] for _ in range(NATIVE_CONTROL_FRAMES)])
+            order = list(runs)
+            offset = pass_index % max(1, len(order))
+            for key in order[offset:] + order[:offset]:
+                run = runs[key]
+                for progress in (0.2, 0.5, 0.8):                             # the run started and its state built, untimed
+                    capture.render(run, progress)
+                times = [capture.render(run, progress)[1] for progress in progresses]
+                ordered = sorted(times)
+                median, p90 = _median(times), ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))]
+                samples.setdefault(key, []).append((median / control_ms if control_ms > 0 else 0.0, median, p90, control_ms))
+                print(f"  transition {key:34s} pass {pass_index + 1}: {median:7.2f} ms ({median / control_ms:5.2f}x control)",
+                      flush=True)
     finally:
-        pipeline.release()
+        capture.close()
+    results = {}
+    for key, rows in samples.items():
+        best = min(rows)
+        rels = [row[0] for row in rows]
+        results[key] = {"native_rel": best[0], "native_ms": best[1], "native_p90_ms": best[2], "control_ms": best[3],
+                        "native_noise": (max(rels) - min(rels)) / best[0] if best[0] > 0 else 0.0, "passes": len(rows)}
+    return results
 
 
 def measure_visualizers(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
@@ -213,137 +154,6 @@ def measure_visualizers(bench: PairedBench, frames: int, passes: int, max_rounds
     finally:
         host.release_resources()
     return {**results, **failed}
-
-
-class _RenderState:
-    """The Quick render state a retained node receives: no incoming scissor or stencil clip."""
-
-    def scissorEnabled(self):
-        return False
-
-    def stencilEnabled(self):
-        return False
-
-    def stencilValue(self):
-        return 0
-
-
-class _StateReadCounter:
-    """Counts the GL state reads that bypass ``OpenGL.GL`` (``gl_query``'s raw entry points and any module-private
-    reader), so the node-path GL count is the same whichever helper a fence reads through."""
-
-    _READERS = (("rendering.quick.gl_query", ("get_int", "get_ints", "get_bool", "get_bools", "get_float",
-                                              "get_floats", "is_enabled")),
-                ("rendering.quick.visualizer.gl_state", ("_glGetIntegerv", "_glGetBooleanv", "_glIsEnabled")))
-
-    def __init__(self, counter) -> None:
-        self.counter, self._saved = counter, []
-
-    def __enter__(self):
-        import importlib
-        for module_name, names in self._READERS:
-            module = importlib.import_module(module_name)
-            for name in names:
-                function = getattr(module, name, None)
-                if callable(function):
-                    self._saved.append((module, name, function))
-                    setattr(module, name, self._wrap(function))
-        return self
-
-    def _wrap(self, function):
-        def call(*args, **kwargs):
-            self.counter.count += 1
-            return function(*args, **kwargs)
-        return call
-
-    def __exit__(self, *_exc):
-        for module, name, function in self._saved:
-            setattr(module, name, function)
-        self._saved.clear()
-
-
-def measure_node_path(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
-    """The production per-frame node path around one Visualizer draw (Spectrum's Guided Setup preview): the
-    background node's base draw, the clip host's begin, the mode render with the carried state, the clip host's
-    end. Measures the GL state fences that ``measure_visualizers`` (render host only) never reaches."""
-    from rendering.quick.render.background_node import BackgroundRenderNode
-    from rendering.quick.visualizer.clip_host import VisualizerClipFrame, VisualizerClipHost
-    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-
-    gl, capture = bench.gl, bench.capture
-    width, height = capture.width, capture.height
-    viewport = (0, 0, width, height)
-    matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
-    snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode="spectrum")
-    background, clip, host = BackgroundRenderNode(), VisualizerClipHost(), QuickVisualizerRenderHost()
-    background._initialize_gl()
-    background._logical_size = (float(width), float(height))
-    clip_frame = VisualizerClipFrame(logical_size=(float(width), float(height)),
-                                     local_content_rect=(width * .1, height * .1, width * .8, height * .8),
-                                     inner_corner_radius=24.0, matrix_values=matrix, viewport=viewport)
-    state = _RenderState()
-    # The node path draws into a target with a depth-stencil attachment, as Quick's render targets have (the clip
-    # writes and tests the stencil); the shared capture target has depth only, so this case owns its own.
-    color = int(gl.glGenTextures(1))
-    gl.glBindTexture(gl.GL_TEXTURE_2D, color)
-    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
-    depth_stencil = int(gl.glGenRenderbuffers(1))
-    gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, depth_stencil)
-    gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_DEPTH24_STENCIL8, width, height)
-    fbo = int(gl.glGenFramebuffers(1))
-    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-    gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
-    gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_STENCIL_ATTACHMENT, gl.GL_RENDERBUFFER, depth_stencil)
-    if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-        raise RuntimeError("node-path framebuffer incomplete")
-
-    def render():
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT)
-        background._draw_base(texture_id=capture.textures[0], viewport=viewport, matrix_values=matrix)
-        run = clip.begin(clip_frame, state)
-        try:
-            host.render(snapshot=snapshot, viewport=viewport, logical_size=(float(width), float(height)),
-                        matrix_values=matrix, inherited_gl_state=run.inherited_gl_state)
-        finally:
-            clip.end(run)
-
-    def warm():
-        for _ in range(10):
-            render()
-
-    def counts():
-        gl_counts, py_counts = [], []
-        for _ in range(COUNT_FRAMES):
-            calls = [0]
-
-            def profile(_frame, event, _arg, calls=calls):
-                if event in ("call", "c_call"):
-                    calls[0] += 1
-
-            with _GLCounter(gl) as counter, _StateReadCounter(counter):
-                sys.setprofile(profile)
-                try:
-                    render()
-                finally:
-                    sys.setprofile(None)
-            gl_counts.append(counter.count)
-            py_counts.append(calls[0])
-        gl.glFinish()
-        return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
-
-    try:
-        return bench.measure("node_path", {"background+clip+spectrum": BenchCase(lambda _index: render, warm, counts)},
-                             frames, passes, max_rounds)
-    finally:
-        host.release_resources()
-        clip.release_resources()
-        background.releaseResources()
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        gl.glDeleteFramebuffers(1, [fbo])
-        gl.glDeleteRenderbuffers(1, [depth_stencil])
-        gl.glDeleteTextures([color])
 
 
 def _commit() -> str:
@@ -390,6 +200,15 @@ def compare(old: dict, new: dict) -> int:
                 continue
             notes = []
             old_row, new_row = rows_old[key], rows_new[key]
+            if "native_rel" in old_row and "native_rel" in new_row:
+                a, b = old_row["native_rel"], new_row["native_rel"]
+                ratio, noise_factor = NATIVE_NOISE_FLAG
+                noisy = noise_factor * max(old_row.get("native_noise", 0.0), new_row.get("native_noise", 0.0)) * a
+                if b - a > max(ratio * a, noisy):
+                    flagged += 1
+                    print(f"  {section[:-1]:10s} {key:34s} SLOWER: native frame {a:.2f}x->{b:.2f}x of the control "
+                          f"({old_row['native_ms']:.2f}->{new_row['native_ms']:.2f} ms)")
+                continue
             relative = "gpu_rel" in old_row and "gpu_rel" in new_row
             for label, absolute, rel, noise, (ratio, floor) in (
                     ("GPU", "gpu_median", "gpu_rel", "gpu_noise", GPU_FLAG),
@@ -422,7 +241,7 @@ def main() -> int:
     parser.add_argument("--passes", type=int, default=3, help="admitted passes each transition needs")
     parser.add_argument("--max-rounds", type=int, default=12,
                         help="round-robin rounds before giving up on a quiet pass (busy machine)")
-    parser.add_argument("--only", choices=("transitions", "visualizers", "surfaces", "node_path"))
+    parser.add_argument("--only", choices=("transitions", "visualizers"))
     parser.add_argument("--match", help="measure only cases whose key contains this text (e.g. liquid_lens); "
                                         "the file is named after it and comparisons cover only those cases")
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
@@ -442,9 +261,9 @@ def main() -> int:
     data = {"commit": _commit(), "date": _dt.datetime.now().isoformat(timespec="seconds"), "size": args.size,
             "frames": args.frames, "passes": args.passes, "match": args.match}
     from OpenGL import GL as gl
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(*size)
+    capture = OffscreenRenderTarget(*size)
     try:
         bench = PairedBench(gl, capture, crossfade_control(capture), args.match)
         if args.only in (None, "transitions"):
@@ -453,12 +272,6 @@ def main() -> int:
         if args.only in (None, "visualizers"):
             print("Visualizers")
             data["visualizers"] = measure_visualizers(bench, args.frames, args.passes, args.max_rounds)
-        if args.only in (None, "surfaces"):
-            print("Surfaces")
-            data["surfaces"] = measure_surfaces(bench, args.frames, args.passes, args.max_rounds)
-        if args.only in (None, "node_path"):
-            print("Node path")
-            data["node_path"] = measure_node_path(bench, args.frames, args.passes, args.max_rounds)
         data["load"] = load = bench.load()
         data["renderer"] = gl.glGetString(gl.GL_RENDERER).decode()
     finally:

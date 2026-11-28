@@ -6,11 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
-from OpenGL import GL as gl
 
-from rendering.gl_programs.melt_drip_program import MELT_BLOCK, MELT_FRAGMENT_SOURCE, MELT_VERTEX_SOURCE
-from rendering.gl_programs.portable import pack_block
-from rendering.quick.scene3d.resources import MeshResources, bind_frame, warm_pass_blocks, warm_programs
+from rendering.gl_programs.melt_drip_program import MELT_FRAGMENT_SOURCE
 from ..fullscreen_pass import NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -79,13 +76,6 @@ class QuickMeltDripRenderer(NativeFragmentPass):
     transition_id = "melt_drip"
     fragment_source = MELT_FRAGMENT_SOURCE
 
-    def __init__(self) -> None:
-        self._resources = MeshResources("Quick Melt Drip")
-
-    @property
-    def has_resources(self) -> bool:
-        return self._resources.has_resources
-
     def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         """Every value of the pass block for this frame (validated first; no GL): the one owner, packed by ``render``
         and filled by the native core (N5.2b). The fragment draws each picture exactly at the run's ends itself."""
@@ -103,33 +93,6 @@ class QuickMeltDripRenderer(NativeFragmentPass):
             values[name] = float(value)
         values["uOrigin"] = params.origin
         return values
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's steps (render thread, between runs): compile the liquid program,
-        then, given the render ``size``, allocate its pass block's ring, so the run's first frame
-        compiles and allocates nothing."""
-        r = self._resources
-        return (warm_programs([(r, "liquid", MELT_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)])
-                and warm_pass_blocks(r, size))
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        try:
-            block = self.block_values(frame)
-            r = self._resources
-            program = r.program("liquid", MELT_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)
-            u = r.uniforms("liquid", ("uOldTex", "uNewTex"))   # every other value is in MELT_BLOCK
-            values = r.values("liquid")
-            bind_frame(program, u, frame, values)
-            values.update(block)
-            with r.pass_blocks.bound(pack_block(MELT_BLOCK, values)):
-                gl.glBindVertexArray(frame.quad_vao)
-                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def release_resources(self) -> None:
-        self._resources.release_resources()
 
 
 def create_transition_renderer() -> QuickMeltDripRenderer:

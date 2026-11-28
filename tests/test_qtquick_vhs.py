@@ -20,7 +20,7 @@ from rendering.gl_programs.vhs_program import (
     vhs_roll,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 _CLEAN = {"vhs": {"tracking": 0.0, "bleed": 0.0, "noise": 0.0}}
@@ -46,7 +46,7 @@ def test_tearing_bands_leave_most_lines_clean():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -111,31 +111,6 @@ def test_each_strength_changes_the_picture(capture, name):
         run = capture.run("vhs", direction="up", settings=settings, duration_ms=3000)
         frames.append(_pixels(capture.render(run, 0.06)[0]))
     assert np.abs(frames[0] - frames[1]).mean() > 1.0
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("vhs", direction="down", duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("vhs", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 10
-        warmed = work.total
-        for progress in (0.0, 0.3, 0.6, 1.0):
-            capture.render(run, progress)
-        assert work.total == warmed
-        renderer = capture.host._implementations["vhs"]
-        capture.host.park()
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_directions_and_repairs_values():
