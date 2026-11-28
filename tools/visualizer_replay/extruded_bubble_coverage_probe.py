@@ -77,6 +77,7 @@ try:
         gl.glBindVertexArray(vao);gl.glBindBuffer(gl.GL_ARRAY_BUFFER,vbo)
         for placement,centre in [('centre',(0.,0.,-6.)),('edge',(-4.,-2.4,-6.))]:
             radius=.6
+            if kind=='ordinary':gl.glVertexAttrib1f(3,radius)   # aLensRadius, the shell's steady lens radius (not an array here)
             # A tiny fully contained second member admits the real cluster shader without changing its SDF silhouette.
             data=np.array((*centre,radius, .3,0) if kind=='ordinary' else (*centre,radius,*centre,.000001,0,0,0,0,2,0,.3,0),dtype='f4')
             gl.glBufferData(gl.GL_ARRAY_BUFFER,data.nbytes,data,gl.GL_STATIC_DRAW)
