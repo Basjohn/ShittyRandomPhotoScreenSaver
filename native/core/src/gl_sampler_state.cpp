@@ -33,4 +33,23 @@ int adoptMultisampleSamplerState(QRhi *rhi, QRhiShaderResourceBindings *bindings
     return marked;
 }
 
+int adoptMultisampleSamplerState(QRhiShaderResourceBindings *bindings)
+{
+    return bindings ? adoptMultisampleSamplerState(bindings->rhi(), bindings) : 0;
+}
+
+void setGraphicsPipelineAdopting(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *pipeline)
+{
+    if (pipeline)
+        adoptMultisampleSamplerState(pipeline->shaderResourceBindings());
+    cb->setGraphicsPipeline(pipeline);
+}
+
+void setComputePipelineAdopting(QRhiCommandBuffer *cb, QRhiComputePipeline *pipeline)
+{
+    if (pipeline)
+        adoptMultisampleSamplerState(pipeline->shaderResourceBindings());
+    cb->setComputePipeline(pipeline);
+}
+
 } // namespace srpss_core

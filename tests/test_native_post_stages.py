@@ -451,12 +451,43 @@ def test_the_gl_errors_round_is_a_proof_only_on_a_debug_context_with_an_empty_lo
     assert not psc.gl_errors_verdict(undrawn)["pass"]
 
 
-def test_the_resolves_bound_to_multisampled_textures_adopt_their_sampler_state_on_opengl() -> None:
-    """N5.2h: both draws that read a multisampled texture through a sampler (the transparency resolve, the nearest
-    resolve) hand their bindings to adoptMultisampleSamplerState before Qt binds them, and it acts on OpenGL alone."""
-    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
-    assert "adoptMultisampleSamplerState(rhi, p.bindings.get());" in source
-    assert "adoptMultisampleSamplerState(n.pipeline->rhi(), n.bindings.get());" in source
+def _bypasses_of_the_sampler_state_helpers(sources: dict) -> list:
+    """Every pipeline set not through set*PipelineAdopting, and every explicit setShaderResources(srb) whose previous
+    statement is not adoptMultisampleSamplerState(srb)."""
+    import re
+
+    found = []
+    for name, text in sources.items():
+        lines = text.splitlines()
+        for number, line in enumerate(lines):
+            if re.search(r"\bcb->set(Graphics|Compute)Pipeline\(", line):
+                found.append(f"{name}:{number + 1}")
+            hit = re.search(r"\bcb->setShaderResources\(([^,)]+)", line)
+            if hit and hit.group(1).strip() != "nullptr":
+                previous = lines[number - 1].strip() if number else ""
+                if not previous.startswith("adoptMultisampleSamplerState("):
+                    found.append(f"{name}:{number + 1}")
+    return found
+
+
+def test_every_pipeline_set_and_shader_resource_bind_adopts_the_multisample_sampler_state() -> None:
+    """N5.2h (found by N5.6; the lead's 7df944fb build still logged eb_4x 5, eb_band_4x 5, tiles_4x 1 with only the two
+    resolves marked): every multisampled texture is a scene target's and reaches shaders through many passes, so every
+    pipeline set in the core goes through set*PipelineAdopting (its own bindings: what setShaderResources(nullptr)
+    binds) and every explicit bind follows adoptMultisampleSamplerState; the helper acts on OpenGL and sampleCount > 1
+    alone. Negative control: one bare cb->setGraphicsPipeline is caught."""
+    sources = {path.name: path.read_text(encoding="utf-8") for path in sorted((CORE / "src").glob("*.cpp"))
+               if path.name != "gl_sampler_state.cpp"}
+    assert _bypasses_of_the_sampler_state_helpers(sources) == []
+    assert sum(text.count("setGraphicsPipelineAdopting(cb, ") for text in sources.values()) > 10
+    altered = dict(sources, **{"mode_content.cpp": sources["mode_content.cpp"].replace(
+        "setGraphicsPipelineAdopting(cb, n.pipeline.get());", "cb->setGraphicsPipeline(n.pipeline.get());")})
+    assert altered["mode_content.cpp"] != sources["mode_content.cpp"]
+    assert len(_bypasses_of_the_sampler_state_helpers(altered)) == 1
+    explicit = dict(sources, **{"post_stages.cpp": sources["post_stages.cpp"].replace(
+        "    adoptMultisampleSamplerState(e->bindings.get());\n", "", 1)})
+    assert explicit["post_stages.cpp"] != sources["post_stages.cpp"]
+    assert len(_bypasses_of_the_sampler_state_helpers(explicit)) == 1
     helper = (CORE / "src" / "gl_sampler_state.cpp").read_text(encoding="utf-8")
     assert "rhi->backend() != QRhi::OpenGLES2" in helper and "texture->sampleCount() <= 1" in helper
     assert "src/gl_sampler_state.cpp" in (CORE / "CMakeLists.txt").read_text(encoding="utf-8")
