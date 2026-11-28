@@ -89,6 +89,54 @@ def test_control_a_projector_kept_across_runs_is_seen():
     assert isinstance(second, str) and "backwards" in second
 
 
+def _two_planned_runs(monkeypatch, tmp_path, run_context):
+    """``_run_native`` over two planned runs (display and overscan), each projecting the take's first three frames
+    through the route's shared projector; per run, its arena and its chain keys or the error it raised."""
+    import rendering.native
+    import rendering.quick.visualizer.native_route as route_module
+    import tools.expanded_visualizer_evidence as evidence
+
+    monkeypatch.setattr(rendering.native, "load", lambda _dir: SimpleNamespace(module=None))
+    monkeypatch.setattr(evidence, "shipped_clip", lambda _seconds: SimpleNamespace(name="clip", frames=()))
+    monkeypatch.setattr(route_module, "NATIVE_MODE_IDS", frozenset({"extruded_bubble"}))
+    monkeypatch.setattr(parity, "_placed_runs", lambda *_a: [("extruded_bubble", "", {}, "display"),
+                                                              ("extruded_bubble@overscan", "", {}, "overscan")])
+    seen = []
+
+    def native_parity(*_args, **_kwargs):
+        arena = schema_module.stream_arena(0)
+        try:
+            keys = [arena_module.key_of_words(schema_module.DRIFT.project(SimpleNamespace(
+                runtime_generation=7, **vars(_state(_family(1), serials=(serial,)))))["chains_geometry_key"])
+                for serial in (1, 2, 3)]
+        except schema_module.NativeSchemaError as exc:
+            keys = str(exc)
+        seen.append((arena, keys))
+        return {"frames_drawn": [3, 3], "native_published": 3, "differing_inputs": 0, "differing_pixels_total": 0,
+                "max_level": 0, "outer_origin": (0, 0), "outer_origin_device_fraction": (0, 0), "identical": True,
+                "pass": True, "carried_from_accepted": [], "rule_a": {"edge_pixels_worst_frame": 0, "bound": {}}}
+
+    monkeypatch.setattr(parity, "native_parity", native_parity)
+    parity._run_native(tmp_path, module_dir=tmp_path, offers=False, mode="extruded_bubble", run_context=run_context)
+    return seen
+
+
+def test_each_planned_run_gets_a_fresh_arena(monkeypatch, tmp_path):
+    # The overscan run replays the take from its first step: it needs its own arena and projector.
+    (first_arena, first), (second_arena, second) = _two_planned_runs(monkeypatch, tmp_path, parity.in_process_drift_arena)
+    assert isinstance(second, list) and first == second
+    assert first_arena is not None and second_arena is not None and first_arena is not second_arena
+    assert schema_module.stream_arena(0) is None
+
+
+def test_control_one_arena_across_planned_runs_is_seen(monkeypatch, tmp_path):
+    import contextlib
+
+    with parity.in_process_drift_arena():
+        (_a, _first), (_b, second) = _two_planned_runs(monkeypatch, tmp_path, contextlib.nullcontext)
+    assert isinstance(second, str) and "backwards" in second
+
+
 def test_control_without_the_arena_no_family_is_named():
     # The replay as it was: no session opened an arena, so every family is absent (a zero key) and no arena is named.
     keys, names = _frames(lambda route, logical: route.project(logical))

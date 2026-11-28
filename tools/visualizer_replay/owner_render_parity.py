@@ -1767,22 +1767,26 @@ def in_process_drift_arena():
 
 def run_native(out: Path, **kwargs) -> dict:
     """``_run_native`` with ``mode`` registered on the route for the run (``harness_registration``); Extruded Bubble's
-    drift geometry through the in-process arena (``in_process_drift_arena``)."""
+    drift geometry through the in-process arena (``in_process_drift_arena``), a fresh one for each run: a second run
+    (the overscan placement, another variant) replays the take's drift from its first step, which the previous run's
+    projector, writer and banks would refuse ("drift serial went backwards") or hold."""
     mode = kwargs.get("mode", "spectrum")
-    arena = in_process_drift_arena() if mode == "extruded_bubble" else contextlib.nullcontext()
-    with harness_registration(mode), arena:
+    if mode == "extruded_bubble":
+        kwargs.setdefault("run_context", in_process_drift_arena)
+    with harness_registration(mode):
         return _run_native(out, **kwargs)
 
 
 def _run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
                 against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
                 recording: str | None = None, references: Path | None = None,
-                native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None) -> dict:
+                native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None,
+                run_context=None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
     (``against_baseline``). ``native_only_run``: ``native_only`` instead (no Python render; with ``against``, each
-    run's native hashes against that report's)."""
+    run's native hashes against that report's). ``run_context``: a context manager factory entered around each run."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     accepted_report = json.loads(Path(accepted).read_text(encoding="utf-8")) if accepted is not None else None
     import tools.expanded_visualizer_evidence as evidence
@@ -1808,8 +1812,12 @@ def _run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = _placed_runs(mode, runs, placements, only)
+    run_scope = contextlib.ExitStack()
     try:
         for key, suffix, settings, placement in planned:
+            run_scope.close()                  # the previous run's context (its drift arena) ends before this one's
+            if run_context is not None:
+                run_scope.enter_context(run_context())
             engine_worker_link.reset_run_state_for_testing()
             if native_only_run:
                 entry = None if baseline is None else (baseline.get("results") or {}).get(key)
@@ -1846,6 +1854,7 @@ def _run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5
                   f"frame {verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
                   f"{'PASS under tolerance' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
+        run_scope.close()
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
         report["pass"] = bool(report["results"]) and all(v["pass"] for v in report["results"].values())
