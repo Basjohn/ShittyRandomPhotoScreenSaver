@@ -17,13 +17,13 @@ def test_block_programs_read_the_captured_background_at_the_renderers_unit(qt_ap
     from OpenGL import GL as gl
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.visualizer.implementations import extruded_bubble as eb
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     # The programs whose samplers a pass-block family binds in the shader (the loose ones take _glass's value).
     rows = [(key, vertex, fragment) for key, vertex, fragment in eb._PROGRAMS
             if key in eb._BLOCKS and _declares_background(fragment)]
     assert any(key == "trails" for key, _v, _f in rows)
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     programs = []
     try:
         units = {}

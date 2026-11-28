@@ -25,9 +25,9 @@ def _snapshot(mode: str, **parameters):
 @pytest.fixture
 def window(qt_app):
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(WW, WH)
+    capture = OffscreenRenderTarget(WW, WH)
     host = QuickVisualizerRenderHost()
     yield capture, host
     host.release_resources()

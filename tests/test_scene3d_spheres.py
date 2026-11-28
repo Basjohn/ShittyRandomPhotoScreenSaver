@@ -70,8 +70,8 @@ void main() {
 class _Scene:
     def __init__(self):
         from rendering.quick.render.gl_resources import compile_program
-        from tools.transition_contact_sheet import TransitionCapture
-        self.capture = TransitionCapture(WIDTH, HEIGHT)
+        from tools.labs.render_target import OffscreenRenderTarget
+        self.capture = OffscreenRenderTarget(WIDTH, HEIGHT)
         self.program = compile_program(_VERTEX, _FRAGMENT, label="sphere impostor test")
         self.depth = int(gl.glGenRenderbuffers(1))
         gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self.depth)

@@ -11,6 +11,7 @@ from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d import resources as resource_module
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 
 _TRIANGLE_VERTEX = """#version 460 core
@@ -97,7 +98,7 @@ def test_incomplete_dsa_mesh_is_never_reused_as_a_zero_count_mesh(monkeypatch):
 
 @pytest.mark.qt
 def test_failed_named_storage_keeps_real_partial_names_owned_until_release_then_allows_a_clean_rebuild(qt_app, monkeypatch):
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     resources = MeshResources("failed storage probe")
     original = resource_module.gl.glNamedBufferStorage
     try:
@@ -124,7 +125,7 @@ def test_failed_named_storage_keeps_real_partial_names_owned_until_release_then_
 
 @pytest.mark.qt
 def test_static_mesh_dsa_upload_draws_and_leaves_generic_vao_and_vbo_bindings_untouched(qt_app):
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     resources = MeshResources("dsa mesh probe")
     sentinel_vao = int(gl.glGenVertexArrays(1))
     sentinel_vbo = int(gl.glGenBuffers(1))
