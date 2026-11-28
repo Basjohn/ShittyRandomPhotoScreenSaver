@@ -589,10 +589,19 @@ try:
 except ValueError as exc:
     report["other_size"] = str(exc)
 report["live_hosts_after"] = core.live_hosts()
+try:
+    bootstrap.native_hidden_host(64, 48, timestamps=True)       # a timed host is another host: refused while kept
+    report["timed_while_kept"] = "accepted"
+except ValueError as exc:
+    report["timed_while_kept"] = str(exc)
+bootstrap.close_native_hidden_host()                            # a tool's --cost: the kept host closed first
+timed = bootstrap.native_hidden_host(64, 48, timestamps=True)
+report["timed"] = {"created": bootstrap._owner.hidden_hosts_created, "live_hosts": core.live_hosts(),
+                   "first_closed": first.closed, "kept": bootstrap.native_hidden_host(64, 48, timestamps=True) is timed}
 from PySide6.QtCore import QTimer
 QTimer.singleShot(0, app.quit)
 app.exec()                           # the application's quit edge closes the kept host (its render thread with it)
-report["closed_at_quit"] = first.closed
+report["closed_at_quit"] = first.closed and timed.closed
 report["live_hosts_at_exit"] = core.live_hosts()
 emit(report)
 '''
@@ -600,6 +609,8 @@ emit(report)
     assert report["same"] is True and report["created"] == 1
     assert report["live_hosts"] == report["live_hosts_after"] == 1
     assert report["api"] == "opengl" and "created once and kept" in report["other_size"]
+    assert "created once and kept" in report["timed_while_kept"]
+    assert report["timed"] == {"created": 2, "live_hosts": 1, "first_closed": True, "kept": True}
     assert report["closed_at_quit"] is True and report["live_hosts_at_exit"] == 0
 
 
@@ -630,8 +641,12 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/mesh_buffer_check.py",
     "tools/visualizer_replay/native_stream_player.py",  # rule (b) harness: replays a take's delivery stream on each backend
     "native/core/python/post_stage_check.py",
-    "native/core/python/eb_core_check.py",              # Extruded Bubble's card-sized hosts (mesh_buffer_check's margin)
-    "native/core/python/waveform_check.py",             # its hosts at each dpr's scene size
+    # N5.6's core children, the same shape as mesh_buffer_check and bubble_check above (audit 28 Nov item 2, kept here
+    # by decision): each Vulkan child creates its instance with validation before any host, and each round makes and
+    # closes hosts at sizes it measures (EB's card-sized and margin hosts; Waveform's cost host at each dpr's scene
+    # size), which the owner's one kept, never-rebuilt, unvalidated host cannot be.
+    "native/core/python/eb_core_check.py",
+    "native/core/python/waveform_check.py",
 })
 _SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})
 

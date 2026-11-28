@@ -852,11 +852,13 @@ def host_or_quit_quick_window(window: Any, *, reason: str) -> Any:
         raise
 
 
-def native_hidden_host(width: int, height: int, *, dpr: float = 1.0) -> Any:
+def native_hidden_host(width: int, height: int, *, dpr: float = 1.0, timestamps: bool = False) -> Any:
     """The process's one hidden host of the native core (``rendering.native.HiddenHost``), created at the first
-    request and kept, never one per use (facts J1). It renders ``width`` x ``height`` device pixels at ``dpr``; a
-    request for another size is refused (the host is never rebuilt). On Vulkan it needs the started backend."""
-    size = (int(width), int(height), float(dpr))
+    request and kept, never one per use (facts J1). It renders ``width`` x ``height`` device pixels at ``dpr``;
+    ``timestamps`` (a tool's ``--cost``) has its QRhi time whole frames (the default creates no query objects). A
+    request for another size or timing is refused (the host is never rebuilt; a tool closes it first with
+    :func:`close_native_hidden_host`). On Vulkan it needs the started backend."""
+    size = (int(width), int(height), float(dpr)) + ((True,) if timestamps else ())
     host = _owner.hidden_host
     if host is not None and not host.closed:
         if size != _owner.hidden_host_size:
@@ -874,7 +876,7 @@ def native_hidden_host(width: int, height: int, *, dpr: float = 1.0) -> Any:
     app = QCoreApplication.instance()
     if app is None:
         raise RuntimeError("a hidden host needs the application")
-    host = core.hidden_host(size[0], size[1], dpr=size[2])
+    host = core.hidden_host(size[0], size[1], dpr=size[2], **({"timestamps": True} if timestamps else {}))
     _owner.hidden_host, _owner.hidden_host_size = host, size
     _owner.hidden_hosts_created += 1
     _connect_quit_edge(app)          # it is closed when the application quits, never earlier

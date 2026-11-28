@@ -73,16 +73,15 @@ class NativeHiddenScene:
         self.dpr = float(dpr)
         # Device pixels, as the foundry's scene counts them.
         self.width, self.height = round(width * self.dpr), round(height * self.dpr)
+        # The owner's one host (facts J1), timed for --cost; another size or timing than the kept one's: a tool's
+        # choice, so the kept host is closed and made again (the product never does). The owner closes it at exit.
         try:
-            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr)
-        except ValueError:                        # the kept host renders another size: a tool's choice, made again
+            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr, timestamps=timestamps)
+        except ValueError:
             bootstrap.close_native_hidden_host()
-            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr)
+            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr, timestamps=timestamps)
         _close_host_at_exit()
-        self._owns_host = bool(timestamps)
-        if self._owns_host:                       # one host per process: the kept one goes, the scene's is timed
-            bootstrap.close_native_hidden_host()
-            self.native = bootstrap.native_core().hidden_host(self.width, self.height, dpr=self.dpr, timestamps=True)
+        self._owns_host = bool(timestamps)        # a timed host goes with the scene (the next untimed one is made again)
         self.owner = QObject()
         self.factory = QuickSceneFactory(self.owner)
         self.qml_context, self.root = self.factory.create_display_root(
@@ -146,9 +145,11 @@ class NativeHiddenScene:
         """The scene gone before this returns: its widgets, then the root off the host and deleted with its context and
         owner (deferred deletions delivered here: outside an event loop nothing else delivers them, R-173). The native
         items in it (the background layer, the backdrop) are closed by their owners first. The hidden host is the
-        process's and stays (closed at the quit or the process's exit). Idempotent."""
+        process's and stays (closed at the quit or the process's exit; a timed one goes here). Idempotent."""
         from PySide6.QtCore import QCoreApplication, QEvent
         import shiboken6
+
+        from rendering.quick import bootstrap
 
         if self._closed:
             return
@@ -166,7 +167,7 @@ class NativeHiddenScene:
         if not self.native.closed:
             self.native.frames(1)                 # the core releases what the closed items held at this sync
             if self._owns_host:
-                self.native.close()
+                bootstrap.close_native_hidden_host()
 
 
 class MaterialScene:
