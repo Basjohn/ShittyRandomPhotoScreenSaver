@@ -170,12 +170,16 @@ def single_sample_scene_targets():
     same passes, programs, post chain and tier. The native route's Waveform program takes the same single sample
     (``native_route.waveform_program`` reads ``waveform.SCENE_SAMPLES`` when it builds): rule (a) judges a multisampled
     scene by its single-sampled form, as the transitions' (D8 point 1; the proof guide, section 3), and its 4x form by
-    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one)."""
+    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one). Extruded Bubble's
+    native program variant is its tier's samples (``extruded_bubble_program.variant_of`` reads ``_scene_samples``), so
+    that reads one sample too (N5.6: its first rule (a) runs compared the core's 4x scene with Python's one)."""
     from rendering.quick.scene3d import waveform
     from rendering.quick.scene3d.target import SceneTarget
+    from rendering.quick.visualizer.implementations import extruded_bubble
 
     begin = SceneTarget.begin
     samples_before = waveform.SCENE_SAMPLES
+    bubble_samples = extruded_bubble._scene_samples
 
     def single(self, frame, samples, *args, **kwargs):
         del samples
@@ -183,11 +187,13 @@ def single_sample_scene_targets():
 
     SceneTarget.begin = single
     waveform.SCENE_SAMPLES = 1
+    extruded_bubble._scene_samples = lambda parameters: 1
     try:
         yield
     finally:
         SceneTarget.begin = begin
         waveform.SCENE_SAMPLES = samples_before
+        extruded_bubble._scene_samples = bubble_samples
 
 
 class _SpilledFrames:
