@@ -50,6 +50,17 @@ holds:
   (`rendering/quick/visualizer/item.py`).
 - The Studio viewport's `_invalidate` (`ui/studio/viewport.py`).
 
+Python on the render thread that is not a slot, and was judged outside this class (switch audit, 28 Nov):
+`DegradedBackgroundNode` (`rendering/quick/render/degraded_background.py`) is a Python `QSGNode` subclass, made and
+synchronised in `BackgroundRenderItem.updatePaintNode` on the render thread while the GUI thread is blocked. It overrides
+no virtual and connects no signal: Qt deletes it as a plain node and no Python code of its own runs at that deletion,
+so the exit sweep that crashed on the direct slot has nothing to run there. It exists only on the degraded display
+(no native core, or a window the core did not host). Its sibling in the class, the item's `updatePaintNode` override,
+is the same kind of Python on the render thread and is what the `QSGImageNode` it creates hangs from. Replacing the
+subclass by a plain `QSGImageNode` held by the item would remove the subclass, not that override; it was not done
+because the degraded display has no GPU test that could show the change safe. If a crash at exit ever names this node,
+this is the entry that already lists it.
+
 ## Lessons
 
 1. A crash that vanishes is not a fix. Check the defect's own facts as well (here, the window and host counts at the
