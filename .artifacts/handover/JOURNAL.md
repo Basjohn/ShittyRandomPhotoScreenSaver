@@ -2,6 +2,14 @@
 
 started 2026-11-28. Newest first.
 
+- 28 Nov (8, successor 4): module 85f1baf9 (5396351bb). Defect 2 confirmed drawn
+  (n5_6/20261128_defocus_level_drawn): real EB program, Vulkan, smoke first 60 inputs with u_defocus_level forced;
+  near layer 640x448 (old cap 4, new 7). Old module 8bf270aa7 at level 5: every frame black (refused); new at level 5
+  and 7: drawn. Not a real 4K card (player window 1920x1080@1.5). Defect 3 NOT started (context limit). Next for
+  defect 3: Python's references draw the same BUBBLE_FRAGMENT, so the refs made before 7a089950b carry R-259's random
+  snow depth: regenerate refs (refs_lane.py) on the fixed source, then rerun P hh1 60 s, then root-cause what remains
+  (speck glints, highlight discs; near-layer 2-3 level ties). OpenGL speck-glint residual after that.
+
 - 28 Nov (7, successor 4): R-259 entry + index row, commit c22cdaac2. OpenGL two-run re-measure on
   l_human_heavy1_base 400 inputs (n5_6/20261128_opengl_self_after_snow_fix): NOT 0. Fixed: 324/400 differ, p50 254
   px, mostly 1-7 levels (two at 30, 38), scattered speck/glint pixels; with the snow fix reverted: 342/400, up to 255
