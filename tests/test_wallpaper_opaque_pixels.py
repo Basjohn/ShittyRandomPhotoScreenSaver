@@ -3,7 +3,7 @@
 One compositing rule: transparent source pixels are composited over opaque black
 by the image-processing owners (the ImageWorker prescale in every display mode;
 the in-process AsyncImageProcessor, whose FILL perfect-fit branch used to return
-the source unchanged). The retained native background then hands Qt a
+the source unchanged). The degraded display's image node then hands Qt a
 ``Format_RGBA8888_Premultiplied`` QImage, byte-identical for opaque pixels, which
 spares Qt a full straight->premultiplied conversion before every upload.
 """
@@ -133,4 +133,58 @@ def test_processed_route_captures_opaque_presentation_pixels(qt_app) -> None:
     )
     presentation = presentation_image_from_processed_qimage(processed, image_path="t.png")
     _assert_opaque_over_black(presentation.rgba8)
+
+
+def test_degraded_background_labels_opaque_pixels_premultiplied(qt_app, monkeypatch) -> None:
+    """The degraded display's node hands Qt a ``Format_RGBA8888_Premultiplied`` QImage, byte-identical for opaque pixels,
+    which spares Qt a full straight->premultiplied conversion before every upload (PR-04 Stage A, retargeted from the
+    deleted retained node). A fake window: no GL upload, no scene graph."""
+    import rendering.quick.render.degraded_background as degraded
+    from rendering.quick.render.degraded_background import DegradedBackgroundNode
+
+    handed: list[QImage] = []
+
+    class _Texture:
+        def setParent(self, _parent) -> None:
+            pass
+
+    class _ImageNode:
+        def setOwnsTexture(self, _owns) -> None:
+            pass
+
+        def setTexture(self, _texture) -> None:
+            pass
+
+        def setSourceRect(self, _rect) -> None:
+            pass
+
+        def setRect(self, _rect) -> None:
+            pass
+
+    class _Window:
+        def createImageNode(self):
+            return _ImageNode()
+
+        def createTextureFromImage(self, image, _options):
+            handed.append(QImage(image))
+            return _Texture()
+
+    width, height = 8, 4
+    rgba = bytes(255 if i % 4 == 3 else (10 * i) % 256 for i in range(width * height * 4))
+    image = PresentationImage(
+        identity="opaque-8x4", source_path="", logical_size=(float(width), float(height)), device_pixel_ratio=1.0,
+        pixel_size=(width, height), row_stride=width * 4, rgba8=rgba,
+    )
+    monkeypatch.setattr(degraded, "shiboken6", type("S", (), {"invalidate": staticmethod(lambda _t: None)}))
+    node = DegradedBackgroundNode.__new__(DegradedBackgroundNode)
+    node._window, node._image_node, node._image = _Window(), None, None
+    node.appendChildNode = lambda _child: None
+    node.synchronize(image, (float(width), float(height)))
+
+    assert len(handed) == 1
+    assert handed[0].format() == QImage.Format.Format_RGBA8888_Premultiplied
+    # Same bytes: premultiplied and straight RGBA agree for opaque pixels.
+    assert _rgba_pixels(handed[0]) == rgba
+    straight = QImage(rgba, width, height, width * 4, QImage.Format.Format_RGBA8888)
+    assert _rgba_pixels(straight) == _rgba_pixels(handed[0])
 
