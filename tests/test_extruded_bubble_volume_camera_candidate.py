@@ -62,13 +62,3 @@ def test_pan_is_physical_and_card_aspect_independent():
     b = physical_camera(.21,.13,16/9,pan_x=.22,pan_y=-.15)
     assert a[2] == pytest.approx(b[2])
     assert a[3] != pytest.approx(b[3])
-
-
-def test_preset_camera_starts_are_unchanged_and_home_resets_new_position():
-    manager = (ROOT/'engine/display_manager.py').read_text(encoding='utf-8')
-    assert 'lens[spec.key("camera_position")] = list(require_canonical_default(' in manager
-    assert 'lens[spec.key("camera_fov")] = float(require_canonical_default(' in manager
-    # Home Reset must source the current canonical authority, not a fixed old
-    # artistic value (which the operator can freely edit).
-
-

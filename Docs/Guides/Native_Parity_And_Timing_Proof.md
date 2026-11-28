@@ -41,7 +41,9 @@ L, response tools, timing parity) applies to it.
 ## 3. How much to run
 
 **A port.**
-- **L:** every frame of every take and reaction mode.
+- **L:** every frame of every take and reaction mode, once, on the module that merges. A fix found along the way
+  is confirmed on a subset: the runs that showed the difference, plus one other take. The full set is not rerun
+  after each build, because a later C++ change would invalidate it again.
 - **P:** the Python reference hashes are rendered once per take, reaction mode and placement, then cached. The Python
   renderers are frozen until N5.2h deletes them, so the references never need re-rendering, except after a
   checklist-16 conversion (a port's decided change to the Python renderer): its references redraw once through the

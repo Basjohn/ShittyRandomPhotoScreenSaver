@@ -1,0 +1,341 @@
+{
+ "schema": 1,
+ "name": "20261128_n52h_ghosts_first_vulkan_hitch",
+ "commit": "d5e9371ab",
+ "created": "2026-11-28T03:18:39",
+ "updated": "2026-11-28T03:21:16",
+ "backend": "native-vulkan",
+ "clip": "anything_mixed2.jsonl",
+ "wallpaper": "D:\\Temp\\Scratch\\SRPSS\\wallpaper_usu",
+ "load": null,
+ "controls": {
+  "2160p": {
+   "size": "3840x2160",
+   "renderer": "NVIDIA GeForce RTX 4090/PCIe/SSE2",
+   "commit": "d5e9371ab",
+   "control_gpu_quiet_ms": 0.023168,
+   "control_gpu_min_ms": 0.023168,
+   "control_gpu_max_ms": 0.023615999999999998,
+   "admitted": 3,
+   "controls": 3,
+   "cpu_others_median": 37.2,
+   "gpu_clock_mhz_median": 2775.0
+  }
+ },
+ "rows": {
+  "transition/glass_shatter/2160p/idle": {
+   "key": "transition/glass_shatter/2160p/idle",
+   "kind": "transition",
+   "id": "glass_shatter",
+   "label": "Glass Shatter",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 0,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-a0c4a0b53ffc18f96\\.artifacts\\evidence\\performance\\preflip_pack\\20261128_20261128_n52h_ghosts_first_vulkan_hitch_transition_glass_shatter_2160p_idle",
+   "measured_in_s": 66.3,
+   "conditions_before": {
+    "captured_at": "2026-11-28T03:18:47",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 1562.5
+     },
+     {
+      "pid": 4480,
+      "name": "enshrouded.exe",
+      "cpu_core_pct": 407.4
+     },
+     {
+      "pid": 7664,
+      "name": "python.exe",
+      "cpu_core_pct": 98.8
+     },
+     {
+      "pid": 40724,
+      "name": "python.exe",
+      "cpu_core_pct": 97.0
+     },
+     {
+      "pid": 2064,
+      "name": "dwm.exe",
+      "cpu_core_pct": 21.8
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 4480,
+      "name": "enshrouded.exe",
+      "gpu_pct": 49.16
+     },
+     {
+      "pid": 27384,
+      "name": "firefox.exe",
+      "gpu_pct": 4.16
+     },
+     {
+      "pid": 40724,
+      "name": "python.exe",
+      "gpu_pct": 0.93
+     },
+     {
+      "pid": 7664,
+      "name": "python.exe",
+      "gpu_pct": 0.72
+     },
+     {
+      "pid": 2064,
+      "name": "dwm.exe",
+      "gpu_pct": 0.71
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P0",
+     "util_pct": 57.0,
+     "clocks_gr_mhz": 2775.0,
+     "clocks_mem_mhz": 10501.0,
+     "temp_c": 53.9,
+     "power_w": 196.06,
+     "memory_used_mb": 10506.0,
+     "throttle_reasons": "0x0000000000000400"
+    },
+    "gpu_clock_mhz": 2775.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 32.8,
+    "cpu_others_max": 49.5,
+    "cpu_system_median": 33.2,
+    "cpu_system_max": 49.7,
+    "gpu_clock_mhz_median": 2775.0,
+    "gpu_clock_mhz_max": 2775.0,
+    "gpu_temp_c_median": 55.5,
+    "gpu_temp_c_max": 58.1,
+    "gpu_util_median": 58.0,
+    "gpu_util_max": 74.0,
+    "memory_used_median": 66.4,
+    "memory_used_max": 66.7
+   },
+   "status": "ok",
+   "figures": {
+    "fps": 164.2,
+    "render_median_ms": 1.5,
+    "render_p90_ms": 1.91,
+    "render_source": "quick_render_ms",
+    "swap_gap_median_ms": 6.06,
+    "swap_gap_p90_ms": 6.65,
+    "frame_source": "quick_after_rendering",
+    "late_pct": 0.0,
+    "hitches_per_min": 0.0,
+    "cpu_core_pct": 71.0,
+    "gpu_pct": 15.51,
+    "gpu_ms_per_frame": 0.945,
+    "rss_mb": 861.0,
+    "private_mb": 1724.8,
+    "first2s_frames": null,
+    "first2s_late_pct": null,
+    "steady_seconds": 7.99,
+    "late_frames": 0,
+    "hitches": 0,
+    "frames": 1310,
+    "run_id": 2,
+    "gap_ms": {
+     "median": 6.06,
+     "p90": 6.65,
+     "max": 17.83,
+     "count": 1310
+    },
+    "first_frame_ms": 13.02,
+    "gaps_over_limit": 0,
+    "gap_limit_ms": 33.0,
+    "hitch_verdict": "pass"
+   },
+   "commit": "d5e9371ab",
+   "backend": "native-vulkan"
+  },
+  "transition/crumble/2160p/idle": {
+   "key": "transition/crumble/2160p/idle",
+   "kind": "transition",
+   "id": "crumble",
+   "label": "Crumble",
+   "size": "2160p",
+   "state": "idle",
+   "seconds": 75.0,
+   "exit_code": 0,
+   "evidence": "F:\\Programming\\Apps\\ShittyRandomPhotoScreenSaver\\.claude\\worktrees\\agent-a0c4a0b53ffc18f96\\.artifacts\\evidence\\performance\\preflip_pack\\20261128_20261128_n52h_ghosts_first_vulkan_hitch_transition_crumble_2160p_idle",
+   "measured_in_s": 74.2,
+   "conditions_before": {
+    "captured_at": "2026-11-28T03:19:58",
+    "displays": {
+     "displays_on": true,
+     "missing": {},
+     "present": [
+      {
+       "index": 0,
+       "width": 2560,
+       "height": 1440,
+       "primary": true,
+       "dpr": 1.5,
+       "name": "MSI G321Q"
+      },
+      {
+       "index": 1,
+       "width": 3840,
+       "height": 2160,
+       "primary": false,
+       "dpr": 1.5,
+       "name": "LG TV"
+      }
+     ]
+    },
+    "other_processes_cpu": [
+     {
+      "pid": 0,
+      "name": "System Idle Process",
+      "cpu_core_pct": 1675.6
+     },
+     {
+      "pid": 4480,
+      "name": "enshrouded.exe",
+      "cpu_core_pct": 343.7
+     },
+     {
+      "pid": 7664,
+      "name": "python.exe",
+      "cpu_core_pct": 101.1
+     },
+     {
+      "pid": 40724,
+      "name": "python.exe",
+      "cpu_core_pct": 97.9
+     },
+     {
+      "pid": 29144,
+      "name": "claude.exe",
+      "cpu_core_pct": 18.7
+     }
+    ],
+    "other_processes_gpu": [
+     {
+      "pid": 4480,
+      "name": "enshrouded.exe",
+      "gpu_pct": 73.44
+     },
+     {
+      "pid": 7664,
+      "name": "python.exe",
+      "gpu_pct": 2.08
+     },
+     {
+      "pid": 40724,
+      "name": "python.exe",
+      "gpu_pct": 1.03
+     }
+    ],
+    "nvidia_smi": {
+     "available": true,
+     "name": "NVIDIA GeForce RTX 4090",
+     "driver": "621.01",
+     "pstate": "P0",
+     "util_pct": 47.0,
+     "clocks_gr_mhz": 2775.0,
+     "clocks_mem_mhz": 10501.0,
+     "temp_c": 54.73,
+     "power_w": 194.97,
+     "memory_used_mb": 10479.0,
+     "throttle_reasons": "0x0000000000000400"
+    },
+    "gpu_clock_mhz": 2775.0
+   },
+   "session": true,
+   "conditions_during": {
+    "cpu_others_median": 34.3,
+    "cpu_others_max": 65.5,
+    "cpu_system_median": 34.8,
+    "cpu_system_max": 65.9,
+    "gpu_clock_mhz_median": 2775.0,
+    "gpu_clock_mhz_max": 2775.0,
+    "gpu_temp_c_median": 56.5,
+    "gpu_temp_c_max": 58.8,
+    "gpu_util_median": 56.0,
+    "gpu_util_max": 82.0,
+    "memory_used_median": 67.2,
+    "memory_used_max": 68.7
+   },
+   "status": "ok",
+   "figures": {
+    "fps": 164.4,
+    "render_median_ms": 1.54,
+    "render_p90_ms": 1.94,
+    "render_source": "quick_render_ms",
+    "swap_gap_median_ms": 6.06,
+    "swap_gap_p90_ms": 6.66,
+    "frame_source": "quick_after_rendering",
+    "late_pct": 0.0,
+    "hitches_per_min": 0.0,
+    "cpu_core_pct": 86.75,
+    "gpu_pct": 15.52,
+    "gpu_ms_per_frame": 0.944,
+    "rss_mb": 863.4,
+    "private_mb": 1754.3,
+    "first2s_frames": null,
+    "first2s_late_pct": null,
+    "steady_seconds": 11.99,
+    "late_frames": 0,
+    "hitches": 0,
+    "frames": 1969,
+    "run_id": 2,
+    "gap_ms": {
+     "median": 6.06,
+     "p90": 6.67,
+     "max": 16.9,
+     "count": 1969
+    },
+    "first_frame_ms": 11.38,
+    "gaps_over_limit": 0,
+    "gap_limit_ms": 33.0,
+    "hitch_verdict": "pass"
+   },
+   "commit": "d5e9371ab",
+   "backend": "native-vulkan"
+  }
+ },
+ "settings": {
+  "viz_seconds": 45.0,
+  "transition_seconds": 75.0,
+  "transition_interval_s": 8,
+  "session_transitions": [
+   "exploding_tiles",
+   "volumetric_dissolve",
+   "disintegrate",
+   "jigsaw",
+   "crossfade"
+  ]
+ }
+}

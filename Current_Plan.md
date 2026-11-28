@@ -82,7 +82,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     **ABI 47 reserved for N5.6**: a glass pass may sample the owner's capture, live attachments still refused). The
     lead built `24893c03` (module in that worktree's `release/native_module/`); successor **Opus High
     `a29135bafeaab65bb`** (28 Nov), worktree `.claude/worktrees/agent-a29135bafeaab65bb`, branch
-    `worktree-agent-a29135bafeaab65bb` (merges the first branch). Retire the first worktree only after its merge.
+    `worktree-agent-a29135bafeaab65bb` (merges the first branch) retired from use at 213k; `14d763931` built on GitHub
+    (module in its `release/native_module/`). Third **Opus High `ae9dbc46b60681ac3`** (28 Nov), worktree
+    `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47.
+    Retire the earlier worktrees only after its merge.
   - **N5.2h Gate**, worktree `.claude/worktrees/agent-a57f8463d6a354e23`, branch `worktree-agent-a57f8463d6a354e23`
     (`6e754c85d` harness, `b483770bc` C++, ABI stays 45: additive control and counters), evidence
     `<worktree>/.artifacts/evidence/native_core/n5_2h/` (links to `D:/Temp/Scratch/SRPSS/worktrees/agent-a57f8463d6a354e23/`).
@@ -91,7 +94,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
     branch) retired from use at 211k; its branch holds `ff29e64ee` (built, module in its `release/native_module/`) and
     `d5e9371ab`. Third agent **Opus `ab7f236afc86eb6b2`** (28 Nov), worktree `.claude/worktrees/agent-ab7f236afc86eb6b2`,
-    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second). Retire the earlier worktrees only after the merge.
+    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second) retired from use at 206k; `9add8a67d` (run-parts
+    timer) built on GitHub, module in its `release/native_module/`. Fourth agent **Opus `a7162539fc47dd8dc`** (28 Nov),
+    worktree `.claude/worktrees/agent-a7162539fc47dd8dc`, branch `worktree-agent-a7162539fc47dd8dc` (merges the
+    third). Retire the earlier worktrees only after the merge.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -876,6 +882,13 @@ the feature (D3D11 is not stated).
       read spans, streams and positional members. Prove L frame by frame for each take and graphics key with
       `native_record_identity.py --mode extruded_bubble --recording <take> --seconds <30-or-60> --run <key>
       --deliveries D:/Temp/Scratch/SRPSS/n56_deliveries/l_<take>_<key>`.
+      28 Nov (successor `a29135bafeaab65bb`, `3df2b64fd` MODES entry and identity tests, `14d763931` C++ ready for
+      build, ABI 47): smoke IDENTICAL (359 frames). The only L difference over 15 runs is signed zero: Qt's JSON
+      stores `-0.0` as integer 0, so the native settings path dropped the sign Python packs (`uLightEnd`, stream and
+      speck source/end, light_type 0's travel/axis). Fixed in the transport (`settingNumber` reads `"-0"`;
+      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). All 15
+      runs redo on the rebuilt module (scripts in that worktree's `.artifacts/scratch/n56rr/`); then the R-NNN entry
+      (silent since settings went through JSON).
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
         find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built
@@ -887,6 +900,8 @@ the feature (D3D11 is not stated).
       - Known approximations to rule on with L and P: a rebase's old steps run at the smaller capacity; the
         `drift_out` relayout edge; the probe cube has no depth; a held geometry key leaves draws reading stale
         `drift_out`; the near layer's edge with no shells.
+        L never reaches them (it runs without a worker or arena, and every L frame had shells); they and the ABI 46
+        hold's firing on long takes go to P and T.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
@@ -1555,6 +1570,9 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       Open: about 0.42 ms at 4K OpenGL inside the single scene run (0.875 against about 0.45 for Python's stages,
       an estimate from the bare-FBO stamps). Suspects: QRhi's end-of-pass resolves and the kept clearing draws on the
       4x R16F attachments; split them with a C++ bracket ("ready for build"), and time Python's same span directly.
+      Lead's Vulkan hitch row on Display 1 after the ghosts-first order (28 Nov, `d5e9371ab` on the `ff29e64e` module,
+      primed, operator's load): Crumble and Glass Shatter pass, no gap over 33 ms, max 16.9 / 17.8 ms, first frame
+      11.4 / 13.0 ms (`tools/baselines/preflip/20261128_n52h_ghosts_first_vulkan_hitch.md`).
     - [x] The composite pass: decided, not built (lead, 28 Nov). D5.2 stands: the core's output reaches the window as a
       texture, never as a draw inside Qt's pass (QRhi cannot record into the window before Qt's pass, which clears it,
       so a direct route would need an underlay or render node). The composite, Qt drawing the kept surface, is the
@@ -1879,6 +1897,14 @@ meanwhile (item 3; plan 01, whose section 0 holds the phase ladder and the 4K bu
   icons and its own extra rows (Custom rows, ScenePath inspectors); each adapter's schema identical before and after
   (compare `build_schema()` output per mode), drift resolved to one rule. Then a new mode's adapter is its bucket
   map, extras, evaluator and recorded inputs.
+- [ ] Studio camera saving has two buttons (operator, 28 Nov, later work): "I think there is duplication in save
+  camera. The save camera button works well but there is a second button that claims to be involved with saving a
+  camera (And tick mark glyph I think?) which is either useless or poorly explained." The second is the toolbar's
+  tick, `keepViewButton` ("Keep View", `StudioShell.qml` near line 2961, `controller.keep_view`). It commits the
+  previewed lens (FOV) as an undoable edit, and the orbit only when the store's camera policy allows; dolly and pan
+  stay previews. Save Camera (`saveCameraButton`, `controller.saveCamera`) writes the preset's starting camera.
+  Decide one model: either fold Keep View into Save Camera, or give it a name and tooltip that say what it keeps and
+  how that differs. Then check every orbiting mode's round trip (`test_framed_camera_home_round_trip.py`).
 - [ ] New native-core modes in this order: **Reactive Liquid / Audio Melt Pool, then Concrete Rain** (section 7,
   lab and mock-fidelity proof first). Usu Moonscape remains a later, separately admitted long-horizon concept;
   it does not block SMP re-evaluation just because it is listed after Concrete Rain.
