@@ -178,12 +178,28 @@ def _file_sources() -> list[ShaderSource]:
     return found
 
 
+def _composer_inputs(module_name: str, module, tree: ast.Module) -> set[str]:
+    """The module's private shader texts that its own composers take as input (a raw GL piece a cached program
+    function converts, N1.6): the product ships the composer's output, which discovery evaluates at the composer's
+    call sites, so the raw piece is not a shipped source."""
+    composers = set(_composers().values())
+    consumed = set()
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and f"{module_name}.{node.name}" in composers:
+            consumed.update(leaf.id for leaf in ast.walk(node)
+                            if isinstance(leaf, ast.Name) and leaf.id.startswith("_")
+                            and _is_shader_text(getattr(module, leaf.id, None)))
+    return consumed
+
+
 def _module_sources(module_name: str, path: Path) -> list[ShaderSource]:
     module = _import(module_name)
-    owned = _top_level_names(_tree(path))
+    tree = _tree(path)
+    owned = _top_level_names(tree)
+    consumed = _composer_inputs(module_name, module, tree)
     found = []
     for name, value in vars(module).items():
-        if name in owned:
+        if name in owned and name not in consumed:
             for key, text in _nested(f"{module_name}.{name}", value):
                 found.append(ShaderSource(key, stage_of(text), text, module_name))
         if isinstance(value, type) and value.__module__ == module_name:
