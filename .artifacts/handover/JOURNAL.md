@@ -80,3 +80,4 @@ started 2026-11-28. Newest first.
   "drift serial went backwards" on the display run's projector) + test with control.
   First smoke (display run, before the harness fix): 594 drawn, 5,019,698 px, max 55 (was 211). Rerunning both
   placements -> evidence n5_6/20261128_rule_a_input0, log .artifacts/scratch/n56b/smoke_rule_a.log.
+- 28 Nov (measure agent): N5.6 defect-3 measurement started
