@@ -883,8 +883,10 @@ the feature (D3D11 is not stated).
       build, ABI 47): smoke IDENTICAL (359 frames). The only L difference over 15 runs is signed zero: Qt's JSON
       stores `-0.0` as integer 0, so the native settings path dropped the sign Python packs (`uLightEnd`, stream and
       speck source/end, light_type 0's travel/axis). Fixed in the transport (`settingNumber` reads `"-0"`;
-      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). All 15
-      runs redo on the rebuilt module (scripts in that worktree's `.artifacts/scratch/n56rr/`); then the R-NNN entry
+      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). On the
+      rebuilt module (lead, 28 Nov) only a subset confirms the fix: light_type 0 on all three takes, one base run and
+      one b run on different takes (scripts in `.artifacts/scratch/n56rr/`). The full 15-run L set runs once, at the
+      end of this box, on the module that merges: a later C++ change would invalidate it. Then the R-NNN entry
       (silent since settings went through JSON).
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
@@ -900,6 +902,10 @@ the feature (D3D11 is not stated).
         L never reaches them (it runs without a worker or arena, and every L frame had shells); they and the ABI 46
         hold's firing on long takes go to P and T.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
+      - Rulings (successor `ae9dbc46b60681ac3`, 28 Nov): the hold's firing and the five approximations are P's and
+        T's (layer L runs without a worker or arena and every L frame had shells), so they stay open as named checks
+        under "P, T and C"; none blocks this box. The route buffers edit is done (`8c0cbad9c`). The 384 KB window is
+        inside its limit; E8's slot shrink is performance work, parked until every port lands.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
     skip and dispatch drift from cold start; confirm continuity and the restart control in `WARMUP_INPUTS`.
