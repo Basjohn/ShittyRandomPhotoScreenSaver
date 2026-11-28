@@ -120,6 +120,18 @@ Continue the native sequence below with the repaired timing receipts. The report
        fix carry the same random snow depth (Python draws the same shader), so **Sonnet `afdd41cbae2c31521`** is
        regenerating all 30 and rerunning P (human_heavy1 60 s, plus the smoke), measurement only. Then defect 3 proper
        and the OpenGL speck residual go to a fresh Opus Medium.
+       afdd4 result (28 Nov, branch `worktree-agent-afdd41cbae2c31521` at `808184e80`, pushed, measurement only): on
+       `85f1baf9` with 30 references regenerated, rule (a) still fails on human_heavy1 60 s (5,275 of 5,313 judged; max
+       level 168 → 52; fails are ties, e.g. 4,425 px in frame 2498 against a bound of 10). The lead's look at frame 2498:
+       native and Python are visually identical at x4; the x64 difference is fine speckle confined to the large glass
+       bubbles' interiors (inner specks / refracted background), not the card at large. The 8 s smoke fails on all four
+       runs (overscan outliers up to 247 levels). OpenGL run-to-run spike: frame 4373 was 14 then 179 levels.
+       Evidence `<afdd4>/.artifacts/evidence/native_core/n5_6/20261128_p_hh1_60s_{after_snow,maps}/`, `20261128_smoke_hh1_8s/`.
+       Side defects: two `owner_render_parity` processes race creating the `.artifacts/webp` junction; `--windows`
+       raises `KeyError: 'reasons'` unless each window has a `reasons` list.
+       **Opus Medium `a361796892595810b`** (own worktree, merges afdd4's): attribute the glass-interior speckle (inner-speck hash precision, refracted
+       background sample or mip chain), fix at the owner, then the OpenGL speck run-to-run residual if it shares the
+       cause; plus the two side defects.
        Before the fix: On a 30 s delivery, 2,576 of 2,586 frames differ across two
        runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
        Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
