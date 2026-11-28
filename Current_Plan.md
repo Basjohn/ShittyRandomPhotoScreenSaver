@@ -186,7 +186,38 @@ Continue the native sequence below with the repaired timing receipts. The report
     (`67b9aa995`, `c6895519c`, C++), dead readiness flags (`0d71788b6`), docs, R-260 (`c7f13e229`). Lead: smoke
     retired-item read fixed (`0faaf09c0`). Built `c9b9f0a6`: native core module 9/9, gl_errors PASS, `test_qtquick_runtime`
     isolated PASS. **Opus High audit `a68c6dfb962986ed2`** (read-only) of `main...worktree-agent-aa3b364fd31f5d860`. Then
-    merge; D1 run + hitch rows when Display 1 is on. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
+    merge; D1 run + hitch rows when Display 1 is on.
+    Audit result (Opus High, 28 Nov). Paths are on the aa3b branch. Fix 1-6 before merge, and the lows too unless noted:
+    1. HIGH: the reveal no longer waits for the first wallpaper (`engine/display_manager.py:5347-5370`, `ce0dc8f83`).
+       `frame_presented` is set on the first frameSwapped on every backend, so the widgets fade in over black or the
+       desktop. Restore the `_authoritative_first_frame_screens` check, fed by the native layer's or the degraded
+       node's first drawn image on both backends. Restore the negative control in
+       `test_startup_reveal_stalled_display.py`, retarget the deleted `test_qtquick_black_flash_contract.py`, and
+       reconcile `Docs/Contracts.md:412`.
+    2. The hidden-host owner guard is red: `tools/surface_material_capture.py:84-85` bypasses the owner for a timed
+       host, which leaks without `close()`. `eb_core_check.py`/`waveform_check.py` were allowlisted in
+       `test_quick_backend_owner.py`. Route all three through the owner.
+    3. `fullscreen_pass_check.py:590` `round_shape` imports the deleted `TransitionCapture`, so the default GL shape
+       round always fails. Add the name to `test_python_route_deleted.py`. Decide on the record-only Python GL code
+       still kept (`fullscreen_pass_check.py:504`, `transition_route_check.py:462/529/1314`).
+    4. Owner tests weakened (`test_quick_backend_owner.py`): restore the `old_stop` negative control and a real
+       driver-edge frame, and add a test for the core-loads-Vulkan-fails-native-OpenGL path (`bootstrap.py:702-703`).
+    5. R-209/R-260 exit routes are run only on Vulkan. Add OpenGL. Retarget the deleted
+       `test_quit_request_render_thread_gil.py` to a hidden-host form. Fix the bare-variant docstring.
+    6. One window's attach failure degrades the whole process (`bootstrap.py:653-660/791-795`), and
+       `native_hidden_host` lazily reloads the core (`~866-871`). Degrade per window, or make the degrade one-way
+       with no reload.
+    Lows:
+    - The degraded flag clears during the layer's fade-in, and the degraded node lingers.
+    - `_native_background_wanted()` raising draws nothing; it should fall to degraded.
+    - `DegradedBackgroundNode` is a Python QSGNode subclass (the R-260 class): use a plain QSGImageNode or note it in
+      R-260.
+    - Retarget the deleted premultiplied-format test in `test_wallpaper_opaque_pixels.py` to the degraded node.
+    - Stale docstrings: `close_native_hidden_host`, and `scene_controller.py:~3784` ("Vulkan only").
+    - Readiness no longer gets background errors; this is covered by fix 1's signal.
+    - The GL modules in `SHARED_RENDERER_MODULES` (`implementation_registry.py`): drop them if not needed.
+    - The dead PhotoEnvironment/MotionTrails/trails code needs a deletion box: Backlog.
+    - The `qtquick_render_node_smoke` assertions have never been seen failing: run one inverted control. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
     with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
