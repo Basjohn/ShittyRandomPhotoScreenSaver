@@ -903,6 +903,16 @@ the feature (D3D11 is not stated).
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
+    - [ ] First (lead, 28 Nov): the Python reference key. `python_references._source_files` hashes the whole
+      `rendering/quick/visualizer` package, so a native-only edit (`native_route.py`, `8c0cbad9c`) re-keys every mode's
+      references, and N5.6's 18 references sit at three producer revisions (12 `23f88094`, 5 `eb776f4d`, 1 `9d34c13b`).
+      Decided: key each reference on the repo modules its drawing process actually imported (recorded with the entry;
+      a lookup rehashes that recorded set; a new import arrives through an importer whose bytes changed), plus the
+      composed shaders, QML and harness sources as now. Native-only files then never enter. Tests: a native-only edit
+      keeps the key, an edit to an imported Python module changes it, each with its control. Re-key once; redraw
+      only the references whose recorded sources really differ, at one revision (a pure run, Haiku/Sonnet if separate).
+      Then the native player and its `owner_render_parity --native` entry (pattern: `native_record_identity.py`
+      registration near line 436).
     - [ ] Verify shaft and backdrop placement through the complete route at nonzero lens shift and odd,
       padded targets. The [ABI 45 component proof](.artifacts/evidence/native_core/n5_6/20261123_abi45_matrix_and_targets/report.md)
       validates the writer, blur and sampling. Reuse the core's scene-item matrix for the backdrop vertex under
