@@ -943,6 +943,10 @@ def _clear_control(core, api: str, scene, host, clock, run, route: str = "surfac
 SCENE_PASS_VARIANTS = ("crumble_both_4x", "glass_shatter_both_4x")
 SCENE_PASS_BLOCKS = 6
 SCENE_PASS_BLOCK_FRAMES = 24
+#: N5.2h successor: a run timed in parts (``time_scene_run_parts``) sums to the run timed whole within this fraction
+#: (the brackets inside the pass flush QRhi's command list and rebind its framebuffer, which moves no GPU work; the
+#: alternating blocks' own spread at 4K is a few percent).
+RUN_PARTS_SUM_TOLERANCE = 0.1
 
 
 def _program_pass_names(scene) -> tuple[list, str]:
@@ -956,7 +960,7 @@ def _program_pass_names(scene) -> tuple[list, str]:
     return [], "none"
 
 
-def _scene_passes(core, scene, host, clock, run) -> tuple[dict, dict]:
+def _scene_passes(core, scene, host, clock, run, api: str = "opengl") -> tuple[dict, dict]:
     """N5.2h: the record timed per unit (``stage_control("time_scene_passes")``: each run with its primes, passes and
     the pass's own resolves; its nearest copies; its self mips; each compute, step and the texture chains) against the
     whole record (the Surface figure) in alternating blocks over the same frames. The off blocks are the control: no
@@ -966,45 +970,78 @@ def _scene_passes(core, scene, host, clock, run) -> tuple[dict, dict]:
 
     if not core.module.stage_control("time_scene_passes", False):
         return {"available": False}, {}
+    # N5.2h successor: a scene run's parts (its opening, each pass, its end-of-pass resolves; OpenGL) as a third block,
+    # against the runs timed whole (the units block) on the same frames; a module without the control runs two blocks.
+    parts_available = bool(core.module.stage_control("time_scene_run_parts", False))
     names, names_from = _program_pass_names(scene)
-    timed: dict = {True: [], False: []}
+    modes = ("units", "parts", "off") if parts_available else ("units", "off")
+    timed: dict = {mode: [] for mode in modes}
     host.set_gpu_timer(True)
     host.gpu_samples()
     frame = 0
     try:
         for _block in range(SCENE_PASS_BLOCKS):
-            for units in (True, False):
-                core.module.stage_control("time_scene_passes", units)
+            for mode in modes:
+                core.module.stage_control("time_scene_passes", mode != "off")
+                if parts_available:
+                    core.module.stage_control("time_scene_run_parts", mode == "parts")
                 for _ in range(SCENE_PASS_BLOCK_FRAMES):
                     clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
                     frame += 1
                     scene.layer.tick()
                     scene.frames(1)
                 scene.frames(2)
-                timed[units].extend(host.gpu_samples())
+                timed[mode].extend(host.gpu_samples())
     finally:
         core.module.stage_control("time_scene_passes", False)
+        if parts_available:
+            core.module.stage_control("time_scene_run_parts", False)
         host.set_gpu_timer(False)
-    units_on = [s for s in timed[True] if s.kind == 5]
-    by_unit: dict = {}
-    per_frame: dict = {}
-    for s in units_on:
-        name = names[s.pass_index] if 0 <= s.pass_index < len(names) else "-"
-        by_unit.setdefault(f"{s.pass_index}:{name}:{GPU_UNIT_PARTS.get(s.part, s.part)}", []).append(s.nanoseconds / 1e6)
-        per_frame[s.frame] = per_frame.get(s.frame, 0.0) + s.nanoseconds / 1e6
-    whole = [s.nanoseconds / 1e6 for s in timed[False] if s.kind == 2]
-    units_sum = blc._ms_stats(list(per_frame.values()))
-    record = {"available": True, "pass_names_from": names_from, "pass_names": names,
-              "units": {key: blc._ms_stats(values) for key, values in sorted(by_unit.items(),
-                                                                           key=lambda kv: int(kv[0].split(":")[0]))},
-              "units_per_frame": round(len(units_on) / max(1, len(per_frame)), 2),
-              "units_sum_per_frame": units_sum, "core_record_gpu_units_off": blc._ms_stats(whole),
-              "qrhi_frame_gpu_units_on": blc._ms_stats([s.nanoseconds / 1e6 for s in timed[True] if s.kind == 0]),
-              "qrhi_frame_gpu_units_off": blc._ms_stats([s.nanoseconds / 1e6 for s in timed[False] if s.kind == 0])}
+
+    def by_units(samples) -> tuple[dict, dict, int]:
+        on = [s for s in samples if s.kind == 5]
+        grouped: dict = {}
+        frames: dict = {}
+        for s in on:
+            name = names[s.pass_index] if 0 <= s.pass_index < len(names) else "-"
+            grouped.setdefault(f"{s.pass_index}:{name}:{GPU_UNIT_PARTS.get(s.part, s.part)}", []).append(
+                s.nanoseconds / 1e6)
+            frames[s.frame] = frames.get(s.frame, 0.0) + s.nanoseconds / 1e6
+        ordered = {key: blc._ms_stats(values) for key, values in sorted(
+            grouped.items(), key=lambda kv: (int(kv[0].split(":")[0]), kv[0]))}
+        return ordered, frames, len(on)
+
+    units, per_frame, units_count = by_units(timed["units"])
+    whole = [s.nanoseconds / 1e6 for s in timed["off"] if s.kind == 2]
+    record = {"available": True, "pass_names_from": names_from, "pass_names": names, "units": units,
+              "units_per_frame": round(units_count / max(1, len(per_frame)), 2),
+              "units_sum_per_frame": blc._ms_stats(list(per_frame.values())),
+              "core_record_gpu_units_off": blc._ms_stats(whole),
+              "qrhi_frame_gpu_units_on": blc._ms_stats([s.nanoseconds / 1e6 for s in timed["units"] if s.kind == 0]),
+              "qrhi_frame_gpu_units_off": blc._ms_stats([s.nanoseconds / 1e6 for s in timed["off"] if s.kind == 0])}
     checks = {"scene_passes_timed": len(per_frame) >= SCENE_PASS_BLOCKS * SCENE_PASS_BLOCK_FRAMES // 2,
               # The switch replaces the whole bracket (GL_TIME_ELAPSED cannot nest) and nothing else times units.
-              "scene_passes_replace_the_record": not any(s.kind == 2 for s in timed[True]),
-              "scene_passes_control_has_none": not any(s.kind == 5 for s in timed[False]) and bool(whole)}
+              "scene_passes_replace_the_record": not any(s.kind == 2 for s in timed["units"]),
+              "scene_passes_control_has_none": not any(s.kind == 5 for s in timed["off"]) and bool(whole)}
+    if parts_available:
+        part_units, part_frames, _count = by_units(timed["parts"])
+        run_parts = {5, 6, 7}
+        has_parts = any(s.kind == 5 and s.part in run_parts for s in timed["parts"])
+        record["run_parts"] = part_units
+        record["run_parts_sum_per_frame"] = blc._ms_stats(list(part_frames.values()))
+        record["qrhi_frame_gpu_run_parts"] = blc._ms_stats(
+            [s.nanoseconds / 1e6 for s in timed["parts"] if s.kind == 0])
+        # The parts are OpenGL's only (Vulkan keeps the unit: a bracket inside its pass needs an ExternalContent pass).
+        # The control: the units block (runs timed whole) holds no part; the parts' sum per frame is the units' (the
+        # brackets inside the pass do not move the work: within RUN_PARTS_SUM_TOLERANCE of the units' median).
+        units_ms = record["units_sum_per_frame"].get("median_ms")
+        parts_ms = record["run_parts_sum_per_frame"].get("median_ms")
+        checks["run_parts_on_opengl_only"] = has_parts == (api == "opengl")
+        checks["run_parts_control_has_none"] = not any(s.kind == 5 and s.part in run_parts for s in timed["units"])
+        if has_parts:
+            record["run_parts_sum_against_units"] = round(parts_ms / units_ms, 4) if units_ms and parts_ms else None
+            checks["run_parts_sum_is_the_units"] = bool(units_ms and parts_ms) and abs(
+                parts_ms / units_ms - 1.0) <= RUN_PARTS_SUM_TOLERANCE
     return record, checks
 
 
@@ -1025,6 +1062,8 @@ def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BL
                   ("pieces", impl, "_draw_chunks" if hasattr(impl, "_draw_chunks") else "_draw_shards")]
         if hasattr(impl, "_draw_debris"):
             owners.append(("debris", impl, "_draw_debris"))
+        if hasattr(impl, "_draw_ghosts"):
+            owners.append(("ghosts", impl, "_draw_ghosts"))          # inside "trails": the R8 ghosts alone
         motion = getattr(target, "_motion", None)
         if motion is not None:
             owners.append(("motion_blur", motion, "apply"))
@@ -1062,6 +1101,7 @@ def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BL
             queries = []
             for frame_stamps in stamps:
                 seen: dict = {}
+                edges: dict = {}                                 # label: (its first start, its last end), ns
                 for label, first, last in frame_stamps:
                     queries += [first, last]
                     values = []
@@ -1070,6 +1110,15 @@ def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BL
                         gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
                         values.append(value.value)
                     seen[label] = seen.get(label, 0.0) + (values[1] - values[0]) / 1e6
+                    start, end = edges.get(label, (values[0], values[1]))
+                    edges[label] = (min(start, values[0]), max(end, values[1]))
+                # N5.2h successor: the native scene run's span timed directly, one pair of stamps: the target's begin
+                # (its clear) to its resolve's end (the underlay, the trails and the pieces between); less the ghosts
+                # (the native layer draws them in their own unit before the run), its own stamped sub-span.
+                if "begin" in edges and "resolve" in edges:
+                    span = (edges["resolve"][1] - edges["begin"][0]) / 1e6
+                    seen["scene_span"] = span
+                    seen["scene_span_less_ghosts"] = span - seen.get("ghosts", 0.0)
                 for label, ms in seen.items():
                     per_label.setdefault(label, []).append(ms)
             gl.glDeleteQueries(len(queries), queries)
@@ -1178,7 +1227,7 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     facts[f"{label}_{variant}"]["scene_clear_control"] = control
                     checks.update({f"{label}_{variant}_scene_{k}": v for k, v in control_checks.items()})
                 if variant in SCENE_PASS_VARIANTS:
-                    units, unit_checks = _scene_passes(core, scene, host, clock, run)
+                    units, unit_checks = _scene_passes(core, scene, host, clock, run, api)
                     facts[f"{label}_{variant}"]["scene_passes"] = units
                     checks.update({f"{label}_{variant}_{k}": v for k, v in unit_checks.items()})
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2

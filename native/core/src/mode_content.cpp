@@ -7996,8 +7996,11 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             SceneTargets::Target &t = *m_targets.target(runTarget);
             // N5.2h: the run's unit (primes, passes, the pass's own resolves at endPass), then its nearest copies and
             // its self mips, each timed apart under time_scene_passes.
+            // Under time_scene_run_parts too (OpenGL only, gpu_timer.h) the unit is three parts: its opening, each pass
+            // and its end-of-pass resolves, the last two bracketed inside the pass (one pointer read otherwise).
+            const bool parts = gpuUnitBrackets() && timeSceneRunParts() && rhi->backend() == QRhi::OpenGLES2;
             std::optional<GpuUnitScope> timed;
-            timed.emplace(rhi, cb, i, GpuUnitPart::Unit);
+            timed.emplace(rhi, cb, i, parts ? GpuUnitPart::RunOpen : GpuUnitPart::Unit);
             QRhiTexture *textures[kMaxTargetColour];
             // N3.4: a transparency target's borrowed attachments and depth (the owner's) are loaded and primed too.
             primeForLoad(rhi, cb, textures, m_targets.loadedColour(runTarget, textures));
@@ -8044,6 +8047,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             const QRhiCommandBuffer::VertexInput &input = cube ? cubeInput : t.decl.surfaceSized() ? sceneInput : ownInput;
             const QRect whole(QPoint(), t.allocation);
             for (int k = i; k <= last; ++k) {
+                if (parts)
+                    timed.emplace(rhi, cb, k, GpuUnitPart::RunDraw);
                 // ABI 37 (N4.i): a pass declaring "viewport": "allocation" covers the whole allocation (the trails'
                 // edges, as Python draws them); every other pass the content viewport, as before.
                 if (program.passes.at(k).allocationViewport)
@@ -8051,6 +8056,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 else
                     drawPass(rhi, cb, k, viewport, input, v); // N3.2
             }
+            if (parts)
+                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);
             cb->endPass();
             timed.emplace(rhi, cb, i, GpuUnitPart::Nearest); // the run's unit ends here (N5.2h)
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads

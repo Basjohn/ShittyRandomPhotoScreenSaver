@@ -233,9 +233,14 @@ class _UnitStand:
     switch is on, the whole Surface figure while it is off. ``nested``: a module that kept the whole bracket beside the
     units; ``always``: one whose units ignore the switch."""
 
-    def __init__(self, *, known=True, nested=False, always=False):
+    def __init__(self, *, known=True, nested=False, always=False, parts_known=False, parts_leak=False,
+                 resolve_ns=30_000):
         self.known, self.nested, self.always = known, nested, always
+        # N5.2h successor: a module with time_scene_run_parts, whose run (pass 0) is then timed in three parts summing
+        # to its unit (``resolve_ns`` other than 30_000: a sum off the unit); ``parts_leak``: parts in the units block.
+        self.parts_known, self.parts_leak, self.resolve_ns = parts_known, parts_leak, resolve_ns
         self.units = False
+        self.parts = False
         self.edge = 0
         self.pending = []
         self.module = SimpleNamespace(stage_control=self._stage_control)
@@ -243,6 +248,9 @@ class _UnitStand:
             {"name": "underlay"}, {"name": "chunks"}]}}})
 
     def _stage_control(self, name, on):
+        if self.known and self.parts_known and name == "time_scene_run_parts":
+            self.parts = bool(on)
+            return True
         if not self.known or name != "time_scene_passes":
             return False
         self.units = bool(on)
@@ -253,7 +261,11 @@ class _UnitStand:
 
         self.edge += 1
         e = self.edge
-        if self.units or self.always:
+        if (self.units or self.always) and (self.parts or (self.parts_leak and self.units)):
+            self.pending += [GpuSample(5, e, e + 1, 20_000, 0, 5), GpuSample(5, e, e + 1, 50_000, 0, 6),
+                             GpuSample(5, e, e + 1, self.resolve_ns, 0, 7), GpuSample(5, e, e + 1, 300_000, 1, 0),
+                             GpuSample(5, e, e + 1, 50_000, 1, 1)]
+        elif self.units or self.always:
             self.pending += [GpuSample(5, e, e + 1, 100_000, 0, 0), GpuSample(5, e, e + 1, 300_000, 1, 0),
                              GpuSample(5, e, e + 1, 50_000, 1, 1)]
         if not self.units or self.nested:
@@ -271,11 +283,11 @@ class _UnitStand:
         return taken
 
 
-def _units(stand):
+def _units(stand, api="opengl"):
     import transition_route_check as trc
 
     scene = SimpleNamespace(layer=stand.layer, frames=stand.frames)
-    return trc._scene_passes(stand, scene, stand, SimpleNamespace(at=lambda run, progress: None), object())
+    return trc._scene_passes(stand, scene, stand, SimpleNamespace(at=lambda run, progress: None), object(), api)
 
 
 def test_the_scene_pass_round_names_each_unit_and_fails_on_its_negatives():
@@ -289,3 +301,19 @@ def test_the_scene_pass_round_names_each_unit_and_fails_on_its_negatives():
     assert _units(_UnitStand(known=False)) == ({"available": False}, {})
     assert not _units(_UnitStand(nested=True))[1]["scene_passes_replace_the_record"]
     assert not _units(_UnitStand(always=True))[1]["scene_passes_control_has_none"]
+
+
+def test_the_run_parts_block_names_each_part_and_fails_on_its_negatives():
+    """N5.2h successor: under ``time_scene_run_parts`` (OpenGL) a scene run is timed as its opening, each pass and its
+    end-of-pass resolves; the parts sum to the run timed whole, none appears in the units block, none on Vulkan."""
+    record, checks = _units(_UnitStand(parts_known=True))
+    assert record["available"] and all(checks.values()), checks
+    assert {"0:underlay:run_open", "0:underlay:run_draw", "0:underlay:run_resolve"} <= set(record["run_parts"])
+    assert abs(record["run_parts_sum_per_frame"]["median_ms"] - 0.45) < 1e-9
+    assert record["run_parts_sum_against_units"] == 1.0
+    # A module without the control runs the two blocks of before and judges no part.
+    assert "run_parts" not in _units(_UnitStand())[0]
+    # Negatives: parts in the units block; parts whose sum is not the unit's; parts reported on Vulkan.
+    assert not _units(_UnitStand(parts_known=True, parts_leak=True))[1]["run_parts_control_has_none"]
+    assert not _units(_UnitStand(parts_known=True, resolve_ns=130_000))[1]["run_parts_sum_is_the_units"]
+    assert not _units(_UnitStand(parts_known=True), api="vulkan")[1]["run_parts_on_opengl_only"]

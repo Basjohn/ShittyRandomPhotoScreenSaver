@@ -86,6 +86,20 @@ bool timeScenePasses()
     return g_timeScenePasses.loadRelaxed() != 0;
 }
 
+namespace {
+QAtomicInteger<int> g_timeSceneRunParts { 0 };
+} // namespace
+
+void setTimeSceneRunParts(bool on)
+{
+    g_timeSceneRunParts.storeRelaxed(on ? 1 : 0);
+}
+
+bool timeSceneRunParts()
+{
+    return g_timeSceneRunParts.loadRelaxed() != 0;
+}
+
 const GpuUnitBrackets *gpuUnitBrackets()
 {
     return t_unitBrackets;

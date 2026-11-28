@@ -67,6 +67,13 @@ enum class GpuUnitPart : int {
     SelfMips = 2,  // the run's self-mipped chains
     Chains = 3,    // the item textures' chains before any pass (pass -1)
     LastClear = 4, // the surface's clear when no run drew it (pass -1)
+    // N5.2h, OpenGL only, under the harness control time_scene_run_parts (time_scene_passes on too): a scene target's
+    // run in three parts in place of its Unit, two of them bracketed inside the run's render pass (QRhi's OpenGL
+    // backend issues what it holds at beginExternal inside a pass as outside one; Vulkan would need an ExternalContent
+    // pass and keeps the Unit):
+    RunOpen = 5,    // the run's opening: its primes, its pass's begin and clear, its clearing draw (`pass` the run's)
+    RunDraw = 6,    // one pass of the run (`pass` that pass)
+    RunResolve = 7, // the run's end: QRhi's end-of-pass resolves of its multisampled attachments (`pass` the run's)
 };
 
 // N5.2h: the harness control time_scene_passes (stage_control). While it is on and a host's timer runs, the frame driver
@@ -74,6 +81,10 @@ enum class GpuUnitPart : int {
 // brackets (below), so each unit is a ScenePass figure. Off (the default) nothing changes: the brackets stay null.
 void setTimeScenePasses(bool on);
 bool timeScenePasses();
+// N5.2h: the harness control time_scene_run_parts: under time_scene_passes on OpenGL, a scene target's run is timed as
+// RunOpen, a RunDraw per pass and RunResolve in place of its Unit. Off (the default) nothing changes.
+void setTimeSceneRunParts(bool on);
+bool timeSceneRunParts();
 
 // N5.2h: the render thread's unit brackets for the record in progress (null: no unit is timed, one pointer read per unit).
 struct GpuUnitBrackets

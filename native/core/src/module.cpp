@@ -2300,6 +2300,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSceneClearDraw(value);
     else if (control == "time_scene_passes")      // N5.2h: a record's units timed one by one (gpu_timer.h)
         srpss_core::setTimeScenePasses(value);
+    else if (control == "time_scene_run_parts")   // N5.2h: a scene run's opening, passes and resolves apart (OpenGL)
+        srpss_core::setTimeSceneRunParts(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")
@@ -3341,7 +3343,9 @@ PyMethodDef methods[] = {
       "flush_defocus_between_draws, flush_defocus_after_sprites, declare_defocus_external, "
       "disable_defocus_compute_tracking (OpenGL; latter requires no compute passes), device_without_independent_blend: read at the next device's "
       "creation; time_scene_passes (N5.2h: while the GPU timer is on, each surface's record is timed per unit as "
-      "ScenePass figures in place of its whole Surface figure, read at the next frame)); False for an unknown "
+      "ScenePass figures in place of its whole Surface figure, read at the next frame); time_scene_run_parts (N5.2h, "
+      "OpenGL, with time_scene_passes: a scene target's run as its opening, each pass and its end-of-pass resolves, "
+      "read at the next record)); False for an unknown "
       "name. fail_allocation (texture/target sync) and fail_build (sampler/bindings/pipeline build or rebind) accept "
       "integer create-attempt ordinals (0: off), bounded by the stage limits." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,

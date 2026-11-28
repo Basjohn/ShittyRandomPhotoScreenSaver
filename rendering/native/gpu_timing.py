@@ -23,8 +23,10 @@ from typing import Any, Iterable
 #: The figure kinds (``GpuPassKind`` in ``gpu_timer.h``); the frame trace's ``logical_timestamp_ns`` field carries them.
 GPU_PASS_KINDS = {0: "frame", 1: "probe", 2: "surface", 3: "load", 4: "backdrop", 5: "scenepass"}
 #: A scene-pass figure's part (``GpuUnitPart`` in ``gpu_timer.h``, N5.2h): the unit itself, its nearest copies, its own
-#: mips, the texture chains before the passes, the closing clear.
-GPU_UNIT_PARTS = {0: "unit", 1: "nearest", 2: "self_mips", 3: "chains", 4: "last_clear"}
+#: mips, the texture chains before the passes, the closing clear; and (``time_scene_run_parts``, OpenGL) a scene run's
+#: opening (begin, clear, clearing draw), each of its passes and its end-of-pass resolves in place of its unit.
+GPU_UNIT_PARTS = {0: "unit", 1: "nearest", 2: "self_mips", 3: "chains", 4: "last_clear", 5: "run_open", 6: "run_draw",
+                  7: "run_resolve"}
 #: The timer's options (``GpuTimerConfig``): ``keep_when_off`` and ``wait_for_results`` are negative controls.
 TIMER_OPTIONS = ("enabled", "keep_when_off", "wait_for_results")
 #: The known-cost pass's options (``LoadConfig`` in ``load_pass.h``); ``timing="before"`` is a negative control.

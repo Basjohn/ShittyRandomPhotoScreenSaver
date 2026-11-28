@@ -216,6 +216,8 @@ def test_each_unit_of_a_surfaces_record_is_timed_apart_under_time_scene_passes()
     source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
     start = source.index("void ModeContent::recordPasses(")
     body = source[start:source.index("\n}\n", start)]
+    # The units as recorded without time_scene_run_parts (its parts, only under that control, are judged apart below).
+    body = re.sub(r"if \(parts\)\s*timed\.emplace\([^;]*;", "", body)
     assert all(body.count(work) == 1 for work in _UNIT_WORK)
     assert units_without_a_scope(body) == []
     # Negative control: the run's nearest copies folded back into its unit are no longer timed apart.
@@ -237,6 +239,48 @@ def test_each_unit_of_a_surfaces_record_is_timed_apart_under_time_scene_passes()
     six, four = gpu_timing.samples_from([(5, 9, 10, 1_000, 3, 1), (2, 9, 10, 2_000)])
     assert (six.kind_name, six.pass_index, six.part_name) == ("scenepass", 3, "nearest")
     assert (four.kind_name, four.pass_index, four.part_name) == ("surface", -1, "unit")
+
+
+def run_parts_misplaced(body: str) -> list[str]:
+    """N5.2h successor: what is wrong with a scene run's parts in ``recordPasses`` (empty: nothing). The parts are
+    taken only with the unit brackets set, the control on and on OpenGL; the opening replaces the run's unit; each pass
+    of the run opens its own part before it is drawn; the resolves' part opens after the last pass and before the
+    run's ``cb->endPass()``, and the run's nearest copies close it."""
+    wrong = []
+    flat = re.sub(r"\s+", " ", body)
+    if "const bool parts = gpuUnitBrackets() && timeSceneRunParts() && rhi->backend() == QRhi::OpenGLES2;" not in flat:
+        wrong.append("gate")
+    if "timed.emplace(rhi, cb, i, parts ? GpuUnitPart::RunOpen : GpuUnitPart::Unit);" not in flat:
+        wrong.append("open")
+    loop = re.search(r"for \(int k = i; k <= last; \+\+k\) \{ if \(parts\) timed\.emplace\(rhi, cb, k, "
+                     r"GpuUnitPart::RunDraw\);(.*?)\} if \(parts\) timed\.emplace\(rhi, cb, i, "
+                     r"GpuUnitPart::RunResolve\); cb->endPass\(\); timed\.emplace\(rhi, cb, i, GpuUnitPart::Nearest\);",
+                     flat)
+    if not loop or "drawPass(rhi, cb, k" not in loop.group(1):
+        wrong.append("draws_and_resolve")
+    return wrong
+
+
+def test_a_scene_run_is_timed_in_parts_under_its_control_on_opengl_only():
+    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    start = source.index("void ModeContent::recordPasses(")
+    body = source[start:source.index("\n}\n", start)]
+    assert run_parts_misplaced(body) == []
+    # Negative controls: the backend gate dropped (Vulkan would bracket inside a pass without ExternalContent), and the
+    # resolves' part opened after the pass ended (the resolves fall into no part).
+    ungated = body.replace(" && rhi->backend() == QRhi::OpenGLES2;", ";", 1)
+    assert ungated != body and run_parts_misplaced(ungated) == ["gate"]
+    late = body.replace("""            if (parts)
+                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);
+            cb->endPass();""", """            cb->endPass();
+            if (parts)
+                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);""", 1)
+    assert late != body and run_parts_misplaced(late) == ["draws_and_resolve"]
+    # The control is the module's (stage_control) and the timer's (gpu_timer.h), off by default.
+    module = (CORE / "src" / "module.cpp").read_text(encoding="utf-8")
+    assert 'control == "time_scene_run_parts"' in module and "setTimeSceneRunParts(value)" in module
+    timer = (CORE / "src" / "gpu_timer.cpp").read_text(encoding="utf-8")
+    assert "QAtomicInteger<int> g_timeSceneRunParts { 0 };" in timer
 
 
 def test_off_holds_no_timer_and_the_edge_tests_one_pointer_for_it():
