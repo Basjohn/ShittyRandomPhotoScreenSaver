@@ -23,6 +23,7 @@ from rendering.gl_programs.scene3d import (
     scene3d_screen_uv,
 )
 from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 
 def _inside(point, half_box) -> bool:
@@ -224,7 +225,7 @@ def test_the_bloom_pass_takes_only_the_alpha_marked_light(qt_app):
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.scene3d.target import SceneTarget
 
-    capture = TransitionCapture(256, 144)
+    capture = OffscreenRenderTarget(256, 144)
     resources, target = MeshResources("bloom test"), SceneTarget("bloom test")
     texture = int(gl.glGenTextures(1))
     try:

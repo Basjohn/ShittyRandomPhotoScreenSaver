@@ -10,7 +10,7 @@ def test_attached_beads_keep_nominal_size_and_stay_below_every_reacted_parent(qt
     from OpenGL import GL
     from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.pass_block_gl import PassBlockGL
 
     gl = PassBlockGL(GL)
@@ -27,7 +27,7 @@ void main() {
     gl_Position = vec4(0.0,0.0,0.0,1.0);
 }
 '''
-    target = TransitionCapture(64,64)
+    target = OffscreenRenderTarget(64,64)
     buffers = []
     program = 0
     try:
@@ -128,14 +128,14 @@ def test_glowing_specks_follow_authored_finite_stream_without_camera_dependent_w
     from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, SPECK_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     gl=PassBlockGL(GL)          # the specks' values are their pass block (N1.6), set by name as before
     prefix=SPECK_VERTEX.split('void main() {\n    speckInstance();\n')[0]
     vertex=prefix+'''
 layout(std430,binding=6) buffer Results { vec4 results[]; };
 void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_Position=vec4(0,0,0,1);}
 '''
-    target=TransitionCapture(64,64);program=buffer=0
+    target=OffscreenRenderTarget(64,64);program=buffer=0
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',label='fixed speck volume')
         gl.register(program,PARTICLE_BLOCK)
@@ -179,7 +179,7 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
     from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, GLASS_BLOCK
     from rendering.gl_programs.extruded_bubble_scene import camera
     from rendering.quick.render.gl_resources import compile_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.pass_block_gl import PassBlockGL
 
     gl = PassBlockGL(GL)
@@ -188,7 +188,7 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
     # fragment and OIT output, where the old consumer discarded this varying.
     vertex = BUBBLE_VERTEX.replace('void main() {', 'uniform float uTestOpacity;\nvoid main() {')
     vertex = vertex.replace('vOpacity = aOpacity;', 'vOpacity = uTestOpacity;')
-    target = TransitionCapture(64, 64)
+    target = OffscreenRenderTarget(64, 64)
     texture = program = 0
     try:
         texture = int(gl.glGenTextures(1))
@@ -242,7 +242,7 @@ def test_procedural_world_positions_and_radii_do_not_follow_camera_or_pixel_size
     from OpenGL import GL
     from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.pass_block_gl import PassBlockGL
 
     gl = PassBlockGL(GL)
@@ -252,7 +252,7 @@ def test_procedural_world_positions_and_radii_do_not_follow_camera_or_pixel_size
 layout(std430,binding=6) buffer Results { vec4 results[]; };
 void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Position=vec4(0,0,0,1);}
 '''
-    target=TransitionCapture(64,64);program=0;buffers=[]
+    target=OffscreenRenderTarget(64,64);program=0;buffers=[]
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',label='fixed procedural world')
         gl.register(program, GLASS_BLOCK)
@@ -303,7 +303,7 @@ def test_free_chain_population_band_on_gpu_matches_its_cpu_mirror(qt_app):
     from OpenGL import GL
     from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX, GLASS_BLOCK
     from rendering.quick.render.gl_resources import compile_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from widgets.spotify_visualizer.extruded_bubble_material_paths import chain_opacity
     from tools.pass_block_gl import PassBlockGL
 
@@ -318,7 +318,7 @@ void main() {
     gl_Position = vec4(0.0,0.0,0.0,1.0);
 }
 '''
-    target = TransitionCapture(64, 64)
+    target = OffscreenRenderTarget(64, 64)
     program = buffer = 0
     chains, per = 12, 16
     try:

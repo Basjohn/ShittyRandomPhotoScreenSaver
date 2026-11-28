@@ -721,14 +721,14 @@ def test_warmed_vertex_frames_reuse_static_resources_and_target(target, monkeypa
 @pytest.mark.parametrize('dpr', [1, 2])
 def test_same_physical_card_pixels_survive_embedding_in_a_larger_viewport(qt_app, style, dpr):
     """Window extent cannot magnify marks/curves or change bloom on an unchanged card."""
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     snapshot = _wire_frame(_snapshot(shockwave_grid_glow=.55), style)
     card_w, card_h = W * dpr, H * dpr
     images = []
     for window_factor in (1, 2):
         pixel_w, pixel_h = card_w * window_factor, card_h * window_factor
-        capture = TransitionCapture(pixel_w, pixel_h)
+        capture = OffscreenRenderTarget(pixel_w, pixel_h)
         host = QuickVisualizerRenderHost()
         try:
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
@@ -765,7 +765,7 @@ def test_same_physical_card_pixels_survive_embedding_in_a_larger_viewport(qt_app
 @pytest.mark.parametrize('dpr', [1.,1.25,1.5,2.])
 def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app, monkeypatch, style, dpr):
     """Every selected real lattice point survives normal sizing and subpixel raster phases."""
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
     from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
     from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
@@ -795,7 +795,7 @@ def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app,
         border_color=(0,0,0,0),shadow_enabled=False,shadow_color=(0,0,0,0),shadow_blur=0.,
         shadow_offset=(0.,0.),shadow_spread=0.,shadow_extensions=(0.,0.,0.,0.))
     snapshot = replace(base,presentation=presentation)
-    capture,host = TransitionCapture(pixel_w,pixel_h),QuickVisualizerRenderHost()
+    capture,host = OffscreenRenderTarget(pixel_w,pixel_h),QuickVisualizerRenderHost()
     try:
         matrix = (2/width,0,0,0,0,-2/height,0,0,0,0,1,0,-1,1,0,1)
         def render(matrix):

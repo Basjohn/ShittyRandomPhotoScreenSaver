@@ -60,9 +60,9 @@ def _authored_snapshot(snapshot, *, timestamp: float, **overrides):
 @pytest.fixture
 def sphere_render_host(qt_app):
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(_WIDTH, _HEIGHT)
+    capture = OffscreenRenderTarget(_WIDTH, _HEIGHT)
     host = QuickVisualizerRenderHost()
     try:
         yield capture, host

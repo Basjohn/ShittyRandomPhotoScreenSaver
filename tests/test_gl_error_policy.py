@@ -29,9 +29,9 @@ def test_a_pending_gl_error_is_drained_and_raised_once_per_frame(qt_app):
     from OpenGL.platform import PLATFORM
 
     from rendering.gl_error_policy import GLFrameError, pending_gl_errors, raise_pending_gl_error
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     try:
         assert pending_gl_errors(gl) == ()
         raise_pending_gl_error(gl, "clean frame")                      # nothing set: no error

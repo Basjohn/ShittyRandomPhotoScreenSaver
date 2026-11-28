@@ -18,13 +18,14 @@ from rendering.quick.scene3d.motion import MOTION_BLUR_MAX_TILE, MotionBlur, mot
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick import gl_query
 from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
 
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(64, 64)
+    capture = OffscreenRenderTarget(64, 64)
     yield capture
     capture.close()
 

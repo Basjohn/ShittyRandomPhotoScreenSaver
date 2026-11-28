@@ -10,10 +10,10 @@ def particle_light(qt_app):
     from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     program = texture = vao = 0
     try:
         # Keep the actual vertex colour/geometry law; isolate it from Gaussian,

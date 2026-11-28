@@ -19,7 +19,7 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.scene3d.uniforms import PassBlocks
     from rendering.quick.visualizer.implementations.extruded_bubble import _Uniforms,_common
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     reference=(Path(__file__).parent/'fixtures/extruded_bubble/accepted_beam_a51aab8a.glsl').read_text(encoding='utf-8')
     # The oracle over the shaft fragment's own header, as one pass block like the product's (N1.6), drawn over a
@@ -29,7 +29,7 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
         '#version 460 core\nout vec2 vNdc;\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);'
         'gl_Position=vec4(p*2.0-1.0,0.9999,1.0);vNdc=p*2.0-1.0;}\n',(prefix+reference,),block='EbOracle',
         samplers=EB_SAMPLERS)
-    target=TransitionCapture(1,1)
+    target=OffscreenRenderTarget(1,1)
     programs=[]
     texture=0
     maxima=[]

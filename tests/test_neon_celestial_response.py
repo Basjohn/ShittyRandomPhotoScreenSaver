@@ -7,7 +7,7 @@ from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_settings import require_mode_settings, Toggle
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 
@@ -77,7 +77,7 @@ def test_rim_experiment_has_one_default_off_typed_settings_roundtrip():
 @pytest.mark.qt
 def test_gl_halo_retains_high_reactivity_contrast_and_rim_marks_follow_phase(qt_app):
     from rendering.quick.render.gl_resources import compile_program
-    capture=TransitionCapture(64,64)
+    capture=OffscreenRenderTarget(64,64)
     program=compile_program('''#version 460 core
 void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-1.,0.,1.);}''',
         '#version 460 core\nout vec4 FragColor;\nuniform vec4 uInput;\nuniform int uProbe;\n'+NEON_CELESTIAL_GLSL+'''
