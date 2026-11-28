@@ -491,3 +491,84 @@ def test_every_pipeline_set_and_shader_resource_bind_adopts_the_multisample_samp
     helper = (CORE / "src" / "gl_sampler_state.cpp").read_text(encoding="utf-8")
     assert "rhi->backend() != QRhi::OpenGLES2" in helper and "texture->sampleCount() <= 1" in helper
     assert "src/gl_sampler_state.cpp" in (CORE / "CMakeLists.txt").read_text(encoding="utf-8")
+
+
+def _split_arguments(text: str, start: int) -> list:
+    """The top-level comma-separated arguments of the call whose '(' is at text[start]."""
+    depth, current, out = 0, [], []
+    for char in text[start:]:
+        if char in "([{":
+            depth += 1
+            if depth == 1:
+                continue
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                out.append("".join(current).strip())
+                return out
+        elif char == "," and depth == 1:
+            out.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    raise AssertionError("unbalanced call")
+
+
+def _enclosing_block(text: str, position: int) -> str:
+    """The innermost {...} block around text[position]."""
+    depth = 0
+    for opening in range(position, -1, -1):
+        if text[opening] == "}":
+            depth += 1
+        elif text[opening] == "{":
+            if depth == 0:
+                break
+            depth -= 1
+    depth = 0
+    for closing in range(opening, len(text)):
+        depth += {"{": 1, "}": -1}.get(text[closing], 0)
+        if depth == 0:
+            return text[opening:closing + 1]
+    raise AssertionError("unbalanced block")
+
+
+def _multisample_textures_not_created_by_the_helper(sources: dict) -> list:
+    """Every rhi->newTexture whose sample count is not the literal 1 (2D form: format, size, samples, ...; 3D form:
+    format, w, h, depth, samples, ...) must sit in a block that creates its textures only through createTexture(...),
+    never a bare ->create()."""
+    import re
+
+    found = []
+    for name, text in sources.items():
+        for hit in re.finditer(r"\bnewTexture\(", text):
+            args = _split_arguments(text, hit.end() - 1)
+            samples = args[4] if len(args) >= 6 else (args[2] if len(args) >= 3 else "1")
+            if samples == "1":
+                continue
+            block = _enclosing_block(text, hit.start())
+            if "createTexture(" not in block or re.search(r"(->|\.)create\(\)", block):
+                found.append(f"{name}:{text.count(chr(10), 0, hit.start()) + 1}")
+    return found
+
+
+def test_every_multisampled_texture_is_created_without_sampler_state() -> None:
+    """N5.2h side defect, named 28 Nov with a synchronous debug logger on the 163d41b8 module: Qt 6.12's
+    QGles2Texture::create() ends with glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR) for every
+    uncompressed texture, so each multisampled scene target logs one GL_INVALID_ENUM at its creation (eb_4x: five
+    textures, the bound GL_TEXTURE_2D_MULTISAMPLE one each time; tiles_4x: one). Every multisampled texture is created
+    through createTexture (gl_sampler_state.cpp): on OpenGL it allocates the storage itself and adopts it, owned, with
+    createFrom. Negative control: a bare texture->create() in the scene targets' make lambda is caught."""
+    sources = {path.name: path.read_text(encoding="utf-8") for path in sorted((CORE / "src").glob("*.cpp"))
+               if path.name != "gl_sampler_state.cpp"}
+    assert _multisample_textures_not_created_by_the_helper(sources) == []
+    every_block = dict(sources, **{"scene_targets.cpp": sources["scene_targets.cpp"].replace("createTexture(", "x(")})
+    assert _multisample_textures_not_created_by_the_helper(every_block)   # the check sees the scene targets' call
+    bare = dict(sources, **{"scene_targets.cpp": sources["scene_targets.cpp"].replace(
+        "return createTexture(texture.get());", "return texture->create();", 1)})
+    assert bare["scene_targets.cpp"] != sources["scene_targets.cpp"]
+    assert len(_multisample_textures_not_created_by_the_helper(bare)) == 1
+    helper = (CORE / "src" / "gl_sampler_state.cpp").read_text(encoding="utf-8")
+    body = helper[helper.index("bool createTexture(QRhiTexture *texture)"):]
+    for step in ("texture->sampleCount() <= 1", "glTexStorage2DMultisample(", "texture->createFrom(", "owns = true"):
+        assert step in body, step
+    assert "glTexParameter" not in body
