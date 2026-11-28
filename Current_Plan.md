@@ -84,8 +84,11 @@ Continue the native sequence below with the repaired timing receipts. The report
     `a29135bafeaab65bb`** (28 Nov), worktree `.claude/worktrees/agent-a29135bafeaab65bb`, branch
     `worktree-agent-a29135bafeaab65bb` (merges the first branch) retired from use at 213k; `14d763931` built on GitHub
     (module in its `release/native_module/`). Third **Opus High `ae9dbc46b60681ac3`** (28 Nov), worktree
-    `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47.
-    Retire the earlier worktrees only after its merge.
+    `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47,
+    retired from use at 230k after L subset and coverage. Fourth **Opus High `ac0cda3c82727c8cd`** (28 Nov), worktree
+    `.claude/worktrees/agent-ac0cda3c82727c8cd`, branch `worktree-agent-ac0cda3c82727c8cd` (merges the third), ABI 47:
+    reference key, native player, P/T/C; signed-zero entry numbered R-254. Retire the earlier worktrees only after its
+    merge.
   - **N5.2h Gate merged** 28 Nov (`f12427a2e`; Opus Medium audit, should-fixes done in `a49087e7c`, harness reds in
     `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
     `.artifacts/evidence/native_core/n5_2h/`, journal `.artifacts/handover/n5_2h/JOURNAL.md`.
