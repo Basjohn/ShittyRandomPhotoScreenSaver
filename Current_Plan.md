@@ -100,8 +100,11 @@ Continue the native sequence below with the repaired timing receipts. The report
     `test_quick_backend_owner`, degraded-display negative control, a failed live layer fades to the degraded display),
     then the backdrop against the blit. Done through the reference cache (`a7c321e82`: Python frames cached in
     `D:/Temp/Scratch/SRPSS/fast_proof/transition_references/`, cost baselines `tools/baselines/preflip/python_cost_*`,
-    proof guide section 3 rule). Now: Membrane/Volumetric Dissolve native run-to-run difference (side defect), then the
-    media tools' native capture.
+    proof guide section 3 rule). Membrane/Volumetric Dissolve run-to-run difference traced to the NVIDIA GL driver's
+    multisampled blending (≤1 level; raw-GL repro, Python too, 1-sample and Vulkan identical); lead decided the
+    proof-guide rule (OpenGL MSAA frames judged against a two-run noise floor, byte identity on Vulkan/1-sample).
+    Media tools capture natively (`e1dcbc83a`, `tools/native_transition_capture.py`; scratch strips match shipped,
+    burn's shipped strip predates the current burn). Retired from use at 190k.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,

@@ -143,6 +143,13 @@ L, response tools, timing parity) applies to it.
   section 24 lock, or the mode's equivalent, plus its response tools.
 - **T** reruns whenever the change touches the render thread, uploads, synchronisation, threads or scheduling.
 - **C** shows the gain.
+- **OpenGL multisampled targets are not run-to-run deterministic** (lead, 28 Nov). On this machine's NVIDIA driver,
+  translucent blends into a multisampled target differ by at most 1 level between identical runs. A raw-GL script
+  reproduces it with no project code, Python's renderer shows it too, and a 1-sample target or Vulkan gives
+  byte-identical frames. So byte identity is judged on Vulkan and on OpenGL single-sampled frames. OpenGL multisampled
+  frames are judged against the noise floor of two "before" runs: at most 1 level, with the differing pixel count no
+  higher than the floor's (2x margin). A larger difference fails as a change. Evidence: the N5.2h switch journal,
+  28 Nov, Membrane and Volumetric Dissolve.
 - **A change that cannot hold byte identity** (reordered float math, half floats, merged passes) is tier 2: the shared
   tolerance plus the operator's sign-off, with the difference measured and shown.
 
