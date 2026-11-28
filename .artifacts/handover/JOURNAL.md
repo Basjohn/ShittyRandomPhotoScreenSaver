@@ -32,5 +32,20 @@ Order: 1 reveal waits for first wallpaper; 2 hidden-host owner guard; 3 fullscre
   with no core never reloads one for a hidden host. Controls: HEAD files fail both new tests; behavioural (old
   _degrade branch) fails (evidence 20261128_audit_item6_per_window_degrade). Residual: backdrop + Visualizer on an
   unhosted window still take the core (native_backdrop_core/attach_native_route have no window check): draw nothing.
+- Fix 7 ROOT CAUSE ONLY (no code; stopped near the context limit): the gradual warm-up owner is DisplayManager's idle
+  warm (engine/display_manager.py ~4985, next-likely spec by reserved seed, 200 ms spaced steps) -> scene_controller.
+  schedule_transition_warm_step -> BackgroundRenderItem.schedule_warm_step (afterRendering, one unit) ->
+  NativeBackgroundLayer.next_warm_unit (native_background.py:573). Its units are Python only: _RUN_MODULES imports, then
+  native_transition_renderer(id). No unit reaches the core. Pipelines are built only in ModeContent::ensure->build
+  (mode_content.cpp:5918) when the DRAWN program's generation changes, i.e. at the run's first record (_start_run's
+  mode.program), on the render thread. The face (rendering/native/mode.py) has no warm/prepare entry; N3.6's "built
+  ahead and warmed gradually" was never built in-process (mode_content.cpp:7751 "N3.6 will schedule the product's
+  warm-up units"); only Qt's disk cache. Not verified: how much of 204 ms is pipeline build vs meshes/fields/targets.
+  Proposed enrollment (needs C++, one build): NativeMode.warm(passes, settings) -> the content builds that program's
+  pipelines (one pass's pipeline per record, backend-neutral, never drawn) and keeps them keyed by the program's
+  passes so the run's program(...) adopts them; layer.next_warm_unit's last unit = mode.warm(run's passes). Control: a
+  first-run child (tests/transition_warm_first_run_child.py shape) asserting the run's first record builds 0 pipelines
+  (field_recipe.h has a pipelines counter) with warm, >0 without.
+- REMAINING: fix 7 implementation; all lows (list in the brief; PhotoEnvironment stays backlog).
 
 ---- previous agent's journal (aa3b364) is in git history of .artifacts/handover/JOURNAL.md ----
