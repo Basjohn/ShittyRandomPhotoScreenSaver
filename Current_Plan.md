@@ -104,7 +104,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     multisampled blending (≤1 level; raw-GL repro, Python too, 1-sample and Vulkan identical); lead decided the
     proof-guide rule (OpenGL MSAA frames judged against a two-run noise floor, byte identity on Vulkan/1-sample).
     Media tools capture natively (`e1dcbc83a`, `tools/native_transition_capture.py`; scratch strips match shipped,
-    burn's shipped strip predates the current burn). Retired from use at 190k.
+    burn's shipped strip predates the current burn). Retired from use at 190k. Third **Opus Medium
+    `ac5eb8a969947d272`** (28 Nov), worktree `.claude/worktrees/agent-ac5eb8a969947d272`, branch
+    `worktree-agent-ac5eb8a969947d272` (merges a5767's and ac12d's): GL_INVALID_ENUM fix (C++), then the delete
+    sub-box. N5.6's `89c3ceca8` built on GitHub 28 Nov (module in the ac0cda worktree).
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
