@@ -887,7 +887,10 @@ the feature (D3D11 is not stated).
       rebuilt module (lead, 28 Nov) only a subset confirms the fix: light_type 0 on all three takes, one base run and
       one b run on different takes (scripts in `.artifacts/scratch/n56rr/`). The full 15-run L set runs once, at the
       end of this box, on the module that merges: a later C++ change would invalidate it. Then the R-NNN entry
-      (silent since settings went through JSON).
+      (silent since settings went through JSON). Done 28 Nov (successor `ae9dbc46b60681ac3`, module from
+      `14d76393`): all five IDENTICAL, every expected frame judged: human_heavy1 base (5,313 compared) and light type 0,
+      ragdoll b and light type 0, nightsolong light type 0 (2,586 compared and 190 undrawn on both, each); evidence `n5_6/20261128_l_<take>_<key>/`.
+      The entry is `Docs/Historical_Bugs/R-NEW_Native_Settings_Lost_The_Sign_Of_Negative_Zero_Through_Qt_JSON.md`.
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
         find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built

@@ -39,6 +39,41 @@ def test_a_window_cut_from_the_continuous_run_is_byte_identical_and_a_restart_is
     assert not caught["identical"] and caught["differing"]
 
 
+@pytest.fixture(scope="module")
+def eb_full_stream(tmp_path_factory, qt_app):
+    from tools.visualizer_replay import native_record_identity as layer_l
+
+    folder = tmp_path_factory.mktemp("eb_full")
+    report = layer_l.run("extruded_bubble", seconds=SECONDS, module_dir=None, deliveries=folder)
+    return folder, report
+
+
+def test_extruded_bubbles_windows_run_its_drift_from_the_cold_start_and_a_restart_is_caught(eb_full_stream, tmp_path,
+                                                                                            qt_app):
+    # N5.6 "Coverage windows": the drift is GPU history from the take's first input (a gap past 128 steps restarts it),
+    # so every window draws nothing before itself and dispatches the drift from input 0; its records are the
+    # continuous run's, and a simulation restarted at the window (a cold drift there) is caught.
+    from tools.visualizer_replay import coverage_windows as coverage
+    from tools.visualizer_replay import native_record_identity as layer_l
+
+    full, report = eb_full_stream
+    selected = coverage.select("extruded_bubble", full, recording=None, seconds=SECONDS,
+                               switch_input=report["switch_input"])
+    assert selected["covered"], {k: v for k, v in selected["coverage"].items() if not v["covered"]}
+    assert selected["late_window_in_last_15_s"]
+    assert all(w["warmup_inputs"] == coverage.WARMUP_INPUTS["extruded_bubble"] and w["compute_from_input"] == 0
+               for w in selected["windows"])
+    window = tmp_path / "window"
+    layer_l.run("extruded_bubble", seconds=SECONDS, module_dir=None, deliveries=window, window=WINDOW)
+    same = coverage.continuity_check(full, window, *WINDOW)
+    assert same["identical"] and same["compared"] == WINDOW[1] - WINDOW[0]
+    restarted = tmp_path / "restarted"
+    layer_l.run("extruded_bubble", seconds=SECONDS, module_dir=None, deliveries=restarted, window=WINDOW, restart=True)
+    caught = coverage.continuity_check(full, restarted, *WINDOW, offset=WINDOW[0])
+    assert caught["compared"] == WINDOW[1] - WINDOW[0]
+    assert not caught["identical"] and caught["differing"]
+
+
 def test_the_selection_covers_every_record_field_with_the_guides_windows(full_stream):
     from core.visualizer_engine.native_schema import schema_for_mode
     from tools.visualizer_replay import coverage_windows as coverage

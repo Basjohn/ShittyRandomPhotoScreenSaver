@@ -27,6 +27,8 @@ acceptance needs them equal (``covered``).
 
 Warm-up per mode (``WARMUP_INPUTS``): the inputs drawn before a window starts so its GPU history is the continuous
 run's. The landed modes keep no GPU history between frames (each frame is drawn from its own record and settings): 0.
+A mode in ``COMPUTE_FROM_COLD_START`` (Extruded Bubble's drift) also dispatches its compute every input from the take's
+first, drawing nothing outside its windows (each window's ``compute_from_input``).
 """
 from __future__ import annotations
 
@@ -48,7 +50,15 @@ LATE_S = 15.0
 #: is drawn again each frame from that frame's emission). Waveform holds no GPU history either (its compute state is
 #: written whole every frame from the record: Current_Plan.md N5.4 "Warm-up"); its 2 inputs are the floor maps'
 #: residency (the content's own texture wait) and the first frame drawn with them.
-WARMUP_INPUTS = {"spectrum": 0, "devcurve": 0, "bubble": 0, "oscilloscope": 0, "waveform_ribbon": 2}
+#: Extruded Bubble draws each frame from its record and settings too, but its drift (D4: chains, snow, specks) is GPU
+#: compute history integrated from the take's cold start: a gap past 128 drift steps restarts it fresh, so no warm-up
+#: shorter than the whole take reproduces the continuous run. Its windows draw nothing before the window (0) and dispatch
+#: the drift every input from input 0 (``COMPUTE_FROM_COLD_START``: the native player's ABI 42 draw skip; the Python
+#: reference draws the whole take, Current_Plan.md N5.6 "Coverage windows").
+WARMUP_INPUTS = {"spectrum": 0, "devcurve": 0, "bubble": 0, "oscilloscope": 0, "waveform_ribbon": 2,
+                 "extruded_bubble": 0}
+#: The modes whose GPU compute history must run from the take's first input under every window (draws skipped).
+COMPUTE_FROM_COLD_START = frozenset({"extruded_bubble"})
 
 
 def stream_states(folder: Path):
@@ -158,6 +168,8 @@ def select(mode: str, deliveries: Path, *, recording: str | None, seconds: float
         lo, hi = window["inputs"]
         window["seconds"] = [times[min(lo, len(times) - 1)], times[min(hi - 1, len(times) - 1)]]
         window["warmup_inputs"] = WARMUP_INPUTS[mode]
+        if mode in COMPUTE_FROM_COLD_START:
+            window["compute_from_input"] = 0
     chosen = {i for window in merged for i in range(*window["inputs"])}
     report = coverage_of(mode, deliveries, merged, ranges)
     late_windows = [w for w in merged if any(r == "late" for r in w["reasons"])]
