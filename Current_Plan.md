@@ -1710,6 +1710,14 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       To name the exact call, use `SynchronousLogging` in the repro's `QOpenGLDebugLogger`. In the callback, read
       `GL_TEXTURE_BINDING_2D_MULTISAMPLE`, `GL_ACTIVE_TEXTURE` and `GL_CURRENT_PROGRAM`, and match the texture name against
       the core textures' `nativeTexture().object`. Check the Qt claims against the SDK's `qrhigles2.cpp` first.
+      Result (`ad3b55fdd7e2d3dcd`, 28 Nov): the advisor was wrong. A synchronous debug-logger probe on `163d41b8` showed
+      one error per multisampled texture at creation, not at bind. Qt's `QGles2Texture::create()` always sets
+      `GL_TEXTURE_MIN_FILTER` after allocating, and that is invalid on a multisampled texture. The `eb_4x` case has five
+      such scene targets and `tiles_4x` has one. Fix `158531ad9`: a `createTexture` helper in `gl_sampler_state.cpp`
+      allocates the multisampled storage itself and hands it to Qt through `createFrom` (Qt owns and frees it). Both
+      creates in `scene_targets.cpp` use it, and a source test plus negative control cover it. The admission test's
+      wording is fixed in `123cf29d0`. The Waveform "first 4x frame" watch is likely the same cause. Lead builds and
+      verifies.
       Verify: `post_stage_check.py --apis opengl --rounds gl_errors` and
       `tests/test_native_core_module.py::test_a_validation_on_opengl_frame_logs_no_gl_errors`.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
