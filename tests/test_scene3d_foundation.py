@@ -22,7 +22,7 @@ from rendering.gl_programs.scene3d import (
     scene3d_impulse,
     scene3d_screen_uv,
 )
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 
 def _inside(point, half_box) -> bool:
@@ -88,132 +88,7 @@ def test_detail_tiers_trade_cost_monotonically():
         scene3d_detail("Ultra")
 
 
-@pytest.mark.qt
-@pytest.mark.parametrize("detail", SCENE3D_DETAIL_NAMES)
-def test_every_tier_keeps_exact_endpoints_and_restores_the_framebuffer(qt_app, detail):
-    capture = TransitionCapture(256, 144)
-    try:
-        run = capture.run("exploding_tiles", direction="center_out", settings={"scene3d_detail": detail})
-        source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
-        near_start = np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16)
-        middle = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
-        bound = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
-        near_end = np.asarray(capture.render(run, 0.9999)[0], dtype=np.int16)
-        assert np.abs(near_start - source).mean() < 0.5
-        assert np.abs(near_end - destination).mean() < 0.5
-        assert np.abs(middle - source).mean() > 2 and np.abs(middle - destination).mean() > 2
-        assert bound == capture.fbo
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app):
-    capture = TransitionCapture(256, 144)
-    try:
-        frames = {}
-        for detail in ("High", "Balanced"):
-            # Bloom off: this compares multisampling alone.
-            run = capture.run("exploding_tiles", direction="center_out",
-                              settings={"scene3d_detail": detail, "exploding_tiles": {"bloom": "Off"}})
-            frames[detail] = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
-        difference = np.abs(frames["High"] - frames["Balanced"])
-        # Same scene, smoother silhouettes: only edge pixels change.
-        assert 0.0 < difference.mean() < 3.0
-        assert (difference.max(axis=2) > 24).mean() < 0.08
-
-        renderer = capture.host._implementations["exploding_tiles"]
-        run = capture.run("exploding_tiles", direction="center_out",
-                          settings={"scene3d_detail": "High", "exploding_tiles": {"bloom": "Off"}})
-        capture.render(run, 0.2)
-        assert renderer._target.has_resources
-        capture.host.park()
-        assert not renderer._target.has_resources
-        assert renderer.has_resources  # programs and the slab mesh stay warm
-        # The next run allocates again and still renders the same frame.
-        assert np.array_equal(np.asarray(capture.render(run, 0.2)[0], dtype=np.int16), frames["High"])
-    finally:
-        capture.close()
-
-
-def test_parking_the_background_node_parks_the_transition_host(qt_app, monkeypatch):
-    from rendering.quick.render import background_node
-    from rendering.quick.render.telemetry import RenderNodeTelemetry
-
-    node = background_node.BackgroundRenderNode(RenderNodeTelemetry(gui_thread_id=1), screen_index=0)
-
-    class _Host:
-        has_resources = True
-        parks = 0
-
-        def park(self):
-            self.parks += 1
-
-        def release_resources(self):
-            self.has_resources = False
-
-    host = _Host()
-    node._transition_renderer = host
-    monkeypatch.setattr(background_node.QOpenGLContext, "currentContext", staticmethod(lambda: object()))
-    node.release_presentation_textures()
-    assert host.parks == 1
-
-
 _MIGRATED = (("glass_shatter", "center_out"), ("crumble", None), ("pixel_accretion", "left"), ("block_spins", "left"))
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect,direction", _MIGRATED)
-def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, direction):
-    capture = TransitionCapture(256, 144)
-    try:
-        source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
-        frames = {}
-        for detail in SCENE3D_DETAIL_NAMES:
-            run = capture.run(effect, direction=direction, settings={"scene3d_detail": detail}, duration_ms=8000)
-            assert np.abs(np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16) - source).mean() < 0.5
-            assert np.abs(np.asarray(capture.render(run, 0.9999)[0], dtype=np.int16) - destination).mean() < 0.5
-            frames[detail] = np.asarray(capture.render(run, 0.45)[0], dtype=np.int16)
-            assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == capture.fbo
-        # High multisamples the same scene: only edge pixels differ from a direct draw.
-        difference = np.abs(frames["High"] - frames["Balanced"])
-        assert difference.mean() < 3.0
-        assert (difference.max(axis=2) > 24).mean() < 0.08
-        renderer = capture.host._implementations[effect]
-        run = capture.run(effect, direction=direction, settings={"scene3d_detail": "High"}, duration_ms=8000)
-        capture.render(run, 0.45)
-        assert renderer._target.has_resources
-        capture.host.park()
-        assert not renderer._target.has_resources and renderer.has_resources
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-def test_bloom_glows_emitted_light_only_and_follows_the_transition_setting(qt_app):
-    capture = TransitionCapture(256, 144)
-    try:
-        def frame(detail, bloom, progress):
-            section = {"bloom": bloom, "bloom_strength": 1.0}
-            run = capture.run("exploding_tiles", direction="center_out", duration_ms=8000,
-                              settings={"scene3d_detail": detail, "exploding_tiles": section})
-            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
-
-        # Late in the run nothing emits (no sparks, cracks, embers or flash): the photographs never bloom.
-        assert np.abs(frame("High", "On", 0.6) - frame("High", "Off", 0.6)).max() <= 1
-        # Around the detonation sparks and glowing cracks do.
-        assert np.abs(frame("High", "On", 0.12) - frame("High", "Off", 0.12)).mean() > 0.3
-        # Auto: Balanced blooms (through a single-sample target), Performance does not...
-        assert np.abs(frame("Balanced", "Auto", 0.12) - frame("Balanced", "Off", 0.12)).mean() > 0.3
-        assert np.array_equal(frame("Performance", "Auto", 0.12), frame("Performance", "Off", 0.12))
-        # ...unless the transition itself says On: its setting is authoritative.
-        assert np.abs(frame("Performance", "On", 0.12) - frame("Performance", "Off", 0.12)).mean() > 0.3
-        # Balanced's bloom target is single-sample and draws like a direct draw: once nothing emits the
-        # frames match (a 1-sample multisampled renderbuffer rasterised the tiles up to 144 levels apart).
-        assert np.abs(frame("Balanced", "Auto", 0.35) - frame("Balanced", "Off", 0.35)).max() <= 1
-        assert np.array_equal(frame("Balanced", "Auto", 0.6), frame("Balanced", "Off", 0.6))
-    finally:
-        capture.close()
 
 
 @pytest.mark.qt
@@ -224,7 +99,7 @@ def test_the_bloom_pass_takes_only_the_alpha_marked_light(qt_app):
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.scene3d.target import SceneTarget
 
-    capture = TransitionCapture(256, 144)
+    capture = OffscreenRenderTarget(256, 144)
     resources, target = MeshResources("bloom test"), SceneTarget("bloom test")
     texture = int(gl.glGenTextures(1))
     try:
@@ -257,78 +132,6 @@ def test_the_bloom_pass_takes_only_the_alpha_marked_light(qt_app):
         gl.glDeleteTextures([texture])
         target.release()
         resources.release_resources()
-        capture.close()
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect,direction", _MIGRATED)
-def test_a_transitions_anti_aliasing_choice_decides_the_scene_target(qt_app, effect, direction):
-    capture = TransitionCapture(256, 144)
-    try:
-        section = "blockspin" if effect == "block_spins" else effect
-        renderer = None
-        # Anti-aliasing alone decides the target while motion blur is off; motion blur needs one too.
-        for tier, choice, motion_blur, expected in (("Performance", "4x", "Off", True), ("High", "Off", "Off", False),
-                                                    ("High", "Auto", "Off", True), ("Performance", "Off", "On", True)):
-            run = capture.run(effect, direction=direction, duration_ms=8000,
-                              settings={"scene3d_detail": tier, section: {"antialiasing": choice, "motion_blur": motion_blur}})
-            capture.render(run, 0.45)
-            renderer = capture.host._implementations[effect]
-            assert renderer._target.has_resources is expected, (tier, choice, motion_blur)
-            capture.host.park()
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-def test_motion_blur_blurs_only_moving_tiles_and_follows_the_transition_setting(qt_app):
-    capture = TransitionCapture(256, 144)
-    try:
-        def frame(detail, motion_blur, progress):
-            section = {"motion_blur": motion_blur}
-            run = capture.run("exploding_tiles", direction="center_out", duration_ms=3000,
-                              settings={"scene3d_detail": detail, "exploding_tiles": section})
-            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
-
-        # Before anything moves the frame is exact; at the detonation the flying tiles blur.
-        assert np.array_equal(frame("High", "On", 0.005), frame("High", "Off", 0.005))
-        assert np.abs(frame("High", "On", 0.13) - frame("High", "Off", 0.13)).mean() > 0.5
-        # Auto follows the tier's post effects; the transition's own choice wins over it.
-        assert np.abs(frame("High", "Auto", 0.13) - frame("High", "Off", 0.13)).mean() > 0.5
-        assert np.array_equal(frame("Performance", "Auto", 0.13), frame("Performance", "Off", 0.13))
-        assert np.abs(frame("Performance", "On", 0.13) - frame("Performance", "Off", 0.13)).mean() > 0.5
-        # Its textures are per run: the host's park drops them with the target.
-        renderer = capture.host._implementations["exploding_tiles"]
-        assert renderer._target.has_resources
-        capture.host.park()
-        assert not renderer._target.has_resources
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect,direction", _MIGRATED)
-def test_every_3d_transition_blurs_its_motion_and_stays_exact_when_nothing_moves(qt_app, effect, direction):
-    """Motion blur for Glass Shatter, Crumble, Directional Pixel Accretion and 3D Block Spins."""
-    capture = TransitionCapture(256, 144)
-    try:
-        section = "blockspin" if effect == "block_spins" else effect
-
-        def frame(motion_blur, progress, duration_ms):
-            run = capture.run(effect, direction=direction, duration_ms=duration_ms,
-                              settings={"scene3d_detail": "High", section: {"motion_blur": motion_blur}})
-            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
-
-        # When its pieces move fastest, at a short duration, they blur...
-        progress = {"glass_shatter": 0.3, "crumble": 0.6}.get(effect, 0.45)
-        moving = np.abs(frame("On", progress, 1500) - frame("Off", progress, 1500))
-        assert moving.mean() > 0.05 and moving.max() > 16, effect
-        # ...and over a very long run a shutter moves nothing by half a pixel: exact.
-        assert np.array_equal(frame("On", progress, 600_000), frame("Off", progress, 600_000)), effect
-        renderer = capture.host._implementations[effect]
-        capture.host.park()
-        assert not renderer._target.has_resources
-    finally:
         capture.close()
 
 

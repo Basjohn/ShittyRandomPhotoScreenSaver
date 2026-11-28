@@ -1,5 +1,6 @@
 // Field recipes (ABI 43, N5.2g): field_recipe.h has the contract.
 #include "field_recipe.h"
+#include "gl_sampler_state.h"
 
 #include "mode_content.h" // ModeTextureFormat
 
@@ -650,7 +651,8 @@ bool FieldRecorder::record(QRhi *rhi, QRhiCommandBuffer *cb, const FieldRecipe &
         const FieldDispatch &d = recipe.dispatches.at(i);
         cb->beginComputePass(batch);
         batch = nullptr;
-        cb->setComputePipeline(pipelines.at(i));
+        setComputePipelineAdopting(cb, pipelines.at(i));
+        adoptMultisampleSamplerState(sets[size_t(setOf.at(i))].get());
         cb->setShaderResources(sets[size_t(setOf.at(i))].get());
         cb->dispatch(int(d.groups[0]), int(d.groups[1]), int(d.groups[2]));
         cb->endComputePass();

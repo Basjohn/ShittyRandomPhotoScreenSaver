@@ -440,10 +440,9 @@ For the expanded effects, render deterministic textured progressions through the
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect melt_drip --source <source-photo> --destination <destination-photo> --animate --output-dir <output-directory>
-./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
 ```
 
-The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
+The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. The frames are the native core's (`tools/native_transition_capture.py`, N5.2h), no window. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
 
 These commands are retained regression/acceptance harnesses for the current Quick transition implementations; they are not an implementation checklist.
 
@@ -942,7 +941,7 @@ python native/core/python/backdrop_pyramid_check.py --module-dir release/native_
     [--apis opengl vulkan] [--rounds levels cards cost rest route lifetime] [--label n57b_backdrop_pyramid]
 # N5.2a: the seven fullscreen transitions on the background layer (NativeBackgroundLayer.transition), hidden hosts only:
 # every variant of fullscreen_pass_check.VARIANTS from a dark to a bright PERSONALSET photo at nine progress values, dpr
-# 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (TransitionCapture);
+# 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (recorded references from the proof cache; the Python host is deleted);
 # rule (b) Vulkan within 1 level; each run's end draws the destination with no upload and nothing at rest; the route
 # through BackgroundRenderItem.set_transition_run on Vulkan; Vulkan validated. N5.2b widened it to the five item-quad
 # programs (N52B_VARIANTS: Chromatic Shear, Liquid Lens, Melt Drip, Surface Tension, VHS; --topic n5_2b), the reference

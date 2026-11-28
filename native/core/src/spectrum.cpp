@@ -1,5 +1,6 @@
 // The native Spectrum (N2.5): spectrum.h has the contract.
 #include "spectrum.h"
+#include "gl_sampler_state.h"
 
 #include "conventions.h"
 #include "rhi_owned.h"
@@ -831,13 +832,13 @@ bool SpectrumContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &targ
     const QRhiViewport viewport(0, 0, float(size.width()), float(size.height()));
     const QRhiCommandBuffer::VertexInput input(r.vertices.get(), 0);
     cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, updates);
-    cb->setGraphicsPipeline(r.clearPipeline.get());
+    setGraphicsPipelineAdopting(cb, r.clearPipeline.get());
     cb->setViewport(viewport);
     cb->setShaderResources();
     cb->setVertexInput(0, 1, &input);
     cb->draw(3);
     if (draw) {
-        cb->setGraphicsPipeline(r.pipeline.get());
+        setGraphicsPipelineAdopting(cb, r.pipeline.get());
         cb->setViewport(viewport);
         cb->setShaderResources();
         cb->setVertexInput(0, 1, &input);

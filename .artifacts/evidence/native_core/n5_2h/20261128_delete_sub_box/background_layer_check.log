@@ -1,0 +1,13 @@
+opengl: PASS
+opengl record time per change at 3840x2160: {'in_frame': {'n': 4, 'median_ms': 0.0345, 'p90_ms': 0.0364, 'max_ms': 0.0364}}; GUI hand-over {'n': 4, 'median_ms': 5.1259, 'p90_ms': 6.0285, 'max_ms': 6.0285}
+opengl rest empty: QRhi frame GPU {'n': 56, 'median_ms': 0.0338, 'p90_ms': 0.041, 'max_ms': 0.0901}, wall {'n': 120, 'median_ms': 0.2346, 'p90_ms': 0.3228, 'max_ms': 5.9752}
+opengl rest python: QRhi frame GPU {'max_ms': 0.0256, 'median_ms': 0.0133, 'n': 74, 'p90_ms': 0.0133}, wall {'max_ms': 1.7094, 'median_ms': 0.1382, 'n': 120, 'p90_ms': 0.1695}
+opengl rest layer: QRhi frame GPU {'n': 51, 'median_ms': 0.0133, 'p90_ms': 0.0143, 'max_ms': 0.0164}, wall {'n': 120, 'median_ms': 0.2036, 'p90_ms': 0.2781, 'max_ms': 1.4971}
+vulkan: PASS
+vulkan record time per change at 3840x2160: {'commit_job': {'n': 4, 'median_ms': 0.0524, 'p90_ms': 0.0651, 'max_ms': 0.0651}, 'submit': {'n': 4, 'median_ms': 0.0123, 'p90_ms': 0.0187, 'max_ms': 0.0187}}; GUI hand-over {'n': 4, 'median_ms': 4.475, 'p90_ms': 5.9442, 'max_ms': 5.9442}
+vulkan rest empty: QRhi frame GPU {'n': 121, 'median_ms': 0.014, 'p90_ms': 0.0146, 'max_ms': 0.0214}, wall {'n': 120, 'median_ms': 0.0861, 'p90_ms': 0.1337, 'max_ms': 1.0719}
+vulkan rest layer: QRhi frame GPU {'n': 119, 'median_ms': 0.0153, 'p90_ms': 0.0157, 'max_ms': 0.0284}, wall {'n': 120, 'median_ms': 0.0992, 'p90_ms': 0.1347, 'max_ms': 1.2383}
+evidence: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.claude\worktrees\agent-ac5eb8a969947d272\.artifacts\evidence\native_core\n5_7a\20261128_n52h_delete_background_layer_check\summary.json
+N57A VERDICT PASS
+
+--- stderr

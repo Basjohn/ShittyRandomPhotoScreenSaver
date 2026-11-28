@@ -24,7 +24,7 @@ def world_shaft(qt_app):
     from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS, SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     prefix = SHAFT_FRAGMENT.rsplit('void main()', 1)[0]
@@ -54,7 +54,7 @@ void main(){
     vNdc=p*2.-1.;gl_Position=vec4(vNdc,0.,1.);
 }
 '''
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     programs = []
     texture = 0
     try:
@@ -310,7 +310,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
                                                                SHAFT_FRAGMENT)
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     # Control only noise density and sample jitter. Keep production main wiring,
@@ -321,7 +321,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
     source = source.replace(jitter, 'float jitter = 0.25;')
     former = source.replace('sceneTransmittance(rayOrigin+ray*atDistance)', 'sceneTransmittance(rayOrigin+ray*18.0)')
     assert former != source
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     programs = []
     texture = 0
     try:

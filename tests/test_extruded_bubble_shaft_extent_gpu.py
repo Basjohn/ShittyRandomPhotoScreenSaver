@@ -25,7 +25,7 @@ def shaft_geometry(qt_app):
     from OpenGL import GL as gl
     from rendering.gl_programs.extruded_bubble_program import SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     # Execute the real functions unchanged, independently of camera marching,
     # angular pattern, representative-depth masks, blur and final composition.
@@ -48,7 +48,7 @@ void main() {
     gl_Position = vec4(0.,0.,0.,1.);
 }
 '''
-    target = TransitionCapture(32, 32)
+    target = OffscreenRenderTarget(32, 32)
     program = 0
     buffers = []
     try:

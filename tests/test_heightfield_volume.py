@@ -14,7 +14,7 @@ from rendering.gl_programs.heightfield_volume_glsl import (
     HEIGHTFIELD_VOLUME_QUALITY_STEPS,
 )
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 
@@ -95,7 +95,7 @@ def test_cpu_four_tap_occlusion_uses_land_and_leaves_exact_zero_water_open():
 
 
 def test_gl_volume_is_premultiplied_bounded_and_occluded_by_raised_land(qt_app):
-    capture = TransitionCapture(16, 16)
+    capture = OffscreenRenderTarget(16, 16)
     texture = HeightfieldTexture("heightfield volume probe", components=2)
     from rendering.quick.render.gl_resources import compile_program
 

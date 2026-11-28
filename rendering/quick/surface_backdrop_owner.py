@@ -7,10 +7,10 @@ the Context Menu, and forwards the controller's existing edges (image published,
 transition started/cleared, geometry changed, dimming changed) as backdrop refreshes.
 It has no timer, no frame request and no per-frame work of its own.
 
-Its source (Current_Plan.md N5.7b): on OpenGL the Python pyramid
-(``render.surface_backdrop.SurfaceBackdropSource``); on the native background's backend
-(Vulkan, with the native core loaded) the core's pyramid built from its background layer
-(``render.native_surface_backdrop``), whose item the same ``MaterialSurface`` samples.
+Its source (Current_Plan.md N5.7b, N5.2h): on every backend the core's pyramid built from
+its background layer (``render.native_surface_backdrop``), whose item the same
+``MaterialSurface`` samples. Without a core (the degraded display) there is no backdrop and
+the cards keep their Normal fill (``backdrop_available``).
 """
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from typing import Any
 
 from PySide6.QtQuick import QQuickItem
 
-from .render.surface_backdrop import SurfaceBackdropSource
 from .widgets.surface_material import transition_refresh_interval_s
 
 # Above backgroundDimming (z 1), below the CUSTOM guide underlay (z 4) and the
@@ -27,15 +26,24 @@ BACKDROP_Z = 2.0
 
 
 def _make_source(root: QQuickItem, screen_index: int) -> tuple[Any, QQuickItem]:
-    """The display's backdrop source and its item: the core's on the native background's backend, else Python's."""
+    """The display's backdrop source and its item: the core's (no Python backdrop on any backend)."""
     from .render.native_surface_backdrop import NativeSurfaceBackdropSource, native_backdrop_core
 
+    del screen_index
     core = native_backdrop_core()
-    if core is not None:
-        source = NativeSurfaceBackdropSource(core, root)
-        return source, source.item
-    item = SurfaceBackdropSource(root, screen_index=screen_index)
-    return item, item
+    if core is None:
+        # N5.2h: one route per API, no Python backdrop; the degraded display has none (``backdrop_available``).
+        raise RuntimeError("the surface backdrop needs the native core")
+    source = NativeSurfaceBackdropSource(core, root)
+    return source, source.item
+
+
+def backdrop_available() -> bool:
+    """Whether a display can have a backdrop (the native core loaded); on the degraded display the cards keep their
+    Normal fill (fail closed)."""
+    from .render.native_surface_backdrop import native_backdrop_core
+
+    return native_backdrop_core() is not None
 
 
 class SurfaceBackdropOwner:
@@ -65,7 +73,7 @@ class SurfaceBackdropOwner:
 
     @property
     def source(self) -> Any:
-        """The Python ``SurfaceBackdropSource`` (the item itself) or the native source (N5.7b)."""
+        """The native source (N5.7b): the core's backdrop and its item."""
         return self._source
 
     @property
@@ -150,4 +158,4 @@ class SurfaceBackdropOwner:
             source.set_parked(True)
 
 
-__all__ = ["BACKDROP_Z", "SurfaceBackdropOwner"]
+__all__ = ["BACKDROP_Z", "SurfaceBackdropOwner", "backdrop_available"]

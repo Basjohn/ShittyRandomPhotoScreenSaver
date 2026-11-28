@@ -30,7 +30,7 @@ from rendering.gl_programs.liquid_lens_program import (
     lens_twist_angle,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 ASPECT = W / H
@@ -109,7 +109,7 @@ def test_the_shader_helpers_match_their_mirrors_on_the_gpu(qt_app):
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -181,31 +181,6 @@ def test_refraction_changes_only_the_lens(capture):
     source = _pixels(capture.images[0])
     outside = np.all(flat == source, axis=2) & np.all(strong == source, axis=2)
     assert outside.mean() > 0.5 and (np.abs(flat - strong).max(axis=2) > 8).any()
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("liquid_lens", duration_ms=8000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("liquid_lens", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 10
-        warmed = work.total
-        for progress in (0.0, 0.3, 0.6, 1.0):
-            capture.render(run, progress)
-        assert work.total == warmed
-        renderer = capture.host._implementations["liquid_lens"]
-        capture.host.park()
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_seeds_runs_and_repairs_stops():

@@ -1,8 +1,8 @@
 """The "available on this backend" answer of the capability registries (D10 point 2, Current_Plan.md item 8b N2.7).
 
 A mode without a renderer on the process's backend is not offered there (never started, activated or cycled to);
-a transition without one runs as Crossfade; the background family (presenter, backdrop, transitions) creates no
-surface on a backend without its renderers. The process's backend is the one owner's (``rendering.quick.bootstrap``);
+a transition without one runs as Crossfade; the background and backdrop come from the native core on
+every backend (N5.2h). The process's backend is the one owner's (``rendering.quick.bootstrap``);
 these tests answer "vulkan" from it without changing Qt. Which modes and transitions are ported is read from each
 descriptor, never listed here: a port is simulated by giving one descriptor the backend.
 """
@@ -57,8 +57,16 @@ def test_on_opengl_every_mode_and_transition_has_its_renderer_and_nothing_change
             descriptor.mode_id, None)[0]
     for descriptor in transitions.iter_transition_descriptors():
         assert transitions.resolve_backend_transition_name(descriptor.setting_name) == descriptor.setting_name
-    assert transitions.background_family_available_on_backend()
     assert not modes.is_mode_available_on_backend("no_such_mode", "opengl")
+
+
+@pytest.mark.parametrize("backend", ["opengl", "vulkan"])
+def test_the_background_is_native_on_every_backend(backend):
+    # N5.2h: one route per API; the background comes from the native core on both.
+    from rendering.quick.render.native_background import native_background_wanted
+
+    assert native_background_wanted(backend)
+    assert not native_background_wanted("no_such_backend")                                  # control
 
 
 def test_each_descriptor_answers_for_itself_on_vulkan(on_vulkan):
@@ -67,8 +75,6 @@ def test_each_descriptor_answers_for_itself_on_vulkan(on_vulkan):
     for descriptor in transitions.iter_transition_descriptors():
         assert transitions.is_transition_available_on_backend(descriptor.setting_name) == (
             "vulkan" in descriptor.renderer_backends)
-    assert transitions.background_family_available_on_backend() == (
-        "vulkan" in transitions.BACKGROUND_FAMILY_BACKENDS)
 
 
 # ----------------------------------------------------------------------------------------------------------- modes
@@ -174,25 +180,4 @@ def test_the_resolved_transition_on_vulkan_is_crossfade_with_its_own_duration(mo
     assert (spec.transition_id, spec.duration_ms, spec.requested_name) == ("crossfade", 654, "Slide")
 
 
-# ------------------------------------------------------------------------------------------ the background family
 
-
-def test_on_vulkan_no_background_or_backdrop_node_is_created(on_vulkan, qt_app):
-    from rendering.quick.render.background_item import BackgroundRenderItem
-    from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
-
-    background = BackgroundRenderItem()
-    background.setProofProgress(0.25)                 # a render that creates the node wherever the family runs
-    assert background.updatePaintNode(None, None) is None
-    assert background.schedule_warm_step("crossfade", {}, object(), 1) is False
-    backdrop = SurfaceBackdropSource()
-    backdrop.request_refresh()
-    assert backdrop.armed and backdrop.updatePaintNode(None, None) is None
-
-
-def test_on_opengl_the_background_family_keeps_its_renderers(qt_app):
-    from rendering.quick.render.background_item import BackgroundRenderItem
-    from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
-
-    assert BackgroundRenderItem()._renderers_on_backend is True
-    assert SurfaceBackdropSource()._renderers_on_backend is True

@@ -11,7 +11,7 @@ def test_scene_particles_keep_near_wall_interior_but_fade_at_real_entry_exit_and
     from rendering.gl_programs.extruded_bubble_program import GLASS_BLOCK,PARTICLE_BLOCK,SPECK_VERTEX,BEAD_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     gl=PassBlockGL(GL)          # the generators' values are their pass block (N1.6), set by name as before
     block=PARTICLE_BLOCK if population=='specks' else GLASS_BLOCK
 
@@ -32,7 +32,7 @@ def test_scene_particles_keep_near_wall_interior_but_fade_at_real_entry_exit_and
 layout(std430,binding=6) buffer Results {vec4 results[];};
 void main(){'''+generated+'''gl_Position=vec4(0,0,0,1);}
 '''
-    target=TransitionCapture(64,64);program=buffer=0
+    target=OffscreenRenderTarget(64,64);program=buffer=0
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;void main(){colour=vec4(0);}',label='scene physical entry fade')
         gl.register(program,block)

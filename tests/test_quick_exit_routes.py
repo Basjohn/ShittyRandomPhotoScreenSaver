@@ -58,6 +58,8 @@ def test_the_route_releases_its_vulkan_window_before_the_loop_ends(route, varian
         assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
         assert returncode == 0
     else:
-        # The negative control: the loop ended with the window alive and the process crashed at its exit.
+        # The negative control: the loop ended with the window alive and its host unreleased. The 0xC0000005 at
+        # interpreter exit no longer follows (measured 28 Nov: the f12427a2e tree crashes, the switch's tree exits
+        # 0): the Python background render node that touched the device from Qt's teardown is deleted (N5.2h).
+        # The window and host counts are the control now.
         assert report["window_alive_at_loop_end"] is True and report["hosts_left"] == 1
-        assert returncode != 0

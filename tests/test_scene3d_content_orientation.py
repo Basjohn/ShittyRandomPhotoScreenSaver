@@ -12,7 +12,7 @@ from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from tests._visualizer_presentation import resolve_presentation
-from tests.test_scene3d_target import WIDTH, HEIGHT, _card_frame, _clear, _read, capture
+from tests.test_scene3d_target import WIDTH, HEIGHT, _card_frame, _clear, _photo, _read, capture
 
 
 @dataclass(frozen=True)
@@ -58,13 +58,13 @@ def test_existing_target_rigidly_rotates_non_square_pixels_without_changing_came
         reference = _frame(capture, 12, 12, logical_width, logical_height, 0, dpr=dpr, viewport=viewport)
         _clear(capture)
         with target.scope(reference, samples, resources, overlay=overlay, bloom=bloom):
-            resources.draw_image(reference, capture.textures[0])
+            resources.draw_image(reference, _photo(capture))
         raw = _read(capture)
         reference_pixels = raw[HEIGHT - 12 - logical_height:HEIGHT - 12, 12:12 + logical_width]
 
         _clear(capture)
         with target.scope(oriented, samples, resources, overlay=overlay, bloom=bloom):
-            resources.draw_image(oriented, capture.textures[0])
+            resources.draw_image(oriented, _photo(capture))
         raw = _read(capture)
         actual = raw[HEIGHT - top - height:HEIGHT - top, left:left + width]
         assert np.array_equal(actual, np.rot90(reference_pixels, quarter))
@@ -94,11 +94,11 @@ def test_only_a_turned_scene_builds_an_output_frame(capture, monkeypatch):
         for frame in (_card_frame(capture, 42, 20, 120, 80), _frame(capture, 42, 20, 120, 80, 0)):
             assert not hasattr(frame, "scene_output_rotation") or frame.scene_output_rotation == 0
             with target.scope(frame, 4, resources, overlay=1.0):
-                resources.draw_image(frame, capture.textures[0])
+                resources.draw_image(frame, _photo(capture))
         assert built == []
         turned = orient_visualizer_scene_frame(_frame(capture, 42, 20, 120, 80, 1))
         with target.scope(turned, 4, resources, overlay=1.0):
-            resources.draw_image(turned, capture.textures[0])
+            resources.draw_image(turned, _photo(capture))
         assert built == [turned]
     finally:
         target.release()
