@@ -574,9 +574,12 @@ from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 
 factory = QuickSceneFactory()
-runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=1, screen=app.primaryScreen(), scene_factory=factory,
-                              window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
-window = runtime.window
+# The display manager is the runtime's one owner: the probe holds it in one place the teardown empties, so no global
+# of the probe keeps the generation alive and the lifecycle barrier proves its drain (it timed out on this global).
+held = {"runtime": QuickDisplayRuntime(screen_index=0, runtime_generation=1, screen=app.primaryScreen(),
+                                       scene_factory=factory,
+                                       window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))}
+window = held["runtime"].window
 
 
 class Manager(QObject):
@@ -584,13 +587,13 @@ class Manager(QObject):
     _runtime_generation = 1
 
     def collect_runtime_retirement_roots(self):
-        return [runtime, window], []
+        return [held["runtime"], window], []
 
     def get_display_count(self):
         return 1
 
     def cleanup(self):
-        runtime.close_runtime()
+        held.pop("runtime").close_runtime()
 
 
 class Engine(QObject):
@@ -678,6 +681,8 @@ def test_an_exiting_stop_releases_the_vulkan_window_and_the_process_exits_cleanl
         assert report["order"] == ["window_destroyed", "quit"]
         assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
         assert completed.returncode == 0, completed.stderr
+        # The drain is proved, not timed out (the probe's own global once kept one QuickDisplayRuntime live).
+        assert "[LIFECYCLE_BARRIER] timeout" not in completed.stderr, completed.stderr[-1500:]
     else:
         assert report["order"][0] == "quit"
 
