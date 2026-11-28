@@ -1206,26 +1206,75 @@ def _jsonable(value):
     return value
 
 
+def _record_writes(writer: Any, deliveries: "DeliveryStream") -> None:
+    """Every write ``writer`` (a ``GeometryArenaWriter``) makes is recorded with ``deliveries`` as it is made."""
+    write = writer._write
+
+    def recording(index, number, key, payload):
+        done = write(index, number, key, payload)
+        if done:
+            deliveries.write(index, number, key, payload)
+        return done
+
+    writer._write = recording
+
+
 class DeliveryStream:
     """What the product's route delivered to the native core, input by input (fast-proof part 2 step 4b): the record
     the core holds, the settings, the card and the target sizes, each written when it changes, and whether the native
     side draws. ``deliveries.jsonl`` holds one line per input; ``records.bin`` the records, each stored once per change
-    (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API."""
+    (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API.
 
-    def __init__(self, folder: Path, mode: str, keep: tuple[int, int] | None = None) -> None:
-        """``keep``: only the inputs in ``[start, end)`` are written (a window run), the first with its whole state."""
+    Format 2 (a mode with a geometry arena, Extruded Bubble's drift, N5.6 D3): the header names the arena's layout and
+    its writer's key namespace (``arena``: families, bank bytes, namespace), and a line's ``geometry`` lists the arena
+    writes made for that input's frame before its record (``[family, bank, key words, offset, size]``, the payload at
+    ``offset`` in ``geometry.bin``). A window's first line holds every bank live then."""
+
+    def __init__(self, folder: Path, mode: str, keep: tuple[int, int] | None = None,
+                 arena: dict | None = None) -> None:
+        """``keep``: only the inputs in ``[start, end)`` are written (a window run), the first with its whole state.
+        ``arena``: the geometry arena's layout and writer namespace (format 2; ``write`` records each write)."""
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self._lines = (self.folder / "deliveries.jsonl").open("w", encoding="utf-8")
         self._records = (self.folder / "records.bin").open("wb")
+        self._geometry = (self.folder / "geometry.bin").open("wb") if arena is not None else None
+        self._writes: list[tuple[int, int, tuple, bytes]] = []
+        self._banks: dict[tuple[int, int], tuple[tuple, bytes]] = {}     # every bank's live key and payload
+        self._started = False
         self._last: dict = {}
         self._keep = keep
-        self._lines.write(json.dumps({"mode": mode, "format": 1, "keep": keep}) + "\n")
+        header: dict = {"mode": mode, "format": 1 if arena is None else 2, "keep": keep}
+        if arena is not None:
+            header["arena"] = dict(arena)
+        self._lines.write(json.dumps(header) + "\n")
+
+    def write(self, family: int, bank: int, key: tuple, payload: bytes) -> None:
+        """One arena write of the coming input's frame (``GeometryArenaWriter._write``'s arguments)."""
+        entry = (int(family), int(bank), tuple(int(v) for v in key), bytes(payload))
+        self._writes.append(entry)
+        self._banks[entry[:2]] = entry[2:]
+
+    def _geometry_line(self) -> list:
+        writes, self._writes = self._writes, []
+        if not self._started:
+            self._started = True
+            writes = [(family, bank, key, payload) for (family, bank), (key, payload) in sorted(self._banks.items())]
+        out = []
+        for family, bank, key, payload in writes:
+            out.append([family, bank, list(key), self._geometry.tell(), len(payload)])
+            self._geometry.write(payload)
+        return out
 
     def add(self, index: int, native: dict) -> None:
         if self._keep is not None and not self._keep[0] <= index < self._keep[1]:
+            self._writes = []                    # the banks still follow every write (a window's first line)
             return
         line: dict = {"input": index, "drawn": bool(native["drawn"])}
+        if self._geometry is not None:
+            geometry = self._geometry_line()
+            if geometry:
+                line["geometry"] = geometry
         if native["drawn"]:
             record = native["record"]
             if record is not self._last.get("record_object") and record != self._last.get("record"):
@@ -1238,11 +1287,15 @@ class DeliveryStream:
                 if value != self._last.get(key):
                     line[key] = value
                     self._last[key] = value
+            if native.get("variant") is not None and native["variant"] != self._last.get("variant"):
+                line["variant"] = self._last["variant"] = list(native["variant"])
         self._lines.write(json.dumps(line) + "\n")
 
     def close(self) -> None:
         self._lines.close()
         self._records.close()
+        if self._geometry is not None:
+            self._geometry.close()
 
 
 # --------------------------------------------------------------------------------------------- the mirror
@@ -1404,8 +1457,10 @@ class IdentityMirror:
             self.applied["block"] = self.index
             self.applied["block_member"] = f"{pass_name}.{member}"
         revision = getattr(route._snapshot, "logical_revision", None)
+        variant = getattr(content, "_program_variant", None)
         return {"drawn": True, "record": self._core_record, "settings": settings, "card": card, "blocks": blocks,
-                "sources": sources, "revision": revision, "sizes": sizes}
+                "sources": sources, "revision": revision, "sizes": sizes,
+                "variant": list(variant) if isinstance(variant, (tuple, list)) else variant}
 
     def _python(self) -> dict:
         import dataclasses
@@ -1433,8 +1488,23 @@ class IdentityMirror:
         if not drawn["blocks"]:
             return {"drawn": False}
         del dataclasses
-        return {"drawn": True, "record": self.comparator.schema.encode(snapshot.logical), "logical": snapshot.logical,
+        return {"drawn": True, "record": self._reference_record(snapshot.logical), "logical": snapshot.logical,
                 "revision": snapshot.logical_revision, **drawn}
+
+    def _reference_record(self, logical: Any) -> bytes:
+        """The Python side's record. With a geometry arena (``reference_drift``, Extruded Bubble's), its drift fields
+        are projected by a drift side of its own over the same arena: the route's projector has already taken newer
+        frames than the drawn snapshot's, and a projector's serial never goes back."""
+        drift = getattr(self, "reference_drift", None)
+        if drift is None:
+            return self.comparator.schema.encode(logical)
+        from core.visualizer_engine import extruded_bubble_native_schema as ebs
+
+        saved, ebs.DRIFT = ebs.DRIFT, drift
+        try:
+            return self.comparator.schema.encode(logical)
+        finally:
+            ebs.DRIFT = saved
 
     def close(self) -> None:
         if self.route is not None:
@@ -1526,11 +1596,27 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
             raise ValueError(f"{mode} has the runs {sorted(runs)}, not {run_key!r}")
         settings = runs[run_key]
         mirror.meta["run"] = run_key
-    if deliveries is not None:
-        mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep)
     register = MODES[mode].register
     try:
-        with (register() if register is not None else contextlib.nullcontext()):
+        with contextlib.ExitStack() as stack:
+            arena = None
+            if mode == "extruded_bubble":
+                # The worker's D3 side in process (the run has no worker): the drift families named as the product's
+                # are, each write recorded with the deliveries (format 2) for the native-only player. The Python
+                # side's record projects through a drift side of its own (projection only, no writes).
+                from core.visualizer_engine import extruded_bubble_native_schema as ebs
+
+                mirror.reference_drift = type("ReferenceDrift", (ebs.DriftStream,),
+                                              {"project": ebs.DriftStream.project})()
+                arena = stack.enter_context(parity.in_process_drift_arena())
+            if deliveries is not None:
+                layout = None if arena is None else {"families": list(arena._names), "bank_bytes": arena._bank_bytes,
+                                                     "namespace": arena.namespace}
+                mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep, arena=layout)
+                if arena is not None:
+                    _record_writes(arena, mirror.deliveries)
+            if register is not None:
+                stack.enter_context(register())
             run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
                                            settings=settings, scene_mirror=mirror)
     finally:

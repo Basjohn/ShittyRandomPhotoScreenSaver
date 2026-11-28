@@ -1713,6 +1713,10 @@ def _largest_geometry_bank() -> int:
     return (largest + 15) // 16 * 16
 
 
+#: The in-process drift arena's writer key namespace (odd and non-zero, as ``GeometryArenaWriter`` draws its own).
+IN_PROCESS_WRITER_NAMESPACE = 0x5E5D_0001
+
+
 @contextlib.contextmanager
 def in_process_drift_arena():
     """The engine worker's D3 side, in process (N5.6): the owner replay runs without a worker, so no session opened
@@ -1720,13 +1724,22 @@ def in_process_drift_arena():
     the drift held). For the run the harness stands in for the worker: the session's arena opened under the in-process
     label namespace (0) as ``engine_worker_link.configure`` opens it, and each logical frame's new keys written by the
     worker's own ``GeometryArenaWriter`` before the route projects that frame (as ``PacketMailbox.publish`` writes them
-    before the slot), the previous frame counted consumed (the in-process route takes every frame it projects)."""
+    before the slot), the previous frame counted consumed (the in-process route takes every frame it projects).
+
+    The writer's key namespace is the fixed ``IN_PROCESS_WRITER_NAMESPACE``, not a fresh random one: the record carries
+    it in every geometry key, so two runs of one take (a coverage window against the continuous run, layer L's runs)
+    hold the same record bytes only under one namespace. The route's shared projector (``schema.DRIFT``) forgets its
+    streams when the arena opens and closes, as a replacement worker's new namespace makes it: another run in the same
+    process starts its epochs and serials again under the same namespace."""
     from core.visualizer_engine import extruded_bubble_native_schema as schema
-    from core.visualizer_engine.geometry_arena import GeometryArenaWriter
+    from core.visualizer_engine import geometry_arena as ga
     from widgets.spotify_visualizer.extruded_bubble_drift_log import FAMILIES
 
     owner = schema.open_stream_arena(0, _largest_geometry_bank())
-    writer = GeometryArenaWriter(owner.name, families=FAMILIES)
+    writer = ga.GeometryArenaWriter(owner.name, families=FAMILIES)
+    writer.namespace = IN_PROCESS_WRITER_NAMESPACE
+    ga._WRITER_NAMESPACE.pack_into(writer._memory.buf, ga._WRITER_NAMESPACE_AT, writer.namespace)
+    schema.DRIFT._projectors = {}
     project = schema.DriftStream.project
     sequence = [0]
 
@@ -1741,6 +1754,7 @@ def in_process_drift_arena():
         yield writer
     finally:
         schema.DriftStream.project = project
+        schema.DRIFT._projectors = {}
         writer.close()
         schema.close_stream_arena(owner)
 
