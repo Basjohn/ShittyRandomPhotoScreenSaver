@@ -38,9 +38,9 @@ def test_block_programs_read_the_captured_background_at_the_renderers_unit(qt_ap
         assert gl.glGetError() == gl.GL_NO_ERROR
         # The unit the renderer binds the captured background to before the transparent pass.
         assert units == {key: eb._UNIT_BACKGROUND for key in units}
-        # The loose traced glass is given the same unit by the renderer's values.
-        assert eb._glass({"spec_dir": (0.0, 1.0, 0.0), "specular_light": (1.0, 1.0, 1.0), "light_strength": 1.0},
-                         False)["uBackground"] == eb._UNIT_BACKGROUND
+        # The traced glass no longer carries the unit as a loose value (994beba7f moved the samplers into the pass
+        # block's layout): its programs are among the rows above and read the same unit.
+        assert {"shells", "near"} <= set(units)
     finally:
         for program in programs:
             delete_program(program)
