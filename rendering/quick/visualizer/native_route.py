@@ -584,12 +584,12 @@ REFUSED_RUN_FADE = 30
 
 
 def native_route_wanted(backend: str | None = None) -> bool:
-    """Whether the Visualizer draws through the native route on ``backend`` (the process's when None): Vulkan."""
-    if backend is None:
-        from rendering.quick.bootstrap import quick_backend_api
+    """Whether the Visualizer draws through the native route on ``backend`` (the process's when None): Vulkan. The
+    owner is ``rendering.quick.bootstrap.native_visualizer_route_wanted``, which the scene asks before importing this
+    module."""
+    from rendering.quick.bootstrap import native_visualizer_route_wanted
 
-        backend = quick_backend_api()
-    return str(backend) == "vulkan"
+    return native_visualizer_route_wanted(backend)
 
 
 class NativeVisualizerRoute:

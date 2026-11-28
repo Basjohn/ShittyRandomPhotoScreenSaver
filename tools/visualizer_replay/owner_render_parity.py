@@ -1379,6 +1379,18 @@ def _python_masks(mode: str, script, settings: dict, python: dict) -> tuple[dict
     return rule_a_masks(python, backdrop), len(backdrop["pixels"])
 
 
+def _recorded_python_reference(mode: str, script, settings: dict) -> tuple[dict, list, dict, int, dict]:
+    """The Python run, its window maps, its masks and the backdrop's frame count (``_python_reference``,
+    ``_python_masks``), with what drew them (``python_references.recording``: the sources a cached reference is
+    checked against)."""
+    from tools.visualizer_replay import python_references
+
+    with python_references.recording() as used:
+        python, mappings = _python_reference(mode, script, settings)
+        masks, backdrop_frames = _python_masks(mode, script, settings, python)
+    return python, mappings, masks, backdrop_frames, used.drawing()
+
+
 def python_references_root() -> Path:
     from tools.visualizer_replay.python_references import DEFAULT_ROOT
     return DEFAULT_ROOT
@@ -1415,9 +1427,9 @@ def references_only(out: Path, *, mode: str, offers: bool, seconds: float, recor
         else:
             script = parity_script(clip.frames, mode)
             with single_sample_scene_targets(), card_placement(placement):
-                python, mappings = _python_reference(mode, script, settings)
-                masks, backdrop_frames = _python_masks(mode, script, settings, python)
-                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+                python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script,
+                                                                                               settings)
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
             state, frames = "drawn and stored", len(python["pixels"])
         report["results"][key_name] = {"key": key, "folder": str(folder), "state": state, "frames": frames,
                                        "seconds": round(time.perf_counter() - started, 1)}
@@ -1555,10 +1567,9 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
         if cached is not None:
             python, masks, mappings, backdrop_frames = cached
         else:
-            python, mappings = _python_reference(mode, script, settings)
-            masks, backdrop_frames = _python_masks(mode, script, settings, python)
+            python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script, settings)
             if references is not None:
-                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
         draw_inputs = None
         if windows is not None:
             from tools.visualizer_replay.coverage_windows import window_inputs
@@ -1580,9 +1591,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
             # The simulation moved since the reference was drawn: never judged against it; drawn again.
             reference_state = "stale (logical digests differ): drawn again and stored"
             python_references.release(cached)             # the stale reference's open files (audit 9 M2)
-            python, mappings = _python_reference(mode, script, settings)
-            masks, backdrop_frames = _python_masks(mode, script, settings, python)
-            python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+            python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script, settings)
+            python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
         if accepted is not None and (reference_state != "read" or accepted.get("reference") != str(folder)):
             accepted = None                               # another reference: every frame is judged
             reference_state += "; the accepted run's reference differs: every frame judged"
