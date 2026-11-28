@@ -452,7 +452,7 @@ These commands are retained regression/acceptance harnesses for the current Quic
 
 ## 3. Transition discriminator expectations
 
-The real-GL smokes protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.
+The transition tests on the native core's hidden host (`NativeTransitionCapture`, `tools/native_transition_capture.py`, N5.2h; the real-GL smokes that judged the deleted Python node are gone) protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.
 
 For parameter-sensitive cases hold constant, as applicable:
 
