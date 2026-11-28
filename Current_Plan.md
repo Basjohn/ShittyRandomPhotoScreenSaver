@@ -104,6 +104,13 @@ Continue the native sequence below with the repaired timing receipts. The report
     media tools' native capture.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
+    Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
+    outputs compared old vs new); stopped at 195k, merges with the switch. Left for the delete box: `bench_stability.
+    crossfade_control` (used by `visualizer_cost_probe.py`, `bubble_particle_glow.py` perf) goes to a native crossfade
+    control; `overhead_baseline.py`, `conventions_identity.py` and the transition-drawing `test_qtquick_*`/
+    `test_transition_*`/mixed scene3d cases retarget to the native route or go. Side defects (pre-existing, both fail
+    identically on old code): `tests/test_extruded_bubble_trails_background_gpu.py` (`eb._glass(...)` has no
+    `uBackground`); `tools/extruded_bubble_coverage_probe.py:103` `min()` of an empty array.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
