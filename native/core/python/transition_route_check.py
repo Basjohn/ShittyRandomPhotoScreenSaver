@@ -1036,7 +1036,7 @@ def _scene_passes(core, scene, host, clock, run, api: str = "opengl") -> tuple[d
         # The control: the units block (runs timed whole) holds no part, and the parts cover the units (no work of a
         # run left outside its parts: their sum per frame is no less than the units' median, less timing noise,
         # RUN_PARTS_SUM_TOLERANCE). Brackets inside a pass serialise it, so the parts add time that grows with the
-        # pass (measured +0.04 ms at 1440p, up to +0.15 ms at 4K on crumble_both_4x): reported as
+        # pass (measured +0.04-0.05 ms at 1440p, +0.15-0.17 ms at 4K on crumble_both_4x): reported as
         # run_parts_overhead_ms, never judged, as the parts are attribution and the units carry the cost.
         units_ms = record["units_sum_per_frame"].get("median_ms")
         parts_ms = record["run_parts_sum_per_frame"].get("median_ms")
