@@ -14,7 +14,7 @@ from rendering.gl_programs.chromatic_shear_options import SHEAR_DIRECTIONS
 from rendering.gl_programs.chromatic_shear_program import shear_envelope, shear_switch
 from rendering.gl_programs.spectral import SPECTRAL_LAYERS, spectral_weight
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 
@@ -30,7 +30,7 @@ def test_the_shear_vanishes_at_the_ends_and_the_layers_turn_in_spectral_order():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -82,31 +82,6 @@ def test_zero_spread_leaves_only_the_spectral_change_and_slices_add_seams(captur
                                                     settings={"chromatic_shear": {"slices": n}}, duration_ms=4000), 0.3)[0])
                  for n in (3, 14))
     assert _seams(many, 0) > _seams(few, 0)
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("chromatic_shear", direction="diagonal", duration_ms=4000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("chromatic_shear", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 10
-        warmed = work.total
-        for progress in (0.0, 0.3, 0.6, 1.0):
-            capture.render(run, progress)
-        assert work.total == warmed
-        renderer = capture.host._implementations["chromatic_shear"]
-        capture.host.park()
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_axes_and_repairs_values():

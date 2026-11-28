@@ -7,7 +7,8 @@ texture (Windows QPA, ``QOffscreenSurface``, operator-approved 2026-09-26): no
 ``QQuickWindow`` is ever shown, and nothing reaches the desktop.  The Qt
 offscreen QPA cannot create OpenGL contexts, so it would silently drop every
 effect layer (header logos, card shadows); it is therefore not used here.
-Transitions are read back from ``TransitionCapture``'s hidden GL surface.
+Transitions are the native core's frames, as the product draws them, read back
+from the process's hidden host (``NativeTransitionCapture``).
 
 Run with ``python tools/onboarding_preview_foundry.py``.  This is a release
 authoring tool; Guided Setup only reads the committed PNGs and never runs it.
@@ -1742,14 +1743,14 @@ _TRANSITION_ARTWORK: Final = (
 def _build_transition_previews(output: Path) -> list[dict[str, object]]:
     from PIL import Image
     from rendering.quick.transitions.implementation_registry import iter_quick_transition_implementations
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.native_transition_capture import NativeTransitionCapture
 
     source_path, destination_path = _prepare_transition_artwork(output)
     source, destination = Image.open(source_path), Image.open(destination_path)
     frame_width, frame_height = TRANSITION_FRAME_SIZE
     rows: list[dict[str, object]] = []
     for implementation in iter_quick_transition_implementations():
-        capture = TransitionCapture(frame_width, frame_height, source, destination)
+        capture = NativeTransitionCapture(frame_width, frame_height, source, destination)
         try:
             run = _resolved_transition_run(capture, implementation.transition_id)
             samples = _TRANSITION_SAMPLES.get(implementation.transition_id, _DEFAULT_TRANSITION_SAMPLES)

@@ -41,7 +41,7 @@ def main():
     import numpy as np
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.extruded_bubble_capture import _draw
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.visualizer_replay.driver import replay_clip
     from tools.visualizer_replay import driver
     from tools.visualizer_replay.extruded_bubble_forensics import distribution, load_clip
@@ -82,7 +82,7 @@ def main():
 
     with patch.object(BubbleSimulation, 'snapshot', observe), patch.object(driver, '_configure', configure):
         result = replay_clip(clip, 'bubble', preset=args.preset-1, snapshots_at=wanted)
-    target = TransitionCapture(*size)
+    target = OffscreenRenderTarget(*size)
     host = QuickVisualizerRenderHost()
     animation, contacts, gpu = [], [], []
     try:

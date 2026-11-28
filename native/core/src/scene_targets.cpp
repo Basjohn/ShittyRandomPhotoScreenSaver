@@ -1,5 +1,6 @@
 // Scene targets (N3.1, D14): scene_targets.h has the contract.
 #include "scene_targets.h"
+#include "gl_sampler_state.h"
 #include "rhi_owned.h"
 
 #include <QtCore/QJsonValue>
@@ -1136,12 +1137,12 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         if (!t.newLayout && texture) {
             texture->setPixelSize(t.allocation);
             m_objectGeneration += 1;
-            return texture->create();
+            return createTexture(texture.get());   // gl_sampler_state.h: no sampler state on a multisampled texture
         }
         texture.reset(rhi->newTexture(format, t.allocation, samples, flags));
         texture->setName(name);
         m_objectGeneration += 1;
-        return texture->create();
+        return createTexture(texture.get());
     };
     QRhiTexture::Flags readableFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
     if (t.decl.mips)

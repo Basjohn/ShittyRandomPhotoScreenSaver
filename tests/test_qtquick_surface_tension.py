@@ -19,7 +19,7 @@ from rendering.gl_programs.surface_tension_program import (
     tension_settle,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 ASPECT = W / H
@@ -40,7 +40,7 @@ def test_pools_spread_and_the_flood_covers_before_the_meniscus_settles():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -90,31 +90,6 @@ def test_gloss_touches_only_the_edges_and_more_pools_make_more_boundary(capture)
         return ~(np.all(image == source, axis=2) | np.all(image == destination, axis=2))
 
     assert edges(frame(pools=20)).mean() > edges(frame(pools=4)).mean()
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("surface_tension", duration_ms=4000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("surface_tension", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 10
-        warmed = work.total
-        for progress in (0.0, 0.3, 0.6, 1.0):
-            capture.render(run, progress)
-        assert work.total == warmed
-        renderer = capture.host._implementations["surface_tension"]
-        capture.host.park()
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_seeds_runs_and_repairs_values():

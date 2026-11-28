@@ -191,13 +191,61 @@ def environment_differs(old: dict[str, float], new: dict[str, float]) -> list[st
 
 REPEATS = 3                # renders per sampled frame; the fastest counts
 CONTROL_DRAWS = 8          # Crossfade draws per control frame: enough GPU work to show contention
-CONTROL = ("crossfade", 1000, {})
+_CONTROL_VERTEX = """#version 460 core
+layout(location = 0) in vec2 aPos;
+out vec2 vUv;
+void main() { vUv = aPos; gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0); }
+"""
+_CONTROL_FRAGMENT = """#version 460 core
+in vec2 vUv;
+out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uFrom;
+layout(binding = 1) uniform sampler2D uTo;
+void main() { FragColor = mix(texture(uFrom, vUv), texture(uTo, vUv), 0.5); }
+"""
 
 
 def crossfade_control(capture) -> Callable[[], None]:
-    """The control: one fixed Crossfade frame on ``capture``'s host (the same workload in every run)."""
-    frame = capture.frame(capture.production_run(CONTROL[0], CONTROL[1], CONTROL[2], run_id=1), 0.5)
-    return lambda: capture.host.render(frame)
+    """The control: one fixed full-target two-picture blend (a Crossfade's work) drawn in ``capture``'s own GL context,
+    the same workload in every run. It owns a tiny program and two textures of its own: the transitions are the native
+    core's now (N5.2h), which draws in its own context, so the control that makes this context's passes comparable
+    cannot be a transition frame; it is the same kind of work."""
+    import numpy as np
+    from OpenGL import GL as gl
+
+    from rendering.quick.render.gl_resources import compile_program
+
+    width, height = capture.width, capture.height
+    with capture.current():
+        program = compile_program(_CONTROL_VERTEX, _CONTROL_FRAGMENT, label="bench-control")
+        textures = []
+        for shade in (60, 190):
+            texture = int(gl.glGenTextures(1))
+            textures.append(texture)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_LINEAR)
+            ramp = np.linspace(0, 255, width * height * 4, dtype=np.float64).reshape(height, width, 4)
+            pixels = ((ramp + shade) % 256).astype(np.uint8)
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels)
+        vao = capture.vao
+
+    def draw() -> None:
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        gl.glViewport(0, 0, width, height)
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glDisable(gl.GL_BLEND)
+        gl.glUseProgram(program)
+        for unit, texture in enumerate(textures):
+            gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+        gl.glBindVertexArray(vao)
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        gl.glBindVertexArray(0)
+        gl.glUseProgram(0)
+
+    return draw
 
 
 @dataclass

@@ -14,7 +14,7 @@ from rendering.quick.transitions.run_geometry import (
     build_crumble_geometry,
     crumble_geometry_key,
 )
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 ASPECT = 16 / 9
 BASE = {"seed": 713.0, "piece_count": 45, "crack_complexity": 1.8, "weight_mode": 3.0,
@@ -153,7 +153,7 @@ def test_collisions_render_change_the_collapse_and_keep_exact_endpoints(qt_app):
     table = np.frombuffer(geometry.motion, dtype=np.float32).reshape(-1, cd.MOTION_FRAMES, 4)
     moving_frames = np.flatnonzero(np.abs(table).max(axis=(0, 2)) > 0)
     first_contact = moving_frames[0] * cd.PATH_END / (cd.MOTION_FRAMES - 1)
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         source, destination = (np.asarray(i, dtype=np.int16) for i in capture.images)
         plain = capture.run("crumble", seed=713, parameters=params)
@@ -180,25 +180,6 @@ def test_collisions_render_change_the_collapse_and_keep_exact_endpoints(qt_app):
         for t in np.arange(first_contact, min(0.95, first_contact + 0.12), spacing / 4):
             wide, narrow = change(t, spacing / 8), change(t, spacing / 64)
             assert narrow <= 0.35 * wide + 0.05, (t, wide, narrow)
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-def test_the_motion_table_is_released_with_the_renderer(qt_app):
-    from rendering.quick.transitions.implementations.crumble import QuickCrumbleRenderer
-
-    capture = TransitionCapture(160, 90)
-    try:
-        capture.render(capture.run("crumble", seed=713, parameters={**BASE, "collisions": True}), 0.5)
-        renderer = capture.host._renderers.get("crumble") if hasattr(capture.host, "_renderers") else None
-        if renderer is None:
-            renderer = QuickCrumbleRenderer()
-            renderer.render(capture.frame(capture.run("crumble", seed=713,
-                                                      parameters={**BASE, "collisions": True}), 0.5))
-        assert renderer._motion_texture
-        renderer.release_resources()
-        assert not renderer._motion_texture and not renderer.has_resources
     finally:
         capture.close()
 

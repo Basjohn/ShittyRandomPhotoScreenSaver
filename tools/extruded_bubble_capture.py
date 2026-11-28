@@ -136,7 +136,7 @@ def capture(output: Path, clip_path: Path, *, size, window, overrides, start, du
     from PIL import Image, ImageDraw
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.visualizer_replay.driver import replay_clip
     from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 
@@ -160,7 +160,7 @@ def capture(output: Path, clip_path: Path, *, size, window, overrides, start, du
     activation = resolve_visualizer_activation_payload({"mode": MODE, f"preset_{MODE}": preset - 1}, mode=MODE)
     settings = {**activation.resolved_config, **overrides}
     window = window or size
-    target = TransitionCapture(*window)
+    target = OffscreenRenderTarget(*window)
     host = QuickVisualizerRenderHost()
     output.mkdir(parents=True, exist_ok=True)
     timer = _PassTimer() if passes else None

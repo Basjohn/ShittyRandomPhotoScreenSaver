@@ -14,7 +14,7 @@ from OpenGL import GL as gl
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.probe import (SCENE3D_PROBE_GLSL, SceneProbe, scene3d_probe_face_of,
                                            scene3d_probe_face_rotation)
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
 
@@ -56,7 +56,7 @@ _DIRECTIONS = [(1, 0.2, -0.1), (-1, 0.3, 0.4), (0.1, 1, 0.2), (0.2, -1, -0.3), (
 
 @pytest.fixture
 def capture(qt_app):
-    result = TransitionCapture(64, 64)
+    result = OffscreenRenderTarget(64, 64)
     yield result
     result.close()
 

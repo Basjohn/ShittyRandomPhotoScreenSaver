@@ -10,7 +10,7 @@ def test_idle_particles_keep_colour_but_emit_no_authored_or_intrinsic_glow(qt_ap
     from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl=PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
     vertex='''#version 460 core
@@ -22,7 +22,7 @@ void main(){
     gl_Position=vec4(vCorner,0.,1.);
 }
 '''
-    target=TransitionCapture(64,64);program=0;textures=[]
+    target=OffscreenRenderTarget(64,64);program=0;textures=[]
     try:
         program=compile_program(vertex,PARTICLE_FRAGMENT,label='particle idle emission')
         gl.register(program,PARTICLE_BLOCK)
@@ -69,10 +69,10 @@ def particle_stage_capture(qt_app):
     from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_VERTEX, PARTICLE_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
-    target = TransitionCapture(64, 64)
+    target = OffscreenRenderTarget(64, 64)
     programs = []
     textures = []
     vao = 0
@@ -97,7 +97,7 @@ def particle_stage_capture(qt_app):
                                      gl.GL_TEXTURE_2D, texture, 0)
         gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
         assert gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) == gl.GL_FRAMEBUFFER_COMPLETE
-        # TransitionCapture's quad VAO has enabled arrays; use disabled inputs
+        # the offscreen target's quad VAO has enabled arrays; use disabled inputs
         # so constant aPoint/aLook attributes actually reach production GLSL.
         vao = int(gl.glGenVertexArrays(1))
         gl.glBindVertexArray(vao)

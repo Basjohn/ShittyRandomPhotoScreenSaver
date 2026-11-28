@@ -152,9 +152,9 @@ class _Target:
     """An offscreen GL context and RGBA target the size of the card (no window)."""
 
     def __init__(self) -> None:
-        from tools.transition_contact_sheet import TransitionCapture
+        from tools.labs.render_target import OffscreenRenderTarget
 
-        self.capture = TransitionCapture(W, H)
+        self.capture = OffscreenRenderTarget(W, H)
 
     def render(self, host, snapshot, backdrop=(0.0, 0.0, 0.0, 0.0)) -> np.ndarray:
         """The card's pixels over ``backdrop`` (what Quick drew beneath, as one colour)."""

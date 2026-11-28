@@ -122,9 +122,9 @@ def test_ripple_starts_on_the_old_picture_exactly_and_ends_on_the_new(qt_app):
     """The first ripple's front starts at the centre; its reveal and ring ramp in, so the first
     frame shows no spot of the new picture (it used to: ~8% at the centre and a ring)."""
     import numpy as np
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.native_transition_capture import NativeTransitionCapture
 
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         run = capture.run("ripple", duration_ms=7200)
         source, destination = (np.asarray(image.convert("RGB"), dtype=np.int16) for image in capture.images)

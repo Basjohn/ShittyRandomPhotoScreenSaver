@@ -16,7 +16,6 @@ from rendering.quick.transitions.implementations import (
     glass_shatter,
     pixel_accretion,
 )
-from tools.transition_contact_sheet import TransitionCapture
 
 _TRAILED = (("block_spins", "left", "blockspin", 0.45), ("exploding_tiles", "center_out", "exploding_tiles", 0.3),
             ("glass_shatter", "left", "glass_shatter", 0.4), ("crumble", None, "crumble", 0.65),
@@ -88,57 +87,3 @@ def test_each_ghost_draws_with_its_own_copy_of_its_pass_block():
     draw_ghosts(Blocks(), block, values, (), lambda time: {"uProgress": time}, lambda: drawn.append(None))
     assert not events and len(drawn) == len(ghosts)
 
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect,direction,section,progress", _TRAILED)
-def test_trails_are_light_lines_where_pieces_moved_and_nothing_on_still_ones(qt_app, effect, direction, section,
-                                                                             progress):
-    capture = TransitionCapture(480, 270)
-    try:
-        def change(duration_ms):
-            frames = {}
-            for trails in ("Off", "On"):
-                run = capture.run(effect, direction=direction, duration_ms=duration_ms,
-                                  settings={section: {"motion_trails": trails}})
-                frames[trails] = np.asarray(capture.render(run, progress)[0], dtype=np.int16)[..., :3]
-            return frames["On"] - frames["Off"]
-
-        moving = change(1500)
-        changed = np.abs(moving).max(axis=2) > 2
-        assert changed.sum() > 50, effect                           # a trail behind what moved...
-        assert (moving[changed].sum(axis=1) >= 0).all(), effect    # ...drawn as light lines, never dark
-        # Over a run so long that pieces barely move between ghosts, practically nothing trails
-        # (no halo around a piece from its own ghosts).
-        nearly_still = np.abs(change(600_000)).max(axis=2) > 2
-        assert nearly_still.mean() < 0.002, (effect, int(nearly_still.sum()))
-        renderer = capture.host._implementations[effect]
-        assert renderer._trails.has_resources
-        capture.host.park()
-        assert not renderer._trails.has_resources
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect,direction,section,progress", _TRAILED)
-def test_each_trail_variant_is_prepared_once_per_pass(qt_app, monkeypatch, effect, direction, section, progress):
-    """The three ghosts change only their time/fade; static state is never rebound per ghost."""
-    capture = TransitionCapture(480, 270)
-    try:
-        run = capture.run(effect, direction=direction, duration_ms=1500,
-                          settings={section: {"motion_trails": "On"}})
-        capture.render(run, progress)  # compile/allocate before observing this one prepared pass.
-        module, expected = _TRAIL_MODULES[effect]
-        actual = module.trail_program
-        calls = 0
-
-        def count(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            return actual(*args, **kwargs)
-
-        monkeypatch.setattr(module, "trail_program", count)
-        capture.render(run, progress)
-        assert calls == expected
-    finally:
-        capture.close()

@@ -42,12 +42,12 @@ def sphere_pixels(qt_app, request):
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)
     width,height=getattr(request,'param',(480,320))
-    target=TransitionCapture(width,height)
-    programs={}; texture=vao=cube=circle_texture=0
+    target=OffscreenRenderTarget(width,height)
+    programs={}; texture=vao=cube=circle_texture=background=0
     try:
         texture=int(gl.glGenTextures(1));gl.glBindTexture(gl.GL_TEXTURE_2D,texture)
         gl.glTexImage2D(gl.GL_TEXTURE_2D,0,gl.GL_RGBA32F,width,height,0,gl.GL_RGBA,gl.GL_FLOAT,None)
@@ -57,10 +57,13 @@ def sphere_pixels(qt_app, request):
         circle_texture=int(gl.glGenTextures(1));gl.glBindTexture(gl.GL_TEXTURE_2D,circle_texture)
         gl.glTexImage2D(gl.GL_TEXTURE_2D,0,gl.GL_RGBA32F,width,height,0,gl.GL_RGBA,gl.GL_FLOAT,None)
         gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER,gl.GL_COLOR_ATTACHMENT1,gl.GL_TEXTURE_2D,circle_texture,0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D,target.textures[0])
+        background=int(gl.glGenTextures(1));gl.glBindTexture(gl.GL_TEXTURE_2D,background)
+        for filt in (gl.GL_TEXTURE_MIN_FILTER,gl.GL_TEXTURE_MAG_FILTER):gl.glTexParameteri(gl.GL_TEXTURE_2D,filt,gl.GL_LINEAR)
+        for axis in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):gl.glTexParameteri(gl.GL_TEXTURE_2D,axis,gl.GL_CLAMP_TO_EDGE)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D,0,gl.GL_RGBA8,width,height,0,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,None)
         gl.glTexSubImage2D(gl.GL_TEXTURE_2D,0,0,0,width,height,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,
                           np.full((height,width,4),128,dtype='u1'))
-        gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], target.textures[0])
+        gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], background)
         cube=int(gl.glGenTextures(1));gl.glActiveTexture(gl.GL_TEXTURE0 + EB_SAMPLERS["uProbe"])
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP,cube)
         for face in range(6):
@@ -153,6 +156,7 @@ def sphere_pixels(qt_app, request):
         if texture:gl.glDeleteTextures([texture])
         if circle_texture:gl.glDeleteTextures([circle_texture])
         if cube:gl.glDeleteTextures([cube])
+        if background:gl.glDeleteTextures([background])
         target.close()
 
 

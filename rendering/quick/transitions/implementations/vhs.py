@@ -4,13 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from OpenGL import GL as gl
 
-from rendering.gl_programs.portable import pack_block
-from rendering.gl_programs.vhs_program import (
-    VHS_BLOCK, VHS_FRAGMENT_SOURCE, VHS_PERIOD, VHS_VERTEX_SOURCE, vhs_envelope, vhs_roll,
-)
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from rendering.gl_programs.vhs_program import VHS_FRAGMENT_SOURCE, VHS_PERIOD, vhs_envelope, vhs_roll
 from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -47,13 +42,6 @@ class QuickVhsRenderer(NativeFragmentPass):
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in VHS_BLOCK
 
-    def __init__(self) -> None:
-        self._resources = MeshResources("Quick VHS Distortion")
-
-    @property
-    def has_resources(self) -> bool:
-        return self._resources.has_resources
-
     def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         """Every value of the pass block for this frame (validated first; no GL): the one owner, packed by ``render``
         and filled by the native core (N5.2b)."""
@@ -67,48 +55,6 @@ class QuickVhsRenderer(NativeFragmentPass):
                 "uShow": _shown(envelope, roll), "uEnvelope": envelope, "uRoll": roll, "uRollSign": _ROLL_SIGN[code],
                 "uTime": progress * frame.run.request.duration_ms / 1000.0, "uSeed": float(seed),
                 "uTracking": tracking, "uBleed": bleed, "uNoise": noise}
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        values = self.block_values(frame)
-        try:
-            if values["uShow"] == SHOW_OLD:
-                self._resources.draw_image(frame, frame.source_texture_id)
-                return
-            if values["uShow"] == SHOW_NEW:
-                self._resources.draw_image(frame, frame.destination_texture_id)
-                return
-            self._draw(frame, values)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing. VHS Distortion
-        allocates nothing per run."""
-        vhs_parameters(parameters)
-        r = self._resources
-        return (warm_programs([(r, *UNDERLAY_PROGRAM), (r, "vhs", VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)])
-                and warm_pass_blocks(r, size))
-
-    def park(self) -> None:
-        """Nothing per run to drop; the programs stay warm."""
-
-    def _draw(self, frame, block: dict) -> None:
-        r = self._resources
-        program = r.program("vhs", VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("vhs", self._SAMPLERS)
-        values = r.values("vhs")
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame, values)
-        values.update(block)
-        with r.pass_blocks.bound(pack_block(VHS_BLOCK, values)):
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-    def release_resources(self) -> None:
-        self._resources.release_resources()
 
 
 def create_transition_renderer() -> QuickVhsRenderer:

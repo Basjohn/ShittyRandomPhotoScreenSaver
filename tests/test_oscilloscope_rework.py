@@ -425,10 +425,10 @@ class _ScopeGlTarget:
     """The existing offscreen capture pattern, with an explicit physical item size."""
 
     def __init__(self, width, height):
-        from tools.transition_contact_sheet import TransitionCapture
+        from tools.labs.render_target import OffscreenRenderTarget
 
         self.width, self.height = width, height
-        self.capture = TransitionCapture(width, height)
+        self.capture = OffscreenRenderTarget(width, height)
 
     def render(self, host, snapshot):
         from OpenGL import GL as gl

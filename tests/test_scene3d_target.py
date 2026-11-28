@@ -15,7 +15,7 @@ from OpenGL import GL as gl
 from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
@@ -29,6 +29,15 @@ def _card_frame(capture, left: float, top: float, width: float, height: float):
               2 * left / WIDTH - 1, 1 - 2 * top / HEIGHT, 0, 1)
     return SimpleNamespace(viewport=(0, 0, WIDTH, HEIGHT), logical_size=(width, height),
                            matrix_values=matrix, quad_vao=capture.vao)
+
+
+def _photo(capture) -> int:
+    """The fixture photograph (the source scene the transition tools use) as one texture per target."""
+    from tools.transition_contact_sheet import fixture_images
+
+    if not hasattr(capture, "photo"):
+        capture.photo = capture.upload_image(fixture_images(WIDTH, HEIGHT)[0].resize((WIDTH, HEIGHT)))
+    return capture.photo
 
 
 def _read(capture) -> np.ndarray:
@@ -46,7 +55,7 @@ def _clear(capture) -> None:
 
 @pytest.fixture
 def capture(qt_app):
-    result = TransitionCapture(WIDTH, HEIGHT)
+    result = OffscreenRenderTarget(WIDTH, HEIGHT)
     yield result
     result.close()
 
@@ -66,7 +75,7 @@ def test_a_card_drawn_through_the_target_matches_a_direct_draw(capture, samples)
     resources, target = MeshResources("target test"), SceneTarget("target test")
     try:
         card = _card_frame(capture, 40, 20, 120, 80)
-        texture = capture.textures[0]
+        texture = _photo(capture)
         _clear(capture)
         resources.draw_image(card, texture)
         direct = _read(capture)
@@ -91,7 +100,7 @@ def test_the_composite_respects_an_inherited_scissor(capture):
         gl.glEnable(gl.GL_SCISSOR_TEST)
         gl.glScissor(10, 10, 100, 60)
         with target.scope(card, 4, resources):
-            resources.draw_image(card, capture.textures[0])
+            resources.draw_image(card, _photo(capture))
         assert bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         assert tuple(int(v) for v in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)) == (10, 10, 100, 60)
         gl.glDisable(gl.GL_SCISSOR_TEST)
@@ -158,11 +167,11 @@ def test_the_target_resolves_in_shaders_never_through_a_blit(capture, monkeypatc
     try:
         card = _card_frame(capture, 40, 20, 120, 80)
         _clear(capture)
-        resources.draw_image(card, capture.textures[0])
+        resources.draw_image(card, _photo(capture))
         direct = _read(capture)
         _clear(capture)
         with target.scope(card, samples, resources, bloom=bloom):
-            resources.draw_image(card, capture.textures[0])
+            resources.draw_image(card, _photo(capture))
             # A photograph emits nothing: in a bloom target its alpha (emitted brightness) is 0.
             gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_TRUE)
             gl.glClearColor(0.0, 0.0, 0.0, 0.0)
@@ -181,11 +190,11 @@ def test_motion_blur_leaves_a_still_scene_exact(capture, samples):
     try:
         card = _card_frame(capture, 40, 20, 120, 80)
         _clear(capture)
-        resources.draw_image(card, capture.textures[0])
+        resources.draw_image(card, _photo(capture))
         direct = _read(capture)
         _clear(capture)
         with target.scope(card, samples, resources, motion_blur=True):
-            resources.draw_image(card, capture.textures[0])   # nothing writes motion
+            resources.draw_image(card, _photo(capture))   # nothing writes motion
         assert np.array_equal(_read(capture), direct)
         target.release()
         assert not target.has_resources
@@ -272,7 +281,7 @@ def test_an_overlay_lays_the_scene_over_what_is_drawn(capture, samples):
     try:
         card = _card_frame(capture, 40, 20, 120, 80)
         inner = _card_frame(capture, 70, 40, 50, 30)       # the scene covers only part of the card
-        texture = capture.textures[0]
+        texture = _photo(capture)
         _clear(capture)
         _straight_alpha()
         resources.draw_image(inner, texture)
@@ -565,11 +574,11 @@ def test_a_depth_texture_target_draws_the_same_and_its_background_holds_colour_a
         card = _card_frame(capture, 40, 20, 120, 80)
         _clear(capture)
         with target.scope(card, samples, resources):
-            resources.draw_image(card, capture.textures[0])
+            resources.draw_image(card, _photo(capture))
         plain = _read(capture)
         _clear(capture)
         with target.scope(card, samples, resources, depth_texture=True):
-            resources.draw_image(card, capture.textures[0])
+            resources.draw_image(card, _photo(capture))
         assert np.array_equal(plain, _read(capture))      # the depth texture changes nothing it draws
         assert target._names["depth_texture"] and not target._names["depth"]
 
@@ -621,7 +630,7 @@ def test_targets_that_ask_for_neither_allocate_no_depth_texture_or_background(ca
     try:
         _clear(capture)
         with target.scope(_card_frame(capture, 40, 20, 120, 80), 4, resources):
-            resources.draw_image(_card_frame(capture, 40, 20, 120, 80), capture.textures[0])
+            resources.draw_image(_card_frame(capture, 40, 20, 120, 80), _photo(capture))
         assert target._names["depth"] and not target._names["depth_texture"]
         assert not any(target._names[key] for key in ("background_fbo", "background_colour", "background_depth"))
         # Warming ahead for a background allocates it as one unit, then reports ready.
@@ -857,7 +866,7 @@ def test_a_card_moved_between_display_scales_and_a_tiny_card_match_direct_draws(
     """The same logical card on a 100% then a 200% display (mixed DPR) reallocates to its device pixels and still
     draws exactly what a direct draw does, with every optional attachment on; so does a card a few pixels wide."""
     resources, target = MeshResources("target test"), SceneTarget("target test")
-    texture = capture.textures[0]
+    texture = _photo(capture)
     kwargs = dict(depth_texture=True, oit=True)
     try:
         for dpr, rect in ((1.0, (20, 10, 60, 40)), (2.0, (20, 10, 60, 40)), (1.0, (100, 50, 3, 2))):

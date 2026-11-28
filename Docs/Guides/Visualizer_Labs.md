@@ -9,7 +9,7 @@ requirements. See [visual tuning](Visualizer_Visual_Tuning.md) for mock/lab/prod
 
 `tools/labs/render_target.py:OffscreenRenderTarget` owns the GUI-thread Qt offscreen surface, validated OpenGL 4.6
 context, RGBA8 colour/depth24 framebuffer and lazy diagnostic quad. Reuse it rather than copying setup or importing
-`TransitionCapture` merely to obtain a context. Construction leaves its context current; `current()` scopes an entire
+a transition capture merely to obtain a context. Construction leaves its context current; `current()` scopes an entire
 GL operation and restores the caller's previous context. `bind()` clears the target; `read_rgba()` returns an owned,
 contiguous, top-left raw RGBA array. Alpha conversion belongs to the exporting caller. Additive glow needs an explicitly
 chosen backdrop when an opaque reference is required.
@@ -48,7 +48,7 @@ renderer retirement is still required before successful exit. See [Qt/QML observ
 Prove driver capture, resize, interleaved context ownership, failure cleanup and idempotent retirement at the shared
 boundary (`tests/test_lab_render_target.py`). Then prove the mode's same-scene low/high output and measured warm GPU
 cost; a successful FBO read is not visual or musical acceptance. Native Settings/runtime rendering and operator
-acceptance remain separate gates. Adopters include TransitionCapture (retaining its own transition fixtures/host),
+acceptance remain separate gates. Adopters include the Visualizer cost probes, the release-media Visualizer cases,
 Foundry's production visualizer captures and the Extruded Bubble composition lab.
 
 ## Bubble two-node gradient
