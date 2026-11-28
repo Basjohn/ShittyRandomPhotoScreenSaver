@@ -279,4 +279,11 @@
 // where the program's scene holds OpenGL's rows (Extruded Bubble's near layer), mirrored as before where it holds the
 // core's top-first rows; the scene's card (sceneAnchor) carries the program's rows as the composite's does. Backward
 // compatible for every earlier program (no defocus step before Extruded Bubble's reads a scene in OpenGL's rows).
+// A record naming no key for a declared geometry buffer (Extruded Bubble's first frame, before its drift has
+// families) no longer waits the frame: the buffer binds a 16-byte zero placeholder (compute_passes.cpp emptyGeometry,
+// never a residency) and the entries that bind it hold as before, so the first frame draws and fades in. Backward
+// compatible (a record naming its keys is unchanged). And a pass writing an attachment with blending off beside one
+// with it on is refused with a named error ("mixed blend", mode_content.cpp mixedBlendRefusal; R-256: OpenGL draws the
+// unblended one with stale factors), on its own outputs and on its sorted pack's; a replace there is an enabled ONE,
+// ZERO blend. Not backward compatible for such a program (none ships: the harness's two moved to ONE, ZERO).
 #define SRPSS_NATIVE_CORE_ABI 47

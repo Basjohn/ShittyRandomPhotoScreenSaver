@@ -346,6 +346,43 @@ def test_the_old_key_retires_only_after_a_frame_using_the_new_one_was_recorded()
     assert "const bool withPasses = texturesReady() && meshesReady() && !m_geometryWaiting;" in mode_cpp
 
 
+def a_record_naming_no_key_draws(storage_cpp: str) -> bool:
+    """N5.6 (ABI 47): a geometry buffer whose record names no key, with none resident (the family has no geometry
+    yet: Extruded Bubble's first frame), binds a 16-byte zero buffer and is not waited on, so the frame draws as
+    Python's does with the family absent; the zero buffer is never a residency, so an entry binding it holds."""
+    sync = _function(storage_cpp, "bool ModeStorage::syncGeometry(", "\nvoid ModeStorage::geometryRecorded()")
+    absent = sync[sync.index("if (wanted == keys.cend() || !wanted.value().valid()) {"):
+                  sync.index("const GeometryKey &key = wanted.value();")]
+    lookup = _function(storage_cpp, "const ModeStorage::Buffer *ModeStorage::buffer(", "\n}\n")
+    resident = _function(storage_cpp, "bool ModeStorage::geometryResident(", "\n}\n")
+    empty = _function(storage_cpp, "ModeStorage::Buffer *emptyGeometry(", "\n}\n")
+    return ("*waiting = *waiting || !slot->current;" not in absent
+            and "slot->empty = emptyGeometry(rhi, updates, decl);" in absent
+            and "g_geometryResident" not in absent and "g_geometryResident" not in empty
+            and "updates->uploadStaticBuffer(made.get(), 0, 16, zeros);" in empty
+            and "b = slot->empty;" in lookup
+            and "return slot->current != nullptr && slot->currentKey == key;" in resident)
+
+
+def test_a_record_naming_no_geometry_key_draws_and_its_entries_hold():
+    storage_cpp = _source("compute_passes.cpp")
+    assert a_record_naming_no_key_draws(storage_cpp)
+    # The zero buffer goes once a key is resident and with the slot (never counted as a residency).
+    sync = _function(storage_cpp, "bool ModeStorage::syncGeometry(", "\nvoid ModeStorage::geometryRecorded()")
+    assert sync.count("releaseGeometryBuffer(slot->empty);") == 2
+    assert "releaseGeometryBuffer(slot->empty);" in _function(storage_cpp, "void ModeStorage::releaseGeometry()",
+                                                              "\n}\n")
+    # Negative controls: the absent key waited on again (the first frame missing), and the zero buffer counted as
+    # resident (an entry would dispatch over 16 zero bytes).
+    sync_start = storage_cpp.index("if (wanted == keys.cend() || !wanted.value().valid()) {")
+    waited = (storage_cpp[:sync_start] + storage_cpp[sync_start:].replace(
+        "if (!slot->current && !slot->empty) {", "*waiting = *waiting || !slot->current;\n            if (false) {", 1))
+    assert not a_record_naming_no_key_draws(waited)
+    counted = storage_cpp.replace("return slot->current != nullptr && slot->currentKey == key;",
+                                  "return (slot->current != nullptr || slot->empty != nullptr) && slot->currentKey == key;")
+    assert not a_record_naming_no_key_draws(counted)
+
+
 def teardown_releases_every_residency(storage_cpp: str, mode_cpp: str) -> bool:
     release = _function(storage_cpp, "void ModeStorage::release()", "\n}\n")
     every = _function(storage_cpp, "void ModeStorage::releaseGeometry()", "\n}\n")

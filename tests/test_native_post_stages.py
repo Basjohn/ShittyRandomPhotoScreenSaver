@@ -460,3 +460,61 @@ def test_n31_per_attachment_check_reads_the_core_device_facts() -> None:
     facts = (CORE / "src" / "vulkan_context.cpp").read_text(encoding="utf-8")
     assert 'facts.insert(QStringLiteral("independent_blend"), f2.features.independentBlend == VK_TRUE);' in facts
     assert "f2.features.independentBlend = VK_FALSE; // N3.4, harness only" in facts
+
+
+# ------------------------------------------------------------------------------------------- N5.6, mixed blends (R-256)
+
+def mixed_blend_is_refused(content: str) -> bool:
+    """ABI 47: the core refuses a pass writing an unblended attachment beside a blended one (OpenGL's stale factors),
+    a masked one counted as neither, at program parse after the transparency state and on a sorted pack's outputs."""
+    if "QString mixedBlendRefusal(" not in content:
+        return False
+    body = content[content.index("QString mixedBlendRefusal("):content.index("bool parseBlendValue(")]
+    sorted_pack = content[content.index("bool checkSortedPack("):content.index("bool parseStageStep(")]
+    parse = content[content.index("|| !transparentPassState(o, pass, program.targets"):]
+    return ("if (!outputs.at(a).write)\n            continue;" in body and "outputBlend(outputs.at(a)).enable" in body
+            and '"mixed blend: pass' in body
+            and "mixedBlendRefusal(pass.sortedOutputs, pass.name" in sorted_pack
+            and "mixedBlendRefusal(pass.outputs, pass.name" in parse[:parse.index("viewport")])
+
+
+def _mixed_passes(declaration: str) -> list[str]:
+    """The passes of a declared program whose written attachments mix blending off (replace) and on (a transparent
+    pass's first two entries are the core's blends)."""
+    found = []
+    for p in json.loads(declaration)["passes"]:
+        if "attachments" not in p or p.get("sorted"):
+            continue
+        enabled = {a.get("blend", p.get("blend")) != "replace" for a in p["attachments"] if a.get("write", True)}
+        if len(enabled) == 2:
+            found.append(p["name"])
+    return found
+
+
+def test_a_pass_mixing_blended_and_unblended_attachments_is_refused_and_no_harness_program_declares_one() -> None:
+    import sys
+    from collections import defaultdict
+
+    sys.path.insert(0, str(CORE / "python"))
+    import post_stages
+    import waveform_primitives as wp
+    from rendering.native.mode import ModePass, PassOutput, program_json
+
+    content = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert mixed_blend_is_refused(content)
+    packs = defaultdict(lambda: b"X")
+    for variant in post_stages.EB_VARIANTS:
+        passes, targets = post_stages.eb_program(packs, variant=variant)
+        assert _mixed_passes(program_json(passes, targets)[0]) == [], variant
+    passes, targets, images = wp.shape_program(packs, {"eb_layer1": b"L", "eb_layer1_sorted": b"S"})
+    assert _mixed_passes(program_json(passes, targets, (), (), images)[0]) == []
+    # Negative controls: the pre-ABI 47 backdrop (replace beside additive) is a mixed pass, a masked attachment is
+    # not, and the core's text without either call or the mask's skip fails the check.
+    old = ModePass("backdrop", b"B", "replace", target="scene",
+                   outputs=(PassOutput(True, "replace"), PassOutput(True, "additive")))
+    masked = ModePass("masked", b"M", "replace", target="scene",
+                      outputs=(PassOutput(True, "replace"), PassOutput(False, "additive")))
+    assert _mixed_passes(program_json((old, masked))[0]) == ["backdrop"]
+    assert not mixed_blend_is_refused(content.replace("mixedBlendRefusal(pass.sortedOutputs", "QString(pass.sorted"))
+    assert not mixed_blend_is_refused(content.replace("mixedBlendRefusal(pass.outputs", "QString(pass.outputs"))
+    assert not mixed_blend_is_refused(content.replace("if (!outputs.at(a).write)\n            continue;", ""))

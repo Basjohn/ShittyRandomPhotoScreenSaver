@@ -357,6 +357,10 @@ private:
         Buffer *previous = nullptr;
         GeometryKey previousKey;
         QList<GeometryKey> failed;    // keys never retried
+        // N5.6 (ABI 47): the binding while the record names no key and none is resident (the family has no geometry
+        // yet: Extruded Bubble's first frame, before its first drift step): 16 zero bytes, never a residency, so the
+        // passes draw (as Python's draw with the family absent) and an entry binding it holds (geometryResident).
+        Buffer *empty = nullptr;
     };
     void releaseGeometryBuffer(Buffer *b);
     QList<GeometrySlot *> m_geometry;

@@ -332,8 +332,10 @@ def eb_program(packs: dict, *, samples: int = 1, variant: str = "full", order=LA
     if defocus:
         targets.append(ModeTarget("near", (TargetAttachment("colour", "rgba16f"), TargetAttachment("circle", "rgba16f")),
                                   mips=True))
+    # ABI 47 (R-256): a replace beside a blend is an enabled ONE, ZERO blend (the core refuses a mixed pass).
+    replace = BlendState(("add", "one", "zero"), ("add", "one", "zero"))
     passes = [ModePass("backdrop", packs["backdrop"], "replace", target="scene",
-                       outputs=(PassOutput(True, "replace"), PassOutput(True, "additive")), depth_test="always",
+                       outputs=(PassOutput(True, replace), PassOutput(True, "additive")), depth_test="always",
                        depth_write=True)]
     if capture:
         passes.append(CapturePass("capture", "scene"))

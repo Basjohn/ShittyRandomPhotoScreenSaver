@@ -1003,6 +1003,28 @@ bool sameOutput(const PassOutput &a, const PassOutput &b)
     return a.blend == b.blend;
 }
 
+// N5.6 (ABI 47; R-256): a pass writing one attachment with blending off beside one with it on is refused on every
+// backend, so a program means the same everywhere: Qt's OpenGL backend leaves the unblended attachment's blend factors
+// stale (the last pipeline's), and Extruded Bubble's backdrop kept its scene's alpha 0 so. A replace beside a blend is
+// declared as an enabled ONE, ZERO blend. A masked attachment writes nothing and counts as neither.
+QString mixedBlendRefusal(const QList<PassOutput> &outputs, const QByteArray &pass, const char *which)
+{
+    int on = -1;
+    int off = -1;
+    for (int a = 0; a < int(outputs.size()); ++a) {
+        if (!outputs.at(a).write)
+            continue;
+        int &first = outputBlend(outputs.at(a)).enable ? on : off;
+        if (first < 0)
+            first = a;
+    }
+    if (on < 0 || off < 0)
+        return QString();
+    return QStringLiteral("mixed blend: pass '%1'%2 writes attachment %3 with blending off beside attachment %4 with "
+                          "it on (OpenGL draws the first with stale blend factors); declare its replace as an enabled "
+                          "one, zero blend").arg(QString::fromLatin1(pass), QLatin1String(which)).arg(off).arg(on);
+}
+
 // N3.2 (D15 point 1): a blend value, a preset's name or a full declaration.
 bool parseBlendValue(const QJsonValue &value, PassBlend *preset, bool *custom,
                      QRhiGraphicsPipeline::TargetBlend *state)
@@ -2051,6 +2073,11 @@ bool checkSortedPack(ModePass &pass, const QByteArray &pack, const QList<TargetD
         }
         pass.sortedOutputs.append(output);
     }
+    const QString mixed = mixedBlendRefusal(pass.sortedOutputs, pass.name, "'s sorted pack"); // ABI 47 (R-256)
+    if (!mixed.isEmpty()) {
+        *error = mixed;
+        return false;
+    }
     return true;
 }
 
@@ -2936,6 +2963,11 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 || !parsePassTargetState(o, pass, program.targets, error)
                 || !transparentPassState(o, pass, program.targets, !sortedPack.isEmpty(), error)) // N3.4
                 return false;
+            const QString mixed = mixedBlendRefusal(pass.outputs, pass.name, ""); // ABI 47 (R-256)
+            if (!mixed.isEmpty()) {
+                *error = mixed;
+                return false;
+            }
             if (o.contains(QStringLiteral("viewport"))) {
                 // ABI 37 (N4.i): "allocation" draws the core's triangle over the scene target's whole allocation (its
                 // viewport and scissor), as Python draws a post pass over its SceneTarget's allocation (the trails'
