@@ -14,6 +14,7 @@ layout(std140, binding = 0) uniform SceneDefocus {
     float u_defocus_radius;     // the mode's: Python's uMaxRadius (pixels)
     float u_defocus_highlight;  // the mode's: Python's uHighlight
     int u_defocus_level;        // the mode's: Python's uLevel (_read_size: the gather's read level for the radius)
+    float u_scene_rows_up;      // the core's (N5.6): 1 where the layer holds OpenGL's rows, else 0
 };
 layout(binding = 1) uniform sampler2D uColour;
 layout(binding = 2) uniform sampler2D uCircle;

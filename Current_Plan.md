@@ -967,9 +967,14 @@ the feature (D3D11 is not stated).
       build, ABI 47): smoke IDENTICAL (359 frames). The only L difference over 15 runs is signed zero: Qt's JSON
       stores `-0.0` as integer 0, so the native settings path dropped the sign Python packs (`uLightEnd`, stream and
       speck source/end, light_type 0's travel/axis). Fixed in the transport (`settingNumber` reads `"-0"`;
-      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). All 15
-      runs redo on the rebuilt module (scripts in that worktree's `.artifacts/scratch/n56rr/`); then the R-NNN entry
-      (silent since settings went through JSON).
+      `settings_json` writes it), not in the frozen Python producer (`7f9f002d8` reverted in `853dbb0b3`). On the
+      rebuilt module (lead, 28 Nov) only a subset confirms the fix: light_type 0 on all three takes, one base run and
+      one b run on different takes (scripts in `.artifacts/scratch/n56rr/`). The full 15-run L set runs once, at the
+      end of this box, on the module that merges: a later C++ change would invalidate it. Then the R-NNN entry
+      (silent since settings went through JSON). Done 28 Nov (successor `ae9dbc46b60681ac3`, module from
+      `14d76393`): all five IDENTICAL, every expected frame judged: human_heavy1 base (5,313 compared) and light type 0,
+      ragdoll b and light type 0, nightsolong light type 0 (2,586 compared and 190 undrawn on both, each); evidence `n5_6/20261128_l_<take>_<key>/`.
+      The entry is `Docs/Historical_Bugs/R-254_Native_Settings_Lost_The_Sign_Of_Negative_Zero_Through_Qt_JSON.md`.
     - [ ] Side defects (agent, 28 Nov; fix or rule on them before merge):
       - `consumed_sequence` shows the main process took a frame, not that the core read it; a missed frame can
         find its bank rewritten. ABI 46 holds the step (late geometry, never wrong bytes). Hold proved on the built
@@ -984,12 +989,27 @@ the feature (D3D11 is not stated).
         L never reaches them (it runs without a worker or arena, and every L frame had shells); they and the ABI 46
         hold's firing on long takes go to P and T.
       - The whole drift window per record is up to 384 KB (limit 2 MiB); E8 slot shrink still open.
+      - Rulings (successor `ae9dbc46b60681ac3`, 28 Nov): the hold's firing and the five approximations are P's and
+        T's (layer L runs without a worker or arena and every L frame had shells), so they stay open as named checks
+        under "P, T and C"; none blocks this box. The route buffers edit is done (`8c0cbad9c`). The 384 KB window is
+        inside its limit; E8's slot shrink is performance work, parked until every port lands.
   - [ ] **Coverage windows.** Use `coverage_windows.py --mode extruded_bubble` with late windows in each take's
     last 15 s. A gap over 128 drift steps (about 1.4 s) resets history. On the native player use the ABI 42 draw
     skip and dispatch drift from cold start; confirm continuity and the restart control in `WARMUP_INPUTS`.
     A Python reference with a late window needs the whole take for that key. Decide which 30 s alternates need
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
+    28 Nov (successor `ae9dbc46b60681ac3`, `561bb70d3`): `WARMUP_INPUTS["extruded_bubble"] = 0` with
+    `COMPUTE_FROM_COLD_START` (each window's drift dispatched from input 0); continuity and the restart control proved
+    at layer L (`tests/test_coverage_windows.py`). Selection on the three base takes (60 s): all 137 fields COVERED,
+    late window in the last 15 s on each (human_heavy1 11 windows, 1,511 of 5,313 inputs, late 43.8-44.9 s;
+    nightsolong 15, 1,813, 57.1-58.9 s; ragdoll 14, 1,689, 45.1-46.1 s; `n5_6/20261128_coverage_<take>/`).
+    Decision on the alternates: each of the 12 needs a late window, and a late window needs its whole take drawn
+    (the Python drift is GPU history from the cold start), so each gets one full 30 s Python reference on one take,
+    not three: audio block size 0, 2, 3 on ragdoll (its quiet-to-loud range), collision scope 0, 2 and drift
+    direction 4, 5 on human_heavy1 (densest collisions), drift direction 0, 2, 3, 6, 7 on nightsolong. Not started:
+    the cached references' key does not match this tree (P box below). Open: EB has no native stream player yet,
+    so the ABI 42 draw skip with drift from the cold start is not exercised natively.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
     - Lead, 28 Nov: the rest of the rule (a) failure came from the harness comparing the 4x scene against Python's
       single-sampled one (`19d5525ea`), plus the defocus gather mirroring its taps for EB's bottom-up near layer
@@ -1019,6 +1039,14 @@ the feature (D3D11 is not stated).
     - [ ] Repeat the [recorded stream-speed trace](tools/visualizer_replay/extruded_bubble_music_response.py) on the
       Python and native routes with the frozen takes and settings. The 22 Nov before-state is under
       [the archived 22 Nov response trace](.artifacts/evidence/visualizers/extruded_bubble/music_response/20261122_onscreen.zip).
+    - Built (agent ac0cda3c82727c8cd, 28 Nov): reference key format 2 (77ca27c7e); harness drift arena (d76b1174b),
+      GL block names (097e5eb7b, R-255), backdrop replace blend (504042eb1, R-256), placed scene passes (389f230ba,
+      R-257), rule (a) single-sampled native scene (19d5525ea); the core defocus gather's taps step by the layer's rows
+      (ABI 47, shaders + sceneAnchor; built). Then (29a844943, ABI 47, awaits a module build): a record naming no
+      geometry key binds a zero placeholder, so EB's first frame draws (it waited the frame); the core refuses a
+      mixed-blend pass by name. Lens shift settable from one owner (5feae1bc0, `owner_render_parity --lens-shift`);
+      the product's in-process arena (`InProcessStreamArena` in the in-process mailbox). Rule (a)/(b) runs, T, C and
+      the L set not yet done.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction

@@ -351,7 +351,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    `u_bloom_strength` and `u_hdr_exposure`, `opaque_glow`); a mipped `ModeTarget(..., mips=True)` with a colour and a
    circle (both RGBA16F, drawn premultiplied over and MAX) and a `DefocusStep(name, layer, onto)` with
    `u_defocus_radius`, `u_defocus_highlight` and `u_defocus_level` (Python resolves the level, `defocus.py`
-   `_read_size`; the core refuses one past `defocusReadLevelCap`). Members are settings or record fields by the one
+   `_read_size`; the core refuses one past `defocusReadLevelCap`, the layer's last level less two; the gather's taps step rows by the core member
+   `u_scene_rows_up`, the program's composite `scene_rows`). Members are settings or record fields by the one
    rule; a stage is turned on or off by the program, never per record. On a device without `independentBlend` a pass
    writing its attachments with differing states is refused: the mode is not offered on that backend (logged once by
    Python).

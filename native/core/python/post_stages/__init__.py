@@ -247,15 +247,8 @@ def read_level(radius: float) -> int:
 
 
 def read_level_cap(allocation: tuple[int, int]) -> int:
-    """``post_stages.cpp`` ``defocusReadLevelCap``: two levels above the last level made only from even-sized levels."""
-    width, height = allocation
-    exact = 0
-    while width > 1 or height > 1:
-        if (width > 1 and width % 2) or (height > 1 and height % 2):
-            break
-        width, height = max(1, width // 2), max(1, height // 2)
-        exact += 1
-    return max(0, exact - 2)
+    """``post_stages.cpp`` ``defocusReadLevelCap``: two levels above the layer's last level (its full chain)."""
+    return max(0, (max(allocation).bit_length() - 1) - 2)
 
 
 SETTINGS = {
@@ -332,8 +325,10 @@ def eb_program(packs: dict, *, samples: int = 1, variant: str = "full", order=LA
     if defocus:
         targets.append(ModeTarget("near", (TargetAttachment("colour", "rgba16f"), TargetAttachment("circle", "rgba16f")),
                                   mips=True))
+    # ABI 47 (R-256): a replace beside a blend is an enabled ONE, ZERO blend (the core refuses a mixed pass).
+    replace = BlendState(("add", "one", "zero"), ("add", "one", "zero"))
     passes = [ModePass("backdrop", packs["backdrop"], "replace", target="scene",
-                       outputs=(PassOutput(True, "replace"), PassOutput(True, "additive")), depth_test="always",
+                       outputs=(PassOutput(True, replace), PassOutput(True, "additive")), depth_test="always",
                        depth_write=True)]
     if capture:
         passes.append(CapturePass("capture", "scene"))

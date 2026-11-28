@@ -2455,7 +2455,11 @@ read once (`:770-808`).
   core caps the defocus read level at two levels above the last level made only from even-sized levels (the clip's
   local mean and the sprites read level + 2): `defocusReadLevelCap`, derived from the near target's allocation; a
   deeper level is refused with its reason, the content's failure latched and noted once. A consumer that ever needs a
-  deeper level gets its own downsample then.
+  deeper level gets its own downsample then. *Superseded (N5.6, 28 Nov 2026):* Extruded Bubble needs one (level 5
+  below aperture ~0.54 on the 3840 x 2112 card, cap 4), and Python reads every level of its chain with the driver's
+  `glGenerateTextureMipmap`, so an own downsample would differ from Python on OpenGL too. The cap is now the layer's
+  chain (its last level less two); odd-built levels are each backend's own, judged by rule (b) and reported apart
+  (choice G), as ABI 33's exact mipped targets.
 - *The bloom prime's negative control is not observable.* With the upsample's rule C prime skipped, synchronisation
   validation (shader accesses on) reports nothing: QRhi's transition into the larger level has the load's stage
   (colour attachment output) in its second scope, and the layer does not flag the access-mask gap there (it does for
@@ -2805,6 +2809,30 @@ previous binding, a capacity growth as a new key, an invalid bank failed once wi
 after a mode switch and after teardown. Point 2's worker writer, the slot shrink and the drifted run against
 `MaterialDriftReference` are the port's. A field only the core reads (a geometry key, a pass's `"when"`) is the
 program's read (`ModeProgram::coreReads`; the 6e9093f7a module refused it as unknown, fixed after that build).
+
+**As built (N5.6 "Native record and route", ABI 46; written, not yet built).** Point 2's writer and owner are
+`core/visualizer_engine/geometry_arena.py`. The main process owns the mapping (`GeometryArenaOwner`, created by
+`engine_worker_link.configure` when the activation has a live drift family (`frame_capacity.geometry_bank_bytes`),
+registered under the session's label namespace in `extruded_bubble_native_schema.open_stream_arena`, unlinked at the
+link's close) and hands its name to the worker in the configure payload (`geometry_arena`). The worker's
+`GeometryArenaWriter` stamps a fresh key namespace into header bytes 32..39 (the C++ reader ignores them), so a
+replacement worker never matches a dead writer's key. It writes from inside `PacketMailbox.publish`, before the slot:
+odd sequence, payload and key, even sequence. A bank is reused only when it is not the key the newest frame names and
+the mailbox's `consumed_sequence` is past the last frame naming its key. With both banks live the key is not written
+(`deferred`) and the frame keeps naming its previous key. On the main side the native route's projection
+(`DriftStream` and `DriftRecordProjector.project(held=owner.holds)`) names a key only once the arena holds it whole;
+otherwise the family keeps the key, epoch, rebase and birth it was last projected with. The route tells the bound item
+the arena name once (`NativeMode.bind`'s `bound` hook and `NativeMode.geometry_arena`). ABI 46 makes the core hold a
+compute entry whose geometry key is not resident, keeping its trigger. The ack is one hop short: `consumed_sequence` is
+the main process's take, not the core's record, so a record the core misses can find a bank rewritten. That case is a
+torn or absent read, held by ABI 46 until a later record names a resident key, never wrong bytes. Proofs:
+`tests/test_native_eb_record_route.py` (the edge, seqlock, reuse, predecessor, deferral and lineage, retirement,
+resize, replacement, and the C++ reader's offsets, each with a mutation control) and
+`tests/test_native_eb_port_core.py` (the hold). A hidden activation whose drift geometry outgrows the arena, or that
+first has a live family, stages a larger one (`engine_worker_link.set_mode`, `stage_stream_arena`). The worker
+attaches it once the previous producer is joined, and the commit registers it and retires the old one
+(`replace_stream_arena`). The new writer namespace starts fresh epochs, as an activation edge does. Not built yet:
+the slot shrink, which waits for the Python renderer's codec frame to stop carrying geometry.
 
 ### The transport rule (proposed)
 

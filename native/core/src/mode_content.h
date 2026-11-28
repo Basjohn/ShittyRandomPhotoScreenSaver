@@ -170,7 +170,8 @@
 //   without the card's oriented rect is refused;
 // - a defocus step ({"name", "defocus": <mips target>, "onto": <scene target>}, an empty pack): the layer's mips, the
 //   clip, the gather and the highlight sprites; its block (u_defocus_radius, u_defocus_highlight, u_defocus_level) filled
-//   by the one rule. The read level is at most post_stages.h defocusReadLevelCap of the layer's allocation (a deeper
+//   by the one rule. The read level is at most post_stages.h defocusReadLevelCap of the layer's allocation (its chain's
+//   last level less two; a deeper
 //   one is the content's failure, latched, with its reason); the run that draws the gather and the sprites is followed
 //   by targets.h chainShaderReads (the layer is read in two shader stages of one pass).
 // A device that does not admit the transparency stage (post_stages.h transparencyGate) leaves the transparency target
@@ -1085,6 +1086,8 @@ private:
     };
     // Audit 5 M2: the largest serial ModeStorage made the entry's storage bindings zeroed at (0: none).
     quint64 entryFreshKey(const ModePass &pass) const;
+    // ABI 46 (N5.6, D3): every geometry buffer `pass` binds holds the record's key (decideDispatches holds it if not).
+    bool geometryKeysResident(const ModePass &pass) const;
     // Audit 5 M2: the tracks of a new program, each entry's kept from the last program by its name.
     void retrackCompute(const ModeProgram &program);
     ModeStorage m_storage;

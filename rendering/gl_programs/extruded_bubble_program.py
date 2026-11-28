@@ -1037,6 +1037,9 @@ void main() {
         float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7) * vOpacity;
         float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7)) * uLightStrength;
 #ifndef NEAR_LAYER
+        // Every path writes its depth: this shader writes gl_FragDepth, so a path that leaves it unwritten tests an
+        // undefined depth (GLSL), and the snow it drew differed from run to run (N5.6, 28 Nov).
+        gl_FragDepth = sceneSphereDepth(front, uProjection);
         sceneTransparent(mix(uShaftColour, vec3(0.9, 0.95, 1.0), 0.4) * 1.2 * glitter * a, a, -front.z);
         Emission = vec4(0.0);
 #endif

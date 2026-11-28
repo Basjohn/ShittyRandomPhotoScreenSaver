@@ -7,7 +7,10 @@
 //
 // fragPixel is the fragment's row in memory on both renderers; the OpenGL renderer's rows run bottom up and the core's
 // top first, so Python's tap at +sin(a) (physically up) is the one at -sin(a) here: the same taps at the same places,
-// in Python's order. Every other read is by texel or at a texel's centre, and is Python's text.
+// in Python's order. N5.6: a layer that holds OpenGL's rows (u_scene_rows_up 1, the program's composite "scene_rows":
+// "up": Extruded Bubble's near layer, drawn as Python's) takes Python's +sin(a) as it is; mirrored there, its circles
+// gathered from the mirrored taps and differed from Python's (rule a). Every other read is by texel or at a texel's
+// centre, and is Python's text.
 #define SRPSS_NATIVE_CORE
 #define SRPSS_CONVENTIONS_FRAGMENT
 //@srpss_conventions
@@ -18,6 +21,7 @@ layout(std140, binding = 0) uniform SceneDefocus {
     float u_defocus_radius;     // the mode's: Python's uMaxRadius (pixels)
     float u_defocus_highlight;  // the mode's: Python's uHighlight
     int u_defocus_level;        // the mode's: Python's uLevel (_read_size: the gather's read level for the radius)
+    float u_scene_rows_up;      // the core's (N5.6): 1 where the layer holds OpenGL's rows, else 0
 };
 layout(binding = 1) uniform sampler2D uColour;
 layout(binding = 2) uniform sampler2D uCircle;
@@ -47,6 +51,7 @@ float circleAt(vec2 uv, float level) {
 }
 void main() {
     float uMaxRadius = u_defocus_radius;
+    float tapRows = u_scene_rows_up > 0.5 ? 1.0 : -1.0;   // the tap's row step: Python's sin(a) in the layer's rows
     vec2 size = vec2(textureSize(uColour, 0));
     ivec2 here = fragTexel(textureSize(uColour, 0));   // the gather draws over a target of the layer's size
     vec4 own = texelFetch(uColour, here, 0);
@@ -61,7 +66,7 @@ void main() {
     for (int i = 0; i < TAPS; ++i) {
         float r = sqrt((float(i) + 0.5) / float(TAPS)) * uMaxRadius;
         float a = float(i) * 2.39996323;
-        vec2 uv = (fragPixel(size) + vec2(cos(a), -sin(a)) * r) / size;
+        vec2 uv = (fragPixel(size) + vec2(cos(a), tapRows * sin(a)) * r) / size;
         if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
         float circle = circleAt(uv, level);
         if (circle < 0.5) continue;
@@ -74,7 +79,7 @@ void main() {
     for (int i = 0; i < FINE_TAPS; ++i) {
         float r = sqrt((float(i) + 0.5) / float(FINE_TAPS)) * smallRadius;
         float a = float(i) * 2.39996323;
-        vec2 uv = (fragPixel(size) + vec2(cos(a), -sin(a)) * r) / size;
+        vec2 uv = (fragPixel(size) + vec2(cos(a), tapRows * sin(a)) * r) / size;
         if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
         float circle = circleAt(uv, 0.0);
         if (circle < 0.5) continue;

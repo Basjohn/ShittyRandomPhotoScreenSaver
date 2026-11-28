@@ -183,14 +183,48 @@ def test_the_core_clip_is_pythons() -> None:
         != python
 
 
-def test_the_core_gather_is_pythons_with_its_taps_mirrored() -> None:
+_TAP_ROWS = "float tapRows = u_scene_rows_up > 0.5 ? 1.0 : -1.0"
+
+
+def _gather_core(source: str) -> list[str]:
+    return [s for s in _main(source) if s not in ("float uMaxRadius = u_defocus_radius", _TAP_ROWS)]
+
+
+def test_the_core_gather_is_pythons_with_its_taps_in_the_layers_rows() -> None:
+    """The taps' row step follows the layer's rows (N5.6): Python's +sin(a) where the layer holds OpenGL's rows
+    (u_scene_rows_up 1: Extruded Bubble's near layer), mirrored where it holds the core's top-first rows."""
     from rendering.quick.scene3d import defocus
 
-    python = [s.replace("vec2(cos(a), sin(a))", "vec2(cos(a), -sin(a))") for s in _main(defocus._GATHER)]
-    core = [s for s in _main(_shader("defocus_gather.frag")) if s != "float uMaxRadius = u_defocus_radius"]
-    assert core == python
-    # Negative control: Python's taps unmirrored are not the core's.
-    assert _main(defocus._GATHER) != core
+    gather = _shader("defocus_gather.frag")
+    python = [s.replace("vec2(cos(a), sin(a))", "vec2(cos(a), tapRows * sin(a))") for s in _main(defocus._GATHER)]
+    assert _gather_core(gather) == python
+    assert _TAP_ROWS in _main(gather)
+    assert "float u_scene_rows_up;" in gather
+    # Negative controls: the taps mirrored whatever the rows (the core before N5.6), and the rows' sign turned, are
+    # caught.
+    mirrored = gather.replace("vec2(cos(a), tapRows * sin(a))", "vec2(cos(a), -sin(a))")
+    assert _gather_core(mirrored) != python
+    assert _TAP_ROWS not in _main(gather.replace("? 1.0 : -1.0", "? -1.0 : 1.0"))
+
+
+def test_the_defocus_shaders_declare_one_block_and_the_scene_card_carries_the_rows() -> None:
+    """The clip, the gather and the sprites bind one SceneDefocus block (the gather's reflected size), so each declares
+    the same members; the defocus step draws onto the scene under the scene's card (sceneAnchor), which carries the
+    program's rows as the composite's card does (packFrame), else its u_scene_rows_up read 0 for Extruded Bubble."""
+    def block(name: str) -> list[str]:
+        text = re.sub(r"//[^\n]*", "", _shader(name))
+        body = text[text.index("uniform SceneDefocus {") + len("uniform SceneDefocus {"):]
+        return [re.sub(r"\s+", " ", s).strip() for s in body[:body.index("}")].split(";") if s.strip()]
+
+    members = ["float u_defocus_radius", "float u_defocus_highlight", "int u_defocus_level", "float u_scene_rows_up"]
+    for name in ("defocus_gather.frag", "defocus_clip.frag", "defocus_sprites.vert"):
+        assert block(name) == members, name
+    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    anchor = source[source.index("bool sceneAnchor(const ModeProgram &program"):]
+    anchor = anchor[:anchor.index("\n}\n")]
+    assert "sceneCard->sceneRowsUp = program.sceneRowsUp();" in anchor
+    # The line precedes every early return (an unanchored scene card is still the one read).
+    assert anchor.index("sceneCard->sceneRowsUp") < anchor.index("return false;")
 
 
 def test_the_core_sprites_are_pythons() -> None:
@@ -345,23 +379,60 @@ def test_the_defocus_run_chains_its_two_stage_reads() -> None:
     assert "sampledTexture(1, vertex, d.colour, d.mipSampler.get())" in stages
 
 
-def test_the_defocus_read_level_cap_keeps_reads_on_even_built_levels() -> None:
-    """The lead's cap (15 Nov): two levels above the last level made only from even-sized levels; the core's function
-    and the harness's mirror agree, and the sync refuses past it."""
+def _even_built_cap(allocation: tuple[int, int]) -> int:
+    """The 15 Nov cap (two above the last level made only from even-sized levels), superseded in N5.6."""
+    width, height = allocation
+    exact = 0
+    while (width > 1 or height > 1) and not ((width > 1 and width % 2) or (height > 1 and height % 2)):
+        width, height = max(1, width // 2), max(1, height // 2)
+        exact += 1
+    return max(0, exact - 2)
+
+
+def test_the_defocus_read_level_cap_is_the_layers_chain_and_admits_every_level_python_reads() -> None:
+    """N5.6 (28 Nov): Python reads every level of its near layer's chain (glGenerateTextureMipmap), so the core's cap is
+    the chain's last level less two (the clip's and the sprites' level + 2). Extruded Bubble's read level stays inside
+    it over the card sizes and framed apertures a card can take; the even-built cap refused zoomed-in worlds."""
+    import math
     import sys
 
     sys.path.insert(0, str(CORE / "python"))
     import post_stages
+    from core.settings.framed_camera import FOV_RANGE, effective_aperture_scale
+    from rendering.native.scene_targets import bucket_pixels
+    from rendering.quick.scene3d.defocus import DEFOCUS_TAPS
+    from rendering.quick.visualizer.implementations import extruded_bubble as eb
 
-    assert post_stages.read_level_cap((640, 384)) == 5        # 5 x 3 is level 7, made from 10 x 6
-    assert post_stages.read_level_cap((64, 64)) == 4          # down to 1 x 1, every level even-built
-    assert post_stages.read_level_cap((3840, 2176)) == 5      # 30 x 17 is level 7
-    # Negative control: a cap that ignored odd sides would allow 8 at 640 x 384.
-    assert post_stages.read_level_cap((640, 384)) != max((640).bit_length() - 2, 0)
+    for size in ((640, 384), (64, 64), (3840, 2176), (1, 1), (65, 3)):
+        last = max(size).bit_length() - 1             # QRhi's and Python's chain: floor(log2) of the longer side
+        assert post_stages.read_level_cap(size) == max(0, last - 2)
+
+    def level(optical: float) -> int:                 # extruded_bubble_values' u_defocus_level, defocus.py _read_size
+        radius = eb._near_spread(optical)
+        return max(int(math.floor(math.log2(max(math.sqrt(math.pi * radius * radius / DEFOCUS_TAPS), 1.0)))), 0)
+
+    def past(cap) -> list:
+        out = []
+        for fov in FOV_RANGE:
+            for w in (64, 420, 640, 1280, 1920, 2560, 3840):
+                for h in (64, 280, 400, 720, 1080, 1440, 2112, 2160):
+                    for aperture in (1.0, 0.75, 0.5, 0.35, 0.25, 0.1, 1.0 / 32.0):
+                        optical = h / effective_aperture_scale(fov, w / h, aperture)
+                        allocation = (bucket_pixels(w), bucket_pixels(h))
+                        if level(optical) > cap(allocation):
+                            out.append((fov, w, h, aperture, level(optical), cap(allocation)))
+        return out
+
+    assert past(post_stages.read_level_cap) == []
+    # Negative control: the even-built cap refused these (level 5 at aperture 0.5 on the 4K expanded card, cap 4).
+    refused = past(_even_built_cap)
+    assert any(w == 3840 and h == 2112 and aperture == 0.5 for _, w, h, aperture, _, _ in refused)
+
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
-    cap = stages[stages.index("int defocusReadLevelCap("):]
-    assert "(s.width() > 1 && s.width() % 2) || (s.height() > 1 && s.height() % 2)" in cap
-    assert "return qMax(0, exact - 2);" in cap
+    cap = stages[stages.index("int defocusReadLevelCap("):stages.index("void countTransparencyResolve()")]
+    assert "for (int m = qMax(layer.width(), layer.height()); m > 1; m >>= 1)" in cap
+    assert "return qMax(0, last - 2);" in cap
+    assert "% 2" not in cap                           # no even-built stop left
     sync = stages[stages.index("bool PostStages::sync("):]
     assert "const int maxLevel = defocusReadLevelCap(layer);" in sync
 
@@ -426,3 +497,61 @@ def test_n31_per_attachment_check_reads_the_core_device_facts() -> None:
     facts = (CORE / "src" / "vulkan_context.cpp").read_text(encoding="utf-8")
     assert 'facts.insert(QStringLiteral("independent_blend"), f2.features.independentBlend == VK_TRUE);' in facts
     assert "f2.features.independentBlend = VK_FALSE; // N3.4, harness only" in facts
+
+
+# ------------------------------------------------------------------------------------------- N5.6, mixed blends (R-256)
+
+def mixed_blend_is_refused(content: str) -> bool:
+    """ABI 47: the core refuses a pass writing an unblended attachment beside a blended one (OpenGL's stale factors),
+    a masked one counted as neither, at program parse after the transparency state and on a sorted pack's outputs."""
+    if "QString mixedBlendRefusal(" not in content:
+        return False
+    body = content[content.index("QString mixedBlendRefusal("):content.index("bool parseBlendValue(")]
+    sorted_pack = content[content.index("bool checkSortedPack("):content.index("bool parseStageStep(")]
+    parse = content[content.index("|| !transparentPassState(o, pass, program.targets"):]
+    return ("if (!outputs.at(a).write)\n            continue;" in body and "outputBlend(outputs.at(a)).enable" in body
+            and '"mixed blend: pass' in body
+            and "mixedBlendRefusal(pass.sortedOutputs, pass.name" in sorted_pack
+            and "mixedBlendRefusal(pass.outputs, pass.name" in parse[:parse.index("viewport")])
+
+
+def _mixed_passes(declaration: str) -> list[str]:
+    """The passes of a declared program whose written attachments mix blending off (replace) and on (a transparent
+    pass's first two entries are the core's blends)."""
+    found = []
+    for p in json.loads(declaration)["passes"]:
+        if "attachments" not in p or p.get("sorted"):
+            continue
+        enabled = {a.get("blend", p.get("blend")) != "replace" for a in p["attachments"] if a.get("write", True)}
+        if len(enabled) == 2:
+            found.append(p["name"])
+    return found
+
+
+def test_a_pass_mixing_blended_and_unblended_attachments_is_refused_and_no_harness_program_declares_one() -> None:
+    import sys
+    from collections import defaultdict
+
+    sys.path.insert(0, str(CORE / "python"))
+    import post_stages
+    import waveform_primitives as wp
+    from rendering.native.mode import ModePass, PassOutput, program_json
+
+    content = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert mixed_blend_is_refused(content)
+    packs = defaultdict(lambda: b"X")
+    for variant in post_stages.EB_VARIANTS:
+        passes, targets = post_stages.eb_program(packs, variant=variant)
+        assert _mixed_passes(program_json(passes, targets)[0]) == [], variant
+    passes, targets, images = wp.shape_program(packs, {"eb_layer1": b"L", "eb_layer1_sorted": b"S"})
+    assert _mixed_passes(program_json(passes, targets, (), (), images)[0]) == []
+    # Negative controls: the pre-ABI 47 backdrop (replace beside additive) is a mixed pass, a masked attachment is
+    # not, and the core's text without either call or the mask's skip fails the check.
+    old = ModePass("backdrop", b"B", "replace", target="scene",
+                   outputs=(PassOutput(True, "replace"), PassOutput(True, "additive")))
+    masked = ModePass("masked", b"M", "replace", target="scene",
+                      outputs=(PassOutput(True, "replace"), PassOutput(False, "additive")))
+    assert _mixed_passes(program_json((old, masked))[0]) == ["backdrop"]
+    assert not mixed_blend_is_refused(content.replace("mixedBlendRefusal(pass.sortedOutputs", "QString(pass.sorted"))
+    assert not mixed_blend_is_refused(content.replace("mixedBlendRefusal(pass.outputs", "QString(pass.outputs"))
+    assert not mixed_blend_is_refused(content.replace("if (!outputs.at(a).write)\n            continue;", ""))

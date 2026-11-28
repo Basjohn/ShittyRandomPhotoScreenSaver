@@ -813,6 +813,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("compute_dispatches"), double(cc.dispatches));
     o.insert(QStringLiteral("compute_passes"), double(cc.computePasses));
     o.insert(QStringLiteral("compute_skipped"), double(cc.skipped));
+    o.insert(QStringLiteral("compute_geometry_holds"), double(cc.geometryHolds));   // ABI 46 (N5.6)
     o.insert(QStringLiteral("compute_clears"), double(cc.clears));
     o.insert(QStringLiteral("compute_copies"), double(cc.copies));
     o.insert(QStringLiteral("compute_image_zero_uploads"), double(cc.imageZeroUploads));

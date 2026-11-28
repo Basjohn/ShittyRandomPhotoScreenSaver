@@ -195,9 +195,10 @@ void countTransparencyResolve();
 void countFallback();
 void countGeneratedMips(int count);
 void countStageRecordTime(qint64 recordNs);     // a record of a program with stages: the render thread's whole record
-// The deepest read level a defocus step may take over a layer of `layer` texels: two levels above the last level made
-// only from even-sized levels (the clip's local mean and the sprites read level + 2), so every level read is one both
-// backends' generateMips make alike (the lead, 15 Nov; D17 as built). A deeper level is refused with a reason.
+// The deepest read level a defocus step may take over a layer of `layer` texels: two levels above the layer's last
+// level (the clip's local mean and the sprites read level + 2), so Python's every level is drawn (N5.6, 28 Nov;
+// superseding the 15 Nov cap at the even-built levels). Levels made from an odd size are each backend's own filter,
+// judged by rule (b). A deeper level is refused with a reason.
 int defocusReadLevelCap(const QSize &layer);
 
 // A program's bloom step and defocus step as the stages need them (mode_content.cpp derives them once per program).

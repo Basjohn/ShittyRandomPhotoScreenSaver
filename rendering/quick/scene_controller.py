@@ -3274,10 +3274,14 @@ class QuickSceneController(QObject):
         item.set_custom_layout_presentation_authority(
             self._custom_layout_session is not None
         )
-        # D10 point 4 (N2.5): on Vulkan the native core's item draws the Visualizer's frames in this content host.
-        from rendering.quick.visualizer.native_route import attach_native_route
+        # D10 point 4 (N2.5): on Vulkan the native core's item draws the Visualizer's frames in this content host. The
+        # route is imported only there: an OpenGL scene never loads it (N5.6, the Python references' drawing sources).
+        from rendering.quick.bootstrap import native_visualizer_route_wanted
 
-        attach_native_route(item, content_host)
+        if native_visualizer_route_wanted():
+            from rendering.quick.visualizer.native_route import attach_native_route
+
+            attach_native_route(item, content_host)
         self._visualizer_root = root
         self._window.watch_plain_orbit_card(root)
         root.setProperty(

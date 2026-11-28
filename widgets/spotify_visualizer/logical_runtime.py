@@ -178,6 +178,23 @@ class LatestStateMailbox:
         # revision counters can never collide in trace correlation.
         self._frame_trace = current_frame_trace()
         self._trace_screen_index = -1
+        # N5.6 (D3): Extruded Bubble's in-process geometry arena (``extruded_bubble_native_schema.
+        # InProcessStreamArena``), made at the first publication with drift families and closed with this mailbox;
+        # ``_consumed`` is the newest revision the GUI took (a bank is reused only after it).
+        self._geometry: Any = None
+        self._consumed = 0
+
+    def _geometry_for(self, state: Any) -> Any:
+        """The in-process arena, made once a frame carries drift families (no work for any other mode)."""
+        geometry = self._geometry
+        if geometry is None and getattr(getattr(state, "mode_state", None), "drift_families", None):
+            import weakref
+
+            from core.visualizer_engine.extruded_bubble_native_schema import InProcessStreamArena
+
+            geometry = self._geometry = InProcessStreamArena()
+            weakref.finalize(self, geometry.close)
+        return geometry
 
     def detach_frame_trace(self) -> None:
         """Record nothing into the process-wide ``--frame-trace`` sink. For an offline controller (a Studio
@@ -207,7 +224,13 @@ class LatestStateMailbox:
                     and previous.activation_id == int(activation_id)
                 ):
                     state = _coalesce_protected_state(previous.state, state)
+            geometry = self._geometry_for(state)
+            if geometry is not None:
+                # As ``PacketMailbox.publish``: the frame's new geometry keys whole in their banks before it is named.
+                geometry.before_publish(state, self._consumed)
             self._revision += 1
+            if geometry is not None:
+                geometry.published(self._revision)
             self._publication = LogicalPublication(
                 state=state,
                 revision=self._revision,
@@ -278,6 +301,8 @@ class LatestStateMailbox:
         with self._lock:
             publication = self._publication
             self._publication = None
+            if publication is not None:
+                self._consumed = publication.revision
             return publication
 
     def take_for_generation(self, generation: int) -> Optional[LogicalPublication]:
@@ -290,6 +315,7 @@ class LatestStateMailbox:
             publication = self._publication
             if publication is None:
                 return None
+            self._consumed = publication.revision       # taken or dropped, it is never projected later
             if int(publication.generation) != int(generation):
                 self._publication = None
                 return None

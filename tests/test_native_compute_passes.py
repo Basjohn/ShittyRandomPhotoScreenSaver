@@ -44,6 +44,27 @@ def test_a_compute_program_declares_its_storage_and_entries_in_pass_order():
     assert "buffers" not in json.loads(program_json((draw,))[0])
 
 
+def test_the_route_hands_the_item_a_programs_storage_buffers(monkeypatch):
+    # N5.6: the route's program edge forwarded a program's images and dropped its buffers, so a compute entry's storage
+    # (Extruded Bubble's drift) never reached the core.
+    from rendering.native.mode import ModePass, StorageBuffer
+    from rendering.quick.visualizer import native_route as route
+
+    buffers = (StorageBuffer("state", 4096),)
+    program = {"passes": [ModePass("draw", b"P")], "targets": (), "streams": (), "buffers": buffers}
+    monkeypatch.setitem(route.GENERIC_MODE_PROGRAM_VARIANTS, "storage_probe", (lambda _s: 0, lambda _v: program))
+    calls = []
+
+    class Item:
+        def program(self, passes, values, **kwargs):
+            calls.append(kwargs)
+
+    content = object.__new__(route._ModeContent)
+    content.item, content._pack, content._resources, content._sizes = Item(), ("storage_probe", b""), None, None
+    content._program("storage_probe", {}, None, 0)
+    assert calls and calls[0].get("buffers") == buffers
+
+
 def test_the_python_face_refuses_what_the_core_would():
     from rendering.native.mode import ComputeBinding, ComputePass, StorageBuffer, StorageImage
 

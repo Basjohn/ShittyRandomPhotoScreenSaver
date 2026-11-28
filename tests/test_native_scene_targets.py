@@ -328,7 +328,7 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
     _refused(core, (planes, ModePass("show", packs["show"], "replace", samplers=(
         PassSampler("u_scene", "scene.colour", mips="linear"), PassSampler("u_depth", "scene.depth"),
         PassSampler("u_cover", "ambient.coverage"), PassSampler("u_light", "ambient.light")))), (scene, ambient),
-             "no mips")
+             "reads mips of 'scene.colour', which has none")
     _refused(core, (planes, ModePass("show", packs["show"], "replace", samplers=(
         PassSampler("u_scene", "scene.velocity"), PassSampler("u_depth", "scene.depth"),
         PassSampler("u_cover", "ambient.coverage"), PassSampler("u_light", "ambient.light")))), (scene, ambient),

@@ -397,6 +397,7 @@ QAtomicInteger<qint64> g_geometryUploads { 0 };
 QAtomicInteger<qint64> g_geometryFailed { 0 };
 QAtomicInteger<qint64> g_geometryReleased { 0 };
 QAtomicInteger<qint64> g_geometryWaits { 0 };
+QAtomicInteger<qint64> g_geometryHolds { 0 };          // ABI 46 (N5.6)
 QAtomicInteger<qint64> g_checkReadbacks { 0 };      // ABI 42 (N5.6)
 QAtomicInteger<qint64> g_checkReadbackBytes { 0 };
 QAtomicInteger<qint64> g_checkReports { 0 };
@@ -410,6 +411,7 @@ ComputeCounts computeCounts()
     c.geometryFailed = g_geometryFailed.loadRelaxed();
     c.geometryReleased = g_geometryReleased.loadRelaxed();
     c.geometryWaits = g_geometryWaits.loadRelaxed();
+    c.geometryHolds = g_geometryHolds.loadRelaxed();
     c.checkReadbacks = g_checkReadbacks.loadRelaxed();
     c.checkReadbackBytes = g_checkReadbackBytes.loadRelaxed();
     c.checkReports = g_checkReports.loadRelaxed();
@@ -432,6 +434,7 @@ ComputeCounts computeCounts()
 void countDispatch() { g_dispatches.fetchAndAddRelaxed(1); }
 void countComputePass() { g_computePasses.fetchAndAddRelaxed(1); }
 void countSkipped() { g_skipped.fetchAndAddRelaxed(1); }
+void countGeometryHold() { g_geometryHolds.fetchAndAddRelaxed(1); }
 void countStateLost() { g_statesLost.fetchAndAddRelaxed(1); }
 void countCheckReadback(quint32 bytes)
 {
@@ -613,6 +616,8 @@ const ModeStorage::Buffer *ModeStorage::buffer(const QByteArray &name) const
         if (slot->name != base)
             continue;
         const Buffer *b = previous && slot->previous ? slot->previous : slot->current;
+        if (!b)
+            b = slot->empty;                  // N5.6: no key named and none resident (the family has no geometry yet)
         return b && b->buffer ? b : nullptr;
     }
     return nullptr;
@@ -632,6 +637,37 @@ int ModeStorage::geometryResidencies() const
         n += (slot->current ? 1 : 0) + (slot->previous ? 1 : 0);
     return n + int(m_geometryRetiring.size());
 }
+
+bool ModeStorage::geometryResident(const QByteArray &name, const GeometryKey &key) const
+{
+    for (const GeometrySlot *slot : m_geometry) {
+        if (slot->name == name)
+            return slot->current != nullptr && slot->currentKey == key;
+    }
+    return true;                              // not a geometry buffer: nothing to wait for
+}
+
+namespace {
+
+// N5.6 (ABI 47): a geometry slot's binding while its record names no key and none is resident: 16 zero bytes (never a
+// residency, so no residency count). Null when it cannot be made (the frame then waits, as before).
+ModeStorage::Buffer *emptyGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, const StorageBufferDeclaration &decl)
+{
+    RhiOwned<QRhiBuffer> made(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::StorageBuffer, 16));
+    made->setName(QByteArrayLiteral("srpss core geometry (none yet) ") + decl.name);
+    g_objectsCreated.fetchAndAddRelaxed(1);
+    if (!made->create())
+        return nullptr;
+    static const char zeros[16] = {};
+    updates->uploadStaticBuffer(made.get(), 0, 16, zeros);
+    ModeStorage::Buffer *b = new ModeStorage::Buffer;
+    b->decl = decl;
+    b->bytes = 16;
+    b->buffer = std::move(made);
+    return b;
+}
+
+} // namespace
 
 bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, const GeometryArena *arena,
                                const QList<StorageBufferDeclaration> &declared,
@@ -662,6 +698,8 @@ bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, cons
             g_geometryReleased.fetchAndAddRelaxed(1);
             releaseGeometryBuffer(b);
         }
+        if (slot->empty)
+            releaseGeometryBuffer(slot->empty); // never a residency: no count
         delete slot;
         m_geometry.removeAt(i);
         *changed = true;
@@ -682,7 +720,19 @@ bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, cons
         }
         const auto wanted = keys.constFind(decl.name);
         if (wanted == keys.cend() || !wanted.value().valid()) {
-            *waiting = *waiting || !slot->current;
+            // N5.6 (ABI 47): the record names no key (its family has no geometry yet: Extruded Bubble's first frame,
+            // before its first drift step, which Python draws with the family absent). Nothing is waited on: with no
+            // residency the passes bind 16 zero bytes, made once per slot (never a residency), and an entry binding
+            // the buffer holds (geometryResident: no current key). It waited before, so a first frame was missing.
+            if (!slot->current && !slot->empty) {
+                slot->empty = emptyGeometry(rhi, updates, decl);
+                if (!slot->empty) {
+                    *waiting = true;          // as before: the frame waits for a key
+                    continue;
+                }
+                ++m_objects;                  // the bindings that name the buffer are made over it
+                *changed = true;
+            }
             continue;
         }
         const GeometryKey &key = wanted.value();
@@ -743,6 +793,10 @@ bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, cons
         slot->previousKey = slot->currentKey;
         slot->current = b;
         slot->currentKey = key;
+        if (slot->empty) {
+            releaseGeometryBuffer(slot->empty); // N5.6: a first key resident; QRhi keeps it past the frames using it
+            slot->empty = nullptr;
+        }
         ++m_objects;
         *changed = true;
     }
@@ -776,6 +830,8 @@ void ModeStorage::releaseGeometry()
             g_geometryReleased.fetchAndAddRelaxed(1);
             releaseGeometryBuffer(b);
         }
+        if (slot->empty)
+            releaseGeometryBuffer(slot->empty); // N5.6: never a residency, no count
         delete slot;
     }
     m_geometry.clear();
