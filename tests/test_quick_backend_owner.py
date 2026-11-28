@@ -253,6 +253,8 @@ report = {"configured_api": configured.graphics_api, "records_before_start": rec
 backend = bootstrap.start_quick_backend(**start_kwargs)
 report["backend"] = [backend.api, backend.requested, backend.reason]
 report["module_loaded"] = "_srpss_native_core" in sys.modules
+report["core"] = bootstrap.native_core() is not None
+report["degraded"] = bootstrap.degraded_reason()
 report["records_after_start"] = records()
 gl_validations = []
 quick_window.validate_or_quit_current_opengl_context = lambda **kw: gl_validations.append(kw["reason"])
@@ -282,6 +284,16 @@ class Presented(QObject):
         report["gl_validations"] = list(gl_validations)      # at the first frame, before the teardown
         report["quits"] = quits
         report["binding_lost"] = window.binding_loss is not None
+        if step == "driver_edge":
+            # A real frame on the process's core and API with no window shown: the kept hidden host's frame driver
+            # records two frames (its edges counted by the core on the render thread, none with a Python thread state).
+            hidden = bootstrap.native_hidden_host(64, 64)
+            before = dict(hidden.state().get("driver") or {}).get("edges", 0)
+            hidden.frames(2)
+            driver = dict(hidden.state().get("driver") or {})
+            report["hidden_api"] = hidden.state().get("graphics_api")
+            report["hidden_edges"] = int(driver.get("edges", 0)) - int(before)
+            report["hidden_python_edges"] = driver.get("edges_with_python_thread_state")
         window.frameSwapped.disconnect(presented.frame)
         # The decided teardown order (facts A7): the window goes first (on Vulkan its device with it), then the
         # process ends (os._exit with the Vulkan window still alive ended this probe with 0xC0000005).
@@ -312,7 +324,7 @@ def _probe_env() -> dict:
     return env
 
 
-def _probe(script: str, state_dir: Path, step: str = "", timeout: float = 60.0) -> dict:
+def _probe(script: str, state_dir: Path, step: str = "", timeout: float = 90.0) -> dict:
     completed = subprocess.run([sys.executable, "-c", script, str(state_dir), step], cwd=ROOT, env=_probe_env(),
                                text=True, capture_output=True, check=False, timeout=timeout)
     lines = [line for line in completed.stdout.splitlines() if line.startswith("PROBE ")]
@@ -330,7 +342,7 @@ _CONFIGURE_VULKAN = ('configured = bootstrap.configure_quick_graphics(reason="n2
 
 @needs_module
 def test_the_rehearsal_window_renders_on_the_native_core_device_and_completes_its_start(tmp_path):
-    report = _probe(_window_script(_CONFIGURE_VULKAN), tmp_path)
+    report = _probe(_window_script(_CONFIGURE_VULKAN), tmp_path, step="driver_edge")
     assert report["configured_api"] == "Vulkan" and report["backend"] == ["vulkan", "vulkan", ""]
     assert [record["state"] for record in report["records_after_start"]] == ["pending"]
     assert report["api"] == "Vulkan"
@@ -338,6 +350,8 @@ def test_the_rehearsal_window_renders_on_the_native_core_device_and_completes_it
     assert host["graphics_api"] == "vulkan" and host["attached"] and host["device_alive"]
     assert int(host["device"]["vk_device"]) != 0                    # the module's VkDevice, given before the show
     assert report["visible"] is False                                # never shown
+    # A real frame on the core's Vulkan device: the hidden host's driver counted both edges, off the Python thread.
+    assert report["hidden_api"] == "vulkan" and report["hidden_edges"] == 2 and report["hidden_python_edges"] == 0
     assert report["records_after_first_frame"] == []                 # the first presented frame completed the start
     assert report["gl_validations"] == [] and report["quits"] == []  # no OpenGL check on a Vulkan window
     assert report["hosts_left"] == 0                                  # the destroyed window closed its host
@@ -453,6 +467,41 @@ def test_a_forced_device_failure_quits_before_any_frame_and_the_next_start_runs_
     assert again["api"] == "Vulkan" and again["records_after_first_frame"] == []
 
 
+_NO_VULKAN_INSTANCE = r'''{"load_core": lambda: RefusedInstance(__import__("rendering.native", fromlist=["load"]).load(
+    bootstrap._native_module_dir()))}
+
+
+class RefusedInstance:
+    """The real core, whose Vulkan instance creation is refused: the module loaded, only its Vulkan instance failed."""
+
+    def __init__(self, core):
+        self._core = core
+
+    def vulkan_instance(self, **_kwargs):
+        return {"ok": False, "error": "forced instance refusal"}
+
+    def __getattr__(self, name):
+        return getattr(self._core, name)
+'''
+
+
+@needs_module
+def test_a_vulkan_start_whose_instance_fails_runs_native_opengl_with_the_core_it_loaded(tmp_path):
+    # bootstrap.start_quick_backend: the module loaded but its Vulkan instance did not; the process falls back to
+    # OpenGL before any window and keeps the core (native OpenGL, never the degraded display).
+    script = _PRELUDE + _CONFIGURE_VULKAN + "\nstart_kwargs = " + _NO_VULKAN_INSTANCE + _WINDOW
+    report = _probe(script, tmp_path, step="driver_edge")
+    api, requested, reason = report["backend"]
+    assert (api, requested) == ("opengl", "vulkan") and "forced instance refusal" in reason
+    assert report["api"] == "OpenGL" and report["core"] is True and report["degraded"] == ""
+    host = report["host"]
+    assert host is not None and host["kind"] == "window" and host["attached"]       # hosted on the core it loaded
+    assert report["hidden_api"] == "opengl" and report["hidden_edges"] == 2 and report["hidden_python_edges"] == 0
+    [record] = report["records_after_first_frame"]                    # remembered: the next start runs OpenGL
+    assert record["state"] == "failed" and "forced instance refusal" in record["reason"]
+    assert report["quits"] == [] and report["hosts_left"] == 0 and report["visible"] is False
+
+
 @needs_module
 def test_a_start_that_dies_before_its_first_frame_sends_the_next_start_to_opengl(tmp_path):
     # As a driver crashing at device creation leaves it: the process ends with its start pending.
@@ -532,6 +581,12 @@ import core.windows.reddit_helper_runtime as reddit_helper_runtime
 reddit_helper_runtime.clear_session_ticket = lambda **_kwargs: False
 engine = Engine()
 report = {}
+# The order the stop ends in: the window's destruction (the Quick retirement drained) against the quit request.
+order = []
+window.destroyed.connect(lambda *_: order.append("window_destroyed"))
+import engine.runtime_destruction as destruction
+_quit = destruction.request_application_quit
+destruction.request_application_quit = lambda reason: (order.append("quit"), _quit(reason))[1]
 
 
 class Presented(QObject):
@@ -539,7 +594,14 @@ class Presented(QObject):
     def frame(self):
         window.frameSwapped.disconnect(presented.frame)
         report["api"] = QQuickWindow.graphicsApi().name
-        engine_lifecycle.stop(engine, exit_app=True, reason="cli_exit_after")           # what --exit-after runs
+        if step == "stop":
+            engine_lifecycle.stop(engine, exit_app=True, reason="cli_exit_after")       # what --exit-after runs
+        else:
+            # The negative control: the stop before the fix. Its barrier was a replacement one (the reason was not
+            # "application_exit"), which cancels itself under terminal shutdown, so the stop finalized and quit at once.
+            engine._terminal_shutdown_requested = True
+            engine_lifecycle.teardown_display_runtime(engine, reason="cli_exit_after", terminal=False)
+            engine_lifecycle._run_stop_finalization(engine, True)
 
 
 presented = Presented()
@@ -550,24 +612,31 @@ QTimer.singleShot(15000, lambda: emit(dict(report, timeout=True), 2))
 app.exec()
 report["window_alive_at_loop_end"] = shiboken6.isValid(window)
 report["hosts_left"] = len(bootstrap._owner.window_hosts)
+report["order"] = order
 print("PROBE " + json.dumps(report), flush=True)
 sys.exit(0)          # a normal interpreter exit, never os._exit: the process's own end is what is tested
 '''
 
 
 @needs_module
-def test_an_exiting_stop_releases_the_vulkan_window_and_the_process_exits_cleanly(tmp_path):
+@pytest.mark.parametrize("step", ["stop", "old_stop"])
+def test_an_exiting_stop_releases_the_vulkan_window_and_the_process_exits_cleanly(step, tmp_path):
     # Lead's run, 14 Nov: --exit-after on Vulkan ended with 0xC0000005, its window still alive when the loop ended.
-    # The probe's window is never shown (N5.2h: no probe window on a screen); the old stop's crash needed a window
-    # rendering on the device, so its negative control (the stop before the fix) is no longer run here.
-    completed = subprocess.run([sys.executable, "-c", _PRELUDE + _EXIT, str(tmp_path), "stop"], cwd=ROOT,
+    # The probe's window is never shown (N5.2h: no probe window on a screen). The fixed stop quits only once the Quick
+    # retirement drained (the window destroyed first); the old stop (the negative control) requested the quit before
+    # the window was destroyed. Its crash needed a window rendering on the device, so its exit code is not judged.
+    completed = subprocess.run([sys.executable, "-c", _PRELUDE + _EXIT, str(tmp_path), step], cwd=ROOT,
                                env=_probe_env(), text=True, capture_output=True, check=False, timeout=60)
     lines = [line for line in completed.stdout.splitlines() if line.startswith("PROBE ")]
     assert lines, completed.stdout + completed.stderr
     report = json.loads(lines[-1][len("PROBE "):])
     assert report["api"] == "Vulkan" and "timeout" not in report and report["visible"] is False
-    assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
-    assert completed.returncode == 0, completed.stderr
+    if step == "stop":
+        assert report["order"] == ["window_destroyed", "quit"]
+        assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
+        assert completed.returncode == 0, completed.stderr
+    else:
+        assert report["order"][0] == "quit"
 
 
 @needs_module

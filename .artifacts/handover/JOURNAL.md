@@ -17,5 +17,10 @@ Order: 1 reveal waits for first wallpaper; 2 hidden-host owner guard; 3 fullscre
   (draw_python_frames, product_capture, _product_python, _python_stages, hold_python_clock) kept marked but it is
   DEAD (TransitionCapture gone, record on an old checkout runs that checkout's tools): report as backlog deletion.
   Control: old fsc fails the guard (evidence 20261128_audit_item3_round_shape).
+- Item 4 DONE: old_stop control back (judges order quit-before-window_destroyed; unshown window dies either way),
+  real driver edges via the kept hidden host (2 edges, 0 Python) in the rehearsal + new native-OpenGL-after-instance-
+  failure test (control: degrade branch fails it). 24/24 owner file. Evidence 20261128_audit_item4_owner_tests.
+  Side note: the exit probe's stop hits a LIFECYCLE_BARRIER timeout (QuickDisplayRuntime 1 live, the probe's own
+  global `runtime` ref) before finalizing.
 
 ---- previous agent's journal (aa3b364) is in git history of .artifacts/handover/JOURNAL.md ----
