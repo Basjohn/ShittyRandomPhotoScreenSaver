@@ -355,6 +355,12 @@ class DriftStream:
         self._tell(logical, arena.name)
         return fields
 
+    def drawn_natively(self, engine_generation: int, activation_id: int) -> bool:
+        """A bound native item draws the stream of this (engine generation, activation). The logical thread asks
+        (``InProcessStreamArena``): the GUI thread only replaces the list or appends to it."""
+        identity = (int(engine_generation) & _U32_MAX, int(activation_id) & _U32_MAX)
+        return any(ref() is not None and bound[1:] == identity for ref, bound, _told in self._items)
+
     def _tell(self, logical: Any, name: str) -> None:
         identity = tuple(int(v) & _U32_MAX for v in (logical.runtime_generation, logical.engine_generation,
                                                      logical.activation_id))
@@ -475,6 +481,95 @@ def _numbers(name: str, kind: str, count: int, value: Any) -> object:
 
 #: The route's drift side (one per process: the route's records and the reference encoder name the same lineage).
 DRIFT = DriftStream()
+
+#: The label namespace of a stream drawn in process: the drift log's own revisions (an engine session's are >= 1).
+IN_PROCESS_NAMESPACE = 0
+
+
+def _canonical_bank_bytes(families) -> int:
+    """The bank bytes no activation of these families exceeds (``frame_capacity.geometry_bank_bytes``' maxima)."""
+    from core.constants.extruded_bubble_world import SNOW_FULL, SPECKS_FULL
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES
+
+    canonical = {"chains": CHAIN_PATHS * CHAIN_GEOMETRY_BYTES, "snow": SNOW_FULL * CLOUD_GEOMETRY_BYTES,
+                 "specks": SPECKS_FULL * CLOUD_GEOMETRY_BYTES}
+    largest = max(max(canonical.get(d.family, 0), len(d.geometry)) for d in families)
+    return (largest + 15) // 16 * 16
+
+
+class InProcessStreamArena:
+    """The engine worker's D3 side for a stream drawn in process (``--viz-in-process``, the worker's fallback), held
+    by its ``LatestStateMailbox`` (N5.6). The worker path's arena is opened by ``engine_worker_link.configure`` and
+    written by the worker's ``GeometryArenaWriter`` inside ``PacketMailbox.publish``; in process no session does either,
+    so ``DriftStream.project`` found no arena and named no drift family (every drift draw held). Here, on the producer
+    thread inside the mailbox's publish: once a bound native item draws the stream (``DRIFT.drawn_natively``; the
+    Python route needs no arena), the arena is opened under ``IN_PROCESS_NAMESPACE`` at the families' canonical bank
+    bytes and each frame's new keys are written before its publication names them, a bank reused only once the GUI
+    took a frame after the last one naming it, as on the worker. Closed when the stream leaves Extruded Bubble (a frame
+    without drift families) or its mailbox goes. One in-process stream owns the namespace: another (a second display
+    in process, the owner replay's harness arena) finds it taken, says so once and keeps every family absent."""
+
+    def __init__(self) -> None:
+        self._owner: GeometryArenaOwner | None = None
+        self._writer: Any = None
+        self._bank = 0
+        self._noted = False
+
+    @property
+    def owner(self) -> GeometryArenaOwner | None:
+        return self._owner
+
+    def before_publish(self, state: Any, consumed: int) -> None:
+        families = getattr(getattr(state, "mode_state", None), "drift_families", None)
+        if families is None:
+            self.close()                    # another mode's frame: the stream left Extruded Bubble
+            return
+        if not families or int(families[0].revision) >> 32 != IN_PROCESS_NAMESPACE:
+            return
+        if self._writer is None or _canonical_bank_bytes(families) > self._bank:
+            if not DRIFT.drawn_natively(getattr(state, "engine_generation", -1), getattr(state, "activation_id", -1)):
+                return
+            if not self._open(_canonical_bank_bytes(families)):
+                return
+        self._writer.before_publish(state, consumed)
+
+    def published(self, sequence: int) -> None:
+        writer = self._writer
+        if writer is not None:
+            writer.published(sequence)
+
+    def _open(self, bank_bytes: int) -> bool:
+        from core.visualizer_engine.geometry_arena import GeometryArenaWriter
+
+        self.close()
+        if stream_arena(IN_PROCESS_NAMESPACE) is not None:
+            if not self._noted:
+                self._noted = True
+                logger.warning("[SPOTIFY_VIS][NATIVE] Extruded Bubble in process: another in-process stream owns the "
+                               "geometry arena; this stream's drift families are not named")
+            return False
+        try:
+            owner = open_stream_arena(IN_PROCESS_NAMESPACE, bank_bytes)
+        except Exception:
+            logger.exception("[SPOTIFY_VIS][NATIVE] Extruded Bubble in process: the geometry arena did not open")
+            return False
+        try:
+            self._writer = GeometryArenaWriter(owner.name, families=FAMILIES)
+        except Exception:
+            close_stream_arena(owner)
+            logger.exception("[SPOTIFY_VIS][NATIVE] Extruded Bubble in process: the geometry arena writer did not attach")
+            return False
+        self._owner, self._bank = owner, int(bank_bytes)
+        return True
+
+    def close(self) -> None:
+        writer, owner = self._writer, self._owner
+        self._writer = self._owner = None
+        self._bank = 0
+        if writer is not None:
+            writer.close()
+        if owner is not None:
+            close_stream_arena(owner)
 
 
 def project(frame: Any) -> dict[str, object]:

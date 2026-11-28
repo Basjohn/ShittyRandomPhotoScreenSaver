@@ -947,7 +947,11 @@ the feature (D3D11 is not stated).
     - Built (agent ac0cda3c82727c8cd, 28 Nov): reference key format 2 (77ca27c7e); harness drift arena (d76b1174b),
       GL block names (097e5eb7b, R-255), backdrop replace blend (504042eb1, R-256), placed scene passes (389f230ba,
       R-257), rule (a) single-sampled native scene (19d5525ea); the core defocus gather's taps step by the layer's rows
-      (ABI 47, shaders + sceneAnchor; awaits a module build). Rule (a)/(b) runs, T, C and the L set not yet done.
+      (ABI 47, shaders + sceneAnchor; built). Then (29a844943, ABI 47, awaits a module build): a record naming no
+      geometry key binds a zero placeholder, so EB's first frame draws (it waited the frame); the core refuses a
+      mixed-blend pass by name. Lens shift settable from one owner (5feae1bc0, `owner_render_parity --lens-shift`);
+      the product's in-process arena (`InProcessStreamArena` in the in-process mailbox). Rule (a)/(b) runs, T, C and
+      the L set not yet done.
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
   (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
