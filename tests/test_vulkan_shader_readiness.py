@@ -44,7 +44,9 @@ _CONVERTED_MODULES = frozenset({
     "rendering.quick.scene3d.edge_field",
     "rendering.quick.scene3d.motion",
     "rendering.quick.scene3d.population",
-    "rendering.quick.scene3d.propagation_field",
+    # propagation_field's raw passes are its own composer's inputs (437b8c3a4 skips them), so they ship, and are
+    # discovered, as the core's propagation packs composed in native_fields.
+    "rendering.quick.scene3d.native_fields",
     "rendering.quick.visualizer.implementations.extruded_bubble_drift_solver",
 })
 
