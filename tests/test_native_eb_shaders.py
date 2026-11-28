@@ -43,7 +43,9 @@ def test_the_texts_are_the_python_texts_apart_from_the_names_and_the_core_varian
 
     files = shader_files()
     body = files["eb_backdrop.frag"].split("\n", 1)[1]
-    body = "\n".join(line for line in body.splitlines() if not line.startswith(("#define u", "// Extruded Bubble")))
+    body = re.sub(r"\} blk_\w+;", "};", body)
+    body = "\n".join(line for line in body.splitlines()
+                     if not line.startswith(("#define u", "// Extruded Bubble")) and " blk_" not in line)
     assert body.strip() == p.BACKDROP_FRAGMENT.split("\n", 1)[1].strip()
     assert "SceneColour" in files["eb_shells_sorted.frag"] and "SceneAccum" not in files["eb_shells_sorted.frag"]
     assert "layout(location=1) out vec4 Emission;" in files["eb_shells_sorted.frag"]
@@ -71,6 +73,67 @@ def test_every_varying_is_located_and_paired_by_name():
     assert unlocated.search("#version 460 core\nin vec2 vNdc;\n")
     with pytest.raises(ValueError):
         _located(p.FULL_VERTEX, "#version 460 core\nin vec2 vMissing;\n")
+
+
+_GL_UNIFORM = re.compile(r"^uniform\s+(\w+)\s+(\w+)\s*;", re.M)
+_GL_BUFFER = re.compile(r"\bbuffer\s+(\w+)\s*\{[^{}]*\}\s*(\w+)\s*;")
+
+
+def _gl_globals(pack: bytes) -> dict[str, str]:
+    """Each OpenGL translation's global uniform and storage instance names and their types (every GLSL version)."""
+    from PySide6.QtCore import QByteArray
+    from PySide6.QtGui import QShader
+
+    shader = QShader.fromSerialized(QByteArray(pack))
+    names: dict[str, str] = {}
+    for key in shader.availableShaders():
+        if key.source() == QShader.Source.GlslShader:
+            text = bytes(shader.shader(key).shader()).decode()
+            for kind, name in (*_GL_UNIFORM.findall(text), *_GL_BUFFER.findall(text)):
+                names[f"{key.sourceVersion().version()}:{name}"] = kind
+    return names
+
+
+def _clashes(vertex: bytes, fragment: bytes) -> list[str]:
+    """The names both stages' OpenGL texts declare with different types (OpenGL refuses to link them)."""
+    a, b = _gl_globals(vertex), _gl_globals(fragment)
+    return sorted(f"{name}: {a[name]} / {b[name]}" for name in set(a) & set(b) if a[name] != b[name])
+
+
+def test_no_program_declares_one_opengl_uniform_name_with_two_types():
+    # OpenGL links the stages' uniforms by name: the trails program's vertex EbTrails and its fragment's
+    # SrpssConventions were both ``_449`` (28 Nov), so its pipeline could not be created.
+    pytest.importorskip("PySide6")
+    from rendering.native.extruded_bubble_shaders import PROGRAMS, TRANSPARENT, pack
+
+    found = {}
+    for program in PROGRAMS:
+        fragments = [f"eb_{program}.frag"] + ([f"eb_{program}_sorted.frag"] if program in TRANSPARENT else [])
+        for fragment in fragments:
+            clashes = _clashes(pack(f"eb_{program}.vert"), pack(fragment))
+            if clashes:
+                found[fragment] = clashes
+    assert not found
+    # Control: a vertex block and a fragment block of different types under one name is a clash.
+    assert _GL_UNIFORM.findall("uniform EbTrails _449;\n") == [("EbTrails", "_449")]
+
+
+def test_every_anonymous_block_is_named_alike_in_every_stage():
+    from rendering.native.extruded_bubble_shaders import PROGRAMS, _instanced, instance_name, shader_files
+
+    anonymous = re.compile(r"(?:uniform|buffer)\s+\w+\s*\{[^{}]*\}\s*;")
+    files = shader_files()
+    for program in PROGRAMS:
+        for name in (f"eb_{program}.vert", f"eb_{program}.frag"):
+            assert not anonymous.search(files[name]), name
+        block = f"uniform {'EbTrails'} {{"
+        if program == "trails":
+            for name in ("eb_trails.vert", "eb_trails.frag"):
+                assert f"}} {instance_name('EbTrails')};" in files[name] and block in files[name]
+    # Control: the composer's step is what names them (a block left as written stays anonymous).
+    text = "layout(std140, binding = 1) uniform EbTrails {\n    float uTime;\n};\nvoid main() { uTime; }\n"
+    assert anonymous.search(text) and not anonymous.search(_instanced(text, "trails"))
+    assert "#define trails_u_time blk_EbTrails.trails_u_time" in _instanced(text, "trails")
 
 
 def test_the_committed_packs_are_what_the_texts_bake_to():

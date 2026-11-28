@@ -17,7 +17,9 @@ folder's own files, which these never are). Variants the core needs and OpenGL d
   ``SCENE_OIT_GLSL`` replaced by ``SORTED_GLSL``, its emission moved to the owner's location 1;
 - the glint proxies draw into the probe's cube (one attachment), so their emission is a plain variable (OpenGL drops
   an unattached output; the core requires a program to write exactly its target's attachments);
-- an input or output without a location gets the location its stage pairs it with (SPIR-V requires one).
+- an input or output without a location gets the location its stage pairs it with (SPIR-V requires one);
+- every anonymous block gets an instance name, the same in every stage (``_instanced``: OpenGL links the translated
+  uniforms by name across stages).
 """
 from __future__ import annotations
 
@@ -144,6 +146,44 @@ def _renamed(text: str, program: str) -> str:
     return _VERSION + "\n".join(lines) + "\n" + text[len(_VERSION):]
 
 
+#: An anonymous uniform or storage block (its declaration up to the members; the members; the closing brace).
+_ANONYMOUS_BLOCK = re.compile(r"(layout\s*\([^)]*\)\s*(?:(?:readonly|writeonly|coherent|restrict)\s+)*"
+                              r"(?:uniform|buffer)\s+(\w+)\s*\{)([^{}]*)\}\s*;")
+_BLOCK_MEMBER = re.compile(r"(\w+)\s*(?:\[[^\]]*\])?\s*;")
+
+
+def instance_name(block: str) -> str:
+    """The instance name every native text gives ``block`` (the same in every stage)."""
+    return f"blk_{block}"
+
+
+def _instanced(text: str, program: str) -> str:
+    """Every anonymous block of a native text given an instance name (``instance_name``), each member read through it.
+
+    Qt's OpenGL translation flattens a uniform block to one uniform of the block's struct type and names an anonymous
+    block's uniform by its SPIR-V id (``_449``). OpenGL links uniforms by name across the stages, so a vertex block and
+    a fragment block of different types that happen to share an id fail to link: the trails program's pipeline could
+    not be created (its vertex ``EbTrails`` and its fragment's ``SrpssConventions`` were both ``_449``, 28 Nov). A
+    named instance is translated under its own name, the same in both stages. The core reads blocks by their block and
+    member names, never the instance's (``mode_content.cpp``), and SPIR-V's arithmetic is unchanged.
+
+    Each member is defined to its instance's member after the declaration (``#define trails_u_time
+    blk_EbTrails.trails_u_time``): the declaration itself keeps the plain name, and ``_renamed``'s own define (``uTime``
+    to ``trails_u_time``) still applies first, the preprocessor expanding the result once more."""
+    own = set(block_members(program))
+
+    def named(match: re.Match) -> str:
+        head, block, body = match.group(1), match.group(2), match.group(3)
+        instance = instance_name(block)
+        defines = []
+        for member in _BLOCK_MEMBER.findall(body):
+            final = member_name(program, member) if member in own else member
+            defines.append(f"#define {final} {instance}.{final}")
+        return f"{head}{body}}} {instance};\n" + "\n".join(defines)
+
+    return _ANONYMOUS_BLOCK.sub(named, text)
+
+
 def sorted_text(fragment: str) -> str:
     """A transparent fragment's sorted pack text: ``SCENE_OIT_GLSL`` replaced by ``_SORTED_GLSL``, its emission moved
     to location 1 and its sphere depth (``gl_FragDepth``) left out, nothing else changed. The core's sorted pass never
@@ -178,10 +218,11 @@ def shader_files() -> dict[str, str]:
         if program in CUBE and "layout(location=1) out vec4 Emission;" in fragment:
             fragment = unemitted_text(fragment)
         vertex, located = _located(vertex, fragment)
-        files[f"eb_{program}.vert"] = _renamed(vertex, program)
-        files[f"eb_{program}.frag"] = _renamed(located, program)
+        files[f"eb_{program}.vert"] = _instanced(_renamed(vertex, program), program)
+        files[f"eb_{program}.frag"] = _instanced(_renamed(located, program), program)
         if program in TRANSPARENT:
-            files[f"eb_{program}_sorted.frag"] = _renamed(_located(vertex, sorted_text(fragment))[1], program)
+            files[f"eb_{program}_sorted.frag"] = _instanced(
+                _renamed(_located(vertex, sorted_text(fragment))[1], program), program)
     from rendering.native.extruded_bubble_drift import compute_texts
 
     files.update(compute_texts())       # the drift entries (eb_drift_*.comp)
@@ -202,5 +243,5 @@ def pack(name: str) -> bytes:
     return path.read_bytes()
 
 
-__all__ = ["CUBE", "PACK_FOLDER", "PROGRAMS", "TRANSPARENT", "block_layout", "block_members", "member_name", "pack",
-           "shader_files", "sorted_text", "unemitted_text"]
+__all__ = ["CUBE", "PACK_FOLDER", "PROGRAMS", "TRANSPARENT", "block_layout", "block_members", "instance_name",
+           "member_name", "pack", "shader_files", "sorted_text", "unemitted_text"]
