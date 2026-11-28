@@ -114,7 +114,14 @@ Continue the native sequence below with the repaired timing receipts. The report
     burn's shipped strip predates the current burn). Retired from use at 190k. Third **Opus Medium
     `ac5eb8a969947d272`** (28 Nov), worktree `.claude/worktrees/agent-ac5eb8a969947d272`, branch
     `worktree-agent-ac5eb8a969947d272` (merges a5767's and ac12d's): GL_INVALID_ENUM fix (C++), then the delete
-    sub-box. N5.6's `89c3ceca8` built on GitHub 28 Nov (module in the ac0cda worktree).
+    sub-box. N5.6's `89c3ceca8` built on GitHub 28 Nov (module in the ac0cda worktree). Done: GL_INVALID_ENUM
+    (`e06691e3e`, C++: Qt 6.12.0 writes sampler state to multisampled textures on first bind; `gl_sampler_state.cpp`;
+    building 28 Nov), delete slice 1 (presenter, bridge, blit backdrop, selectors; import guard
+    `tests/test_python_route_deleted.py`); retired at 183k. **Sonnet Medium `a6b16aeef142dc895`** (28 Nov), worktree
+    `.claude/worktrees/agent-a6b16aeef142dc895`, branch `worktree-agent-a6b16aeef142dc895` (merges ac5eb's): the
+    remaining ~54 `TransitionCapture` callers → `NativeTransitionCapture`, delete `render_host.py` and the transitions'
+    GL draw code, bench/overhead/conventions retargets, public bootstrap close, smoke tests, Docs/Reference, and the
+    pre-existing red `afterRendering.connect` in `background_item.py`.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
