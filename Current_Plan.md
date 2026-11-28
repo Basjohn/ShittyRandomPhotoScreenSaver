@@ -1602,14 +1602,34 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       `crumble_both_4x` +0.043 (composite plus the RGBA16F share). Python's own figures swing up to 0.2 ms between runs.
       Lead's Vulkan hitch row passed (above). Gate closed: audited and merged 28 Nov (`f12427a2e`).
   - [ ] The switch (after the Gate merges; decompose here before dispatch). Order:
+    - [x] Caller list (28 Nov, `acd9164542fb33bfc`): `<wt>/.artifacts/evidence/native_core/n5_2h/20261128_switch_caller_list/caller_list.txt`.
+      Five callers rule out deleting in the same change as the route; lead decided each (28 Nov):
+      1. Python transition references are drawn live by `transition_route_check.py` (rule (a) `:456-485`, `--cost`
+         `:818-845`), `fullscreen_pass_check`, `background_layer_check`, `backdrop_pyramid_check`. **Cache them once
+         before deleting**: frames per check case into the proof cache (keyed like the Visualizer references), Python
+         cost figures as stored baselines under `tools/baselines/preflip/`. No frozen Python GL code is kept. The proof
+         guide section 3 gains the transition rule in the same change (side defect found by the caller list).
+      2. `release_media.py` and `onboarding_preview_foundry.py` capture only through `TransitionCapture` →
+         `QuickTransitionRenderHost`. **N5.8's native capture for these two tools is pulled forward** into this box,
+         before the deletion (the Studio preview host stays in N5.8).
+      3. The Python transition classes stay as value owners (`block_values`, `scene_values`, `native_scene`,
+         `regen_qrc.py:442-501` pack baking); only their GL draw code and `render_host.py` are deleted.
+      4. `TransitionCapture` as the generic offscreen GL context (~45 tests, ~12 tools) moves to
+         `tools/labs/render_target.py` `OffscreenRenderTarget`: mechanical, a Sonnet Medium slice.
+      5. `start_quick_backend` (`bootstrap.py:652`) loads the core on OpenGL too. A failed Vulkan start falls back to
+         native OpenGL as today's API fallback; a module that fails to load on both shows the photos through Qt's own
+         `Image` with hard cuts and no transitions, logged as an error once (degraded display, not a second renderer),
+         with a test.
     - [ ] Production route: OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
-      does; one route per API, no Python fallback kept. List every caller of the Python presenter, Python
-      transitions, the blit backdrop and the wrapped-texture bridge first (product, Studio, release-media and capture
-      tools, tests), with what replaces each.
+      does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
+      changes per the caller list.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
-    - [ ] Delete in the same change: the Python presenter, Python transitions, the blit backdrop and the bridge. Tests
-      that only pinned them go; tests of behaviour retarget to the native route. The frozen Python references stay
-      only where the proof cache needs them (the proof guide says which); nothing in the product imports them.
+    - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; native capture for the two
+      media tools (point 2), judged on the showcase WebPs; the `TransitionCapture` → `OffscreenRenderTarget` move
+      (point 4).
+    - [ ] Delete: the Python presenter, Python transitions' GL draw code and `render_host.py`, the blit backdrop and the
+      bridge. Tests that only pinned them go; tests of behaviour retarget to the native route. A test that nothing in
+      the product or tools imports the deleted modules.
     - [ ] Proof: the route check and `--cost` on both APIs, a Display 1 run on native OpenGL (wallpaper folder +
       recorded clip), the hitch rows for the five-transition load set on both APIs, and the isolated suite at the
       milestone. Audit: Opus Medium, High if the deletion touches core lifetime.
