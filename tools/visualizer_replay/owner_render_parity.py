@@ -2041,7 +2041,14 @@ def main(argv=None) -> int:
                              "the same verdicts either way)")
     parser.add_argument("--api", choices=("opengl", "vulkan"), default="opengl",
                         help="with --native: the graphics API the owner's scene and the native item draw on")
+    parser.add_argument("--lens-shift", nargs=2, type=float, default=None, metavar=("X", "Y"),
+                        help="extruded_bubble: the shafts' and backdrop's lens shift both routes draw at (the Python "
+                             "owner's LENS_SHIFT, zero in the product; N5.6's odd-target bullet); Python is drawn live, "
+                             "so --references is refused with it")
     args = parser.parse_args(argv)
+    if args.lens_shift is not None:
+        if args.references is not None or args.references_only:
+            parser.error("--lens-shift: a cached Python reference is drawn at the product's zero shift; draw it live")
     if args.api != "opengl":
         parser.error("--api vulkan: the owner replay's hidden host draws OpenGL only; the native item on Vulkan is "
                      "drawn from the take's delivery stream by tools/visualizer_replay/native_stream_player.py "
@@ -2064,6 +2071,10 @@ def main(argv=None) -> int:
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(["owner-render-parity"])
+    if args.lens_shift is not None:
+        from rendering.quick.visualizer.implementations import extruded_bubble as eb_owner
+
+        eb_owner.LENS_SHIFT = (float(args.lens_shift[0]), float(args.lens_shift[1]))
     try:
         if args.references_only:
             report = references_only(args.out, mode=args.mode, offers=args.offers, seconds=args.seconds,

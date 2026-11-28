@@ -172,6 +172,34 @@ def _check_moves(state_values):
     assert state_values(wide.logical.mode_state)[0] == members_a
 
 
+def lens_shift_reaches(settings, snapshot, card_geometry, owner, monkeypatch) -> set:
+    """The settings members a lens shift set on the Python owner moves (the native route's reading of its one owner)."""
+    zero = settings(snapshot, card_geometry)
+    monkeypatch.setattr(owner, "LENS_SHIFT", (0.25, -0.125))
+    shifted = settings(snapshot, card_geometry)
+    monkeypatch.setattr(owner, "LENS_SHIFT", (0.0, 0.0))
+    assert settings(snapshot, card_geometry) == zero
+    moved = {name for name in zero if shifted[name] != zero[name]}
+    assert all(tuple(shifted[name]) == (0.25, -0.125) for name in moved)
+    return moved
+
+
+@pytest.mark.qt
+def test_the_native_settings_read_the_python_owners_lens_shift(qt_app, monkeypatch):
+    """N5.6: the lens shift is settable for the odd-target bullet, from one owner both routes read (zero in the
+    product); the cached settings see a set shift."""
+    from rendering.native import extruded_bubble_values as values
+    from rendering.quick.visualizer.implementations import extruded_bubble as owner
+
+    snapshot = _snapshot()
+    moved = lens_shift_reaches(values.settings, snapshot, _card(snapshot.presentation), owner, monkeypatch)
+    assert {"shafts_u_lens_shift", "backdrop_u_lens_shift"} <= moved
+    assert all("lens_shift" in name for name in moved)
+    # Negative control: a settings function holding its own zero (the pre-N5.6 route) moves nothing.
+    held = values.settings(snapshot, _card(snapshot.presentation))
+    assert lens_shift_reaches(lambda *_a: held, snapshot, None, owner, monkeypatch) == set()
+
+
 @pytest.mark.qt
 def test_the_frame_moves_the_record_and_the_card_the_settings(qt_app):
     from rendering.native.extruded_bubble_values import state_values

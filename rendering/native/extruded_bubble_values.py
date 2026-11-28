@@ -256,8 +256,8 @@ def settings_values(parameters, geometry: dict) -> dict[str, Any]:
     probe_size = eb._PROBE_SIZE[scene["detail"].name]
     probe_levels = int(math.log2(probe_size)) + 1
     pixel = 2.0 * tan[1] / height
-    shift = (0.0, 0.0)
-    values = {program: _defaults(program) for program in PROGRAMS}
+    shift = tuple(float(v) for v in eb.LENS_SHIFT)      # the Python owner's (zero in the product)
+    values ={program: _defaults(program) for program in PROGRAMS}
 
     def put(program: str, given: dict) -> None:
         held = values[program]
@@ -362,7 +362,10 @@ def settings(snapshot: Any, card: dict) -> dict:
     """The route's settings function (``GENERIC_MODE_SETTINGS``): computed once per Settings or card change."""
     parameters = snapshot.logical.mode_state.parameters
     geometry = card_geometry(snapshot.presentation)
-    key = (parameters, tuple(sorted((k, v if not isinstance(v, tuple) else tuple(v)) for k, v in geometry.items())))
+    from rendering.quick.visualizer.implementations.extruded_bubble import LENS_SHIFT
+
+    key = (parameters, tuple(sorted((k, v if not isinstance(v, tuple) else tuple(v)) for k, v in geometry.items())),
+           tuple(LENS_SHIFT))
     if _SETTINGS_CACHE[0] is not None and _SETTINGS_CACHE[0] == key:
         return _SETTINGS_CACHE[1]
     values = settings_values(parameters, geometry)
