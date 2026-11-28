@@ -432,10 +432,9 @@ void FrameDriver::onBeforeRendering()
         // N5.2h: under the harness's time_scene_passes (the timer on) the record's units are timed one by one instead
         // of the record whole (OpenGL's GL_TIME_ELAPSED queries cannot nest); otherwise the brackets stay null.
         const bool units = m_timer && timeScenePasses();
-        const GpuUnitBrackets brackets { this, &FrameDriver::unitBegin, &FrameDriver::unitEnd };
         const int scope = units ? -1 : timerBegin(rhi, cb, GpuPassKind::Surface);
         if (units)
-            setGpuUnitBrackets(&brackets);
+            setGpuUnitBrackets(&m_unitBrackets); // made once with the driver (frame_driver.h)
         const bool surfaceOk = surface->record(rhi, cb, &surfaceRecorded, &error);
         if (units)
             setGpuUnitBrackets(nullptr);

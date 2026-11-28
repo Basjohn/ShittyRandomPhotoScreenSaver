@@ -216,11 +216,10 @@ def test_a_mesh_layout_holds_the_glass_shards_sixteen_attributes():
 _OUTPUT = re.compile(r"layout\s*\(\s*location\s*=\s*(\d+)\s*\)\s*out\s+vec4\s+(\w+)\s*;")
 
 
-def test_a_motion_fragment_writes_x_and_y_at_one_and_y_at_two_and_a_ghost_its_colour_only():
-    """Checklist 16 (N5.2d): the native velocity is two R16F attachments, so the motion variants write y again at
-    location 2 (Python's RG16F at 1 keeps (x, y); its location 2 has no draw buffer); a ghost writes FragColor alone
-    (the core refuses outputs past its one-attachment ghost target). Stills before and after: byte-identical
-    (evidence native_core/n5_2d)."""
+def test_a_motion_fragment_writes_its_motion_at_one_and_a_ghost_its_colour_only():
+    """Checklist 16 (N5.2d, N5.2h): the motion variants write (x, y) at location 1 alone, the native core's one RGBA16F
+    velocity as Python's RG16F (N5.2h replaced the two R16F attachments, y written again at 2); a ghost writes FragColor
+    alone (the core refuses outputs past its one-attachment ghost target)."""
     from rendering.gl_programs import blockspin_program, crumble_program, glass_shatter_program, pixel_accretion_program
     from rendering.gl_programs import exploding_tiles_program
     from rendering.gl_programs.scene3d import scene3d_ghost_fragment

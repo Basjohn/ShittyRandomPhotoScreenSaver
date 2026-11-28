@@ -192,95 +192,22 @@ def test_the_frame_driver_brackets_every_pass_it_records():
 
 
 # N5.2h: under the harness's time_scene_passes a surface's record is timed per unit (GpuPassKind::ScenePass) in place of
-# its whole Surface figure (GL_TIME_ELAPSED cannot nest). Each unit of ModeContent::recordPasses opens a scope of its own.
-_UNIT_WORK = ("recordTextureChains(", "recordCompute(", "t.captureTarget.get()", "m_post.recordEnvironment(",
-              "m_post.recordBloom(", "recordDefocus(rhi", "m_cubePrefilter.record(",
-              "cb->beginPass(passClears ? clearingTarget", "primeForLoad(rhi, cb, textures", "recordNearest(cb",
-              "m_targets.generateSelfMips(", "cb->beginPass(clearingTarget ? clearingTarget")
-_UNIT_SCOPE = re.compile(r"const GpuUnitScope timed\(rhi, cb, |timed\.emplace\(rhi, cb, ")
+# its whole Surface figure, and under time_scene_run_parts a scene run in parts (OpenGL). What the record does is judged
+# on the built module by the cost round (transition_route_check.py ``_scene_passes``: scene_passes_replace_the_record,
+# scene_passes_control_has_none, run_parts_on_opengl_only, run_parts_sum_is_the_units; their harness logic in
+# test_native_surface_clear_route.py), not by matching the source.
 
 
-def units_without_a_scope(body: str) -> list[str]:
-    """The record's units (``_UNIT_WORK``, in source order) with no scope opened between the previous unit and them."""
-    sites = sorted((body.index(work), work) for work in _UNIT_WORK)
-    scopes = [m.start() for m in _UNIT_SCOPE.finditer(body)]
-    missing, previous = [], 0
-    for at, work in sites:
-        if not any(previous < s < at for s in scopes):
-            missing.append(work)
-        previous = at
-    return missing
-
-
-def test_each_unit_of_a_surfaces_record_is_timed_apart_under_time_scene_passes():
-    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
-    start = source.index("void ModeContent::recordPasses(")
-    body = source[start:source.index("\n}\n", start)]
-    # The units as recorded without time_scene_run_parts (its parts, only under that control, are judged apart below).
-    body = re.sub(r"if \(parts\)\s*timed\.emplace\([^;]*;", "", body)
-    assert all(body.count(work) == 1 for work in _UNIT_WORK)
-    assert units_without_a_scope(body) == []
-    # Negative control: the run's nearest copies folded back into its unit are no longer timed apart.
-    folded = body.replace("timed.emplace(rhi, cb, i, GpuUnitPart::Nearest);", "", 1)
-    assert folded != body and units_without_a_scope(folded) == ["recordNearest(cb"]
-    # The driver sets the brackets around the surface's record only, and only while the timer is on; the whole
-    # Surface bracket is taken then.
-    edge = _function((CORE / "src" / "frame_driver.cpp").read_text(encoding="utf-8"), "onBeforeRendering")
-    assert "const bool units = m_timer && timeScenePasses();" in edge
-    flat = re.sub(r"\s+", " ", edge)
-    on, record, off = (flat.index(s) for s in ("if (units) setGpuUnitBrackets(&brackets);", "surface->record(rhi, cb",
-                                                "if (units) setGpuUnitBrackets(nullptr);"))
-    assert on < record < off
-    # The parts are one list in C++ and Python, and a row carries its pass and part (a 4-item row stays readable).
+def test_the_unit_parts_are_one_list_in_cpp_and_python_and_a_row_carries_its_pass_and_part():
     header = (CORE / "src" / "gpu_timer.h").read_text(encoding="utf-8")
     enum = re.search(r"enum class GpuUnitPart : int \{(.*?)\};", header, re.S).group(1)
     parts = {int(v): re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name, v in re.findall(r"(\w+) = (\d+)", enum)}
     assert parts == gpu_timing.GPU_UNIT_PARTS
+    # Negative control: a part the Python list does not name is caught.
+    assert {**parts, 99: "run_extra"} != gpu_timing.GPU_UNIT_PARTS
     six, four = gpu_timing.samples_from([(5, 9, 10, 1_000, 3, 1), (2, 9, 10, 2_000)])
     assert (six.kind_name, six.pass_index, six.part_name) == ("scenepass", 3, "nearest")
     assert (four.kind_name, four.pass_index, four.part_name) == ("surface", -1, "unit")
-
-
-def run_parts_misplaced(body: str) -> list[str]:
-    """N5.2h successor: what is wrong with a scene run's parts in ``recordPasses`` (empty: nothing). The parts are
-    taken only with the unit brackets set, the control on and on OpenGL; the opening replaces the run's unit; each pass
-    of the run opens its own part before it is drawn; the resolves' part opens after the last pass and before the
-    run's ``cb->endPass()``, and the run's nearest copies close it."""
-    wrong = []
-    flat = re.sub(r"\s+", " ", body)
-    if "const bool parts = gpuUnitBrackets() && timeSceneRunParts() && rhi->backend() == QRhi::OpenGLES2;" not in flat:
-        wrong.append("gate")
-    if "timed.emplace(rhi, cb, i, parts ? GpuUnitPart::RunOpen : GpuUnitPart::Unit);" not in flat:
-        wrong.append("open")
-    loop = re.search(r"for \(int k = i; k <= last; \+\+k\) \{ if \(parts\) timed\.emplace\(rhi, cb, k, "
-                     r"GpuUnitPart::RunDraw\);(.*?)\} if \(parts\) timed\.emplace\(rhi, cb, i, "
-                     r"GpuUnitPart::RunResolve\); cb->endPass\(\); timed\.emplace\(rhi, cb, i, GpuUnitPart::Nearest\);",
-                     flat)
-    if not loop or "drawPass(rhi, cb, k" not in loop.group(1):
-        wrong.append("draws_and_resolve")
-    return wrong
-
-
-def test_a_scene_run_is_timed_in_parts_under_its_control_on_opengl_only():
-    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
-    start = source.index("void ModeContent::recordPasses(")
-    body = source[start:source.index("\n}\n", start)]
-    assert run_parts_misplaced(body) == []
-    # Negative controls: the backend gate dropped (Vulkan would bracket inside a pass without ExternalContent), and the
-    # resolves' part opened after the pass ended (the resolves fall into no part).
-    ungated = body.replace(" && rhi->backend() == QRhi::OpenGLES2;", ";", 1)
-    assert ungated != body and run_parts_misplaced(ungated) == ["gate"]
-    late = body.replace("""            if (parts)
-                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);
-            cb->endPass();""", """            cb->endPass();
-            if (parts)
-                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);""", 1)
-    assert late != body and run_parts_misplaced(late) == ["draws_and_resolve"]
-    # The control is the module's (stage_control) and the timer's (gpu_timer.h), off by default.
-    module = (CORE / "src" / "module.cpp").read_text(encoding="utf-8")
-    assert 'control == "time_scene_run_parts"' in module and "setTimeSceneRunParts(value)" in module
-    timer = (CORE / "src" / "gpu_timer.cpp").read_text(encoding="utf-8")
-    assert "QAtomicInteger<int> g_timeSceneRunParts { 0 };" in timer
 
 
 def test_off_holds_no_timer_and_the_edge_tests_one_pointer_for_it():

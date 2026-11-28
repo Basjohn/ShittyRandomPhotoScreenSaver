@@ -33,6 +33,7 @@ void ColorTarget::reset()
     clearingRenderTargetObject.reset();
     clearingRenderPass.reset();
     clearingGeneration = 0;
+    clearingFailedGeneration = 0;
     renderTarget.reset();
     renderPass.reset();
     depthStencil.reset();
@@ -82,6 +83,8 @@ QRhiTextureRenderTarget *clearingRenderTarget(QRhi *rhi, ColorTarget *target, QS
         return nullptr;
     if (target->clearingRenderTargetObject && target->clearingGeneration == target->generation)
         return target->clearingRenderTargetObject.get();
+    if (target->clearingFailedGeneration != 0 && target->clearingFailedGeneration == target->generation)
+        return nullptr;                       // failed for this generation: the draw clears until the next one
     // Another generation (a new texture, or the same one resized in place): the old framebuffer is not reused.
     target->clearingRenderTargetObject.reset();
     target->clearingRenderPass.reset();
@@ -98,6 +101,7 @@ QRhiTextureRenderTarget *clearingRenderTarget(QRhi *rhi, ColorTarget *target, QS
                      .arg(QString::fromUtf8(target->texture->name()));
         target->clearingRenderTargetObject.reset();
         target->clearingRenderPass.reset();
+        target->clearingFailedGeneration = target->generation;
         return nullptr;
     }
     target->clearingGeneration = target->generation;

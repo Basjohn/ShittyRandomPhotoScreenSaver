@@ -7849,11 +7849,15 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     const QRhiCommandBuffer::VertexInput cubeInput(r.vertices.get(),          // ABI 42: a cube face's rows up
                                                    quint32(kCubeTriangle * kTriangleFloats * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
+    // N5.2h: the record's unit brackets (null unless time_scene_passes) and whether a scene run is timed in parts
+    // (time_scene_run_parts, OpenGL only), read once per record.
+    const GpuUnitBrackets *const brackets = gpuUnitBrackets();
+    const bool runParts = brackets && timeSceneRunParts() && rhi->backend() == QRhi::OpenGLES2;
     // ABI 35: the item textures committed with mips this record: their chains before any pass samples them.
     {
-        // N5.2h: each unit below is bracketed between render passes under the harness's time_scene_passes (null
-        // brackets otherwise: GpuUnitScope reads one pointer).
-        const GpuUnitScope timed(rhi, cb, -1, GpuUnitPart::Chains);
+        // N5.2h: each unit below is bracketed under the harness's time_scene_passes; the brackets are read once here
+        // (null at rest: every scope below is then a null test, and a scene run's are not made at all).
+        const GpuUnitScope timed(brackets, rhi, cb, -1, GpuUnitPart::Chains);
         recordTextureChains(rhi, cb, &pending);
     }
     bool surfaceOpened = false;
@@ -7875,7 +7879,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         if (pass.compute) {
             // N3.3 (D16 point 1): at its place in the list, outside any render pass, only with new work.
             {
-                const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+                const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
                 recordCompute(rhi, cb, i, &pending, &computeOpen);
             }
             ++i;
@@ -7889,7 +7893,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: the capture (D14 point 5): the target's pass ended; its capture's two textures primed for the load
             // (rule C: a later pass or a readback left them elsewhere) and written over the whole allocation.
             const SceneTargets::Target &t = *m_targets.target(pass.target);
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             QRhiTexture *const captured[2] = { t.captureColour.get(), t.captureDepth.get() };
             primeForLoad(rhi, cb, captured, 2); // no list per capture (audit 2, M5)
             cb->beginPass(t.captureTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
@@ -7909,7 +7913,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N5.2c (N4.j): the photo's mipped copy, its own render pass outside any run, drawn only when the photo's
             // front changed since it was last drawn (once per photo; the record's uploads stay pending otherwise).
             const GpuTexture *photo = front(pass.environmentSource);
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             m_post.recordEnvironment(rhi, cb, i, ownInput, photo ? photo->generation : 0, &pending);
             ++i;
             continue;
@@ -7924,7 +7928,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 r.vertices.get(), n < kMaxBloomStages && n < int(m_bloomSpecs.size())
                                       ? quint32((kFirstBloomTriangle + n) * kTriangleFloats * sizeof(float))
                                       : quint32(kTriangleFloats * sizeof(float)));
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             m_post.recordBloom(rhi, cb, i, ownInput, firstInput, &pending);
             ++i;
             continue;
@@ -7935,7 +7939,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         }
         if (pass.stage == StageKind::Defocus) {
             // N3.4 (D17 point 6): the layer's mips and the clip, then a run on the onto target (gather, sprites).
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             recordDefocus(rhi, cb, i, &pending, cleared, readback);
             ++i;
             continue;
@@ -7943,7 +7947,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         if (pass.prefilter) {
             // ABI 42 (N5.6): the cube's levels from what its faces hold now (cube_prefilter.h), outside any run.
             QString prefilterError;
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             if (SceneTargets::Target *cube = m_targets.target(pass.target)) {
                 if (!m_cubePrefilter.record(rhi, cb, *cube, &pending, &prefilterError))
                     m_reason = prefilterError;
@@ -7961,7 +7965,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                && program.passes.at(last + 1).face == pass.face)
             ++last;
         if (runTarget < 0) {
-            const GpuUnitScope timed(rhi, cb, i, GpuUnitPart::Unit);
+            const GpuUnitScope timed(brackets, rhi, cb, i, GpuUnitPart::Unit);
             const bool passClears = !surfaceOpened && clearingTarget;
             cb->beginPass(passClears ? clearingTarget : target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
                           pending);
@@ -7997,10 +8001,11 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N5.2h: the run's unit (primes, passes, the pass's own resolves at endPass), then its nearest copies and
             // its self mips, each timed apart under time_scene_passes.
             // Under time_scene_run_parts too (OpenGL only, gpu_timer.h) the unit is three parts: its opening, each pass
-            // and its end-of-pass resolves, the last two bracketed inside the pass (one pointer read otherwise).
-            const bool parts = gpuUnitBrackets() && timeSceneRunParts() && rhi->backend() == QRhi::OpenGLES2;
+            // and its end-of-pass resolves, the last two bracketed inside the pass. At rest (null brackets) no scope
+            // is made.
             std::optional<GpuUnitScope> timed;
-            timed.emplace(rhi, cb, i, parts ? GpuUnitPart::RunOpen : GpuUnitPart::Unit);
+            if (brackets)
+                timed.emplace(brackets, rhi, cb, i, runParts ? GpuUnitPart::RunOpen : GpuUnitPart::Unit);
             QRhiTexture *textures[kMaxTargetColour];
             // N3.4: a transparency target's borrowed attachments and depth (the owner's) are loaded and primed too.
             primeForLoad(rhi, cb, textures, m_targets.loadedColour(runTarget, textures));
@@ -8046,22 +8051,30 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             const QRect viewport = sceneOversizeViewport() ? QRect(QPoint(), t.allocation) : v;
             const QRhiCommandBuffer::VertexInput &input = cube ? cubeInput : t.decl.surfaceSized() ? sceneInput : ownInput;
             const QRect whole(QPoint(), t.allocation);
-            for (int k = i; k <= last; ++k) {
-                if (parts)
-                    timed.emplace(rhi, cb, k, GpuUnitPart::RunDraw);
-                // ABI 37 (N4.i): a pass declaring "viewport": "allocation" covers the whole allocation (the trails'
-                // edges, as Python draws them); every other pass the content viewport, as before.
+            // ABI 37 (N4.i): a pass declaring "viewport": "allocation" covers the whole allocation (the trails'
+            // edges, as Python draws them); every other pass the content viewport, as before.
+            const auto drawRunPass = [&](int k) {
                 if (program.passes.at(k).allocationViewport)
                     drawPass(rhi, cb, k, whole, ownInput, whole);
                 else
                     drawPass(rhi, cb, k, viewport, input, v); // N3.2
+            };
+            if (runParts) {
+                for (int k = i; k <= last; ++k) {
+                    timed.emplace(brackets, rhi, cb, k, GpuUnitPart::RunDraw);
+                    drawRunPass(k);
+                }
+                timed.emplace(brackets, rhi, cb, i, GpuUnitPart::RunResolve);
+            } else {
+                for (int k = i; k <= last; ++k)
+                    drawRunPass(k);
             }
-            if (parts)
-                timed.emplace(rhi, cb, i, GpuUnitPart::RunResolve);
             cb->endPass();
-            timed.emplace(rhi, cb, i, GpuUnitPart::Nearest); // the run's unit ends here (N5.2h)
+            if (brackets)
+                timed.emplace(brackets, rhi, cb, i, GpuUnitPart::Nearest); // the run's unit ends here (N5.2h)
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
-            timed.emplace(rhi, cb, i, GpuUnitPart::SelfMips);
+            if (brackets)
+                timed.emplace(brackets, rhi, cb, i, GpuUnitPart::SelfMips);
             // ABI 33 (N5.4): a self-mipped target's chains from what this run drew (the core's box kernel, the text the
             // Python renderer runs after the reflection's passes), before any later pass reads its levels. Its kernel
             // is checked at the build (compute on the device), so a failure here is a binding the driver refused.
@@ -8078,7 +8091,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     if (!surfaceOpened) {
         // The surface is cleared once at least (its frame is what the composite shows): by its pass (N5.2h, OpenGL)
         // or by the clearing draw.
-        const GpuUnitScope timed(rhi, cb, -1, GpuUnitPart::LastClear);
+        const GpuUnitScope timed(brackets, rhi, cb, -1, GpuUnitPart::LastClear);
         cb->beginPass(clearingTarget ? clearingTarget : target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 },
                       pending);
         if (clearingTarget) {

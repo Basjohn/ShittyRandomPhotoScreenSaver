@@ -169,8 +169,8 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
 
     N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity, one
     RGBA16F attachment (``velocity``: QRhi has no RG16F; its .xy the half floats of Python's RG16F, cleared to no
-    motion), written by the passes that move (the others mask it, Python's ``velocity_writes``); then the tile max (a compute entry triggered by every drawn record,
-    into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
+    motion), written by the passes that move (the others mask it, Python's ``velocity_writes``); then the tile max (a
+    compute entry triggered by every drawn record, into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
     the composite of that. With trails each ghost pass (target ``ghosts``) is drawn once a ghost into an R8 buffer,
     MAX-blended, and the edges are a pass of the scene's list."""
     from rendering.gl_programs.scene3d import SCENE3D_TRAIL_GHOSTS
@@ -243,7 +243,8 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
                                depth_test="less" if p.depth else None,
                                depth_write=bool(getattr(p, "writes_depth", p.depth)), geometry=geometry))
-    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears to 0).
+    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears
+    # to 0).
     bloom = float(getattr(scene, "bloom", 0.0) or 0.0)
     colour = [TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0))]
     targets: list = []

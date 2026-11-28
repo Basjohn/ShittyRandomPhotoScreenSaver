@@ -95,5 +95,5 @@ def write_to_frame_trace(sink: Any, samples: Iterable[GpuSample], *, screen_inde
     return written
 
 
-__all__ = ["GPU_PASS_KINDS", "GPU_UNIT_PARTS","GpuSample", "LOAD_OPTIONS", "LOAD_TIMINGS", "TIMER_OPTIONS", "gpu_pass_timing_wanted",
-           "samples_from", "write_to_frame_trace"]
+__all__ = ["GPU_PASS_KINDS", "GPU_UNIT_PARTS", "GpuSample", "LOAD_OPTIONS", "LOAD_TIMINGS", "TIMER_OPTIONS",
+           "gpu_pass_timing_wanted", "samples_from", "write_to_frame_trace"]

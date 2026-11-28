@@ -48,6 +48,7 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QtGlobal>
+#include <QtGui/QColor>
 #include <QtQuick/QQuickItem>
 
 #include <cmath>
@@ -2361,6 +2362,32 @@ PyObject *scene_target_clamp(PyObject *, PyObject *args)
     return PyLong_FromLong(srpss_core::clampSamples(counts, requested));
 }
 
+// N5.2h (audit): the pure pass-clear rule (scenePassClearColour, GPU-free) for each scene target a program declares,
+// at `samples` (the effective count) or, when it is 0, at each declaration's own request.
+PyObject *scene_target_pass_clear(PyObject *, PyObject *args)
+{
+    const char *json = "";
+    Py_ssize_t length = 0;
+    PyObject *packs = nullptr;
+    int samples = 0;
+    if (!PyArg_ParseTuple(args, "s#O|i", &json, &length, &packs, &samples))
+        return nullptr;
+    srpss_core::ModeProgram program;
+    if (!programArgument(json, length, packs, &program))
+        return nullptr;
+    QJsonObject out;
+    for (const srpss_core::TargetDeclaration &decl : program.targets) {
+        QColor colour;
+        if (srpss_core::scenePassClearColour(decl, samples > 0 ? samples : decl.samples, &colour))
+            out.insert(QString::fromLatin1(decl.name),
+                       QJsonArray { double(colour.redF()), double(colour.greenF()), double(colour.blueF()),
+                                    double(colour.alphaF()) });
+        else
+            out.insert(QString::fromLatin1(decl.name), QJsonValue::Null);
+    }
+    return pyJson(out);
+}
+
 PyObject *mode_blocks(PyObject *, PyObject *args)
 {
     const char *schemaJson = "";
@@ -3364,6 +3391,9 @@ PyMethodDef methods[] = {
       "QRhi's convention (GPU-free)." },
     { "scene_target_clamp", scene_target_clamp, METH_VARARGS,
       "([supported counts], requested) -> int: D14's sample clamp (GPU-free)." },
+    { "scene_target_pass_clear", scene_target_pass_clear, METH_VARARGS,
+      "(program_json, packs, samples=0) -> JSON str: N5.2h; per scene target the colour OpenGL's pass clears it to "
+      "instead of its clearing draw, or null (the draw); samples 0: each declaration's own (GPU-free)." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
       "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
       "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "

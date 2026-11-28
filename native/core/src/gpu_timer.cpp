@@ -110,8 +110,9 @@ void setGpuUnitBrackets(const GpuUnitBrackets *brackets)
     t_unitBrackets = brackets;
 }
 
-GpuUnitScope::GpuUnitScope(QRhi *rhi, QRhiCommandBuffer *cb, int pass, GpuUnitPart part)
-    : m_brackets(t_unitBrackets), m_rhi(rhi), m_cb(cb)
+GpuUnitScope::GpuUnitScope(const GpuUnitBrackets *brackets, QRhi *rhi, QRhiCommandBuffer *cb, int pass,
+                           GpuUnitPart part)
+    : m_brackets(brackets), m_rhi(rhi), m_cb(cb)
 {
     if (m_brackets)
         m_scope = m_brackets->begin(m_brackets->owner, rhi, cb, pass, int(part));

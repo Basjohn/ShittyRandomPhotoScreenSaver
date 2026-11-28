@@ -893,3 +893,64 @@ def test_the_n52f_bounds_cover_every_form_and_the_sampler_rule_keeps_its_guards(
     patch[20:30, 20:30, :3] += 2                                  # a compact patch past one level
     assert not trc.judge_piece_edges(patch, reference, 1000, np.ones_like(allowed), scatter_pixels=4305,
                                      compact_past=1)["pass"]                                  # control: still caught
+
+
+# ------------------------------------------------------------------------------------ the pass-clear rule, on the module
+
+
+def _built_core():
+    """The built module (release/native_module) with N5.2h's scene_target_pass_clear, or a skip saying why."""
+    import os
+
+    from rendering.native import loader
+
+    module_dir = ROOT / "release" / "native_module"
+    if not (os.name == "nt" and (module_dir / f"{loader.MODULE_NAME}.pyd").is_file()):
+        pytest.skip(f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd")
+    from rendering import native
+
+    core = native.load(module_dir)
+    if not hasattr(core.module, "scene_target_pass_clear"):
+        pytest.skip("the built module predates scene_target_pass_clear (N5.2h audit): build the branch")
+    return core
+
+
+def _pass_clears(core, program: dict, packs, samples: int = 0) -> dict:
+    return json.loads(core.module.scene_target_pass_clear(json.dumps(program), packs, samples))
+
+
+def test_the_motion_scene_clears_by_its_pass_and_a_target_the_rule_refuses_keeps_the_draw():
+    """N5.2h (audit, behaviour): the core's own scenePassClearColour answers the scene target crumble_both_4x declares
+    (RGBA8 colour, RGBA16F velocity, four samples) with one clear colour, the colour's; each refused shape answers
+    null (the clearing draw). The source is never matched: the module decides."""
+    from rendering.native.mode import program_json
+    from rendering.quick.render import native_background as nb
+
+    core = _built_core()
+    run = _run("crumble_both_4x")
+    renderer = _renderer(run.request.transition_id)
+    scene = renderer.native_scene(run, LOGICAL)
+    passes, targets, images = nb.scene_program(renderer, scene, nb.TEXTURE, nb.NEXT_TEXTURE, (2560, 1440), PIXELS)
+    declared, packs = program_json(passes, targets, images=images)
+    program = json.loads(declared)
+    index = next(i for i, t in enumerate(program["targets"]) if t["name"] == nb.SCENE_TARGET)
+    target = program["targets"][index]
+    assert target.get("samples", 1) > 1 and velocity_is_one_attachment(target)
+    colour = target["colour"][0].get("clear", [0.0, 0.0, 0.0, 0.0])
+    assert _pass_clears(core, program, packs)[nb.SCENE_TARGET] == pytest.approx(colour)
+
+    def answer(**changes) -> list | None:
+        edited = json.loads(declared)
+        velocity = edited["targets"][index]["colour"][1]
+        velocity.update(changes)
+        return _pass_clears(core, edited, packs)[nb.SCENE_TARGET]
+
+    # Negative controls: the velocity's alpha apart from the colour's (no one clear colour), a clear value other than
+    # 0 or 1, and the ABI 37 form's multisampled R16F (measured slower by glClear) each keep the draw.
+    assert answer(clear=[0.0, 0.0, 0.0, 1.0 - colour[3]]) is None
+    assert answer(clear=[0.5, 0.0, 0.0, colour[3]]) is None
+    assert answer(format="r16f", clear=[0.0, 0.0, 0.0, colour[3]]) is None
+    # ... while the same R16F single-sampled clears by its pass (the rule's multisample clause alone refused it).
+    single = json.loads(declared)
+    single["targets"][index]["colour"][1].update(format="r16f", clear=[0.0, 0.0, 0.0, colour[3]])
+    assert _pass_clears(core, single, packs, samples=1)[nb.SCENE_TARGET] is not None

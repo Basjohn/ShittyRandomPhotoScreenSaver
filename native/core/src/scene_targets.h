@@ -121,8 +121,9 @@ struct TargetDeclaration;
 // not a transparency target (its borrowed attachments are the owner's, never cleared by it, nor its depth); every
 // attachment's clear equal to that colour on the channels its format holds (all four for RGBA8/RGBA16F, red for
 // R16F/R32F/R8), each value exactly 0 or 1 (a QColor clear is 16 bits a channel: any other value could differ from the
-// draw's float); multisampled (`samples`, the effective count) only when every attachment is RGBA8 (a multisampled R16F
-// clears slower by glClear than by the draw: measured). Anything else keeps the draw.
+// draw's float); multisampled (`samples`, the effective count) only when every attachment is RGBA8 or RGBA16F (a
+// multisampled R16F clears slower by glClear than by the draw, an RGBA16F faster: measured). Anything else keeps the
+// draw. GPU-free; the module's scene_target_pass_clear answers it for a program's declarations (harness).
 bool scenePassClearColour(const TargetDeclaration &decl, int samples, QColor *colour);
 
 // The nearest resolve's slots of a target: its colour attachments, then its depth.

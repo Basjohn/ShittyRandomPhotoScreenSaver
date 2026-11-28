@@ -59,7 +59,8 @@ enum class GpuPassKind : int {
 QString gpuPassKindName(GpuPassKind kind);
 
 // N5.2h: what a ScenePass figure times inside a mode's record (mode_content.cpp recordPasses), each bracketed between
-// render passes, never inside one. `pass` names the program's first pass of the unit (-1: none).
+// render passes except RunDraw and RunResolve, which open inside the run's render pass (below). `pass` names the
+// program's first pass of the unit (-1: none).
 enum class GpuUnitPart : int {
     Unit = 0,      // the unit at `pass`: a run (its primes, its passes, the pass's own resolves at its end), a compute
                    // entry, a capture, an environment, a bloom chain, a defocus or a prefilter
@@ -96,11 +97,13 @@ struct GpuUnitBrackets
 const GpuUnitBrackets *gpuUnitBrackets();
 void setGpuUnitBrackets(const GpuUnitBrackets *brackets);
 
-// N5.2h: a unit's bracket for its scope (render thread, outside any pass at construction and destruction).
+// N5.2h: a unit's bracket for its scope (render thread; outside any pass at construction and destruction, except
+// RunDraw and RunResolve, which open inside the run's pass). `brackets` is the record's gpuUnitBrackets(), read once per
+// record by its caller (null: nothing is timed and the scope does nothing).
 class GpuUnitScope
 {
 public:
-    GpuUnitScope(QRhi *rhi, QRhiCommandBuffer *cb, int pass, GpuUnitPart part);
+    GpuUnitScope(const GpuUnitBrackets *brackets, QRhi *rhi, QRhiCommandBuffer *cb, int pass, GpuUnitPart part);
     ~GpuUnitScope();
     GpuUnitScope(const GpuUnitScope &) = delete;
     GpuUnitScope &operator=(const GpuUnitScope &) = delete;

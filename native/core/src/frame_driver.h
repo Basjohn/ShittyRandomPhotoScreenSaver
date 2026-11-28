@@ -101,6 +101,9 @@ private:
     // N5.2h: GpuUnitBrackets' thunks (owner: this driver), a unit of a record timed as GpuPassKind::ScenePass.
     static int unitBegin(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int pass, int part);
     static void unitEnd(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int scope);
+    // N5.2h: the brackets handed to a surface's record under time_scene_passes, made once with the driver (nothing is
+    // built per frame at rest).
+    const GpuUnitBrackets m_unitBrackets { this, &FrameDriver::unitBegin, &FrameDriver::unitEnd };
     // N5.7b: the window's backdrop pyramids after its background layer (each timed whole); true when one built.
     bool recordBackdropPyramids(QRhi *rhi, QRhiCommandBuffer *cb);
 

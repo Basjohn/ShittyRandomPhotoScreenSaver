@@ -42,6 +42,9 @@ struct ColorTarget
     RhiOwned<QRhiRenderPassDescriptor> clearingRenderPass;
     RhiOwned<QRhiTextureRenderTarget> clearingRenderTargetObject;
     quint64 clearingGeneration = 0;
+    // N5.2h: the generation whose clearing render target failed to create: not retried (nor reported again) until the
+    // target's next generation, the scene targets' rule (scene_targets.cpp: dropped until the next layout).
+    quint64 clearingFailedGeneration = 0;
 
     ColorTarget();
     ~ColorTarget();
@@ -66,8 +69,8 @@ bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, Col
 
 // N5.2h: on OpenGL, the target's clearing render target (a pass begun on it clears the whole texture to the pass's clear
 // colour, as a full-target clearing draw did, without that draw's fragments), made for the target's generation when
-// needed; nullptr on every other backend (rule B: Vulkan clears by a draw) or when it cannot be made (`error` set), and
-// the caller clears by its draw. Render thread only.
+// needed; nullptr on every other backend (rule B: Vulkan clears by a draw) or when it cannot be made (`error` set once
+// for that generation, which is then not retried), and the caller clears by its draw. Render thread only.
 QRhiTextureRenderTarget *clearingRenderTarget(QRhi *rhi, ColorTarget *target, QString *error);
 
 // Rule C: on Vulkan, when the texture is not in COLOR_ATTACHMENT_OPTIMAL, records the transition into `cb` (recording,
