@@ -404,6 +404,151 @@ class WaveformPython:
         self._context = self._surface = self._host = None
 
 
+#: Extruded Bubble's native passes by the Python program they draw (``extruded_bubble_values``): a program bound more
+#: than once a frame takes its passes' names in bind order (the cube's faces, the blur's two directions).
+def _eb_pass_names() -> dict[str, tuple[str, ...]]:
+    from rendering.native.extruded_bubble_shaders import PROGRAMS
+    from rendering.native.extruded_bubble_values import BLUR_PASSES, FACE_PASSES, PROXY_PASSES
+
+    names = {program: (program,) for program in PROGRAMS}
+    names.update({"probe_backdrop": FACE_PASSES, "proxies": PROXY_PASSES, "blur": BLUR_PASSES})
+    return names
+
+
+def _eb_layouts() -> dict:
+    from rendering.native.extruded_bubble_shaders import block_layout
+
+    return {name: block_layout(program) for program, passes in _eb_pass_names().items() for name in passes}
+
+
+#: The instance buffers the Python renderer uploads, by the record's stream (``extruded_bubble_native_schema``).
+_EB_INSTANCES = {"_shells": "shells", "_clusters": "clusters", "_proxies": "proxies", "_wakes": "wakes"}
+
+
+@contextlib.contextmanager
+def _eb_registered():
+    """The route draws Extruded Bubble for this run only (its registration is the port's last step, after P, T, C):
+    its settings, its program by the scene's samples and its explicit target sizes."""
+    from rendering.native import extruded_bubble_program as program
+    from rendering.native.extruded_bubble_values import settings
+    from rendering.quick.visualizer import native_route as route
+
+    saved = (route.GENERIC_MODE_SETTINGS, route.GENERIC_MODE_PROGRAM_VARIANTS, route.GENERIC_MODE_TARGET_SIZES,
+             route.NATIVE_MODE_IDS)
+    route.GENERIC_MODE_SETTINGS = {**saved[0], "extruded_bubble": settings}
+    route.GENERIC_MODE_PROGRAM_VARIANTS = {**saved[1], "extruded_bubble": (program.variant_of, program.program)}
+    route.GENERIC_MODE_TARGET_SIZES = {**saved[2], "extruded_bubble": program.target_sizes}
+    route.NATIVE_MODE_IDS = saved[3] | {"extruded_bubble"}
+    try:
+        yield
+    finally:
+        (route.GENERIC_MODE_SETTINGS, route.GENERIC_MODE_PROGRAM_VARIANTS, route.GENERIC_MODE_TARGET_SIZES,
+         route.NATIVE_MODE_IDS) = saved
+
+
+class ExtrudedBubblePython(WaveformPython):
+    """Extruded Bubble's Python side of layer L: its real renderer drawing the frame on a real offscreen OpenGL 4.6
+    context (its drift compute, probe, shafts, scene target and near layer run as in the product; nothing is read
+    back), with what that draw used captured: each pass block as it was bound (``_bound``), named by its program and
+    bind order (``_eb_pass_names``), the values its programs held at that bind (``_Uniforms``: the value each member
+    was last set to, else its block's initial value), the instance buffers' uploads by stream, and the post steps'
+    own values (the scene's bloom and exposure, the near layer's radius, highlight and read level)."""
+
+    def draw(self, frame) -> dict:
+        from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS
+        from rendering.native.extruded_bubble_shaders import block_layout, member_name
+        from rendering.quick.scene3d.defocus import DefocusLayer
+        from rendering.quick.scene3d.target import SceneTarget
+        from rendering.quick.visualizer.implementations import extruded_bubble as python_eb
+
+        import numpy as np
+        from OpenGL import GL as gl
+
+        width, height = int(frame.viewport[2]), int(frame.viewport[3])
+        self._current(width, height)
+        gl.glViewport(0, 0, width, height)
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        renderers: list = []
+        binds: list = []
+        uploads: dict = {}
+        post: dict = {}
+        Renderer = python_eb.QuickExtrudedBubbleRenderer
+        render, bound, upload = Renderer.render, Renderer._bound, python_eb._Instances.upload
+        scope, composite, read_size = SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size
+
+        def rendering(renderer, render_frame):
+            renderers.append(renderer)
+            return render(renderer, render_frame)
+
+        def binding(renderer, program):
+            held = renderer._uniforms._values
+            binds.append((program, renderer._uniforms.packed(program),
+                          {name: value for (owner, name), value in held.items() if owner == program}))
+            return bound(renderer, program)
+
+        def uploading(instances, rows):
+            count = upload(instances, rows)
+            uploads[id(instances)] = np.ascontiguousarray(rows[:instances.capacity], dtype=np.float32).tobytes()
+            return count
+
+        def scoping(target, *args, **kwargs):
+            post["u_bloom_strength"] = float(kwargs.get("bloom", 0.0))
+            post["u_hdr_exposure"] = float(kwargs["hdr"]) if kwargs.get("hdr") is not None else None
+            return scope(target, *args, **kwargs)
+
+        def compositing(layer, max_radius, highlight=0.25):
+            post["u_defocus_radius"], post["u_defocus_highlight"] = float(max_radius), float(highlight)
+            return composite(layer, max_radius, highlight)
+
+        def sizing(layer, max_radius):
+            found = read_size(layer, max_radius)
+            post["u_defocus_level"] = int(found[0])
+            return found
+
+        Renderer.render, Renderer._bound, python_eb._Instances.upload = rendering, binding, uploading
+        SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size = scoping, compositing, sizing
+        try:
+            self._host.render(snapshot=frame.snapshot, viewport=tuple(frame.viewport),
+                              logical_size=tuple(frame.logical_size), matrix_values=tuple(frame.matrix_values))
+        finally:
+            Renderer.render, Renderer._bound, python_eb._Instances.upload = render, bound, upload
+            SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size = scope, composite, read_size
+        if not renderers or not binds:
+            return {"blocks": {}, "uploads": {}, "values": {}}
+        renderer = renderers[-1]
+        keys = {int(number): key for key, number in renderer._resources._programs.items()
+                if key in python_eb._BLOCKS}
+        names = _eb_pass_names()
+        taken: dict[str, int] = {}
+        blocks: dict[str, bytes] = {}
+        values: dict = {}
+        for program, data, held in binds:
+            key = keys[int(program)]
+            at = taken.get(key, 0)
+            if at >= len(names[key]):
+                raise RuntimeError(f"Extruded Bubble's Python renderer bound {key!r} more than {len(names[key])} times")
+            taken[key] = at + 1
+            pass_name = names[key][at]
+            blocks[pass_name] = data
+            layout = block_layout(key)
+            initial = FULLSCREEN_DEFAULTS if layout is FULLSCREEN_BLOCK else {}
+            for member, kind in layout.fields:
+                value = held.get(member, initial.get(member))
+                if value is None:
+                    count = {"vec2": 2, "vec3": 3, "vec4": 4, "mat3": 9, "mat4": 16}.get(kind, 1)
+                    zero = 0 if kind in ("int", "uint", "bool") else 0.0
+                    value = zero if count == 1 else (zero,) * count
+                name = member_name(key, member)
+                values.setdefault(name, value)                 # unscoped: the program's first pass this frame
+                if len(names[key]) > 1:
+                    values[f"{name}@{pass_name}"] = value      # scoped: this pass's own
+        values.update({name: value for name, value in post.items() if value is not None})
+        streams = {stream: uploads[id(getattr(renderer, attribute))] for attribute, stream in _EB_INSTANCES.items()
+                   if id(getattr(renderer, attribute)) in uploads}
+        return {"blocks": blocks, "uploads": streams, "values": values}
+
+
 MODES: dict[str, LMode] = {
     "spectrum": LMode(
         "spectrum", (f"{_IMPL}.spectrum",), {"Quick Spectrum pass blocks": "spectrum"}, _spectrum_layouts,
@@ -449,6 +594,20 @@ MODES: dict[str, LMode] = {
         streams={"ribbon_knots": ("ribbon_knot_floats", (), ""), "ribbon_cohorts": ("ribbon_cohort_floats", (), ""),
                  "ribbon_bursts": ("ribbon_burst_floats", (), ""), "ribbon_pulse": ("ribbon_pulse_floats", (), "")},
         ulp_field="ribbon_u_mvp", python=lambda d: WaveformPython(d)),
+    # Every drawn pass of the one program (``extruded_bubble_program``): the cube's faces and glints, the shafts and
+    # their blur, the scene's backdrop, specks, glass and near layer. Its drift entries, probe prefilter, capture,
+    # resolve, defocus, bloom and composite are the core's own steps (layer P's pixels); the drift window travels in
+    # the record (its record level) and the Python solver integrates its own copy on its GPU (P's pixels judge both).
+    # Its Python side draws for real (``ExtrudedBubblePython``).
+    "extruded_bubble": LMode(
+        "extruded_bubble", (),
+        {"Extruded Bubble pass blocks (QuickExtrudedBubbleRenderer._bound, by program and bind order)": tuple(
+            name for passes in _eb_pass_names().values() for name in passes)}, _eb_layouts,
+        # The drawn target's pixels, the core's own (the Python renderer sets the shafts' half size and the scene's
+        # bucketed allocation there): placement, proved by P's pixels.
+        positional={"u_target_px": "the core's target pixels: the pass's placement in its target (layer P)"},
+        streams={stream: (f"{stream}_floats", (), "") for stream in _EB_INSTANCES.values()},
+        ulp_field="backdrop_u_time", register=_eb_registered, python=lambda d: ExtrudedBubblePython(d)),
 }
 
 
@@ -715,6 +874,9 @@ class _Item:
     def on_textures_lost(self, _callback) -> None:
         pass
 
+    def geometry_arena(self, name) -> None:              # N5.6 (D3): the stream's arena, told by its schema
+        self.arena = str(name)
+
     def drop_retained_frame(self) -> None:
         pass
 
@@ -887,7 +1049,8 @@ class Comparator:
             else:
                 program = build(mode_fragment_pack(mode), dict(sizes))
             declared, packs = program_json(program["passes"], program["targets"], program["streams"],
-                                           images=program.get("images", ()), unread=program.get("unread", ()))
+                                           program.get("buffers", ()), images=program.get("images", ()),
+                                           unread=program.get("unread", ()))
             table = json.dumps(dict(schema_table_entry(self.schema)))
             cached = self._program_cache[key] = (program, declared, packs, table)
         program, declared, packs, table = cached
