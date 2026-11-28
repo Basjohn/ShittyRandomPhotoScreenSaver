@@ -1684,6 +1684,27 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       sampler pairing triggers it (a multisample texture bound through a sampler, or a QRhiSampler on a
       `QRhiTexture::sampleCount > 1`), fix it in the core (C++), and test that a validation-on OpenGL frame logs
       no GL errors.
+      State 28 Nov: `e06691e3e` and `aab60aa9e` (marking each multisampled bind at record time, built as `163d41b8`)
+      left the count unchanged: `eb_4x` 5, `eb_band_4x` 5, `tiles_4x` 1, all on frame 0. Advisor's diagnosis (Opus High,
+      read-only; it had no Qt source on hand, so the Qt internals below are unverified). QRhi's GL backend writes sampler
+      state at execute time, in `bindCombinedSampler` during `endFrame`. Each mismatch makes five calls (MIN, MAG, WRAP_S,
+      WRAP_T, COMPARE_MODE), so each case of 5 is one mismatched bind. Record-time marking is undone by:
+      (1) a `create()` after the mark in the same frame, which resets the cache. Frame 0 allocates the scene targets
+      lazily and re-points the nearest-resolve bindings after a resize (`mode_content.cpp:6088`). This is the main
+      candidate.
+      (2) Two srbs binding the same multisampled texture with different `QRhiSampler`s, for example the capture's
+      nearest sampler and the nearest resolve's `n.sampler`. The single error in `tiles_4x` may be this.
+      Fix direction:
+      - one shared sampler (nearest, clamp, no compare) for every multisampled binding;
+      - one helper that `create()`s a multisampled texture and writes that sampler's state into its cache at once;
+      - keep the record-time marking as a backstop;
+      - a source test that no `sampleCount>1` texture is created outside the helper and no other sampler reaches a
+        `sampler2DMS` binding.
+      To name the exact call, use `SynchronousLogging` in the repro's `QOpenGLDebugLogger`. In the callback, read
+      `GL_TEXTURE_BINDING_2D_MULTISAMPLE`, `GL_ACTIVE_TEXTURE` and `GL_CURRENT_PROGRAM`, and match the texture name against
+      the core textures' `nativeTexture().object`. Check the Qt claims against the SDK's `qrhigles2.cpp` first.
+      Verify: `post_stage_check.py --apis opengl --rounds gl_errors` and
+      `tests/test_native_core_module.py::test_a_validation_on_opengl_frame_logs_no_gl_errors`.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
     - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; native capture for the two
       media tools (point 2: scratch capture only, no asset rerender); the `TransitionCapture` → `OffscreenRenderTarget` move
