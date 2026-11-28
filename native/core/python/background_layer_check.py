@@ -185,11 +185,10 @@ class Scene:
             self.layer = NativeBackgroundLayer(core, self.item)
         else:
             from rendering.quick.render.background_item import BackgroundRenderItem
-            from rendering.quick.render.telemetry import RenderNodeTelemetry
 
             if kind not in ("python", "route"):
                 raise ValueError(f"unknown scene kind {kind!r}")
-            self.item = BackgroundRenderItem(scene, telemetry=RenderNodeTelemetry(), screen_index=0)
+            self.item = BackgroundRenderItem(scene, screen_index=0)
             if kind == "python":
                 # The Python presenter as the reference (N5.2h: the product draws natively on both APIs; the harness
                 # keeps today's Python drawing until the references are cached, the switch's cache box).

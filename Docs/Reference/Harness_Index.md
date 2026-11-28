@@ -450,31 +450,6 @@ These commands are retained regression/acceptance harnesses for the current Quic
 
 **Headless cost baselines on a busy machine** (how to run them, read them and what to expect: `Docs/Reference/Benchmarks.md`). `tools/overhead_baseline.py` measures every showcase transition and Visualizer mode offscreen (no window) and stays usable while the machine is busy (`tools/bench_stability.py`): transitions and Visualizer modes (each mode's Guided Setup preview snapshot) share one context and run round-robin; every sampled frame is rendered three times right after a fixed Crossfade control and only the fastest repeat counts; each case is also recorded relative to that control (`gpu_rel`, `cpu_rel`), which cancels GPU clock state (an idle GPU downclocks between flushes and read Particle at twice its loaded cost), contention and a busy core's slowdown; passes whose control GPU time ran 35% over the controls' lower quartile are re-measured; CPU submit is also recorded as thread CPU time (`QueryThreadCycleTime`); and system usage (other processes' CPU, memory, GPU utilisation, clock, temperature) is recorded per pass and per run, printed with every comparison, with a warning when two runs' conditions differ. Per-frame GL and Python call counts (Visualizer modes included since 2026-10-11) remain the load-proof signal: any rise is real added work.
 
-### Blinds
-
-```powershell
-python tools\qtquick_blinds_smoke.py --direction horizontal --windows 1
-python tools\qtquick_blinds_smoke.py --direction vertical   --windows 1
-python tools\qtquick_blinds_smoke.py --direction diagonal   --windows 1
-```
-
-Use `--windows 2` only when physical multi-display evidence is intentionally being exercised.
-
-### Parameterized effects
-
-```powershell
-python tools\qtquick_phase_c_effect_smoke.py --effect <effect> --case <case> --windows 1
-```
-
-Canonical case families include:
-
-- Ripple: count1, count3, count8;
-- Crumble: top, bottom, random-weighted, random-choice, age-weighted;
-- Particle: authored modes/directions including directional variants, swirl and converge;
-- Burn: six directions plus smoke/ash toggle cases.
-
-Use exact tool/source case names if they differ from this human-readable summary.
-
 ## 3. Transition discriminator expectations
 
 The real-GL smokes protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.

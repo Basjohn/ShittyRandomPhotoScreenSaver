@@ -174,12 +174,11 @@ class MaterialScene:
 
     def __init__(self, width: int, height: int, *, dpr: float = 1.0, timestamps: bool = False) -> None:
         from rendering.quick.render.background_item import BackgroundRenderItem
-        from rendering.quick.render.telemetry import RenderNodeTelemetry
 
         self.scene = NativeHiddenScene(width, height, dpr=dpr, timestamps=timestamps)
         self.scene.window.setColor("black")
         root = self.scene.root
-        self.background = BackgroundRenderItem(root, telemetry=RenderNodeTelemetry(), screen_index=0)
+        self.background = BackgroundRenderItem(root, screen_index=0)
         self.background.setZ(0.0)
         self.background.setWidth(root.width())
         self.background.setHeight(root.height())

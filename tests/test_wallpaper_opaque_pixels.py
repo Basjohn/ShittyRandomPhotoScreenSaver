@@ -21,7 +21,6 @@ from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.image_state import PresentationImage
-from rendering.quick.render.telemetry import RenderNodeTelemetry
 
 # Straight-alpha source colour and its expected result over opaque black.
 _SOURCE_RGBA = (200, 100, 40, 128)

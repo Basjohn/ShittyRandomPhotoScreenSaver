@@ -505,7 +505,6 @@ the product module holds today.
 | **Framed camera** (D5.5, N0.4) | `core/settings/framed_camera.py`; Decisions line 1466+ | decided; the worker publishes the finished camera, built with N5.4 then N5.6 (N0.4's remainder box) | one camera for every framed 3D mode (section 7) |
 
 Quick-side services that stay as they are until the native presenter replaces them: the program cache (E27), the
-render-node telemetry (`rendering/quick/render/telemetry.py`, proof telemetry, no thread, timer or context), the
 background and image nodes (`background_node.py`, `background_item.py`, `background_image_node.py`) and the GL
 query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; Lessons line 168-171).
 

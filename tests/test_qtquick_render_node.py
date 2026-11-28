@@ -7,57 +7,10 @@ from pathlib import Path
 
 from PySide6.QtQuick import QQuickItem
 
-from rendering.quick.render import (
-    BackgroundRenderItem,
-    RenderNodeTelemetry,
-)
-from rendering.quick.transitions import TransitionSample
+from rendering.quick.render import BackgroundRenderItem
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def _transition_sample(progress: float) -> TransitionSample:
-    return TransitionSample(
-        run_id=7,
-        runtime_generation=3,
-        linear_progress=progress,
-        eased_progress=progress,
-        complete=False,
-    )
-
-
-def test_transition_pixel_probes_keep_nearest_frame_across_cadence_jump():
-    telemetry = RenderNodeTelemetry(
-        gui_thread_id=1,
-        capture_pixels=True,
-        transition_probe_progresses=(0.42, 0.50),
-    )
-    before = _transition_sample(0.39)
-    after = _transition_sample(0.47)
-    assert telemetry.wants_transition_probe_sample(before)
-    telemetry.note_transition_probe_sample(sample=before, colors=("before",))
-    assert telemetry.snapshot().transition_probe_colors == ()
-    assert telemetry.wants_transition_probe_sample(after)
-    telemetry.note_transition_probe_sample(sample=after, colors=("after",))
-    assert telemetry.snapshot().transition_probe_linear_progresses == (0.39,)
-    assert telemetry.snapshot().transition_probe_colors == (("before",),)
-
-    before_second = _transition_sample(0.48)
-    after_second = _transition_sample(0.54)
-    telemetry.note_transition_probe_sample(
-        sample=before_second,
-        colors=("second-before",),
-    )
-    telemetry.note_transition_probe_sample(
-        sample=after_second,
-        colors=("second-after",),
-    )
-    assert telemetry.snapshot().transition_probe_linear_progresses == (
-        0.39,
-        0.48,
-    )
-    assert telemetry.snapshot().transition_probe_colors[-1] == ("second-before",)
 
 
 def test_background_item_uses_the_selected_inline_primitive():

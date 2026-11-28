@@ -14,12 +14,12 @@ def _read(relative: str) -> str:
 
 def test_native_reveal_readiness_remains_frame_swapped_gated():
     controller = _read("rendering/quick/scene_controller.py")
-    telemetry = _read("rendering/quick/render/telemetry.py")
-    assert "native_background_active" in controller
-    assert "def note_native_background_visibility(" in telemetry
-    assert "native_background_active=bool(visible and identity is not None)" in telemetry
+    # N5.2h: the native layer draws the photo, so the presented frame is the reveal's input (the deleted Python node's
+    # telemetry no longer stands in for it).
+    swapped = controller.split("def _on_frame_swapped", 1)[1].split("\n    def ", 1)[0]
+    assert "self._publish_readiness(frame_presented=True)" in swapped
     # Retained texture admission alone is not a new GUI show/update loop.
     assert "frameSwapped -> requestUpdate" not in controller
-    assert "frameSwapped -> requestUpdate" not in telemetry
+    assert "requestUpdate" not in swapped
 
 

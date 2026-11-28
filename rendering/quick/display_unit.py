@@ -35,7 +35,6 @@ from .context_menu import QuickContextMenuEntry
 from .display_processing import DisplayProcessingDescriptor
 from .display_presenter import QuickDisplayPresenter
 from .image_state import PresentationImage
-from .render import RenderNodeTelemetry
 from .runtime import QuickDisplayRuntime
 from .scene_controller import QuickSceneFactory
 from .state import QuickWindowPolicy
@@ -484,7 +483,6 @@ def create_quick_display_unit(
     ctrl_coordinator: SharedCtrlCoordinator,
     interaction_mode_enabled: bool = False,
     custom_layout_active_provider: Callable[[], bool] | None = None,
-    telemetry: RenderNodeTelemetry | None = None,
     adapters: Sequence[OrdinaryFamilyAdapter] | None = None,
 ) -> QuickDisplayUnit:
     """Construct one display's full Quick destination chain.
@@ -501,7 +499,6 @@ def create_quick_display_unit(
         screen=screen,
         scene_factory=scene_factory,
         window_policy=window_policy,
-        telemetry=telemetry,
         interaction_mode_enabled=bool(interaction_mode_enabled),
         custom_layout_active_provider=custom_layout_active_provider,
         ctrl_state_publisher=ctrl_coordinator.publisher_for(ctrl_key),

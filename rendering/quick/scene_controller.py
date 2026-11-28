@@ -69,7 +69,7 @@ from .custom_layout_overlay import (
 from .fullscreen_overlay_edit import CARD_EDIT_ID as FULLSCREEN_CARD_EDIT_ID
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
-from .render import BackgroundRenderItem, RenderNodeTelemetry
+from .render import BackgroundRenderItem
 from .state import QuickInputState, QuickSceneReadiness
 from .surface_backdrop_owner import SurfaceBackdropOwner, backdrop_available
 from .transitions.state import TransitionRun
@@ -116,20 +116,6 @@ def _projected_pixel_shift(state: QuickAuxiliaryState | None, window: Any, suspe
     return (snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr),
             snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr))
 
-
-
-def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
-    """Return whether one swapped frame contains a real product background."""
-
-    rendered_background = bool(
-        int(getattr(snapshot, "render_count", 0) or 0) > 0
-        or getattr(snapshot, "native_background_active", False)
-    )
-    return bool(
-        rendered_background
-        and getattr(snapshot, "active_image_identity", None) is not None
-        and getattr(snapshot, "error", None) is None
-    )
 
 
 def _custom_visualizer_relative_scale(
@@ -460,12 +446,10 @@ class QuickSceneController(QObject):
         *,
         window: QuickDisplayWindow,
         factory: QuickSceneFactory,
-        telemetry: RenderNodeTelemetry | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
         self._factory = factory
-        self._telemetry = telemetry or RenderNodeTelemetry()
         self._context: QQmlContext | None = None
         self._scene_root: QQuickItem | None = None
         self._background_item: BackgroundRenderItem | None = None
@@ -678,7 +662,6 @@ class QuickSceneController(QObject):
         self._custom_layout_guide_underlay = custom_layout_guide_underlay
         self._background_item = BackgroundRenderItem(
             root,
-            telemetry=self._telemetry,
             screen_index=self._window.screen_index,
         )
         self._background_item.setObjectName("backgroundRenderItem")
@@ -2139,10 +2122,6 @@ class QuickSceneController(QObject):
         return True
 
     @property
-    def telemetry(self) -> RenderNodeTelemetry:
-        return self._telemetry
-
-    @property
     def visualizer_telemetry(self) -> VisualizerRenderNodeTelemetry:
         return self._visualizer_telemetry
 
@@ -2161,13 +2140,6 @@ class QuickSceneController(QObject):
     @property
     def readiness(self) -> QuickSceneReadiness:
         return self._readiness
-
-    def set_background_proof_progress(self, progress: float) -> None:
-        """Drive the proof background before a real presentation image is admitted."""
-
-        if not self._readiness.admission_open:
-            raise RuntimeError("Quick scene admission is closed")
-        self.background_item.setProofProgress(float(progress))
 
     def set_presentation_image(self, image: PresentationImage | None) -> None:
         """Admit detached image state while this scene generation is live."""
@@ -3160,8 +3132,14 @@ class QuickSceneController(QObject):
             raise RuntimeError("cannot retire QML objects before scene invalidation")
         self._retire_qml_objects()
 
+    def _native_layer_state(self) -> dict | None:
+        background = self._background_item
+        if not _qobject_is_alive(background) or background.native_layer is None:
+            return None
+        return {key: value for key, value in background.native_layer.state().items()
+                if key not in ("composite", "mode")}
+
     def describe_scene_state(self) -> dict[str, object]:
-        snapshot = self._telemetry.snapshot()
         return {
             "readiness": self._readiness.as_dict(),
             "qml_url": self._factory.qml_url.toLocalFile(),
@@ -3170,11 +3148,8 @@ class QuickSceneController(QObject):
             ),
             "qml_root_alive": _qobject_is_alive(self._scene_root),
             "unexpected_qml_root_loss": bool(self._unexpected_scene_root_loss),
-            "render_initialize_count": snapshot.initialize_count,
-            "render_count": snapshot.render_count,
-            "release_count": snapshot.release_count,
-            "invalidation_count": snapshot.invalidation_count,
-            "render_error": snapshot.error,
+            # N5.2h: the background is the native core's layer; its own state (None: not made, or closed).
+            "native_layer": self._native_layer_state(),
             # Diagnostics are observational only. A poisoned retained Qt wrapper
             # must never abort terminal teardown merely because a pre-destruction
             # snapshot tried to inspect it.
@@ -3446,14 +3421,15 @@ class QuickSceneController(QObject):
             self._surface_probe_frames_remaining,
             max(0, int(probe_frames)),
         )
-        snapshot = self._telemetry.snapshot()
         window = self._window
         background = self._background_item
         transition = None if background is None else background.transition_run
+        image = None if background is None else background.presentation_image
+        layer = None if background is None else background.native_layer
         logger.info(
             "[QUICK_SURFACE] seq=%d event=%s screen=%s generation=%s "
             "visible=%s active=%s exposed=%s sg_initialized=%s "
-            "renderer_init=%d renders=%d active_image=%s transition=%s %s",
+            "native_layer=%s active_image=%s transition=%s %s",
             self._surface_event_sequence,
             str(event),
             window.screen_index,
@@ -3462,9 +3438,8 @@ class QuickSceneController(QObject):
             bool(window.isActive()),
             bool(window.isExposed()),
             bool(self._readiness.scene_graph_initialized),
-            int(snapshot.initialize_count),
-            int(snapshot.render_count),
-            snapshot.active_image_identity,
+            "none" if layer is None else ("drawing" if layer.drawing else "not-drawing"),
+            None if image is None else image.identity,
             getattr(transition, "run_id", None),
             str(detail or ""),
         )
@@ -3759,23 +3734,6 @@ class QuickSceneController(QObject):
 
     def _on_frame_swapped(self) -> None:
         self._update_perf_hud_on_swap()
-        snapshot = self._telemetry.snapshot()
-        # A rendered proof/empty clear is not an intentional product base frame.
-        # Reveal readiness requires an actually uploaded image.
-        intentional_image_ready = _render_snapshot_has_intentional_base_frame(
-            snapshot
-        )
-        self._publish_readiness(
-            background_renderer_ready=(
-                (
-                    snapshot.initialize_count > 0
-                    or snapshot.native_background_active
-                )
-                and snapshot.error is None
-            ),
-            intentional_base_frame_ready=intentional_image_ready,
-            error=snapshot.error,
-        )
         # D10, N5.2h: the native background draws the photo, so the presented frame is the reveal's input.
         if not self._readiness.frame_presented:
             self._publish_readiness(frame_presented=True)
@@ -3787,13 +3745,11 @@ class QuickSceneController(QObject):
             )
 
     def _on_scene_graph_invalidated(self) -> None:
-        snapshot = self._telemetry.snapshot()
         self._publish_readiness(
             scene_graph_initialized=False,
             background_renderer_ready=False,
             intentional_base_frame_ready=False,
             scene_graph_invalidated=True,
-            error=snapshot.error,
         )
         self._trace_surface_event("scene_graph_invalidated", probe_frames=3)
         if not self._readiness.admission_open:

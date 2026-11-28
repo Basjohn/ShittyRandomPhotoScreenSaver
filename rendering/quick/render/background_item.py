@@ -3,14 +3,12 @@
 
 from __future__ import annotations
 
-import threading
 import weakref
 
 from PySide6.QtQuick import QQuickItem, QSGNode
 
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
-from .telemetry import RenderNodeTelemetry
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,16 +31,12 @@ class BackgroundRenderItem(QQuickItem):
         self,
         parent: QQuickItem | None = None,
         *,
-        telemetry: RenderNodeTelemetry | None = None,
         screen_index: int = -1,
     ) -> None:
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self._presentation_image: PresentationImage | None = None
         self._transition_run: TransitionRun | None = None
-        self._telemetry = telemetry or RenderNodeTelemetry(
-            gui_thread_id=threading.get_ident()
-        )
         self._screen_index = int(screen_index)
         # N5.7a (D7 point 1, D10 point 3), N5.2h: the photo and every run are drawn by the native core's background
         # layer, a composite item in this one, made at the first image. This item keeps owning the image, its identity
@@ -57,10 +51,6 @@ class BackgroundRenderItem(QQuickItem):
         self._gui_warm_pending: tuple[str, weakref.ref, int] | None = None
         self._gui_warm_edge = None
         self.windowChanged.connect(self._cancel_warm_up)
-
-    @property
-    def telemetry(self) -> RenderNodeTelemetry:
-        return self._telemetry
 
     @property
     def presentation_image(self) -> PresentationImage | None:
