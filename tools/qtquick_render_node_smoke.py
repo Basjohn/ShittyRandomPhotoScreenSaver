@@ -275,8 +275,9 @@ def _layer_draws(facts: dict[str, Any]) -> bool:
 
 
 def _reveal_ready(readiness: Any) -> bool:
-    """The product's reveal rule (``DisplayManager._startup_reveal_admits``, N5.2h): presentable and presented."""
-    return bool(readiness.scene_presentable and readiness.frame_presented)
+    """The scene's half of the product's reveal rule (``DisplayManager._startup_reveal_admits``, N5.2h audit item 1):
+    presentable, presented, and its background drew its photo (the manager adds the first authored wallpaper)."""
+    return bool(readiness.scene_presentable and readiness.frame_presented and readiness.background_drawn)
 
 
 def _native_release() -> dict[str, Any]:

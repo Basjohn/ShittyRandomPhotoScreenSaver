@@ -126,14 +126,18 @@ class QuickSceneReadiness:
     admission_open: bool = True
     qml_objects_retired: bool = False
     error: str | None = None
-    # A frame of this scene was presented, published once on every backend (D10, N5.2h): with the presentable scene
-    # it is the reveal's one input (DisplayManager._startup_reveal_admits). The native background layer fades its first
-    # photo in by itself, so no background renderer or base frame fact exists to wait for.
+    # A frame of this scene was presented, published once on every backend (D10, N5.2h).
     frame_presented: bool = False
+    # The display's background drew a photo, published once at the first frame swap after it did (N5.2h audit item 1):
+    # the native background layer's content recorded a frame with its photo (``NativeBackgroundLayer.photo_drawn``), or
+    # the degraded display's image node holds one (``BackgroundRenderItem.background_drawn``). With the presented frame
+    # and the display's first authored wallpaper it is the reveal's input (``DisplayManager._startup_reveal_admits``):
+    # a presented frame alone may be black or the desktop.
+    background_drawn: bool = False
 
     @property
     def scene_presentable(self) -> bool:
-        """The scene exists, renders and is admitted (the reveal adds only its presented frame)."""
+        """The scene exists, renders and is admitted (the reveal adds its presented frame and its drawn background)."""
         return bool(
             self.qml_root_created
             and self.scene_graph_initialized

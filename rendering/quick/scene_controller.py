@@ -3734,9 +3734,17 @@ class QuickSceneController(QObject):
 
     def _on_frame_swapped(self) -> None:
         self._update_perf_hud_on_swap()
-        # D10, N5.2h: the native background draws the photo, so the presented frame is the reveal's input.
+        # D10, N5.2h: the presented frame and, once the background drew its photo (the native layer's content, or the
+        # degraded node), that fact: both reveal inputs, each published once (audit item 1: a frame alone may be black).
+        changes: dict[str, bool] = {}
         if not self._readiness.frame_presented:
-            self._publish_readiness(frame_presented=True)
+            changes["frame_presented"] = True
+        if not self._readiness.background_drawn:
+            background = self._background_item
+            if background is not None and _qobject_is_alive(background) and background.background_drawn:
+                changes["background_drawn"] = True
+        if changes:
+            self._publish_readiness(**changes)
         if self._surface_probe_frames_remaining > 0:
             self._surface_probe_frames_remaining -= 1
             self._trace_surface_event(

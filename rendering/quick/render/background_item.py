@@ -45,6 +45,7 @@ class BackgroundRenderItem(QQuickItem):
         self._native_layer_wanted = _native_background_wanted()
         # N5.2h point 5: the degraded display, once the layer cannot be made (no native core on either API).
         self._degraded = False
+        self._degraded_drawn = False             # the degraded node was given a photo (background_drawn)
         # The hitch rows (22 Nov): a GUI-thread warm-up unit (the renderer module's import with its shader text build,
         # then the native layer's own) waits for the next frame the window renders anyway (afterRendering, queued),
         # then runs alone: (transition id, weak reporter, ticket) while one is armed.
@@ -231,6 +232,16 @@ class BackgroundRenderItem(QQuickItem):
         """Whether this item shows the degraded display (N5.2h point 5)."""
         return self._degraded
 
+    @property
+    def background_drawn(self) -> bool:
+        """Whether this display's background has drawn a photo (the reveal's input, N5.2h audit item 1): the native
+        layer's content recorded a frame with its photo, or the degraded display's image node was given one (at its
+        render-thread sync; the next frame swap presents it). GUI thread."""
+        if self._degraded_drawn:
+            return True
+        layer = self._native_layer
+        return layer is not None and bool(layer.photo_drawn())
+
     def _degraded_node(self, old_node: QSGNode | None) -> QSGNode | None:
         """The degraded display's node: the current photo through Qt's own image node (a run draws nothing; the run's
         destination arrives as the next image, a hard cut)."""
@@ -241,6 +252,7 @@ class BackgroundRenderItem(QQuickItem):
             return None
         node = old_node if isinstance(old_node, DegradedBackgroundNode) else DegradedBackgroundNode(window)
         node.synchronize(self._presentation_image, (float(self.width()), float(self.height())))
+        self._degraded_drawn = True              # the render-thread sync (GUI blocked): the next swap presents it
         return node
 
     def updatePaintNode(

@@ -51,6 +51,7 @@ def _ready(screen_index: int) -> QuickSceneReadiness:
         qml_root_created=True,
         scene_graph_initialized=True,
         frame_presented=True,
+        background_drawn=True,
     )
 
 
@@ -200,26 +201,20 @@ def test_retired_manager_deadline_never_reveals(two_display_manager, qtbot):
 
 
 def _presented_without_background(screen_index: int) -> QuickSceneReadiness:
-    """A scene that presented a frame and has no background facts (no background renderer drew)."""
-    return QuickSceneReadiness(
-        screen_index=screen_index,
-        runtime_generation=GENERATION,
-        qml_root_created=True,
-        scene_graph_initialized=True,
-        frame_presented=True,
-    )
+    """A scene that presented a frame whose background has drawn no photo yet (the frame may be black or the desktop)."""
+    return replace(_ready(screen_index), background_drawn=False)
 
 
 @pytest.mark.parametrize("backend", ["vulkan", "opengl"])
-def test_on_every_backend_a_display_reveals_on_its_first_presented_frame(
+def test_on_every_backend_a_display_reveals_only_once_its_first_wallpaper_is_displayed_and_drawn(
     backend,
     qt_app,
     qtbot,
     monkeypatch,
 ):
-    # N5.2h: on every backend the wallpaper is the native background layer, which fades its first photo in itself, so
-    # the reveal's owner reveals each display on its first presented frame (no scene base frame is awaited); a
-    # presentable scene with no frame yet reveals nothing.
+    # N5.2h audit item 1: on both backends a presented frame alone reveals nothing (the widgets would fade in over
+    # black or the desktop); nor does a drawn background before the display's first authored wallpaper is displayed.
+    # Only both, per display, open the shared reveal.
     from rendering.quick import bootstrap
 
     monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
@@ -227,16 +222,30 @@ def test_on_every_backend_a_display_reveals_on_its_first_presented_frame(
     try:
         coordinator = manager._quick_startup_reveal
         startup = manager._display_startup_generation
-        # Before any frame: a presentable scene alone is never enough.
-        for unit in manager.displays:
-            manager._on_quick_readiness_changed(
-                unit, replace(_presented_without_background(unit.screen_index), frame_presented=False), startup)
-        qtbot.wait(200)
-        assert coordinator.is_started is False and reveals == []
+        # A presented frame with no photo drawn, and the first wallpaper displayed: still nothing.
         for unit in manager.displays:
             manager._on_quick_readiness_changed(unit, _presented_without_background(unit.screen_index), startup)
+            manager._on_image_displayed(unit.screen_index, f"first{unit.screen_index}.jpg")
+        assert first_frames == [GENERATION]
+        qtbot.wait(300)
+        assert coordinator.is_started is False and reveals == []
+    finally:
+        _retire(manager)
+
+    manager, _units, reveals, first_frames = _make_manager(monkeypatch, reveal_ms=40)
+    try:
+        coordinator = manager._quick_startup_reveal
+        startup = manager._display_startup_generation
+        # The background drew (the desktop snapshot, say) but no authored wallpaper is displayed: nothing.
+        for unit in manager.displays:
+            manager._on_quick_readiness_changed(unit, _ready(unit.screen_index), startup)
+        qtbot.wait(300)
+        assert coordinator.is_started is False and reveals == []
+        # Each display's first wallpaper displayed: the shared reveal opens.
+        for unit in manager.displays:
+            manager._on_image_displayed(unit.screen_index, f"first{unit.screen_index}.jpg")
         qtbot.waitUntil(lambda: reveals == [GENERATION], timeout=2000)
-        assert first_frames == []                         # no wallpaper was displayed: none was waited for
+        assert first_frames == [GENERATION]
     finally:
         _retire(manager)
 
@@ -246,13 +255,12 @@ def _non_decreasing(history: list[tuple[float, float]]) -> bool:
     return all(later >= earlier for earlier, later in zip(values, values[1:]))
 
 
-def test_late_display_fades_in_on_its_own_after_its_first_presented_frame(
+def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
     qt_app,
     qtbot,
     monkeypatch,
 ):
-    """Two monitors, real 300 ms hold + 2,500 ms fades: late sibling. N5.2h: a display is ready at its first
-    presented frame (its wallpaper is the native layer's own fade), not at a scene base frame and its first image."""
+    """Two monitors, real 300 ms hold + 2,500 ms fades: late sibling."""
 
     manager, units, reveals, _first = _make_manager(monkeypatch, reveal_ms=None)
     try:
@@ -267,8 +275,10 @@ def test_late_display_fades_in_on_its_own_after_its_first_presented_frame(
         # Before: every display is primed closed.
         assert [widgets0.value, visualizer0.value, widgets1.value, visualizer1.value] == [0.0] * 4
 
-        # Display 0 becomes ready the production way (its first frame presented); display 1 stalls.
-        manager._on_quick_readiness_changed(unit0, _presented_without_background(0), startup)
+        # Display 0 becomes ready the production way; display 1 stalls.
+        manager._on_quick_readiness_changed(unit0, _ready(0), startup)
+        manager._on_image_displayed(0, "healthy.jpg")
+        assert coordinator.is_started is False
         qtbot.waitUntil(lambda: coordinator.is_started, timeout=2000)
         shared_started = time.monotonic()
 
@@ -276,17 +286,16 @@ def test_late_display_fades_in_on_its_own_after_its_first_presented_frame(
         qtbot.waitUntil(lambda: 0.2 < widgets0.value < 0.8, timeout=2000)
         assert widgets1.value == 0.0 and visualizer1.value == 0.0
 
-        # A presentable scene alone (no frame presented yet) is not enough.
-        manager._on_quick_readiness_changed(
-            unit1, replace(_presented_without_background(1), frame_presented=False), startup)
+        # Quick readiness alone (its wallpaper not yet displayed) is not enough.
+        manager._on_quick_readiness_changed(unit1, _ready(1), startup)
         qtbot.wait(100)
         assert widgets1.value == 0.0 and visualizer1.value == 0.0
 
-        # Its first frame presents mid-way through the healthy fade.
+        # Its first wallpaper finishes presenting mid-way through the healthy fade.
         healthy_at_recovery = widgets0.value
         assert 0.0 < healthy_at_recovery < 1.0
         late_started = time.monotonic()
-        manager._on_quick_readiness_changed(unit1, _presented_without_background(1), startup)
+        manager._on_image_displayed(1, "late.jpg")
 
         # The healthy display finishes on its own schedule, never restarted.
         qtbot.waitUntil(lambda: widgets0.value == 1.0, timeout=4000)

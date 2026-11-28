@@ -332,13 +332,15 @@ def test_scene_controller_keeps_all_custom_edge_wheel_cancel_and_save_geometry(
 def test_scene_readiness_preserves_generation_zero_and_requires_a_presented_frame():
     initial = QuickSceneReadiness(screen_index=0, runtime_generation=0)
     presentable = replace(initial, qml_root_created=True, scene_graph_initialized=True)
-    ready = replace(presentable, frame_presented=True)
+    ready = replace(presentable, frame_presented=True, background_drawn=True)
 
-    def reveal(readiness):  # DisplayManager._startup_reveal_admits's rule
-        return readiness.scene_presentable and readiness.frame_presented
+    def reveal(readiness):  # DisplayManager._startup_reveal_admits's scene half
+        return readiness.scene_presentable and readiness.frame_presented and readiness.background_drawn
 
     assert reveal(initial) is False
     assert reveal(presentable) is False
+    assert reveal(replace(ready, background_drawn=False)) is False      # a presented frame alone may be black
+    assert reveal(replace(ready, frame_presented=False)) is False
     assert ready.runtime_generation == 0
     assert reveal(ready) is True
     assert reveal(replace(ready, admission_open=False)) is False
@@ -373,10 +375,26 @@ def test_presented_frame_is_published_on_every_backend(backend, qt_app, monkeypa
             qt_app.processEvents()
         assert controller.readiness.frame_presented is True
         assert [state.frame_presented for state in published] == [True]
-        # N5.2h: the readiness carries no background renderer facts; the presented frame is the reveal's input.
+        # N5.2h: the readiness carries no Python background renderer facts.
         assert not {"background_renderer_ready", "intentional_base_frame_ready", "ready_for_reveal"} & set(
             controller.readiness.as_dict()
         )
+        # Audit item 1: no photo drawn yet (no layer, no degraded node), so the background fact stays false; once the
+        # background item's layer reports its photo drawn, the next swap publishes it, once.
+        assert controller.readiness.background_drawn is False
+        background = controller.background_item
+        drawn = {"value": False}
+        background._native_layer = SimpleNamespace(photo_drawn=lambda: drawn["value"], close=lambda: None)
+        window.frameSwapped.emit()
+        qt_app.processEvents()
+        assert controller.readiness.background_drawn is False
+        drawn["value"] = True
+        for _ in range(3):
+            window.frameSwapped.emit()
+            qt_app.processEvents()
+        assert controller.readiness.background_drawn is True
+        assert [state.background_drawn for state in published] == [False, True]   # each fact published once
+        background._native_layer = None
     finally:
         controller.quiesce_for_retirement()
         window.deleteLater()

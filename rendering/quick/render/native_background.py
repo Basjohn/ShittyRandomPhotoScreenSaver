@@ -941,6 +941,19 @@ class NativeBackgroundLayer:
         """Shown and not failed (it draws the photo)."""
         return self._shown and self._failure is None
 
+    def photo_drawn(self) -> bool:
+        """Whether the layer, shown with a photo and not failed, has had a frame recorded with its passes: the core
+        counts a draw only once every texture the program reads is in (``ModeContent::record``: ``m_draw &&
+        withPasses``), so a layer still waiting for its first photo's upload has drawn nothing. The reveal's input
+        (N5.2h audit item 1), read at frame swaps until it is true: one C call, nothing at rest."""
+        if self.closed or self._mode is None or self._image is None or not self.drawing:
+            return False
+        try:
+            status = self._mode.composite.content_status()
+        except Exception:
+            return False
+        return status is not None and int(status.draws) > 0 and not status.failing
+
     def _fail(self, message: str, exc: BaseException | None = None) -> None:
         first = self._failure is None
         if first:

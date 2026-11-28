@@ -5345,26 +5345,29 @@ class DisplayManager(QObject):
             self._mark_startup_reveal_ready(int(screen_index))
 
     def _startup_reveal_admits(self, screen_index: int, readiness: QuickSceneReadiness) -> bool:
-        """The reveal's one rule for one display: its scene is presentable and
-        presented a frame.
-
-        N5.2h: on every backend the wallpaper is the native core's background
-        layer (or, with no core, the degraded display's image node), which
-        fades its first photo in by itself; no Python background renderer
-        draws a base frame for the scene to report, so none is awaited. The
-        decision is logged once per display.
+        """The reveal's one rule for one display, on every backend: its scene
+        is presentable and presented a frame, its background drew a photo
+        (the native core's background layer, or the degraded display's image
+        node, ``QuickSceneReadiness.background_drawn``), and its first
+        authored wallpaper was displayed (``_on_image_displayed``). Without
+        the last two the widgets would fade in over black or the desktop
+        (N5.2h audit item 1). The decision is logged once per display.
         """
 
-        if not (readiness.scene_presentable and readiness.frame_presented):
+        if not (
+            readiness.scene_presentable
+            and readiness.frame_presented
+            and readiness.background_drawn
+            and screen_index in self._authoritative_first_frame_screens
+        ):
             return False
         if screen_index not in self._startup_reveal_screens:
             from rendering.quick.bootstrap import quick_backend_api
 
             logger.info(
-                "[STARTUP_REVEAL] Display ready on its first presented frame "
-                "screen=%s generation=%s backend=%s: the wallpaper is the "
-                "native background layer, which fades its first photo in "
-                "itself, so no scene base frame is awaited (N5.2h)",
+                "[STARTUP_REVEAL] Display ready: its first wallpaper is "
+                "displayed and its background drew it screen=%s "
+                "generation=%s backend=%s",
                 screen_index,
                 int(self._runtime_generation or 0),
                 quick_backend_api(),
