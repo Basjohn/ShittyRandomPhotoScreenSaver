@@ -186,17 +186,22 @@ def test_the_owner_takes_the_core_backdrop_on_the_native_background_backend(qt_a
         del engine
 
 
-def test_the_owner_keeps_the_python_backdrop_elsewhere(qt_app, monkeypatch) -> None:
+def test_without_a_core_there_is_no_backdrop_and_never_a_python_one(qt_app, monkeypatch) -> None:
+    # N5.2h: one route per API; the degraded display (no core) keeps the cards' Normal fill, never the Python blit.
+    from PySide6.QtQuick import QQuickItem
+
     from rendering.quick.render import native_surface_backdrop as nsb
-    from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
-    from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner
+    from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner, backdrop_available
 
     monkeypatch.setattr(nsb, "native_backdrop_core", lambda: None)
     engine, root = _root(False, 0.0)
     try:
-        owner = SurfaceBackdropOwner(root, screen_index=0)
-        assert owner.native is False and isinstance(owner.item, SurfaceBackdropSource)
-        assert owner.source is owner.item
+        assert backdrop_available() is False
+        with pytest.raises(RuntimeError, match="native core"):
+            SurfaceBackdropOwner(root, screen_index=0)
+        assert [child for child in root.childItems() if isinstance(child, QQuickItem)] == []
+        monkeypatch.setattr(nsb, "native_backdrop_core", lambda: _FakeCore())                # control
+        assert backdrop_available() is True
     finally:
         root.deleteLater()
         qt_app.processEvents()

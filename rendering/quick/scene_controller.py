@@ -72,7 +72,7 @@ from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickInputState, QuickSceneReadiness
-from .surface_backdrop_owner import SurfaceBackdropOwner
+from .surface_backdrop_owner import SurfaceBackdropOwner, backdrop_available
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
 from .visualizer.render_host import VisualizerRenderCarryover
@@ -1195,6 +1195,8 @@ class QuickSceneController(QObject):
             if root is None or not _qobject_is_alive(root) or not self._readiness.admission_open:
                 return
             created = owner is None
+            if created and not backdrop_available():
+                return                     # N5.2h: the degraded display keeps the Normal fill (fail closed)
             if created:
                 owner = SurfaceBackdropOwner(root, screen_index=self._window.screen_index)
                 self._surface_backdrop_owner = owner

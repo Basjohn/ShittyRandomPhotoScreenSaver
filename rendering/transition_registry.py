@@ -342,9 +342,10 @@ def is_transition_available(setting_name: str) -> bool:
 
 #: The transition every other one becomes on a backend where it has no renderer (D10 point 2).
 BACKEND_FALLBACK_TRANSITION = "Crossfade"
-#: The backends the background family runs on: its presenter, the card backdrop and every transition switch as one
-#: unit (D10 point 4). On a backend without it no background surface is created (no wallpaper yet on Vulkan).
-BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ("opengl",)
+#: The backends the Python background family runs on: its presenter, the card backdrop and every transition switch as
+#: one unit (D10 point 4). N5.2h: none; every backend draws the background natively (the core's background layer and
+#: backdrop), and no Python background surface is created anywhere.
+BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ()
 
 
 def _backend(backend: str | None) -> str:

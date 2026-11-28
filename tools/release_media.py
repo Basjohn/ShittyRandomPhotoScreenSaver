@@ -237,8 +237,9 @@ def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[i
                             duration_ms: int, scenes, pair: tuple[int, int], seed: int) -> list[Path]:
     """One looping showcase: first -> second, a rest on the second, then second -> first in another
     direction/order. Frames sample the whole timeline at ``fps``; the encoder adds the loop's rest on
-    the first picture at both ends. Both runs' endpoints must be their photographs exactly."""
-    from tools.transition_contact_sheet import TransitionCapture
+    the first picture at both ends. Both runs' endpoints must be their photographs exactly. The frames
+    are the native core's, as the product draws them (``NativeTransitionCapture``)."""
+    from tools.native_transition_capture import NativeTransitionCapture
 
     first, second = (fit_scene(scenes[index], size) for index in pair)
     directory.mkdir(parents=True, exist_ok=False)
@@ -253,7 +254,7 @@ def capture_transition_loop(case: "MediaCase", directory: Path, *, size: tuple[i
 
     legs = ((first, second, seed), (second, first, return_seed(case, duration_ms, seed)))
     for leg, (source, destination, seed) in enumerate(legs):
-        capture = TransitionCapture(size[0], size[1], source=source, destination=destination)
+        capture = NativeTransitionCapture(size[0], size[1], source=source, destination=destination)
         try:
             run = capture.production_run(case.identity, duration_ms, case.settings, seed)
             for index in range(run_frames):
@@ -353,12 +354,14 @@ def content_box(frames: list[Path], background: tuple[int, int, int], margin: fl
 
 def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], fps: int,
                    duration_ms: int, clip=None, start_seconds: float = 0) -> list[Path]:
+    from tools.native_transition_capture import NativeTransitionCapture
     from tools.transition_contact_sheet import TransitionCapture
     from PIL import Image
 
     width, height = size
     directory.mkdir(parents=True, exist_ok=False)
-    capture = TransitionCapture(width, height)
+    # A transition is the native core's frame (as the product draws it); a Visualizer keeps its GL host's target.
+    capture = (NativeTransitionCapture if case.kind == "transition" else TransitionCapture)(width, height)
     frames = []
     host = None
     try:

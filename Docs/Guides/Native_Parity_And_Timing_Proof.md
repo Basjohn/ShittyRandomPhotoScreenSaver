@@ -133,6 +133,18 @@ L, response tools, timing parity) applies to it.
   first frame is measured from the run's start), cut from the frame trace by the run's records (the native layer's tick
   and end records on Vulkan). The verdict is no gap over 33 ms inside a run, which includes no first-run compile stall.
   No pre-port baseline and no timing parity.
+- **Python references are cached, never frozen code** (N5.2h, 28 Nov): the Python frames of `transition_route_check`
+  rule (a), `fullscreen_pass_check`, `background_layer_check` and `backdrop_pyramid_check` live in one cache
+  (`native/core/python/transition_references.py`, default `D:\Temp\Scratch\SRPSS\fast_proof\transition_references\
+  <check>\<key>.npz` + `.json`), keyed like the Visualizer references by a digest of what each frame is made of (check,
+  variant, overrides, the run's parameters, progress, dpr, sizes, the photos' pixels). The checks read it by default
+  (`--python-references cache`); `--python-references record` draws them live and stores them, which only a checkout
+  that still holds the Python renderers can do, so every entry is recorded before the Python GL code is deleted. A
+  missing entry, one made of something else, or one whose frames' digest differs from the one stored with it is
+  refused with the case named, never drawn in its place. Python's `--cost` figures (the route check's and the
+  background layer's) are stored baselines the same way, `tools/baselines/preflip/python_cost_<check>.json`, timed
+  live beside the native figures when recorded. The proof of a retarget is the same verdict live and from the
+  cache on the same cases, plus a control where one corrupted entry is refused.
 - Registration (offering it on Vulkan) waits for both.
 
 **An optimisation of a landed port.**

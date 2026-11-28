@@ -148,13 +148,26 @@ def _controller(qt_app):
 def _backdrops(root):
     from PySide6.QtQuick import QQuickItem
 
-    return [child for child in root.findChildren(QQuickItem) if child.objectName() == "surfaceBackdropSource"]
+    found, stack = [], list(root.childItems())       # the visual tree: the core's item has no QObject parent
+    while stack:
+        item = stack.pop()
+        if isinstance(item, QQuickItem):
+            if item.objectName() == "surfaceBackdropSource":
+                found.append(item)
+            stack.extend(item.childItems())
+    return found
 
 
-def test_all_normal_creates_nothing_and_the_first_material_creates_one_owner(qt_app) -> None:
+def test_all_normal_creates_nothing_and_the_first_material_creates_one_owner(qt_app, monkeypatch) -> None:
     from PySide6.QtGui import QColor
+    from rendering.quick.render import native_surface_backdrop as nsb
     from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
+    from tests.test_native_backdrop import _FakeCore
 
+    # N5.2h: the backdrop is the core's on every backend; a stand-in core makes it (its pixels: test_native_backdrop
+    # and backdrop_pyramid_check).
+    core = _FakeCore()
+    monkeypatch.setattr(nsb, "native_backdrop_core", lambda: core)
     window, factory, controller = _controller(qt_app)
     try:
         root = controller.scene_root
@@ -174,7 +187,8 @@ def test_all_normal_creates_nothing_and_the_first_material_creates_one_owner(qt_
                                    geometry=OverlayWidgetGeometry(300, 10, 200, 100),
                                    card_style=OverlayCardStyle(surface_material="glass"))
         owner = controller.surface_backdrop_owner
-        assert owner is not None and not owner.parked
+        assert owner is not None and not owner.parked and owner.native
+        assert len(core.made) == 1 and owner.item is core.made[0].item
         assert _backdrops(root) == [owner.item]
         for widget in (normal, glass):
             assert widget.item.property("cardSurfaceBackdrop") is owner.item
@@ -187,20 +201,19 @@ def test_all_normal_creates_nothing_and_the_first_material_creates_one_owner(qt_
         assert controller.surface_backdrop_owner is owner
         assert root.property("contextMenuSurfaceBackdrop") is owner.item
 
-        # Edges: a transition run sets continuous refresh, clearing it does a one-shot.
-        assert owner.item.armed is True        # the creation one-shot is pending
+        # The last material gone: the consumers are unbound and the core's item parked (its QRhi objects go).
         controller.apply_context_menu_surface_material("normal")
         host.retire_widget(glass)
-        assert owner.parked is True
+        assert owner.parked is True and core.made[0].calls[-1] == ("parked", True)
         assert root.property("contextMenuSurfaceBackdrop") is None
         assert normal.item.property("cardSurfaceBackdrop") is None
-        assert owner.item.armed is False
 
         # A material in the same generation wakes the parked owner instead of making another.
         host.create_widget(object_name="mica", model_identity="media",
                            geometry=OverlayWidgetGeometry(10, 200, 200, 100),
                            card_style=OverlayCardStyle(surface_material="mica"))
         assert controller.surface_backdrop_owner is owner and owner.parked is False
+        assert ("parked", False) in core.made[0].calls and len(core.made) == 1
         assert len(_backdrops(root)) == 1
     finally:
         controller.quiesce_for_retirement()
@@ -209,155 +222,46 @@ def test_all_normal_creates_nothing_and_the_first_material_creates_one_owner(qt_
         qt_app.processEvents()
 
 
-def test_owner_follows_transition_and_image_edges(qt_app) -> None:
-    from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner
-    from PySide6.QtQuick import QQuickItem
-
-    root = QQuickItem()
-    root.setWidth(400)
-    root.setHeight(300)
-    owner = SurfaceBackdropOwner(root, screen_index=0)
-    item = owner.item
-    owner.set_materials(frozenset({"glass", "mica"}))
-    owner.set_transition_active(True)
-    assert item._shared.continuous is True
-    from rendering.quick.widgets.surface_material import TRANSITION_REFRESH_INTERVAL_S
-    assert item._shared.min_interval_s == min(TRANSITION_REFRESH_INTERVAL_S["glass"],
-                                              TRANSITION_REFRESH_INTERVAL_S["mica"])
-    serial = item._shared.requested_serial
-    owner.set_transition_active(False)
-    assert item._shared.continuous is False
-    assert item._shared.requested_serial == serial + 1   # the final frame / adopted wallpaper
-    owner.note_background_changed()
-    assert item._shared.requested_serial == serial + 2
-    root.setWidth(500)                                    # geometry edge
-    assert item._shared.requested_serial == serial + 3 and item.width() == 500
-    owner.park()
-    owner.note_background_changed()
-    owner.set_transition_active(True)
-    assert item._shared.requested_serial == serial + 3 and item._shared.continuous is False
-    root.deleteLater()
-    qt_app.processEvents()
-
-
 # --------------------------------------------------------------------------- pixels
 
 
-@pytest.fixture()
-def material_scene(qt_app):
-    from tools.surface_material_capture import MaterialScene
-
-    if qt_app.platformName().lower() != "windows":
-        pytest.skip("hidden GL scene needs the Windows QPA")
-    scene = MaterialScene(640, 360)
-    yield scene
-    scene.close()
+# N5.2h: the backdrop is the core's on every backend. Its pixels (Normal exact before the first photo and when
+# parked, the material over what is beneath, following a running transition) are judged on the native route by
+# native/core/python/backdrop_pyramid_check.py (test_the_native_backdrop_rounds_pass_on_opengl below) and against
+# the Python blit on the same frames by its "blit" round; the Python blit's own pixel tests went with the switch.
 
 
-def _flat_image(width, height, left, right, identity):
-    from rendering.quick.image_state import PresentationImage
+def test_the_native_backdrop_rounds_pass_on_opengl(tmp_path) -> None:
+    """The check's OpenGL rounds in their own process (Qt Quick's graphics API is process-wide), hidden hosts only:
+    Normal exact before the first photo and when parked, one build per change and none at rest, the cards following a
+    running transition, the owner's route native, and the native backdrop against the blit on the same frames. Needs
+    the built module (only GitHub builds it); skipped where this checkout has none."""
+    import json
+    import os
+    import subprocess
+    import sys
 
-    row = bytes(left) * (width // 2) + bytes(right) * (width - width // 2)
-    return PresentationImage(identity, identity, (float(width), float(height)), 1.0, (width, height),
-                             width * 4, row * height)
+    from rendering.native import loader
 
-
-def test_normal_is_exact_a_material_blurs_what_is_beneath_and_parking_restores_normal(material_scene) -> None:
-    import numpy
-    from PySide6.QtGui import QColor
-    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
-
-    scene = material_scene
-    image = _flat_image(640, 360, (220, 40, 40, 255), (40, 60, 220, 255), "split")
-    scene.set_wallpaper(image)
-    style = OverlayCardStyle(background_color=QColor(20, 20, 20, 77), border_width=0.0, shadow_enabled=False)
-    card = scene.host.create_widget(object_name="card", model_identity="clock",
-                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160), card_style=style)
-    scene.presentations = []
-    scene.render(4)
-    normal = numpy.asarray(scene.read(), numpy.int16)
-
-    scene.set_material("acrylic")
-    scene.render(1)
-    # Fail closed: the frame that creates the backdrop samples no texture yet and shows Normal.
-    first = numpy.asarray(scene.read(), numpy.int16)
-    # Exact inside the corner radius; the 1 px rim differs only by antialiasing method (vertex AA vs the
-    # shader's SDF), which a card border covers.
-    assert numpy.array_equal(first[110:250, 180:460], normal[110:250, 180:460])
-    assert numpy.abs(first - normal).max() <= 12
-    scene.render(3)
-    acrylic = numpy.asarray(scene.read(), numpy.int16)
-    inside_left, inside_right = acrylic[180, 200], acrylic[180, 440]
-    # Outside the card nothing changed; inside, the backdrop's colour follows the wallpaper beneath.
-    assert numpy.array_equal(normal[20:90], acrylic[20:90])
-    assert inside_left[0] > inside_left[2] and inside_right[2] > inside_right[0]
-    # Blurred: across the colour edge under the card the material changes gradually.
-    row = acrylic[180, 300:340, 0]
-    assert numpy.all(numpy.abs(numpy.diff(row)) < 12)
-    assert not numpy.array_equal(normal[110:250, 180:460], acrylic[110:250, 180:460])
-
-    scene.set_material("normal")
-    scene.render(3)
-    assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), normal)
-    assert scene.owner.parked is True
-    card.item.deleteLater()
-
-
-def test_first_publish_draws_the_steady_blur(material_scene) -> None:
-    """R-NEW: the backdrop's first publish draws what a later refresh draws (Qt's one-time generateMips on the
-    wrapped texture overwrote the heavy level on the first card frame, which has no refresh of its own)."""
-    import numpy
-    from PySide6.QtGui import QColor
-    from rendering.quick.image_state import PresentationImage
-    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
-
-    scene = material_scene
-    # A busy wallpaper (24 px blocks of random colour): the light level keeps the blocks, the heavy one does not.
-    blocks = numpy.random.default_rng(7).integers(0, 256, (360 // 24 + 1, 640 // 24 + 1, 4), dtype=numpy.uint8)
-    pixels = numpy.repeat(numpy.repeat(blocks, 24, axis=0), 24, axis=1)[:360, :640].copy()
-    pixels[..., 3] = 255
-    scene.set_wallpaper(PresentationImage("blocks", "blocks", (640.0, 360.0), 1.0, (640, 360), 640 * 4,
-                                          pixels.tobytes()))
-    card = scene.host.create_widget(object_name="card", model_identity="clock",
-                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160),
-                                    card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
-                                                                border_width=0.0, shadow_enabled=False))
-    scene.presentations = []
-    scene.set_material("acrylic")
-    scene.render(4)
-    first = numpy.asarray(scene.read(), numpy.int16)[110:250, 180:460]
-    scene.owner.item.request_refresh()
-    scene.render(3)
-    steady = numpy.asarray(scene.read(), numpy.int16)[110:250, 180:460]
-    assert scene.owner.item.texture_ready
-    assert numpy.abs(first - steady).max() <= 1
-    card.item.deleteLater()
-
-
-def test_material_follows_a_running_transition(material_scene) -> None:
-    import numpy
-    from PySide6.QtGui import QColor
-    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
-
-    scene = material_scene
-    red = _flat_image(640, 360, (220, 40, 40, 255), (220, 40, 40, 255), "red")
-    green = _flat_image(640, 360, (40, 200, 60, 255), (40, 200, 60, 255), "green")
-    scene.set_wallpaper(red)
-    scene.host.create_widget(object_name="card", model_identity="clock",
-                             geometry=OverlayWidgetGeometry(170, 100, 300, 160),
-                             card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
-                                                         shadow_enabled=False))
-    scene.presentations = []
-    scene.set_material("glass")
-    scene.render(4)
-    scene.start_transition("crossfade", red, green, 0.0)
-    scene.render(2)
-    early = numpy.asarray(scene.frame_at("crossfade", red, green, 0.1), numpy.int16)[180, 320]
-    late = numpy.asarray(scene.frame_at("crossfade", red, green, 0.9), numpy.int16)[180, 320]
-    # The legibility panel holds the card text's floor, so a saturated wallpaper is dimmed;
-    # what follows the transition is the hue under the card (red early, green late).
-    assert early[0] > early[1] + 10 and late[1] > late[0] + 10
-    assert late[1] - early[1] > 15 and early[0] - late[0] > 15
+    module_dir = ROOT / "release" / "native_module"
+    if os.name != "nt" or not (module_dir / f"{loader.MODULE_NAME}.pyd").is_file():
+        pytest.skip(f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd")
+    record_path = tmp_path / "child.json"
+    rounds = ("rest", "transition", "route", "blit")
+    env = os.environ.copy()
+    env.pop("QT_QPA_PLATFORM", None)        # hidden hosts need Qt's own platform (offscreen has no GPU device)
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "native" / "core" / "python" / "backdrop_pyramid_check.py"), "--child", "--api",
+         "opengl", "--rounds", *rounds, "--repo", str(ROOT), "--module-dir", str(module_dir), "--out-dir",
+         str(tmp_path), "--child-json", str(record_path)],
+        capture_output=True, text=True, timeout=1800, cwd=str(ROOT), env=env)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert not record.get("error"), record.get("error")
+    for name in rounds:
+        entry = record[name]
+        assert entry["pass"], {k: v for k, v in entry.get("checks", {}).items() if not v} or entry.get("error")
+    assert record["live_hosts_at_end"] == 0
 
 
 # --------------------------------------------------------------------------- legibility
@@ -394,75 +298,6 @@ def test_text_runs_change_only_on_an_active_material() -> None:
     assert "readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]" in text
     assert "&& !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)" in text
     assert "&& !shadowedText.onSurfaceMaterial" in text
-
-
-def _text_run(scene, card, *, text: str, color: str, pixel_size: int, soft: bool):
-    from PySide6.QtCore import QUrl
-    from PySide6.QtQml import QQmlComponent
-    from PySide6.QtQuick import QQuickItem
-
-    engine = scene.scene.qml_context.engine()
-    component = QQmlComponent(engine)
-    component.setData(
-        (f'import QtQuick\nShadowedText {{ x: 30; y: 40; width: 220; height: 20; text: "{text}"; '
-         f'color: "{color}"; font.pixelSize: {pixel_size}; shadowEnabled: true; '
-         f'shadowSoft: {"true" if soft else "false"}; shadowColor: "#96000000" }}').encode(),
-        QUrl.fromLocalFile(str(QML / "_test_run.qml")))
-    item = component.create(scene.scene.qml_context)
-    assert item is not None, component.errorString()
-    content = card.item.findChild(QQuickItem, "overlayCardContent")
-    item.setParentItem(content)
-    item.setParent(content)
-    return item
-
-
-def test_small_text_meets_4_5_on_a_busy_backdrop_and_normal_is_untouched(material_scene) -> None:
-    import numpy
-    from PySide6.QtGui import QColor
-    from PySide6.QtQuick import QQuickItem
-    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
-    from tools.surface_material_capture import measure_text_legibility
-
-    scene = material_scene
-    # Busy, bright stripes under a 12 px run in the card's text colour on a dark-theme Glass
-    # card: the card's own legibility panel brings it to 4.5:1, with no plate of the run's own.
-    width, height = 640, 360
-    stripes = bytearray()
-    for _y in range(height):
-        for x in range(width):
-            stripes += bytes((250, 240, 150, 255)) if (x // 6) % 2 else bytes((235, 200, 245, 255))
-    from rendering.quick.image_state import PresentationImage
-
-    scene.set_wallpaper(PresentationImage("stripes", "stripes", (640.0, 360.0), 1.0, (width, height),
-                                          width * 4, bytes(stripes)))
-    card = scene.host.create_widget(object_name="card", model_identity="clock",
-                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160),
-                                    card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
-                                                                shadow_enabled=False))
-    scene.presentations = []
-    run = _text_run(scene, card, text="03D AGO 25M", color="#e6e6e6", pixel_size=12, soft=True)
-    scene.render(4)
-    out = Path(__file__).resolve().parent / "_surface_material_run.png"
-    try:
-        normal_rows = measure_text_legibility(scene, out)
-        shadow = run.findChild(QQuickItem, "shadowedTextShadow")
-        assert shadow.isVisible()
-        normal = numpy.asarray(scene.read(), numpy.int16)
-
-        scene.set_material("glass")
-        scene.render(4)
-        rows = measure_text_legibility(scene, out)
-        assert run.findChild(QQuickItem, "textLegibilityPlate") is None
-        assert shadow.isVisible() is False            # no soft halo on a material
-        mine = [row for row in rows if row["text"].startswith("03D")]
-        assert mine and mine[0]["p5"] >= 4.5, (mine, normal_rows)
-
-        scene.set_material("normal")
-        scene.render(3)
-        assert shadow.isVisible()
-        assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), normal)
-    finally:
-        out.unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------- per-family row

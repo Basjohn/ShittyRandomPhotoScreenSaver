@@ -33,3 +33,27 @@ def test_a_transition_showcase_runs_there_and_back_with_exact_ends(qt_app, tmp_p
 
     assert rgb(frames[0]) == first and rgb(frames[-1]) == first           # the loop's ends meet
     assert all(rgb(frames[run_frames - 1 + k]) == second for k in range(hold + 1))
+
+
+@pytest.mark.qt
+def test_the_showcase_frames_are_the_native_cores(qt_app, tmp_path: Path, monkeypatch) -> None:
+    """Switch point 2: every showcase frame is drawn by the native background layer (the product's), none by the
+    Python GL host."""
+    from tools import native_transition_capture as native
+    from tools.release_media import capture_transition_loop
+
+    drawn: list[int] = []
+    original = native.NativeTransitionCapture.render
+
+    def counted(self, run, progress):
+        result = original(self, run, progress)
+        drawn.append(self.layer.runs)
+        return result
+
+    monkeypatch.setattr(native.NativeTransitionCapture, "render", counted)
+    scenes = tuple(Image.new("RGB", (400, 225), colour) for colour in ((200, 40, 40), (40, 40, 200)))
+    frames = capture_transition_loop(MediaCase("transition", "wipe", "default", "Canonical"), tmp_path / "frames",
+                                     size=(160, 90), fps=10, duration_ms=500, scenes=scenes, pair=(0, 1), seed=713)
+    run_frames = round(500 * 10 / 1000) + 1
+    assert frames and len(drawn) == 2 * run_frames - 1                    # each leg's frames (the second's first skipped)
+    assert all(runs >= 1 for runs in drawn)                               # the core drew the run each time
