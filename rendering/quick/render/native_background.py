@@ -199,6 +199,12 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     populations = {population.draw: population for population in getattr(scene, "populations", ())}
     for population in populations.values():
         passes.extend(population_compute(renderer, population))
+    # N5.2h: the ghost passes (their own R8 target, reading only the pictures and the environment) go before every
+    # scene pass, so the scene target is drawn in one run: drawn between its passes, they split it into two runs, each
+    # paying the multisampled attachments' resolves at its end (0.43 ms at 4K on OpenGL, 0.13 on Vulkan, for
+    # crumble_both_4x), work Python never does (its framebuffer switch keeps the samples). Same pixels: nothing the
+    # ghosts read is written by a scene pass.
+    ghost_at = len(passes)
     for p in scene.passes:
         samplers = tuple(PassSampler(name, textures[kind], "nearest" if kind in nearest else "linear", "clamp",
                                      "linear" if kind in mipped else "none") for name, kind in p.samplers)
@@ -230,9 +236,10 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         if target == "ghosts":
             # One pass a ghost, each with its own values (<member>@<pass>): MAX-blended, no depth (trails.py).
             for age in range(SCENE3D_TRAIL_GHOSTS):
-                passes.append(ModePass(ghost_pass_name(p.name, age), fragment,
-                                       BlendState(("max", "one", "one"), ("max", "one", "one")), samplers,
-                                       target=SCENE_GHOSTS, geometry=geometry))
+                passes.insert(ghost_at, ModePass(ghost_pass_name(p.name, age), fragment,
+                                                 BlendState(("max", "one", "one"), ("max", "one", "one")), samplers,
+                                                 target=SCENE_GHOSTS, geometry=geometry))
+                ghost_at += 1
             continue
         passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
                                depth_test="less" if p.depth else None,
