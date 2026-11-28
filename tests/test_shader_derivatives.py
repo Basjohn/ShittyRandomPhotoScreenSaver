@@ -4,7 +4,7 @@ R-210).
 A derivative after a non-uniform discard or return, or inside a branch the quad's lanes may take differently, is
 undefined in GLSL: the quad's other lanes may be gone or elsewhere. OpenGL keeps a discarded lane running as a helper;
 Vulkan's discard (SPIR-V OpKill) ends it, so Spectrum's rim feather, taken after its corner discards, differed by up to
-15 levels beside every discarded pixel. The rule binds every 2D mode's shader (``_ALL_SHADER_FILES``: the native
+15 levels beside every discarded pixel. The rule binds every 2D mode's shader (``_ALL_SHADER_FILES`` and Waveform Ribbon's pass files: the native
 route's ports take them as they are); the check itself takes any fragment source.
 
 Textual and conservative. A *derivative* is ``fwidth``/``dFdx``/``dFdy`` in any precision, an implicit-LOD ``texture``
@@ -292,9 +292,15 @@ def _mode_sources() -> list[tuple[str, str]]:
 
     from widgets.spotify_visualizer import shaders
 
+    from rendering.gl_programs.waveform_shader_files import PASS_FILES
+
     folder = Path(shaders.__file__).resolve().parent
-    return [(mode, shaders.compose_shader_source(folder / filename))
-            for mode, filename in sorted(shaders._ALL_SHADER_FILES.items())]
+    sources = [(mode, shaders.compose_shader_source(folder / filename))
+               for mode, filename in sorted(shaders._ALL_SHADER_FILES.items())]
+    # Waveform Ribbon draws from its own pass files, not one file a mode (waveform_shader_files.PASS_FILES).
+    sources += [("waveform_ribbon", shaders.compose_shader_source(folder / name))
+                for name, _body, _pass in PASS_FILES if name.endswith(".frag")]
+    return sources
 
 
 @pytest.mark.parametrize("mode, source", _mode_sources(), ids=lambda value: str(value)[:20])
