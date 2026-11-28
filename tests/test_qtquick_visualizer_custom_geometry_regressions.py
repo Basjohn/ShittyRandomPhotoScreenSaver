@@ -40,7 +40,8 @@ class _Scene:
 
 
 class _Unit:
-    def __init__(self, scene, *, visualizer_owner=None) -> None:
+    def __init__(self, scene, *, visualizer_owner=None, screen_index=0) -> None:
+        self.screen_index = screen_index
         self.runtime = SimpleNamespace(scene_controller=scene)
         self.visualizer_owner = visualizer_owner
 

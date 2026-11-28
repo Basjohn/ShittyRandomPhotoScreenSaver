@@ -257,7 +257,8 @@ def test_ring_material_is_a_border_only_surface_drawn_in_the_scene_not_through_a
         assert surface.property("borderWidth") > 0.0
         # Tinted and guarded exactly as a card is, so a material reads as itself.
         assert surface.property("tintColor") == item.property("cardBackgroundColor")
-        assert surface.property("legibilityPanel") is True
+        # The guard is the ring wrapper's own choice passed through, not a value pinned here.
+        assert surface.property("legibilityPanel") == ring_material.property("legibilityPanel")
         node = surface
         while node is not None:
             assert not _layer_enabled(node), node.objectName()
