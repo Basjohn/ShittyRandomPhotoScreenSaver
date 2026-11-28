@@ -178,7 +178,8 @@ Continue the native sequence below with the repaired timing receipts. The report
     Done 28 Nov (retired at 221k, branch pushed): route + cost PASS both APIs, hitch rows wait for Display 1, suite
     reds sorted (see the Proof box). **Opus Medium `aa3b364fd31f5d860`** (own worktree, merges aa7af's): the three
     switch-caused retargets + the exit-crash attribution. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
-    main): the 9 reds that predate the switch.
+    main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
+    with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
