@@ -175,6 +175,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     and the admission wording red. Done, built `f9d4399e`, verified. **Sonnet Medium `aa7af460a1382fb30`** (28 Nov, own
     worktree, merges ad3b5's): the switch's Proof box minus D1 (only Display 0 on): route + `--cost` both APIs, hitch
     rows, isolated suite.
+    Done 28 Nov (retired at 221k, branch pushed): route + cost PASS both APIs, hitch rows wait for Display 1, suite
+    reds sorted (see the Proof box). **Opus Medium `aa3b364fd31f5d860`** (own worktree, merges aa7af's): the three
+    switch-caused retargets + the exit-crash attribution. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
+    main): the 9 reds that predate the switch.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
