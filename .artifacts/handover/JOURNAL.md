@@ -1,3 +1,26 @@
+# N5.2h "Switch-caused and NOT fixed" (proof run 28 Nov), agent aa3b364fd31f5d860
+
+2026-11-28. Merged worktree-agent-aa7af460a1382fb30 (9744222bb). Module f9d4399e copied into release/native_module.
+- Item 1 (card-material pixel tests) DONE: tools/surface_material_capture.NativeHiddenScene (the scene root as the
+  kept hidden native host's content; timestamps=True owns a timed host for --cost), MaterialScene.settle_background
+  (upload jobs + wall-time fade), measure_cost on the host's QRhi frame timer; expanded_visualizer_evidence
+  HiddenDisplayHost attaches bootstrap.host_quick_window + set_wallpaper (the clip contract's glass cases need a photo
+  to build the backdrop from); test_hidden_scene_retirement retargeted to the core's live counts (negative controls:
+  no DeferredDelete delivery -> nothing destroyed in close(); no sync frame -> backdrop pyramid/resources held).
+  54 + 57 pass. Evidence rendering/n52h_card_material_native/20261128_retarget.
+- Item 1 commit 9f4a5b731.
+- Item 3 DONE 87c0063f5: discovery evaluates composer calls nested in composers (population_packs, propagation_sources)
+  and local-import parts; forwarded sites count as covered when every part is covered. 13 pass, 1 predating red (4 raw
+  module-level fragments disintegrate/volumetric; fixing changes the baked packs -> needs a build). Evidence
+  native_core/n52h_shader_readiness/20261128_native_pack_discovery.
+- Exit-crash attribution DONE 418d137ce (comment in test_quick_exit_routes; by reading f12427a2e: BackgroundRenderItem's
+  direct sceneGraphInvalidated slot ran Python on the render thread in the exit sweep). Control unchanged.
+- Item 2 NOT DONE: tools/qtquick_render_node_smoke.py has 124 reads of the deleted node's telemetry (pixel samples,
+  midpoint colours, GL init/release/upload counts, hide/show polls) and runs QuickDisplayRuntime on physical screens,
+  which this agent may not run; an unverifiable rewrite was not committed. Decomposition in the report.
+- Side note: the core's composite handle table keeps a null entry when a layer item dies with its root (close_native_layer skipped).
+
+---- previous agent's journal ----
 # N5.2h switch side defect: Qt GL sets sampler state on multisampled textures (GL_INVALID_ENUM), agent ad3b55
 
 2026-11-28. Merged worktree-agent-a6b16aeef142dc895 (7dc955488). Module 163d41b8 copied into release/native_module.
