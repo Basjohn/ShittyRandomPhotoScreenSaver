@@ -109,8 +109,8 @@ Continue the native sequence below with the repaired timing receipts. The report
     crossfade_control` (used by `visualizer_cost_probe.py`, `bubble_particle_glow.py` perf) goes to a native crossfade
     control; `overhead_baseline.py`, `conventions_identity.py` and the transition-drawing `test_qtquick_*`/
     `test_transition_*`/mixed scene3d cases retarget to the native route or go. Side defects (pre-existing, both fail
-    identically on old code): `tests/test_extruded_bubble_trails_background_gpu.py` (`eb._glass(...)` has no
-    `uBackground`); `tools/extruded_bubble_coverage_probe.py:103` `min()` of an empty array.
+    identically on old code), both fixed and merged 28 Nov (`e895f7680` stale assertion after `994beba7f`; `2472a342d` probe never fed `aLensRadius`): `tests/test_extruded_bubble_trails_background_gpu.py` (`eb._glass(...)` has no
+    `uBackground`); `tools/visualizer_replay/extruded_bubble_coverage_probe.py:103` `min()` of an empty array.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
