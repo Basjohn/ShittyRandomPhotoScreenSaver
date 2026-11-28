@@ -137,6 +137,70 @@ def test_every_anonymous_block_is_named_alike_in_every_stage():
     assert "#define trails_u_time blk_EbTrails.trails_u_time" in _instanced(text, "trails")
 
 
+def _main_body(text: str) -> str:
+    """``main``'s body, preprocessed for the conditionals inside it (``#ifdef``/``#ifndef``/``#else``/``#endif``
+    against the names the text defines before it), its comments dropped."""
+    head, rest = text.split("void main() {", 1)
+    defined = set(re.findall(r"^\s*#define (\w+)", head, re.M))
+    depth, end = 1, 0
+    for end, char in enumerate(rest):
+        depth += {"{": 1, "}": -1}.get(char, 0)
+        if depth == 0:
+            break
+    kept, live = [], [True]
+    for line in rest[:end].splitlines():
+        directive = line.strip()
+        if directive.startswith(("#ifdef ", "#ifndef ")):
+            name = directive.split()[1]
+            live.append(live[-1] and ((name in defined) == directive.startswith("#ifdef ")))
+        elif directive == "#else":
+            live[-1] = not live[-1] and live[-2]
+        elif directive == "#endif":
+            live.pop()
+        elif directive.startswith("#"):
+            raise ValueError(f"an unhandled directive in main: {directive}")
+        elif live[-1]:
+            kept.append(line.split("//", 1)[0])
+    return "\n".join(kept)
+
+
+def _unwritten_depth_exits(body: str) -> int:
+    """How many of ``main``'s exits (each ``return;`` and its end) leave ``gl_FragDepth`` unwritten. A write counts
+    for its own block and the blocks it encloses (a write inside an ``if`` does not count after it); ``discard``
+    is no exit (it writes nothing)."""
+    unwritten, written = 0, [False]
+    for token in re.findall(r"gl_FragDepth\s*=|return\s*;|[{}]", body):
+        if token == "{":
+            written.append(written[-1])
+        elif token == "}":
+            written.pop()
+        elif token.startswith("gl_FragDepth"):
+            written[-1] = True
+        elif not written[-1]:
+            unwritten += 1
+    return unwritten + (not written[-1])
+
+
+def test_every_exit_of_a_depth_writing_glass_fragment_writes_its_depth():
+    """GLSL: a fragment shader that writes ``gl_FragDepth`` on one path leaves the depth undefined on any path that
+    does not, and the depth test reads that. The marine snow's path of the bead fragment returned without its write
+    and Vulkan drew different snow on two runs of the same delivery (N5.6, 28 Nov)."""
+    from rendering.gl_programs import extruded_bubble_program as p
+    from rendering.native.extruded_bubble_shaders import TRANSPARENT, shader_files
+
+    files = shader_files()
+    texts = {f"eb_{program}.frag": files[f"eb_{program}.frag"] for program in TRANSPARENT}
+    texts.update(BUBBLE_FRAGMENT=p.BUBBLE_FRAGMENT, CLUSTER_FRAGMENT=p.CLUSTER_FRAGMENT)
+    writing = [name for name, text in texts.items() if "gl_FragDepth" in _main_body(text)]
+    assert {"eb_shells.frag", "eb_beads.frag", "eb_clusters.frag", "BUBBLE_FRAGMENT"} <= set(writing)
+    assert {name: _unwritten_depth_exits(_main_body(texts[name])) for name in writing} == {n: 0 for n in writing}
+    # Control: the snow path as it was (its write left out) is an exit without the write.
+    snow = "        gl_FragDepth = sceneSphereDepth(front, uProjection);\n        sceneTransparent(mix(uShaftColour"
+    assert files["eb_beads.frag"].count(snow) == 1
+    before = files["eb_beads.frag"].replace(snow, "        sceneTransparent(mix(uShaftColour")
+    assert _unwritten_depth_exits(_main_body(before)) == 1
+
+
 def test_the_committed_packs_are_what_the_texts_bake_to():
     pytest.importorskip("PySide6")
     from tools.eb_native_shaders import statuses
