@@ -1,3 +1,16 @@
+# Fix 7, in-process pipeline warm-up (agent a37b0453cae98f514), started 2026-11-28
+Merged worktree-agent-aeba3f08a60b6a572 (642847a5a); module c9b9f0a6 copied to release/native_module (ignored).
+- Box 1 attribution DONE (evidence native_core/n5_2h/20261128_fix7_attribution/, hidden host OpenGL 4K, idle):
+  render-side first record per run 15-27 ms, the SAME on run 1 and runs 2-3, also with Qt's disk caches and NVIDIA's
+  shader disk cache cold; Crossfade (one trivial pipeline) 10-18 ms of it. Pipeline building <= ~5-10 ms, inside the noise,
+  recurs every run. GUI-thread first start unwarmed: ET 80, Jigsaw 166-174, VD 52, Dis 45 ms (later runs ~6); with the
+  product's warm units ~6 ms except Jigsaw 94 (run geometry built on the GUI thread: the probe has no COMPUTE prepare).
+  One warm unit (the transition module's import) is 47-57 ms for ET/Jigsaw (unbounded unit, side defect).
+- Decision: NO C++ warm entry (pipeline building is not the stall's cause); nothing built for the core; reported to lead.
+- Audit low (coordinator): SHARED_RENDERER_MODULES drops mip_chain and scene3d.environment (no renderer imports them;
+  mip_chain moved to _RUN_MODULES before environment). Test + control in test_transition_warm_units.py. 21 passed.
+
+---- aeba3 journal below ----
 # N5.2h switch audit fixes (items 1-6 + lows), agent aeba3f08a60b6a572
 
 started 2026-11-28. Merged worktree-agent-aa3b364fd31f5d860. Module c9b9f0a6 copied.
