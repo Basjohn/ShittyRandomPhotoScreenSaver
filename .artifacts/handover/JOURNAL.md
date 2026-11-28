@@ -12,5 +12,10 @@ Order: 1 reveal waits for first wallpaper; 2 hidden-host owner guard; 3 fullscre
   through the owner (closed via close_native_hidden_host). eb_core_check/waveform_check STAY allowlisted (validated
   Vulkan instance per child + per-round sizes the kept host cannot give) with the reason in the test: deviation to report.
   Control: old bootstrap+capture fail both owner tests (evidence 20261128_audit_item2_hidden_host). 91 passed / 8 files.
+- Item 3 DONE: round_shape reads block values GL-free (_values/_run_without_gl). TransitionCapture import guard
+  (DELETED_NAMES in test_python_route_deleted; marker lines excepted). Decision: record-only Python GL code
+  (draw_python_frames, product_capture, _product_python, _python_stages, hold_python_clock) kept marked but it is
+  DEAD (TransitionCapture gone, record on an old checkout runs that checkout's tools): report as backlog deletion.
+  Control: old fsc fails the guard (evidence 20261128_audit_item3_round_shape).
 
 ---- previous agent's journal (aa3b364) is in git history of .artifacts/handover/JOURNAL.md ----

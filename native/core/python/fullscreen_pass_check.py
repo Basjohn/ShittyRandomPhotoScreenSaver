@@ -501,7 +501,7 @@ def draw_python_frames(images, size: tuple[int, int], variants: Mapping[str, Map
     """The Python renderer's frames (the production GL host) and its block values, per variant and progress."""
     import numpy as np
 
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.transition_contact_sheet import TransitionCapture  # record mode only
 
     capture = TransitionCapture(size[0], size[1], *images)
     out: dict = {}
@@ -587,29 +587,23 @@ def round_shape(core, folder: Path) -> dict:
     card = probe_rings.harness_card(CARD, 1.0)
     target = target_pixels(1.0)
     images = photos(PHOTOS, target)
-    from tools.transition_contact_sheet import TransitionCapture
-
-    capture = TransitionCapture(target[0], target[1], *images)
-    try:
-        for variant, overrides in VARIANTS.items():
-            transition_id = variant_transition(variant)
-            run = runs(capture, transition_id, overrides)
-            values = renderer_class(transition_id)().block_values(capture.frame(run, 0.5))
-            core_values, settings, record = split_values(transition_id, values)
-            members = block_members(transition_id)
-            filled = sorted([*core_values, *settings, *record])
-            checks[f"{variant}_every_member_filled_once"] = filled == sorted(members)
-            agreement = core_agreement(core_values, card, target)
-            checks[f"{variant}_core_members_agree"] = bool(agreement) and all(agreement.values())
-            facts.setdefault("split", {})[variant] = {"core": sorted(core_values), "settings": sorted(settings),
-                                                      "record": sorted(record), "agreement": agreement}
-            blocks, info = core.mode_blocks(frame_schema(transition_id),
-                                            [transition_pass(transition_id, folder / f"blocks_{variant}")],
-                                            settings, frame_schema(transition_id).encode(record), card, target)
-            checks[f"{variant}_core_packs_the_split"] = len(blocks) == 1 and set(info["passes"][0]["sources"]) == set(
-                members)
-    finally:
-        capture.close()
+    for variant, overrides in VARIANTS.items():
+        transition_id = variant_transition(variant)
+        # N5.2h: the run's block values with no GL draw (the Python transition host is deleted).
+        values = _values(transition_id, overrides, images, target, {}, variant)[0.5]
+        core_values, settings, record = split_values(transition_id, values)
+        members = block_members(transition_id)
+        filled = sorted([*core_values, *settings, *record])
+        checks[f"{variant}_every_member_filled_once"] = filled == sorted(members)
+        agreement = core_agreement(core_values, card, target)
+        checks[f"{variant}_core_members_agree"] = bool(agreement) and all(agreement.values())
+        facts.setdefault("split", {})[variant] = {"core": sorted(core_values), "settings": sorted(settings),
+                                                  "record": sorted(record), "agreement": agreement}
+        blocks, info = core.mode_blocks(frame_schema(transition_id),
+                                        [transition_pass(transition_id, folder / f"blocks_{variant}")],
+                                        settings, frame_schema(transition_id).encode(record), card, target)
+        checks[f"{variant}_core_packs_the_split"] = len(blocks) == 1 and set(info["passes"][0]["sources"]) == set(
+            members)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 

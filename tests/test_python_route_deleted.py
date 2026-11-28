@@ -15,6 +15,8 @@ DELETED = (
     "rendering.quick.render.surface_backdrop", "rendering.quick.transitions.render_host",
 )
 NAMES = ("background_family_available_on_backend", "BACKGROUND_FAMILY_BACKENDS", "_publishes_frame_presented")
+#: Names deleted from modules that stay: the Python transition host's GL capture (now ``NativeTransitionCapture``).
+DELETED_NAMES = {"tools.transition_contact_sheet": ("TransitionCapture",)}
 RECORD_ONLY = "# record mode only"
 SCANNED = ("rendering", "core", "ui", "widgets", "tools", "native/core/python", "tests")
 
@@ -61,6 +63,27 @@ def test_the_deleted_python_route_modules_are_gone():
 def test_nothing_imports_a_deleted_python_route_module():
     found = {dotted: _importers(dotted) for dotted in DELETED}
     assert {dotted: hits for dotted, hits in found.items() if hits} == {}
+
+
+def _name_importers(module: str, name: str) -> list[str]:
+    """Code lines importing ``name`` from ``module`` (a line ending in the record-only marker excepted), and the
+    module still defining it."""
+    pattern = re.compile(rf"from\s+{re.escape(module)}\s+import\s+[^\n#]*\b{name}\b")
+    hits = []
+    for path in _sources():
+        lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
+        if any(pattern.search(line) and not line.rstrip().endswith(RECORD_ONLY) for line in lines):
+            hits.append(path.relative_to(ROOT).as_posix())
+    owner = (ROOT / Path(*module.split("."))).with_suffix(".py")
+    if re.search(rf"^(class|def)\s+{name}\b|^{name}\s*=", owner.read_text(encoding="utf-8"), re.MULTILINE):
+        hits.append(f"{owner.relative_to(ROOT).as_posix()} (defines it)")
+    return hits
+
+
+def test_nothing_imports_a_deleted_python_route_name():
+    found = {f"{module}.{name}": _name_importers(module, name)
+             for module, names in DELETED_NAMES.items() for name in names}
+    assert {name: hits for name, hits in found.items() if hits} == {}
 
 
 def test_nothing_names_the_python_route_selectors():

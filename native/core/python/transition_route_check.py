@@ -459,7 +459,7 @@ def product_capture(width: int, height: int, old, new, dpr: float, *, core_frame
     the runtime's render frame gives them on a window of that ratio. N5.2d: ``core_frame`` draws it upside down (the
     frame matrix's y negated: the core's top-row-first frame, F1), so the frame read back is flipped by the caller
     (``references``); only for a scene drawn straight into the frame (no SceneTarget: its gather reads GL's rows)."""
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.transition_contact_sheet import TransitionCapture  # record mode only
 
     class _ProductFrameCapture(TransitionCapture):
         def frame(self, run, progress: float):
