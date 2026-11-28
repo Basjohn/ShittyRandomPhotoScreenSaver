@@ -111,6 +111,10 @@ Continue the native sequence below with the repaired timing receipts. The report
        shader's marine-snow exit left `gl_FragDepth` undefined, so the depth test rejected snow at random. It now writes
        `sceneSphereDepth`; the `.qsb` files are rebaked, with an every-exit test. Two Vulkan runs are byte-identical on
        400 inputs. R-259.
+       R-259 entry `c22cdaac2`. OpenGL after the fix: 324/400 frames still differ run to run (p50 254 px, mostly 1–7
+       levels, two frames at 30/38) on speck glints. This is OpenGL-only and has a separate cause. Side defect for this agent after defect 3.
+       Defect 2 FIXED `5396351bb` (C++, ABI stays 47): the cap is now the layer's whole chain less two (4K: 4→9), matching
+       Python's full mip chain. The 15 Nov core-downsample line is superseded. Building 28 Nov.
        Before the fix: On a 30 s delivery, 2,576 of 2,586 frames differ across two
        runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
        Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
