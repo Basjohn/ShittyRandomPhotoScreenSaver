@@ -1635,7 +1635,9 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       (`<a5767 wt>/.artifacts/evidence/display/d1_run/20261128_n52h_switch_gl_native/`). Side defects sent to the
       agent: stale reveal log wording (`display_manager.py:5375`), GL `v_uv`/`vUv` varying-name warning, five
       window-showing probes in `test_quick_backend_owner.py`, offscreen env leak into pixel wrappers, Cube Turn input
-      53-59 levels vs Python. OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
+      53-59 levels vs Python. All done by `f475358aa` (vUv triangle `mode_up.vert`, C++), built on GitHub 28 Nov
+      (module in the a5767 worktree). Pending: the D1 recheck that the warning is gone (displays off at 05:35; the
+      agent confirms it offscreen meanwhile). OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
       does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
       changes per the caller list.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
