@@ -1676,10 +1676,77 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     return verdict
 
 
-def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
-               recording: str | None = None, references: Path | None = None,
-               native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None) -> dict:
+def harness_registration(mode: str):
+    """A context manager under which the route draws ``mode`` for the run: ``native_record_identity.MODES[mode].
+    register`` for a port the product's route does not draw yet (its registration is the port's last step, after P, T
+    and C: Extruded Bubble's ``_eb_registered``), else nothing."""
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    if mode in NATIVE_MODE_IDS:
+        return contextlib.nullcontext()
+    from tools.visualizer_replay import native_record_identity
+
+    spec = native_record_identity.MODES.get(mode)
+    register = None if spec is None else spec.register
+    return contextlib.nullcontext() if register is None else register()
+
+
+def _largest_geometry_bank() -> int:
+    """The D3 bank bytes no admitted activation exceeds (``frame_capacity.geometry_bank_bytes`` at every family's
+    canonical maximum): a bank larger than a session's own changes no byte the core reads."""
+    from core.constants.extruded_bubble_world import SNOW_FULL, SPECKS_FULL
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS
+
+    largest = max(CHAIN_PATHS * CHAIN_GEOMETRY_BYTES, max(SNOW_FULL, SPECKS_FULL) * CLOUD_GEOMETRY_BYTES)
+    return (largest + 15) // 16 * 16
+
+
+@contextlib.contextmanager
+def in_process_drift_arena():
+    """The engine worker's D3 side, in process (N5.6): the owner replay runs without a worker, so no session opened
+    Extruded Bubble's geometry arena and the route names no drift family (``DriftStream.project``: every family absent,
+    the drift held). For the run the harness stands in for the worker: the session's arena opened under the in-process
+    label namespace (0) as ``engine_worker_link.configure`` opens it, and each logical frame's new keys written by the
+    worker's own ``GeometryArenaWriter`` before the route projects that frame (as ``PacketMailbox.publish`` writes them
+    before the slot), the previous frame counted consumed (the in-process route takes every frame it projects)."""
+    from core.visualizer_engine import extruded_bubble_native_schema as schema
+    from core.visualizer_engine.geometry_arena import GeometryArenaWriter
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import FAMILIES
+
+    owner = schema.open_stream_arena(0, _largest_geometry_bank())
+    writer = GeometryArenaWriter(owner.name, families=FAMILIES)
+    project = schema.DriftStream.project
+    sequence = [0]
+
+    def projecting(self, logical):
+        writer.before_publish(logical, sequence[0])
+        sequence[0] += 1
+        writer.published(sequence[0])
+        return project(self, logical)
+
+    schema.DriftStream.project = projecting
+    try:
+        yield writer
+    finally:
+        schema.DriftStream.project = project
+        writer.close()
+        schema.close_stream_arena(owner)
+
+
+def run_native(out: Path, **kwargs) -> dict:
+    """``_run_native`` with ``mode`` registered on the route for the run (``harness_registration``); Extruded Bubble's
+    drift geometry through the in-process arena (``in_process_drift_arena``)."""
+    mode = kwargs.get("mode", "spectrum")
+    arena = in_process_drift_arena() if mode == "extruded_bubble" else contextlib.nullcontext()
+    with harness_registration(mode), arena:
+        return _run_native(out, **kwargs)
+
+
+def _run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
+                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
+                recording: str | None = None, references: Path | None = None,
+                native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
