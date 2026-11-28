@@ -716,11 +716,19 @@ def _connect_quit_edge(app: Any) -> None:
         app.aboutToQuit.connect(_on_about_to_quit)
 
 
-def _on_about_to_quit() -> None:
-    # The kept hidden host goes with the process, before Qt's own teardown (its render thread is the core's).
+def close_native_hidden_host() -> None:
+    """Close the process's kept hidden host (a no-op when there is none). The application's quit edge calls it; a
+    tool or test process that never runs an event loop (so never quits) registers it for its exit instead, and a
+    capture that needs another size closes the host first (the next request creates it again)."""
     host, _owner.hidden_host = _owner.hidden_host, None
+    _owner.hidden_host_size = None
     if host is not None:
         host.close()
+
+
+def _on_about_to_quit() -> None:
+    # The kept hidden host goes with the process, before Qt's own teardown (its render thread is the core's).
+    close_native_hidden_host()
     # A process that quits cleanly did not fail its start, whether or not a frame was presented.
     _forget_start_record("the process quit cleanly")
 

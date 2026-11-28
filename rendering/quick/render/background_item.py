@@ -6,7 +6,6 @@ from __future__ import annotations
 import threading
 import weakref
 
-from PySide6.QtCore import QObject, Qt
 from PySide6.QtQuick import QQuickItem, QSGNode
 
 from ..image_state import PresentationImage
@@ -25,17 +24,6 @@ def _native_background_wanted() -> bool:
         return native_background_wanted()
     except Exception:
         return False
-
-
-class _FrameEdgeReceiver(QObject):
-    """GUI-thread receiver of one queued window signal (a plain method: no @Slot with a result, the QML slot crash)."""
-
-    def __init__(self, fire) -> None:
-        super().__init__()
-        self._fire = fire
-
-    def fired(self) -> None:
-        self._fire()
 
 
 class BackgroundRenderItem(QQuickItem):
@@ -67,8 +55,7 @@ class BackgroundRenderItem(QQuickItem):
         # then the native layer's own) waits for the next frame the window renders anyway (afterRendering, queued),
         # then runs alone: (transition id, weak reporter, ticket) while one is armed.
         self._gui_warm_pending: tuple[str, weakref.ref, int] | None = None
-        self._gui_warm_window = None
-        self._gui_warm_receiver = None
+        self._gui_warm_edge = None
         self.windowChanged.connect(self._cancel_warm_up)
 
     @property
@@ -208,20 +195,18 @@ class BackgroundRenderItem(QQuickItem):
         return layer.next_warm_unit(transition_id) if layer is not None else None
 
     def _arm_gui_warm(self, window, transition_id: str, reporter, ticket: int) -> None:
-        if self._gui_warm_receiver is None:
-            self._gui_warm_receiver = _FrameEdgeReceiver(self._run_gui_warm)
+        if self._gui_warm_edge is None:
+            from rendering.quick.visualizer.native_route import _WindowEdge
+
+            # The one window-edge owner (``_WindowEdge``: a queued, one-shot GUI-thread edge, never a timer).
+            self._gui_warm_edge = _WindowEdge("afterRendering", self._run_gui_warm)
         self._gui_warm_pending = (transition_id, weakref.ref(reporter), ticket)
-        window.afterRendering.connect(self._gui_warm_receiver.fired, Qt.ConnectionType.QueuedConnection)
-        self._gui_warm_window = window
+        self._gui_warm_edge.arm(window)
 
     def _disarm_gui_warm(self) -> None:
         self._gui_warm_pending = None
-        window, self._gui_warm_window = self._gui_warm_window, None
-        if window is not None:
-            try:
-                window.afterRendering.disconnect(self._gui_warm_receiver.fired)
-            except (RuntimeError, TypeError):
-                pass                              # the window went first
+        if self._gui_warm_edge is not None:
+            self._gui_warm_edge.disarm()
 
     def _run_gui_warm(self) -> None:
         """GUI thread, a frame just rendered: one unit, then the owner is told whether this display has more."""

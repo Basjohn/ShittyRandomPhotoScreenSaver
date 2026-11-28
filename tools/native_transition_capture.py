@@ -58,7 +58,7 @@ def _close_host_at_exit() -> None:
     from rendering.quick import bootstrap
 
     _EXIT_HOOK.append(True)
-    atexit.register(bootstrap._on_about_to_quit)
+    atexit.register(bootstrap.close_native_hidden_host)
 
 
 class _Clock:
@@ -85,7 +85,11 @@ class NativeTransitionCapture:
 
         self.width, self.height = int(width), int(height)
         self.app = ensure_application()
-        self.host = bootstrap.native_hidden_host(self.width, self.height)
+        try:
+            self.host = bootstrap.native_hidden_host(self.width, self.height)
+        except ValueError:                              # another size than the kept host's: a tool's choice, so it is
+            bootstrap.close_native_hidden_host()        # closed and made again at this size (the product never does)
+            self.host = bootstrap.native_hidden_host(self.width, self.height)
         self.core = bootstrap.native_core()
         _close_host_at_exit()
         fixtures = fixture_images(self.width, self.height)
@@ -109,6 +113,35 @@ class NativeTransitionCapture:
         self._closed = False
 
     # ------------------------------------------------------------------------------------------------- the run
+
+    def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None, duration_ms: int = 1000,
+            settings=None):
+        """One run of ``effect`` with its own parameters resolved from ``settings`` (the transitions section; empty is
+        the canonical defaults), then ``direction`` and ``parameters`` laid over them, for a test that needs exact
+        control. ``production_run`` is the runtime's own resolution."""
+        import random
+
+        from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
+        from rendering.quick.transitions.state import TransitionRequest, TransitionRun
+
+        if effect == "slide":
+            resolved_direction, resolved_params = "left", {"motion_style": "Perspective Push"}
+        elif effect == "block_spins":
+            from core.settings.default_contract import require_canonical_default
+            from rendering.quick.transitions.parameter_resolution import resolve_block_spins_parameters
+
+            section = {**require_canonical_default("transitions.blockspin"), **(settings or {}).get("blockspin", {})}
+            resolved_direction = "left"
+            resolved_params = resolve_block_spins_parameters(settings or {}, section,
+                                                             require_canonical_default("transitions.blockspin"))
+        else:
+            resolved = resolve_parameterized_phase_c_inputs(effect, settings or {}, random_source=random.Random(seed))
+            resolved_direction, resolved_params = resolved.direction, resolved.parameter_dict()
+        resolved_params.update(parameters or {})
+        images = self._presentation_images("diagnostic")
+        request = TransitionRequest(0, effect, effect, False, int(duration_ms), direction or resolved_direction,
+                                    resolved_params, *images)
+        return TransitionRun.start(run_id=1, request=request, start_ns=0)
 
     def production_run(self, identity: str, duration_ms: int | None = None, settings=None, seed: int = 713,
                        run_id: int = 1, *, detail: str | None = "High", timeline_ms: int | None = None,
@@ -217,7 +250,8 @@ class NativeTransitionCapture:
             self.layer.close()
         finally:
             self._run = None
-            self.host.set_content(None)
+            if not self.host.closed:
+                self.host.set_content(None)
             if self._root is not None and shiboken6.isValid(self._root):
                 self._root.setParentItem(None)
                 shiboken6.delete(self._root)

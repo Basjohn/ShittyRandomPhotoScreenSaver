@@ -7,10 +7,8 @@ import pytest
 from OpenGL import GL as gl
 
 from rendering.gl_programs.item_quad import item_quad_program
-from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d import resources as resource_module
-from rendering.quick.scene3d.resources import MeshResources, bind_frame
-from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.scene3d.resources import MeshResources
 from tools.labs.render_target import OffscreenRenderTarget
 
 
@@ -168,71 +166,3 @@ def test_static_mesh_dsa_upload_draws_and_leaves_generic_vao_and_vbo_bindings_un
         gl.glDeleteVertexArrays(1, [sentinel_vao])
         capture.close()
 
-
-@pytest.mark.qt
-def test_frame_multibind_initializes_linked_program_once_and_leaves_active_and_unit_two_untouched(qt_app, monkeypatch):
-    import rendering.quick.scene3d.resources as resource_module
-
-    capture = TransitionCapture(64, 64)
-    resources = MeshResources("frame multi-bind probe")
-    try:
-        run = capture.run("block_spins", direction="left")
-        frame = capture.frame(run, 0.5)
-        program = resources.program("frame", _FRAME_VERTEX, _FRAME_FRAGMENT)
-        uniforms = resources.uniforms("frame", ("uOldTex", "uNewTex"))
-        values = resources.values("frame")
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, capture.textures[2])
-        gl.glActiveTexture(gl.GL_TEXTURE3)
-        active_before = int(gl.glGetIntegerv(gl.GL_ACTIVE_TEXTURE))
-        unit_two_before = int(capture.textures[2])
-        calls = []
-        original = resource_module.gl.glProgramUniform1i
-
-        def record(*args):
-            calls.append(args)
-            return original(*args)
-
-        monkeypatch.setattr(resource_module.gl, "glProgramUniform1i", record)
-        bind_frame(program, uniforms, frame, values)
-        bind_frame(program, uniforms, frame, values)
-
-        assert values["uMatrix"] == frame.matrix_values and values["uItemSize"] == frame.logical_size
-        assert calls == [
-            (program, uniforms["uOldTex"], 0),
-            (program, uniforms["uNewTex"], 1),
-        ]
-        assert int(gl.glGetIntegerv(gl.GL_ACTIVE_TEXTURE)) == active_before
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        assert int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D)) == frame.source_texture_id
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        assert int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D)) == frame.destination_texture_id
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        assert int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D)) == unit_two_before
-        gl.glActiveTexture(active_before)
-
-        resources.release_resources()
-        replacement = resources.program("frame", _FRAME_VERTEX, _FRAME_FRAGMENT)
-        replacement_uniforms = resources.uniforms("frame", ("uOldTex", "uNewTex"))
-        assert replacement_uniforms is not uniforms
-        replacement_values = resources.values("frame")
-        assert replacement_values is not values and not replacement_values   # a new program's values start at zero
-        bind_frame(replacement, replacement_uniforms, frame, replacement_values)
-        assert calls[2:] == [
-            (replacement, replacement_uniforms["uOldTex"], 0),
-            (replacement, replacement_uniforms["uNewTex"], 1),
-        ]
-
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        gl.glViewport(0, 0, capture.width, capture.height)
-        with resources.pass_blocks.bound(pack_block(_FRAME_BLOCK, replacement_values)):
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        pixels = np.frombuffer(
-            bytes(gl.glReadPixels(0, 0, capture.width, capture.height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)),
-            dtype=np.uint8,
-        )
-        assert pixels.reshape(-1, 4)[:, :2].mean(axis=0).min() > 10.0
-    finally:
-        resources.release_resources()
-        capture.close()

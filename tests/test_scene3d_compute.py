@@ -11,13 +11,11 @@ import numpy as np
 import pytest
 from OpenGL import GL as gl
 
-from rendering.quick.render import gl_resources
 from rendering.quick.scene3d import compute as compute_module
 from rendering.quick.scene3d.compute import bound_image, dispatch
 from rendering.quick.scene3d.motion import MOTION_BLUR_MAX_TILE, MotionBlur, motion_blur_tile
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick import gl_query
-from tools.transition_contact_sheet import TransitionCapture
 from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
@@ -167,69 +165,8 @@ def test_image_units_are_handed_back_even_after_a_failure(capture, inherited):
         gl.glDeleteTextures([sentinel, target])
 
 
-def test_a_motion_blurred_run_hands_back_the_tile_max_image_unit(qt_app):
-    capture = TransitionCapture(256, 144)
-    sentinel = _texture(8, 8, gl.GL_RGBA8)
-    unit = 1   # the tile max writes its tiles through image unit 1 (its binding in the source)
-    try:
-        gl.glBindImageTexture(unit, sentinel, 0, gl.GL_FALSE, 0, gl.GL_READ_WRITE, gl.GL_RGBA8)
-        run = capture.run("exploding_tiles", parameters={"motion_blur": True}, duration_ms=3000)
-        capture.render(run, 0.4)
-        assert capture.host._implementations["exploding_tiles"]._target._motion.has_resources
-        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit) == sentinel
-        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_ACCESS, unit) == gl.GL_READ_WRITE
-    finally:
-        gl.glBindImageTexture(unit, 0, 0, gl.GL_FALSE, 0, gl.GL_READ_ONLY, gl.GL_R8)
-        gl.glDeleteTextures([sentinel])
-        capture.close()
-
-
 _CASES = (("exploding_tiles", None), ("glass_shatter", "left"), ("crumble", None), ("pixel_accretion", "left"),
           ("block_spins", "left"))
-
-
-@pytest.mark.parametrize("effect,direction", _CASES)
-def test_without_motion_blur_nothing_compiles_or_dispatches_compute(qt_app, monkeypatch, effect, direction):
-    """Motion blur's compute stays dormant without it. N4.j's photo environment is compute of its own (the shared mip
-    kernel, once a photograph, for the scenes that reflect it: Exploding Tiles, Glass Shatter); it is allowed, and only
-    while its own kernel is the program in use (stale before 21 Nov: the test forbade every compute)."""
-    from rendering.gl_programs.mip_chain import MIP_BOX_RGBA8_COMP
-    import rendering.quick.scene3d.resources as scene_resources
-
-    allowed: set[int] = set()
-    real_compile, real_dispatch = scene_resources.compile_compute_program, gl.glDispatchCompute
-
-    def compile_environment_only(source, *, label):
-        if source != MIP_BOX_RGBA8_COMP:
-            raise AssertionError(f"dormant compute compiled: {label}")
-        program = real_compile(source, label=label)
-        allowed.add(int(program))
-        return program
-
-    def environment_only(real):
-        def call(*args, **kwargs):
-            if gl_query.get_int(gl.GL_CURRENT_PROGRAM) not in allowed:
-                raise AssertionError("dormant compute touched GL")
-            return real(*args, **kwargs)
-        return call
-
-    monkeypatch.setattr(gl, "glDispatchCompute", environment_only(real_dispatch))
-    monkeypatch.setattr(gl_resources, "compile_compute_program", compile_environment_only)
-    monkeypatch.setattr(scene_resources, "compile_compute_program", compile_environment_only)
-    capture = TransitionCapture(256, 144)
-    try:
-        run = capture.run(effect, direction=direction, parameters={"motion_trails": True}, duration_ms=3000)
-        assert not run.request.parameter_dict().get("motion_blur")
-        while not capture.host.warm_step(run.request.transition_id, run.request.parameter_dict(), (256, 144)):
-            pass
-        for progress in (0.0, 0.2, 0.5, 0.8, 1.0):
-            capture.render(run, progress)
-        renderer = capture.host._implementations[run.request.transition_id]
-        assert not renderer._target._motion.has_resources
-        resources = getattr(renderer, "_resources", None) or renderer._target_resources
-        assert not resources.has_program("motion_tile_max")
-    finally:
-        capture.close()
 
 
 def test_tile_capacity_is_fixed_and_loud():

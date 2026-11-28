@@ -9,7 +9,6 @@ from collections import Counter
 
 import numpy as np
 import pytest
-from OpenGL import GL as gl
 
 from rendering.gl_programs import scene3d as lib
 
@@ -69,65 +68,3 @@ void main() {
 }
 """
 
-
-@pytest.mark.qt
-def test_a_flat_grid_draws_the_photograph_and_a_bend_turns_its_normals(qt_app):
-    from rendering.gl_programs.portable import pack_block, portable_program
-    from rendering.quick.scene3d.grid import draw_grid
-    from rendering.quick.scene3d.resources import MeshResources, bind_frame
-    from tools.transition_contact_sheet import TransitionCapture
-
-    width, height = 256, 144
-    capture = TransitionCapture(width, height)
-    resources = MeshResources("grid test")
-    try:
-        run = capture.run("block_spins", direction="left")
-        frame = capture.frame(run, 0.5)
-
-        def read():
-            pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
-            return np.frombuffer(bytes(pixels), dtype=np.uint8).reshape(height, width, 4).astype(np.int16)
-
-        def clear():
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-            gl.glViewport(0, 0, width, height)
-            gl.glDisable(gl.GL_DEPTH_TEST)
-            gl.glClearColor(1.0, 0.0, 1.0, 1.0)
-            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-
-        clear()
-        resources.draw_image(frame, capture.textures[0])
-        photograph = read()
-
-        columns, rows = lib.scene3d_grid_size(lib.SCENE3D_DETAIL_TIERS["Performance"], width / height)
-        # The grid's program as the effects draw it (N1.6): its values one std140 pass block, the image at unit 0.
-        vertex, (fragment,), block = portable_program(lib.scene3d_grid_vertex_source(_DISPLACE, _DECLARATIONS),
-                                                      (_PHOTO_FRAGMENT,), block="GridProbe", samplers={"uImage": 0})
-        program = resources.program("grid", vertex, fragment)
-
-        def draw(tilt, show_normal):
-            clear()
-            values = resources.values("grid")
-            bind_frame(program, resources.uniforms("grid", ()), frame, values)
-            values.update({"uGridCells": (float(columns), float(rows)), "uTilt": tilt, "uShowNormal": show_normal})
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, capture.textures[0])
-            with resources.pass_blocks.bound(pack_block(block, values)):
-                draw_grid(resources, columns, rows)
-            return read()
-
-        # At rest the subdivided surface is the photograph.
-        assert np.abs(draw(0.0, 0) - photograph).max() <= 1
-        # Its normal faces the viewer everywhere...
-        flat = draw(0.0, 1)
-        assert np.abs(flat[..., :3] - np.array([128, 128, 255])).max() <= 1
-        # ...and follows a bend: leaning back to the right turns it toward -x, evenly.
-        leaning = draw(0.4, 1)
-        covered = ~((leaning[..., 0] == 255) & (leaning[..., 1] == 0) & (leaning[..., 2] == 255))   # not the clear
-        assert covered.mean() > 0.5
-        seen = leaning[..., 0][covered]
-        assert seen.max() < 128 - 10 and seen.max() - seen.min() <= 2
-        assert not np.array_equal(draw(0.4, 0), photograph)
-    finally:
-        resources.release_resources()
-        capture.close()

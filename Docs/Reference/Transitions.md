@@ -117,7 +117,7 @@ transition-specific resources to the expected parked floor.
 
 `tests/test_qtquick_future_transition_gl.py` renders through the real driver and production host to check exact/near endpoints, repeatability, parameter and direction sensitivity, and resource retirement. Dormancy/count-invariance coverage must also derive from the canonical transition registry: unselected implementations stay unconstructed/unadvanced/unwarmed, only the current run plus one explicitly reserved next run may own transition-specific runtime preparation, and adding a registered transition must not add recurring dispatch work to an unrelated run. Focused `crumble_volume`, `melt_surface`, `organic_surfaces`, `transition_material_settings` and `tile_departure` tests cover bounded topology, material controls and continuous departure; registry/request/Settings/run/fence suites cover integration.
 
-`tools/transition_contact_sheet.py` produces textured progression frames, optional supplied-image contact sheets, and a 60-frame/two-second WebP with `--animate`. It accepts `--source` and `--destination` photos, and `TransitionCapture.run(..., duration_ms=)` renders real-time motion (Exploding Tiles' rumble) at an authored duration instead of the 1000 ms default; `--quick-smoke` reuses the existing threaded QQuickWindow lifecycle harness. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of performance neutrality.
+`tools/transition_contact_sheet.py` produces textured progression frames, optional supplied-image contact sheets, and a 60-frame/two-second WebP with `--animate`. It accepts `--source` and `--destination` photos, and `NativeTransitionCapture.run(..., duration_ms=)` (`tools/native_transition_capture.py`: the native background layer in the process's hidden host, no window) renders real-time motion (Exploding Tiles' rumble) at an authored duration instead of the 1000 ms default. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of performance neutrality.
 
 The open perceptual/freshness work is tracked only in the Physical acceptance checklist below; automated pixel/scene evidence cannot close those items.
 
@@ -158,7 +158,7 @@ Each foundation slice adds what it learned here.
   `tools/visualizer_cost_probe.py` and harnesses import OpenGL with checking on unless told otherwise, so set
   `OpenGL.ERROR_CHECKING = False` before importing `OpenGL.GL` when comparing with production.
 - GPU cost: `GL_TIME_ELAPSED` around a whole frame or one stage, over at least 90 frames, reporting median and p90.
-  Flush after every frame as presentation does (`TransitionCapture.benchmark` does). Without a flush, the driver's
+  Flush after every frame as presentation does (a Visualizer cost probe, `tools/visualizer_cost_probe.py`, does). Without a flush, the driver's
   command-buffer boundary lands inside a query and counts the GPU waiting on the CPU: periodic multi-ms spikes
   (every ~9 frames) that are not rendering cost.
 - Find where a cost is spent by removing the operation (a skip variant) and timing with `GL_TIME_ELAPSED`.

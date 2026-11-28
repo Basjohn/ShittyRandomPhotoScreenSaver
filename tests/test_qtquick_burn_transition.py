@@ -220,9 +220,9 @@ def _burn_frames(capture, progress, **switches):
 @pytest.mark.qt
 def test_flames_rise_from_the_burning_edge_and_veins_glow_only_in_the_char(qt_app):
     import numpy as np
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.native_transition_capture import NativeTransitionCapture
 
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         source, destination = (np.asarray(image.convert("RGB"), dtype=np.int16) for image in capture.images)
         plain = _burn_frames(capture, 0.45)

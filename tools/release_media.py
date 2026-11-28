@@ -355,13 +355,14 @@ def content_box(frames: list[Path], background: tuple[int, int, int], margin: fl
 def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], fps: int,
                    duration_ms: int, clip=None, start_seconds: float = 0) -> list[Path]:
     from tools.native_transition_capture import NativeTransitionCapture
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
+    from tools.transition_contact_sheet import fixture_images
     from PIL import Image
 
     width, height = size
     directory.mkdir(parents=True, exist_ok=False)
     # A transition is the native core's frame (as the product draws it); a Visualizer keeps its GL host's target.
-    capture = (NativeTransitionCapture if case.kind == "transition" else TransitionCapture)(width, height)
+    capture = (NativeTransitionCapture if case.kind == "transition" else OffscreenRenderTarget)(width, height)
     frames = []
     host = None
     try:
@@ -391,7 +392,7 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
             host = QuickVisualizerRenderHost()
             descriptor = get_visualizer_mode_descriptor(case.identity)
             backdrop = VisualizerBackdrop(identity="release_transition_fixture", size=size,
-                                          rgba=capture.images[0].tobytes())
+                                          rgba=fixture_images(width, height)[0].convert("RGBA").resize(size).tobytes())
             # Room for 3D overflow around the card; the crop removes the rest.
             presentation = showcase_presentation(case.identity, size)
             item_width, item_height = presentation.outer_rect[2:]

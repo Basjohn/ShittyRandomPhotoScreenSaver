@@ -1,138 +1,15 @@
 """Gradual warm-up (S11): while the displays hold an image, spaced single-program steps on
 frames they render anyway prepare the next run, so its first frame compiles nothing.
 
-Offscreen GL through the transition capture harness; no window is shown.
+The display manager and the engine drive it; no window is shown.
 """
 from __future__ import annotations
 
 import pytest
 
-import rendering.quick.render.gl_resources as gl_resources
-import rendering.quick.scene3d.resources as scene_resources
-from tools.transition_contact_sheet import TransitionCapture
 
 pytestmark = pytest.mark.qt
 
-_CASES = (
-    ("exploding_tiles", "center_out", "exploding_tiles"),
-    ("glass_shatter", "left", "glass_shatter"),
-    ("crumble", None, "crumble"),
-    ("pixel_accretion", "left", "pixel_accretion"),
-    ("block_spins", "left", "blockspin"),
-)
-_SETUPS = (
-    {},                                                                    # canonical defaults
-    {"antialiasing": "4x", "motion_blur": "On", "motion_trails": "On", "bloom": "On", "edge_glass": "Both"},
-    {"antialiasing": "Off", "motion_blur": "On"},
-    {"antialiasing": "Off", "motion_trails": "On"},
-)
-
-
-class _Compiles:
-    """Counts every program compile, graphics or compute."""
-
-    def __init__(self, monkeypatch) -> None:
-        self.total = 0
-        for name in ("compile_program", "compile_compute_program"):
-            original = getattr(gl_resources, name)
-
-            def counted(*args, _original=original, **kwargs):
-                self.total += 1
-                return _original(*args, **kwargs)
-
-            for module in (gl_resources, scene_resources):
-                monkeypatch.setattr(module, name, counted)
-
-
-class _Work(_Compiles):
-    """Counts program compiles, per-run texture allocations (S10) and stream-ring allocations
-    (S14), the units a warm-up step may do one of."""
-
-    def __init__(self, monkeypatch) -> None:
-        super().__init__(monkeypatch)
-        from rendering.quick.scene3d.motion import MotionBlur
-        from rendering.quick.scene3d.post import BloomChain
-        from rendering.quick.scene3d.stream import StreamRing
-        from rendering.quick.scene3d.target import SceneTarget
-        from rendering.quick.scene3d.trails import MotionTrails
-
-        self.allocations = []
-        for owner, name in ((SceneTarget, "_allocate"), (SceneTarget, "_allocate_resolve"),
-                            (MotionBlur, "_allocate"), (BloomChain, "_allocate"), (MotionTrails, "_allocate"),
-                            (StreamRing, "_allocate")):
-            original = getattr(owner, name)
-
-            def counted(*args, _original=original, _label=f"{owner.__name__}.{name}", **kwargs):
-                self.allocations.append(_label)
-                self.total += 1
-                return _original(*args, **kwargs)
-
-            monkeypatch.setattr(owner, name, counted)
-
-
-@pytest.mark.parametrize("effect,direction,section", _CASES)
-@pytest.mark.parametrize("setup", range(len(_SETUPS)))
-def test_after_warming_a_runs_first_frames_compile_and_allocate_nothing(qt_app, monkeypatch, effect, direction,
-                                                                         section, setup):
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run(effect, direction=direction, duration_ms=3000,
-                          settings={"scene3d_detail": "High", section: dict(_SETUPS[setup])})
-        parameters = run.request.parameter_dict()
-        size = (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step(run.request.transition_id, parameters, size):
-            steps += 1
-            assert work.total <= steps, "a warm-up step did more than one compile or allocation"
-            assert steps < 100, "warm-up never finished"
-        assert work.total > 1
-        warmed, allocated = work.total, list(work.allocations)
-        for progress in (0.0, 0.3):              # an endpoint frame and a mid-run frame
-            capture.render(run, progress)
-        assert work.allocations == allocated, "the warmed run's first frames allocated textures or buffers"
-        assert work.total == warmed, "the warmed run's first frames compiled a program"
-        assert capture.host.warm_step(run.request.transition_id, parameters, size)   # nothing left
-        capture.host.park()
-        renderer = capture.host._implementations[run.request.transition_id]
-        assert not renderer._target.has_resources and not renderer._trails.has_resources   # none held
-    finally:
-        capture.close()
-
-
-def test_without_a_render_size_the_warm_up_compiles_only(qt_app, monkeypatch):
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("block_spins", direction="left", settings={"scene3d_detail": "High"})
-        while not capture.host.warm_step(run.request.transition_id, run.request.parameter_dict()):
-            pass
-        assert work.allocations == []
-    finally:
-        capture.close()
-
-
-def test_a_warm_step_is_one_plain_compile_and_leaves_nothing_running(qt_app, monkeypatch):
-    """No driver compile threads, no status polling: a step compiles one program and returns."""
-    from OpenGL import GL as gl
-    from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, warm_programs
-
-    capture = TransitionCapture(64, 64)
-    resources = MeshResources("warm test")
-    try:
-        compiles = _Compiles(monkeypatch)
-        entries = [(resources, *UNDERLAY_PROGRAM), (resources, "second", *UNDERLAY_PROGRAM[1:])]
-        assert warm_programs(entries) is False and compiles.total == 1 and resources.has_program("underlay")
-        assert warm_programs(entries) is False and compiles.total == 2
-        assert warm_programs(entries) is True and compiles.total == 2
-        # The driver's parallel compile threads are never asked for.
-        import rendering.quick.render.gl_resources as source
-        assert "parallel_shader_compile" not in open(source.__file__, encoding="utf-8").read()
-        assert "COMPLETION_STATUS" not in open(scene_resources.__file__, encoding="utf-8").read()
-        assert gl.glGetError() == gl.GL_NO_ERROR
-    finally:
-        resources.release_resources()
-        capture.close()
 
 
 def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app, monkeypatch):

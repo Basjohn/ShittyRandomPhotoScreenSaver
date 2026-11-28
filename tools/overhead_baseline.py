@@ -2,9 +2,10 @@
 
 Record one before and one after any major architecture addition (a shared primitive, a new
 pass, a host change) and compare: an addition should leave everything that does not use it
-unchanged. Each case renders through the production render host on one offscreen GL 4.6
-context (no window, no runtime): transitions as their release-showcase cases (canonical
-settings at High detail, fixture photographs), Visualizer modes as their Guided Setup preview
+unchanged. Transitions are drawn by the native core as the product draws them (``tools/native_transition_capture.py``, no
+window): their release-showcase cases (canonical settings at High detail, fixture photographs), one wall-time figure
+per frame relative to the native Crossfade control. Visualizer modes render through the production render host on one
+offscreen GL 4.6 context (no window, no runtime) as their Guided Setup preview
 snapshots (``tools/visualizer_cost_probe.visualizer_case``); how to run it, read it and what to expect:
 ``Docs/Reference/Benchmarks.md``. Per frame it records CPU submit (render
 thread Python + GL calls) as wall time and as the thread's own CPU time, and GPU time
@@ -63,87 +64,69 @@ sys.path.insert(0, str(ROOT))
 # checking off before OpenGL.GL is first imported, as main.py does, and refuses otherwise).
 import tools.visualizer_cost_probe  # noqa: E402,F401
 from tools.bench_stability import (  # noqa: E402
-    BenchCase, PairedBench, crossfade_control, environment_differs,
+    PairedBench, crossfade_control, environment_differs,
 )
 
 OUT = ROOT / "tools" / "baselines" / "overhead"
 GPU_FLAG = (0.20, 0.05)     # ratio, ms
 CPU_FLAG = (0.50, 0.15)
-COUNT_FRAMES = 8
+
+
+NATIVE_NOISE_FLAG = (0.20, 2.0)     # a transition is flagged above 20% of its control-relative cost and 2x its noise
+NATIVE_CONTROL_FRAMES = 6
+
+
+def _median(values: list[float]) -> float:
+    return statistics.median(values) if values else 0.0
 
 
 def measure_transitions(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
-    """Every showcase transition case (release-showcase settings, fixture photographs)."""
+    """Every showcase transition case (release-showcase settings, fixture photographs), drawn by the native core as
+    the product draws it (``NativeTransitionCapture``: the native background layer in the process's hidden host).
+
+    The figure is the frame's wall milliseconds (draw, submit and readback, ``NativeTransitionCapture.render``), not a
+    GPU query: the core draws in its own context and thread. Each pass measures the native Crossfade control first and
+    every case after it (round-robin, the order rotating each pass); a case's ``native_rel`` is its median over that
+    pass's control median, so a busy machine moves case and control alike. The best (lowest) pass is kept and
+    ``native_noise`` is the spread of the passes' relative figures. The core's own GPU cost is the reference checks'
+    ``--cost`` rounds (``native/core/python/transition_route_check.py``)."""
+    from tools.native_transition_capture import NativeTransitionCapture
     from tools.release_media import catalogue
 
-    gl, capture = bench.gl, bench.capture
-    cases = {}
-    for run_id, case in enumerate((c for c in catalogue() if c.kind == "transition"), start=2):
-        run = capture.production_run(case.identity, case.duration_ms, case.settings, run_id=run_id)
-
-        def point(index, run=run):
-            frame = capture.frame(run, 0.05 + 0.9 * index / max(1, frames - 1))
-            return lambda: capture.host.render(frame)
-
-        def warm(run=run):
-            # A renderer switching runs on the shared host rebuilds per-run state here, untimed.
-            for progress in (0.2, 0.5, 0.8):
-                capture.render(run, progress)
-
-        cases[f"{case.identity}/{case.variant}"] = BenchCase(point, warm, lambda run=run: _transition_counts(gl, capture, run))
-    return bench.measure("transition", cases, frames, passes, max_rounds)
-
-
-class _GLCounter:
-    """Counts every call to an ``OpenGL.GL`` function while installed (renderers call through
-    the module object, so wrapping its attributes sees them all)."""
-
-    def __init__(self, gl) -> None:
-        self.gl, self.count, self._saved = gl, 0, {}
-
-    def __enter__(self):
-        for name in dir(self.gl):
-            value = getattr(self.gl, name)
-            if name.startswith("gl") and callable(value):
-                self._saved[name] = value
-                setattr(self.gl, name, self._wrap(value))
-        return self
-
-    def _wrap(self, function):
-        def call(*args, **kwargs):
-            self.count += 1
-            return function(*args, **kwargs)
-        return call
-
-    def __exit__(self, *_exc):
-        for name, value in self._saved.items():
-            setattr(self.gl, name, value)
-        self._saved.clear()
-
-
-def _transition_counts(gl, capture, run) -> dict[str, float]:
-    """Median GL and Python calls per frame over ``COUNT_FRAMES`` frames (deterministic)."""
-    gl_counts, py_counts = [], []
-    for index in range(COUNT_FRAMES):
-        progress = 0.05 + 0.9 * index / max(1, COUNT_FRAMES - 1)
-        frame = capture.frame(run, progress)
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
-        calls = [0]
-
-        def profile(_frame, event, _arg):
-            if event in ("call", "c_call"):
-                calls[0] += 1
-
-        with _GLCounter(gl) as counter:
-            sys.setprofile(profile)
-            try:
-                capture.host.render(frame)
-            finally:
-                sys.setprofile(None)
-        gl_counts.append(counter.count)
-        py_counts.append(calls[0])
-    gl.glFinish()
-    return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
+    width, height = bench.capture.width, bench.capture.height
+    capture = NativeTransitionCapture(width, height)
+    keys = [c for c in catalogue() if c.kind == "transition" and (not bench.match or bench.match in f"{c.identity}/{c.variant}")]
+    samples: dict[str, list[tuple[float, float, float, float]]] = {}
+    try:
+        control = capture.production_run("crossfade", 1000, {}, run_id=1)
+        runs = {f"{c.identity}/{c.variant}": capture.production_run(c.identity, c.duration_ms, c.settings,
+                                                                    run_id=index) for index, c in
+                enumerate(keys, start=2)}
+        progresses = [0.05 + 0.9 * index / max(1, frames - 1) for index in range(frames)]
+        for pass_index in range(passes):
+            capture.render(control, 0.5)                                     # the control's run started, untimed
+            control_ms = _median([capture.render(control, 0.5)[1] for _ in range(NATIVE_CONTROL_FRAMES)])
+            order = list(runs)
+            offset = pass_index % max(1, len(order))
+            for key in order[offset:] + order[:offset]:
+                run = runs[key]
+                for progress in (0.2, 0.5, 0.8):                             # the run started and its state built, untimed
+                    capture.render(run, progress)
+                times = [capture.render(run, progress)[1] for progress in progresses]
+                ordered = sorted(times)
+                median, p90 = _median(times), ordered[min(len(ordered) - 1, int(0.9 * len(ordered)))]
+                samples.setdefault(key, []).append((median / control_ms if control_ms > 0 else 0.0, median, p90, control_ms))
+                print(f"  transition {key:34s} pass {pass_index + 1}: {median:7.2f} ms ({median / control_ms:5.2f}x control)",
+                      flush=True)
+    finally:
+        capture.close()
+    results = {}
+    for key, rows in samples.items():
+        best = min(rows)
+        rels = [row[0] for row in rows]
+        results[key] = {"native_rel": best[0], "native_ms": best[1], "native_p90_ms": best[2], "control_ms": best[3],
+                        "native_noise": (max(rels) - min(rels)) / best[0] if best[0] > 0 else 0.0, "passes": len(rows)}
+    return results
 
 
 def measure_visualizers(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
@@ -217,6 +200,15 @@ def compare(old: dict, new: dict) -> int:
                 continue
             notes = []
             old_row, new_row = rows_old[key], rows_new[key]
+            if "native_rel" in old_row and "native_rel" in new_row:
+                a, b = old_row["native_rel"], new_row["native_rel"]
+                ratio, noise_factor = NATIVE_NOISE_FLAG
+                noisy = noise_factor * max(old_row.get("native_noise", 0.0), new_row.get("native_noise", 0.0)) * a
+                if b - a > max(ratio * a, noisy):
+                    flagged += 1
+                    print(f"  {section[:-1]:10s} {key:34s} SLOWER: native frame {a:.2f}x->{b:.2f}x of the control "
+                          f"({old_row['native_ms']:.2f}->{new_row['native_ms']:.2f} ms)")
+                continue
             relative = "gpu_rel" in old_row and "gpu_rel" in new_row
             for label, absolute, rel, noise, (ratio, floor) in (
                     ("GPU", "gpu_median", "gpu_rel", "gpu_noise", GPU_FLAG),
@@ -269,9 +261,9 @@ def main() -> int:
     data = {"commit": _commit(), "date": _dt.datetime.now().isoformat(timespec="seconds"), "size": args.size,
             "frames": args.frames, "passes": args.passes, "match": args.match}
     from OpenGL import GL as gl
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(*size)
+    capture = OffscreenRenderTarget(*size)
     try:
         bench = PairedBench(gl, capture, crossfade_control(capture), args.match)
         if args.only in (None, "transitions"):

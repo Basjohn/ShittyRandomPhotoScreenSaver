@@ -58,18 +58,6 @@ def test_failed_resize_keeps_the_last_admitted_target(qt_app, monkeypatch):
         target.close()
 
 
-def test_partial_capture_admission_restores_the_callers_context(qt_app):
-    from tools.transition_contact_sheet import TransitionCapture
-
-    previous = OffscreenRenderTarget(16, 16)
-    try:
-        with pytest.raises(AttributeError, match="convert"):
-            TransitionCapture(16, 16, source=object())
-        assert QOpenGLContext.currentContext() == previous.context
-    finally:
-        previous.close()
-
-
 def test_invalid_target_size_is_rejected_before_allocation():
     with pytest.raises(ValueError, match="positive integers"):
         OffscreenRenderTarget(0, 20)
@@ -94,35 +82,3 @@ def test_failed_retirement_restores_context_and_can_be_retried(qt_app, monkeypat
         first.close()
         second.close()
 
-
-def test_transition_render_and_failed_benchmark_keep_contexts_and_queries_owned(qt_app, monkeypatch):
-    from PIL import Image
-    from tools.transition_contact_sheet import TransitionCapture
-
-    first = TransitionCapture(24, 16, source=Image.new("RGBA", (24,16), "red"))
-    second = OffscreenRenderTarget(24, 16)
-    query_ids = []
-    try:
-        run = first.production_run("slide")
-        image, _ = first.render(run, 0.)
-        assert image.getpixel((12,8)) == (255, 0, 0, 255)
-        assert QOpenGLContext.currentContext() == second.context
-        original_gen = gl.glGenQueries
-        def gen_queries(*args):
-            result = original_gen(*args)
-            query_ids.extend(int(value) for value in result)
-            return result
-        def fail_draw(*_args):
-            raise RuntimeError("injected draw failure")
-        with monkeypatch.context() as patch:
-            patch.setattr(gl, "glGenQueries", gen_queries)
-            patch.setattr(first.host, "render", fail_draw)
-            with pytest.raises(RuntimeError, match="injected draw"):
-                first.benchmark(run)
-        assert QOpenGLContext.currentContext() == second.context
-        with first._target.current():
-            assert int(gl.glGetQueryiv(gl.GL_TIME_ELAPSED, gl.GL_CURRENT_QUERY)) == 0
-            assert query_ids and not any(gl.glIsQuery(query) for query in query_ids)
-    finally:
-        first.close()
-        second.close()

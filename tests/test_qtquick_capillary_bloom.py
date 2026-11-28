@@ -21,7 +21,7 @@ from rendering.gl_programs.capillary_field import (
 )
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 
@@ -55,7 +55,7 @@ def test_the_fibre_field_matches_its_gpu_twin(qt_app):
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -96,33 +96,6 @@ def test_fibres_reshape_the_fronts(capture):
         run = capture.run("capillary_bloom", settings={"capillary_bloom": {"fibres": fibres}}, duration_ms=7000)
         frames.append(_pixels(capture.render(run, 0.4)[0]))
     assert (np.abs(frames[0] - frames[1]).max(axis=2) > 10).mean() > 0.05
-
-
-@pytest.mark.qt
-def test_warm_up_builds_the_field_so_the_first_frame_builds_nothing(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("capillary_bloom", duration_ms=4000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("capillary_bloom", parameters, size):
-            steps += 1
-            assert steps < 30
-        renderer = capture.host._implementations["capillary_bloom"]
-        warmed, built = work.total, renderer._field.builds
-        assert built == 1
-        for progress in (0.0, 0.3, 0.6, 1.0):
-            capture.render(run, progress)
-        assert work.total == warmed and renderer._field.builds == built
-        capture.host.park()
-        assert not renderer._field.has_resources
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_seeds_runs_and_repairs_values():
