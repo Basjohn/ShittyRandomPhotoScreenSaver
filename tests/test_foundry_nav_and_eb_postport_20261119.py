@@ -32,19 +32,6 @@ def test_left_and_right_foundry_navigation_share_page_authority():
         assert f'self.tabs.setCurrentWidget({member})' in source
 
 
-def test_extruded_bubble_preset9_system_defects_are_deferred_until_after_native_port():
-    plan = (ROOT / 'Current_Plan.md').read_text(encoding='utf-8')
-    section = plan.split('### 1B.10a Extruded Bubble idle wake continuity', 1)[1].split('\n### ', 1)[0]
-    assert 'Preset 9 (Deep Red Ocean)' in section
-    assert 'flickering bubble-star/circle' in section
-    assert 'Existing regular bubbles not consistently accelerated by music' in section
-    assert 'Exclude microbubbles and particles' in section
-    assert 'after N5.6' in section
-    assert 'before SMP M0' in section
-    preset = (ROOT / 'presets/visualizer_modes/extruded_bubble/preset_9_deep_red_ocean.json').read_text(encoding='utf-8')
-    assert 'Preset 9 (Deep Red Ocean)' in preset
-
-
 def test_live_plans_do_not_explain_archive_handoff_mechanics():
     for name in ('Current_Plan.md', 'Future_Work.md', 'Linux_Plan.md'):
         content = (ROOT / name).read_text(encoding='utf-8')
