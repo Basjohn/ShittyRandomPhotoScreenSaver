@@ -10,20 +10,15 @@ motion blur the slabs also write their screen motion over the shutter.
 
 from __future__ import annotations
 
-from OpenGL import GL as gl
 from rendering.gl_programs.exploding_tiles_program import (
-    EXPLODING_TILES_BACKDROP_BLOCK,
     EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
     EXPLODING_TILES_BACKDROP_VERTEX_SOURCE,
-    EXPLODING_TILES_BLOCK,
     EXPLODING_TILES_BOX_VERTICES,
     EXPLODING_TILES_FRAGMENT_SOURCE,
     EXPLODING_TILES_FRAME_BLOCK,
     EXPLODING_TILES_GHOST_FRAGMENT_SOURCE,
-    EXPLODING_TILES_SHADOW_BLOCK,
     EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
     EXPLODING_TILES_SHADOW_VERTEX_SOURCE,
-    EXPLODING_TILES_SPARK_BLOCK,
     EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
     EXPLODING_TILES_SPARK_VERTEX_SOURCE,
     EXPLODING_TILES_SPARKS,
@@ -35,28 +30,13 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_sparks_live,
 )
 from rendering.gl_programs.photo_colour import photo_dominant_colour
-from rendering.gl_programs.portable import pack_block
-from rendering.gl_programs.scene3d import (
-    SCENE3D_TRAIL_GHOSTS,
-    scene3d_detail,
-    scene3d_shutter_progress,
-    scene3d_trail_ghosts,
-)
-from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
-                                                 PhotoEnvironment)
-from rendering.quick.scene3d.particles import draw_particles, particle_budget
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
-from rendering.quick.scene3d.shadows import draw_planar_shadows
-from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from rendering.quick.scene3d.stream import StreamRing
-from rendering.quick.scene3d.uniforms import UniformBlock
+from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress, scene3d_trail_ghosts
+from rendering.quick.scene3d.particles import particle_budget
 from rendering.quick.scene3d.resources import pack_floats
 from ..directions import direction_vector
 from ..native_scene import (QUAD_MESH, TRAIL_EDGES_PASS, NativeScene, NativeSceneMesh, NativeScenePass,
                             NativeScenePasses, eased_show, ghost_pass_name, native_clip_depth, native_one_block,
                             native_without_motion)
-from ..render_contract import QuickTransitionRenderFrame
 
 # N5.2e: the native scene's passes, the texts this renderer compiles with the frame block merged into each pass block
 # (``native_one_block``: the core admits one block a pass), each stage writing its own clip depth given its native clip
@@ -101,6 +81,10 @@ class QuickExplodingTilesRenderer(NativeScenePasses):
     scene_pixels = True                  # N5.2e: its grid and motion read the item's device pixels
 
     # ------------------------------------------------------------------------------- N5.2e: the scene, one owner
+
+    def __init__(self) -> None:
+        self._body_key: tuple[int, str] | None = None
+        self._body = (0.15, 0.15, 0.15)
 
     @classmethod
     def native_scene_passes(cls) -> tuple[NativeScenePass, ...]:
@@ -151,177 +135,8 @@ class QuickExplodingTilesRenderer(NativeScenePasses):
                 values[f"uGhostFade@{scope}"] = float(fade)
         return values
 
-    def __init__(self) -> None:
-        # A ghost pass gives each of its draws its own pass block copy.
-        self._resources = MeshResources("Quick Exploding Tiles", copies=SCENE3D_TRAIL_GHOSTS)
-        self._target = SceneTarget("Quick Exploding Tiles")
-        self._environment = PhotoEnvironment("Quick Exploding Tiles")   # photo reflections
-        self._trails = MotionTrails("Quick Exploding Tiles")
-        # Both blocks stream through one ring; the ghosts' values are rebound copies, so the
-        # real tiles keep theirs.
-        self._stream = StreamRing("Quick Exploding Tiles")
-        self._ghost_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles ghosts", self._stream)
-        self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles", self._stream)
-        self._body_key: tuple[int, str] | None = None
-        self._body = (0.15, 0.15, 0.15)
-
-    @property
-    def has_resources(self) -> bool:
-        return (self._resources.has_resources or self._target.has_resources or self._stream.has_resources
-                or self._environment.has_resources or self._trails.has_resources)
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        try:
-            if progress <= 0.0:
-                self._resources.draw_image(frame, frame.source_texture_id)
-                return
-            if progress >= 1.0:
-                self._resources.draw_image(frame, frame.destination_texture_id)
-                return
-            (seed, columns, depth, thickness, force, detail_name, samples, bloom,
-             motion_blur, trails) = exploding_tiles_parameters(frame.run.request.parameter_dict())
-            # Multisampling, bloom and motion blur arrive resolved (this transition's settings
-            # over the 3D Detail tier); the tier itself still sets shadows and the spark budget.
-            detail = scene3d_detail(detail_name)
-            samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
-            grid = exploding_tiles_grid(columns, frame.viewport[2], frame.viewport[3])
-            center_out = str(frame.run.request.direction) == "center_out"
-            values = self._frame_values(frame.run, progress, frame.logical_size,
-                                        (frame.viewport[2], frame.viewport[3]))
-            environment = self._environment.texture(frame, self._resources)
-            with self._frame_block.bound(values):
-                if samples:
-                    with self._target.scope(frame, samples, self._resources, bloom=bloom, motion_blur=motion_blur):
-                        self._draw_scene(frame, grid, detail, progress, force, center_out, environment,
-                                         values if trails else None)
-                else:
-                    self._draw_scene(frame, grid, detail, progress, force, center_out, environment)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing and, given the
-        render ``size`` in device pixels, allocate nothing."""
-        (_seed, _columns, _depth, _thickness, _force, detail_name, samples, bloom,
-         motion_blur, trails) = exploding_tiles_parameters(parameters)
-        detail = scene3d_detail(detail_name)
-        samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
-        r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
-                   (r, "backdrop", EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE)]
-        if detail.shadows:
-            entries.append((r, "shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE))
-        entries.append((r, "tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE))
-        if particle_budget(EXPLODING_TILES_SPARKS, detail):
-            entries.append((r, "sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE))
-        if trails:
-            entries += [(r, "tiles_ghost", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_GHOST_FRAGMENT_SOURCE),
-                        (r, *TRAIL_EDGES_PROGRAM)]
-        if samples:
-            entries += [(r, *program) for program in scene_target_programs(samples, bloom > 0.0, motion_blur)]
-        if not warm_programs(entries) or not self._stream.warm():
-            return False
-        if not warm_pass_blocks(self._resources, size):
-            return False
-        return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion_blur,
-                                  bloom=bloom > 0.0, with_trails=trails)
-
-    def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool,
-                    environment: int, trail_values=None) -> None:
-        tiles = grid[0] * grid[1]
-        self._draw_backdrop(frame)
-        if detail.shadows:
-            self._draw_shadows(frame, tiles)
-        if trail_values is not None:
-            self._trails.draw(self._target, frame, self._resources,
-                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
-                              lambda ghosts: self._draw_tile_ghosts(
-                                  frame, ghosts, tiles, environment, trail_values, progress,
-                              ))
-        self._resources.begin_depth(frame)
-        self._draw_tiles(frame, tiles, environment)
-        sparks = particle_budget(EXPLODING_TILES_SPARKS, detail)
-        if sparks and exploding_tiles_sparks_live(progress, force, center_out):
-            self._draw_sparks(frame, sparks)
-
-    def _use(self, key: str, vertex: str, fragment: str, names: tuple[str, ...], frame) -> dict:
-        """Use the program with the frame block attached and the photographs ``names`` bound; its pass block's values
-        (the frame's matrix and item size among them) are returned for the draw to bind."""
-        program = self._resources.program(key, vertex, fragment)
-        self._frame_block.attach(program)
-        values = self._resources.values(key)
-        bind_frame(program, self._resources.uniforms(key, names), frame, values)
-        return values
-
-    def _draw_backdrop(self, frame) -> None:
-        values = self._use("backdrop", EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
-                           ("uNewTex",), frame)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BACKDROP_BLOCK, values)):
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-    def _draw_shadows(self, frame, tiles: int) -> None:
-        values = self._use("shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
-                           ("uNewTex",), frame)
-        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_SHADOW_BLOCK, values)):
-            draw_planar_shadows(frame, tiles)
-
     # The photograph the slabs read (bind_frame binds it); the environment's sampler is bound in the source.
     _TILE_SAMPLERS = ("uOldTex",)
-
-    def _draw_tiles(self, frame, tiles: int, environment: int) -> None:
-        values = self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-                           self._TILE_SAMPLERS, frame)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
-        gl.glBindVertexArray(vao)
-        with self._target.velocity_writes(), \
-                self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BLOCK, values)):
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
-
-    def _draw_tile_ghosts(self, frame, ghosts, tiles: int, environment: int, values, now: float) -> None:
-        """One prepared tile ghost pass; only the ghost's time-derived block fields and fade change."""
-        program, uniforms = trail_program(
-            self._resources, "tiles", EXPLODING_TILES_VERTEX_SOURCE,
-            EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_SAMPLERS,
-        )
-        self._ghost_block.attach(program)
-        pass_values = self._resources.values("tiles_ghost")
-        bind_frame(program, uniforms, frame, pass_values)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
-        gl.glBindVertexArray(vao)
-        ghosts = tuple(ghosts)
-        if ghosts:
-            pass_values["uGhostFade"] = ghosts[0][1]
-        with self._ghost_block.bound(values), self._target.velocity_writes(), \
-                self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BLOCK, pass_values)) as rebind:
-            for index, (time, fade) in enumerate(ghosts):
-                # A negative shutter makes the ghost vertex stage find the tile at the moment now.
-                self._ghost_block.update_fields({
-                    "uProgress": time,
-                    "uBlast": exploding_tiles_blast(time),
-                    "uShutter": time - now,
-                })
-                if index:                  # each draw keeps the copy it was given (the ring's rebind)
-                    pass_values["uGhostFade"] = fade
-                    rebind(pack_block(EXPLODING_TILES_BLOCK, pass_values))
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
-
-    def _draw_sparks(self, frame, count: int) -> None:
-        values = self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
-                           (), frame)
-        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_SPARK_BLOCK, values)):
-            draw_particles(frame, count)
 
     def _frame_values(self, run, progress: float, logical_size: tuple[float, float],
                       pixels: tuple[int, int]) -> dict[str, object]:
@@ -352,24 +167,6 @@ class QuickExplodingTilesRenderer(NativeScenePasses):
             self._body = photo_dominant_colour(image.rgba8, image.pixel_size, image.row_stride)
             self._body_key = key
         return self._body
-
-    def park(self) -> None:
-        """Drop the per-run target, environment and trails; programs, the slab mesh and the stream ring stay warm."""
-        self._target.release()
-        self._environment.release()
-        self._trails.release()
-
-    def release_resources(self) -> None:
-        errors: list[str] = []
-        for release in (self._target.release, self._environment.release, self._trails.release,
-                        self._frame_block.release, self._ghost_block.release, self._stream.release,
-                        self._resources.release_resources):
-            try:
-                release()
-            except Exception as exc:
-                errors.append(str(exc))
-        if errors:
-            raise RuntimeError(" | ".join(errors))
 
 
 def create_transition_renderer() -> QuickExplodingTilesRenderer:

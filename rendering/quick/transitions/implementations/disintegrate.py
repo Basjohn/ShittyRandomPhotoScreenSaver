@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 from collections.abc import Mapping
 
-from OpenGL import GL as gl
 
 from rendering.gl_programs.disintegrate_program import (
     DISINTEGRATE_FRAME_BLOCK,
@@ -15,18 +14,10 @@ from rendering.gl_programs.disintegrate_program import (
     disintegrate_grid,
     disintegrate_intact_program,
 )
-from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.scene3d.passes import blend_scope
-from rendering.quick.scene3d.population import CompactedPopulation, population_programs
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
-from rendering.quick.scene3d.stream import StreamRing
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
-from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..native_scene import (QUAD_MESH, NativeScene, NativeScenePass, NativeScenePasses, NativeScenePopulation,
                             eased_show, native_one_block, population_packs, population_values)
-from ..render_contract import QuickTransitionRenderFrame
 
 # N5.2f: the native scene's passes (the intact picture with the frame block merged into its pass block, the grains'
 # draw as its text is: it reads no frame block) and its population (its count and scatter packs merge the frame block
@@ -117,116 +108,6 @@ class QuickDisintegrateRenderer(NativeScenePasses):
     # The photographs each program reads (bind_frame binds them); every other value is in a block.
     _INTACT_SAMPLERS = ("uOldTex", "uNewTex")
     _GRAIN_SAMPLERS = ("uOldTex",)
-
-    def __init__(self) -> None:
-        self._resources = MeshResources("Quick Disintegrate")
-        self._target = SceneTarget("Quick Disintegrate")
-        self._grains = CompactedPopulation("Quick Disintegrate")
-        self._stream = StreamRing("Quick Disintegrate")
-        self._frame_block = UniformBlock(DISINTEGRATE_FRAME_BLOCK, "Quick Disintegrate", self._stream)
-
-    @property
-    def has_resources(self) -> bool:
-        return (self._resources.has_resources or self._target.has_resources or self._grains.has_resources
-                or self._stream.has_resources)
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        parameters = frame.run.request.parameter_dict()
-        seed, grain, wind = disintegrate_parameters(parameters)
-        direction = direction_vector(frame.run.request.direction)
-        try:
-            if progress <= 0.0:
-                self._resources.draw_image(frame, frame.source_texture_id)
-                return
-            if progress >= 1.0:
-                self._resources.draw_image(frame, frame.destination_texture_id)
-                return
-            columns, rows, _size = disintegrate_grid(frame.viewport[2], frame.viewport[3], grain)
-            samples = scene3d_request_samples(parameters)
-            if samples:
-                with self._target.scope(frame, samples, self._resources):
-                    self._draw(frame, progress, seed, wind, direction, columns, rows)
-            else:
-                self._draw(frame, progress, seed, wind, direction, columns, rows)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing and, given the
-        render ``size`` in device pixels, allocate nothing."""
-        _seed, grain, _wind = disintegrate_parameters(parameters)
-        samples = scene3d_request_samples(parameters)
-        r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM),
-                   (r, "intact", *disintegrate_intact_program()[:2]),
-                   (r, "grains", *disintegrate_grain_program()[:2])]
-        entries += [(r, *program) for program in population_programs("grains", DISINTEGRATE_HOOKS)]
-        if samples:
-            entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
-        if not warm_programs(entries) or not self._stream.warm():
-            return False
-        if size is not None:
-            columns, rows, _size = disintegrate_grid(size[0], size[1], grain)
-            if not self._grains.warm(columns * rows):
-                return False
-        if not warm_pass_blocks(self._resources, size):
-            return False
-        return warm_run_resources(self._target, None, size, samples)
-
-    def park(self) -> None:
-        """Drop the per-run target and grain population; programs and the stream ring stay warm."""
-        self._target.release()
-        self._grains.release()
-
-    def _draw(self, frame, progress: float, seed: int, wind: float, direction, columns: int, rows: int) -> None:
-        values = self._frame_values(progress, seed, wind, direction, columns, rows, frame.logical_size)
-        with self._frame_block.bound(values):
-            self._draw_bound(frame, columns, rows)
-
-    def _draw_bound(self, frame, columns: int, rows: int) -> None:
-        r = self._resources
-        program = r.program("intact", *disintegrate_intact_program()[:2])
-        self._frame_block.attach(program)
-        uniforms = r.uniforms("intact", self._INTACT_SAMPLERS)
-        values = r.values("intact")
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame, values)
-        with r.pass_blocks.bound(pack_block(disintegrate_intact_program()[2], values)):
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-
-        population = columns * rows
-        self._grains.warm(population)              # a no-op when warmed for this run's size
-
-        def configure(_key: str, hook_program: int) -> None:
-            self._frame_block.attach(hook_program)   # the hooks read the streamed frame block
-
-        with self._grains.bound():
-            self._grains.update(r, "grains", DISINTEGRATE_HOOKS, population, DISINTEGRATE_VERTICES, configure)
-            program = r.program("grains", *disintegrate_grain_program()[:2])
-            uniforms = r.uniforms("grains", self._GRAIN_SAMPLERS)
-            values = r.values("grains")
-            bind_frame(program, uniforms, frame, values)
-            values["uGrid"] = (columns, rows)
-            gl.glBindVertexArray(frame.quad_vao)
-            with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA), \
-                    r.pass_blocks.bound(pack_block(disintegrate_grain_program()[2], values)):
-                self._grains.draw(gl.GL_TRIANGLE_STRIP)
-
-    def release_resources(self) -> None:
-        errors: list[str] = []
-        for release in (self._target.release, self._grains.release, self._frame_block.release, self._stream.release,
-                        self._resources.release_resources):
-            try:
-                release()
-            except Exception as exc:
-                errors.append(str(exc))
-        if errors:
-            raise RuntimeError(" | ".join(errors))
 
 
 def create_transition_renderer() -> QuickDisintegrateRenderer:

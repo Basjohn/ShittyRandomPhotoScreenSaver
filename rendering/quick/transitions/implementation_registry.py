@@ -238,10 +238,10 @@ def resolve_quick_transition_renderer(
         raise RuntimeError(
             f"Quick transition implementation identity mismatch: {stable_id}"
         )
-    if not callable(getattr(implementation, "render", None)) or not callable(
-        getattr(implementation, "release_resources", None)
+    if not callable(getattr(implementation, "block_values", None)) and not callable(
+        getattr(implementation, "scene_values", None)
     ):
         raise TypeError(
-            f"Quick transition implementation violates render contract: {stable_id}"
+            f"Quick transition implementation violates value contract: {stable_id}"
         )
     return implementation

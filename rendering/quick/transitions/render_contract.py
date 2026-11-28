@@ -55,11 +55,7 @@ class QuickTransitionRenderFrame:
 
 
 class QuickTransitionRenderer(Protocol):
+    """A transition's value owner (N5.2h): the native core draws it from ``block_values`` (a fragment transition) or
+    ``scene_values`` (a scene transition); no Python GL draw exists."""
+
     transition_id: str
-
-    @property
-    def has_resources(self) -> bool: ...
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None: ...
-
-    def release_resources(self) -> None: ...

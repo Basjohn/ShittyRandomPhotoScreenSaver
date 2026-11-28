@@ -12,10 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DELETED = (
     "rendering.quick.render.background_image_node", "rendering.quick.render.background_node",
     "rendering.quick.render.image_textures", "rendering.quick.render.native_texture_bridge",
-    "rendering.quick.render.surface_backdrop",
+    "rendering.quick.render.surface_backdrop", "rendering.quick.transitions.render_host",
 )
-# Not yet: rendering.quick.transitions.render_host stays while tools/transition_contact_sheet.py's TransitionCapture
-# (about 54 test and tool callers) still draws transitions through it; it goes with that retarget.
 NAMES = ("background_family_available_on_backend", "BACKGROUND_FAMILY_BACKENDS", "_publishes_frame_presented")
 RECORD_ONLY = "# record mode only"
 SCANNED = ("rendering", "core", "ui", "widgets", "tools", "native/core/python", "tests")
