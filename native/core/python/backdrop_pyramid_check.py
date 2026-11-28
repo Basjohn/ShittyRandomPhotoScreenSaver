@@ -979,8 +979,15 @@ def round_route(core, engine, app, api: str) -> dict:
 
 
 #: N5.2h's sub-box: transitions whose frames the blit round reads (a fullscreen pass, one with options, a camera
-#: scene, a scene with motion blur and trails), each at two held progress values.
-BLIT_VARIANTS = ("crossfade", "wipe_diagonal", "burn_options", "cube_turn", "block_spins_both")
+#: scene, a scene with motion blur and trails), each at two held progress values. Cube Turn at its production defaults
+#: is multisampled: its input differs from Python's along the slanted silhouettes (measured 53-59 levels on 939-1758
+#: pixels), which transition_route_check never judges by rule (a) (MULTISAMPLED_RULE_A, D8 point 1: the 4x sample
+#: pattern lands mirrored on Python's bottom-first rows); its single-sampled form (cube_turn_options, rule (a) there:
+#: N52C_RULE_A) is read too. Measured (20261128_n52h_backdrop_blit_r2): its display pixels are within 1 level; the
+#: input's whole-window difference (126-161 levels) is the two overscan rows above the display, which the Python scene
+#: renderer drawn single-sampled straight into Quick's framebuffer overdraws (the native layer keeps to the display),
+#: and the Python blit's levels carry it; rule (a)'s references (product_capture, the display's size) have no margin.
+BLIT_VARIANTS = ("crossfade", "wipe_diagonal", "burn_options", "cube_turn", "cube_turn_options", "block_spins_both")
 BLIT_PROGRESS = (0.3, 0.6)
 #: The pyramid is a chain of averaging passes with one 8-bit rounding each, so on a transition frame its levels can
 #: differ from the blit's by no more than its input does plus the still frames' own rounding (LEVEL_RULE_A's tie: 2
@@ -1032,6 +1039,9 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
 
     def judged(native_input, python_input, native_levels, python_levels) -> dict:
         entry = {"input": compare(native_input, python_input),
+                 # The display's own pixels (a fact): the window's overscan margins are outside the display.
+                 "input_display": compare(blc.display_rows(native_input, blc.DISPLAY),
+                                          blc.display_rows(python_input, blc.DISPLAY)),
                  "levels": {name: compare(native_levels[name], python_levels[name]) for name in native_levels}}
         bound = entry["input"]["max_level"] + BLIT_ROUNDING_LEVELS
         entry["bound_levels"] = bound
