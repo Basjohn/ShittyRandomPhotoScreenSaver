@@ -25,14 +25,20 @@ def test_input_roles_follow_current_semantics_across_live_theme_changes(qt_app, 
     try:
         for value in (foreground, Rgba(80, 60, 90, 200), foreground):
             colors["control.input.text"] = value
-            root.setStyleSheet(_build_settings_root_stylesheet(replace(DEFAULT_DARK_SETTINGS_THEME, colors=colors)))
+            theme = replace(DEFAULT_DARK_SETTINGS_THEME, colors=colors)
+            root.setStyleSheet(_build_settings_root_stylesheet(theme))
+            # The theme projects every token through the legibility model, so
+            # the roles must follow the projected semantic colour, not the raw
+            # token the test supplied.
+            text = theme.color("control.input.text")
+            disabled = theme.color("control.input.disabled_text")
             for control in controls:
                 control.ensurePolished()
                 palette = control.palette()
-                assert palette.color(QPalette.ColorRole.Text) == QColor(*value.as_tuple())
-                assert palette.color(QPalette.ColorRole.PlaceholderText) == QColor(value.r, value.g, value.b, round(value.a * 0.5))
+                assert palette.color(QPalette.ColorRole.Text) == QColor(*text.as_tuple())
+                assert palette.color(QPalette.ColorRole.PlaceholderText) == QColor(text.r, text.g, text.b, round(text.a * 0.5))
                 control.setEnabled(False)
-                assert control.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText) == QColor(100, 110, 120, 150)
+                assert control.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText) == QColor(*disabled.as_tuple())
                 control.setEnabled(True)
     finally:
         root.deleteLater()
