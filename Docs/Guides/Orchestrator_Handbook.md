@@ -36,6 +36,14 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   sweeps, layer P against references, test suites, reference regeneration, recordings). It never designs or fixes,
   and it never runs while a timing, cost or hitch run (T, C, hitch rows) is going: those runs keep the machine to
   themselves apart from the operator's own load. Display-bound runs still share one Visualizer on screen at a time.
+  **First pass High, successors Medium** (operator's idea, 28 Nov; lead's check): a port, new primitive or complex
+  feature gets its first pass on Opus 5.5 High, bounded to its foundation (design, data model, ABI, proof harness,
+  first "ready for build"). Every successor is Opus 5.5 Medium or a workhorse, except a truly critical phase
+  (concurrency, ABI or core lifetime changes). High audits at merges stay as they are. Why it is cheap: over this
+  session's 23 Opus agents, High cost about 3 % more per turn than Medium (22.2k against 21.4k weighted tokens; the
+  context re-read dominates, effort changes only the thinking), so the premium is the first pass's length, not its
+  rate. Why it pays: the expensive defects were foundations decided but never built (N3.6's in-process warm-up) or
+  built loosely; successors inherit the first pass's design. Never on the cheap slot.
   The cap counts agents running at once. When it shrinks, nobody busy is stopped: they finish, or hand over safely
   (journal current, work committed). New work starts only once the plans are in logical order and the open
   worries are solved.
