@@ -43,5 +43,15 @@ every attachment already.
 ## Rule
 
 On a native pass with several attachments, never leave one written attachment with blending off beside a blended one.
-Declare replace as an enabled ONE, ZERO blend there. A core-side guard (expressing replace that way whenever a pass
-mixes them) would cover every mode and is left to the core's owner: it is a C++ change.
+Declare replace as an enabled ONE, ZERO blend there.
+
+## The core's guard (ABI 47)
+
+The core now refuses such a pass by name on every backend, so a program means the same on Vulkan and OpenGL
+(`mode_content.cpp` `mixedBlendRefusal`, commit `29a844943`, built at `8bf270aa7`). The program is refused at parse
+with "mixed blend: pass '<name>' writes attachment <i> with blending off beside attachment <j> with it on ...", for the
+pass's own outputs and for its sorted pack's outputs; a masked attachment writes nothing and counts as neither. The
+guard refuses rather than rewriting the replace silently, so the program's declaration stays the one truth. No shipped
+program mixes them: Extruded Bubble's backdrop was fixed above, and the two harness programs that did (the post-stage
+backdrop and the waveform primitives' `two`) moved to an enabled ONE, ZERO blend. `tests/test_native_post_stages.py`
+proves the refusal; its control on the old source (`.artifacts/scratch/n56key/mixed_control.py`) failed.
