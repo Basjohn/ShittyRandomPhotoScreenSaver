@@ -248,7 +248,7 @@ defaults, the installer script) are committed and pushed at once, silently.
 - **No ticket system** (lead, 27 Nov, on the operator's question). The plan as live checklists already acts as the
   ticket store. Agents read only their box: in the 17-27 Nov transcripts, the plan slices read were a few percent of
   an agent's context. An external tracker would put its tool schemas into every turn of every agent and split the
-  one owner of open work. What costs is turns times context (above), not the plan's size. Revisit only if the lead's
+  one owner of open work. What costs is turns times context (above), not the plan's size. Beads (`bd`, 28 Nov, operator's question): a CLI, so no schemas, and its dependency graph's `bd ready` is neat, but it targets none of the measured costs (prefix, turns per brief, compaction re-reads) and would move open work out of the plan; not adopted. Revisit only if the lead's
   own plan reads become a measurable share.
 - **Resume or fresh, by the agent's context size.** Resuming an agent after a long wait (a GitHub build, a lead run)
   writes its whole context to cache again. Resume related work when the agent's context is small (under about
