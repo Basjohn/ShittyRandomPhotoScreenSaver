@@ -559,17 +559,18 @@ QRhiGraphicsPipeline::CompareOp rhiCompare(DepthTest test)
 bool settingNumbers(const QString &key, const QJsonValue &value, QList<double> *out, QString *error)
 {
     out->clear();
-    if (value.isDouble() || value.isBool()) {
-        out->append(value.isBool() ? (value.toBool() ? 1.0 : 0.0) : value.toDouble());
+    double number = 0.0;
+    if (settingNumber(value, &number)) { // a negative zero arrives as "-0" (settingNumber)
+        out->append(number);
         return true;
     }
     if (value.isArray()) {
         for (const QJsonValue &item : value.toArray()) {
-            if (!item.isDouble() && !item.isBool()) {
+            if (!settingNumber(item, &number)) {
                 *error = QStringLiteral("'%1' holds a value that is not a number").arg(key);
                 return false;
             }
-            out->append(item.isBool() ? (item.toBool() ? 1.0 : 0.0) : item.toDouble());
+            out->append(number);
         }
         return true;
     }
@@ -3608,8 +3609,9 @@ QHash<QByteArray, double> ModeProgram::drawSettingNumbers(const QJsonObject &set
     QHash<QByteArray, double> numbers;
     for (auto it = settings.begin(); it != settings.end(); ++it) {
         const QByteArray name = it.key().toLatin1();
-        if (drawNames(name) && (it.value().isDouble() || it.value().isBool()))
-            numbers.insert(name, it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
+        double number = 0.0;
+        if (drawNames(name) && settingNumber(it.value(), &number))
+            numbers.insert(name, number);
     }
     return numbers;
 }

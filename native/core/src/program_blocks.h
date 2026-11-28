@@ -27,6 +27,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
+#include <QtCore/QJsonValue>
 #include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -94,6 +95,11 @@ private:
     QByteArray m_bytes;
     QList<bool> m_filled;  // Qt containers only: the core imports nothing from the STL DLL (P1 risk 4)
 };
+
+// One number of a settings JSON: a number, a boolean as 0 or 1, or the string "-0", which is negative zero (N5.6: Qt's
+// JSON parser stores -0.0 as the integer 0, so ``rendering/native/program_values.settings_json`` writes a negative
+// zero as "-0" and its sign reaches the block as the Python renderer packs it). False for anything else.
+bool settingNumber(const QJsonValue &value, double *out);
 
 // N2.9: why the record's `field` cannot fill the block's `member` (empty: it fits exactly).
 QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field);
