@@ -128,7 +128,9 @@ Continue the native sequence below with the repaired timing receipts. The report
     the f475358aa module (goes to the GL fix agent); `rendering/quick/scene3d` PhotoEnvironment/MotionTrails/trails may
     now be dead for transitions (the visualizers still use them; check before any deletion). Retired at 231k.
     **Opus Medium `ad3b55fdd7e2d3dcd`** (28 Nov, own worktree, merges a6b16's): GL_INVALID_ENUM fix (diagnosis in the switch box)
-    and the admission wording red; stops at a commit, lead builds.
+    and the admission wording red. Done, built `f9d4399e`, verified. **Sonnet Medium `aa7af460a1382fb30`** (28 Nov, own
+    worktree, merges ad3b5's): the switch's Proof box minus D1 (only Display 0 on): route + `--cost` both APIs, hitch
+    rows, isolated suite.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
@@ -1716,8 +1718,8 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       such scene targets and `tiles_4x` has one. Fix `158531ad9`: a `createTexture` helper in `gl_sampler_state.cpp`
       allocates the multisampled storage itself and hands it to Qt through `createFrom` (Qt owns and frees it). Both
       creates in `scene_targets.cpp` use it, and a source test plus negative control cover it. The admission test's
-      wording is fixed in `123cf29d0`. The Waveform "first 4x frame" watch is likely the same cause. Lead builds and
-      verifies.
+      wording is fixed in `123cf29d0`. The Waveform "first 4x frame" watch is likely the same cause. Built as `f9d4399e`;
+      lead verified 28 Nov: gl_errors PASS (no errors), 52 tests pass in the module, scene-target and post-stage files.
       Verify: `post_stage_check.py --apis opengl --rounds gl_errors` and
       `tests/test_native_core_module.py::test_a_validation_on_opengl_frame_logs_no_gl_errors`.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
