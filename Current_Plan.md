@@ -220,6 +220,14 @@ Continue the native sequence below with the repaired timing receipts. The report
     - The `qtquick_render_node_smoke` assertions have never been seen failing: run one inverted control. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
     **Opus Medium `aeba3f08a60b6a572`** (28 Nov, own worktree, merges aa3b's): this fix list. **Sonnet `ac55fd94250f2d20c`**:
     D1 runs (GL, Vulkan) + hitch rows on `c9b9f0a6`; the reveal part is rerun by the lead after fix 1.
+    Result (lead, 28 Nov): D1 PASS on both APIs (wallpaper drawn, mid-transition frames, no GL errors, no vUv warning).
+    Hitch rows FAIL under the operator's game (~400 % CPU); evidence `native_core/n5_2h/20261128_n52h_switch_hitch/` in
+    the aa3b worktree. OpenGL: every over-limit gap is the FIRST frame (Exploding Tiles 204.4, Jigsaw 63.3, Volumetric
+    62.3, Disintegrate 39.9 ms) against loaded Python-GL maxima of 35-62 ms: a switch regression, the native GL
+    pipelines compile at first use and are not warmed (R-252's units warmed the deleted Python renderers). Fix 7 for
+    aeba3: warm each next transition's native GL pipelines gradually (warm-up rule), negative control, retake the GL
+    rows. Vulkan: mid-run gaps (Exploding Tiles 79.2, Crossfade control 76.8 ms) with the control failing too = load,
+    not the switch; retaken with the GL rows. Store the retaken rows in `tools/baselines/preflip/`.
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
     with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
