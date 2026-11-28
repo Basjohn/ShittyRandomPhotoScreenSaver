@@ -397,14 +397,13 @@ def native_one_block(stages: tuple[str, ...], frame_block: str) -> tuple[str, ..
 
 
 def native_without_motion(fragment_source: str) -> str:
-    """N5.2e: a fragment that always writes its screen motion (Exploding Tiles' tiles: ``SceneMotion`` and
-    ``SceneMotionY`` at locations 1 and 2) as drawn on a scene without motion blur: its motion outputs plain variables
-    (their writes dead), since the core refuses outputs past a target's attachments; Python masks the attachment."""
-    for output in ("SceneMotion", "SceneMotionY"):
-        fragment_source, count = re.subn(rf"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*out\s+vec4\s+{output}\s*;",
-                                         f"vec4 {output};", fragment_source)
-        if count != 1:
-            raise ValueError(f"a motion-writing fragment declares its {output} output once")
+    """N5.2e: a fragment that always writes its screen motion (Exploding Tiles' tiles: ``SceneMotion`` at location 1)
+    as drawn on a scene without motion blur: its motion output a plain variable (its writes dead), since the core
+    refuses outputs past a target's attachments; Python masks the attachment."""
+    fragment_source, count = re.subn(r"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*out\s+vec4\s+SceneMotion\s*;",
+                                     "vec4 SceneMotion;", fragment_source)
+    if count != 1:
+        raise ValueError("a motion-writing fragment declares its SceneMotion output once")
     return fragment_source
 
 

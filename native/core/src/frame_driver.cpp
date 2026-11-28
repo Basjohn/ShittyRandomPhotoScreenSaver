@@ -92,12 +92,22 @@ QList<GpuTimingSample> FrameDriver::takeGpuSamples()
     return m_samples->take();
 }
 
-int FrameDriver::timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind)
+int FrameDriver::timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind, int pass, int part)
 {
     if (!m_timer)
         return -1;
     QMutexLocker lock(&m_timerMutex);
-    return m_timer->begin(rhi, cb, kind);
+    return m_timer->begin(rhi, cb, kind, pass, part);
+}
+
+int FrameDriver::unitBegin(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int pass, int part)
+{
+    return static_cast<FrameDriver *>(owner)->timerBegin(rhi, cb, GpuPassKind::ScenePass, pass, part);
+}
+
+void FrameDriver::unitEnd(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int scope)
+{
+    static_cast<FrameDriver *>(owner)->timerEnd(rhi, cb, scope);
 }
 
 void FrameDriver::timerEnd(QRhi *rhi, QRhiCommandBuffer *cb, int scope)
@@ -419,8 +429,15 @@ void FrameDriver::onBeforeRendering()
             recordBackdrops();
         bool surfaceRecorded = false;
         QString error;
-        const int scope = timerBegin(rhi, cb, GpuPassKind::Surface);
+        // N5.2h: under the harness's time_scene_passes (the timer on) the record's units are timed one by one instead
+        // of the record whole (OpenGL's GL_TIME_ELAPSED queries cannot nest); otherwise the brackets stay null.
+        const bool units = m_timer && timeScenePasses();
+        const int scope = units ? -1 : timerBegin(rhi, cb, GpuPassKind::Surface);
+        if (units)
+            setGpuUnitBrackets(&m_unitBrackets); // made once with the driver (frame_driver.h)
         const bool surfaceOk = surface->record(rhi, cb, &surfaceRecorded, &error);
+        if (units)
+            setGpuUnitBrackets(nullptr);
         timerEnd(rhi, cb, scope);
         if (!surfaceOk) {
             setError(QStringLiteral("surface: ") + error);

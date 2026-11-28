@@ -48,6 +48,7 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QtGlobal>
+#include <QtGui/QColor>
 #include <QtQuick/QQuickItem>
 
 #include <cmath>
@@ -618,8 +619,9 @@ PyObject *host_gpu_samples(PyObject *, PyObject *args)
         return nullptr;
     for (qsizetype i = 0; i < samples.size(); ++i) {
         const srpss_core::GpuTimingSample &s = samples.at(i);
-        PyObject *row = Py_BuildValue("(iLLL)", s.kind, (long long)s.frame, (long long)s.readAt,
-                                      (long long)s.nanoseconds);
+        // N5.2h: a ScenePass figure's unit (pass, part) rides as the row's last two items (-1, 0 for every other kind).
+        PyObject *row = Py_BuildValue("(iLLLii)", s.kind, (long long)s.frame, (long long)s.readAt,
+                                      (long long)s.nanoseconds, s.pass, s.part);
         if (!row) {
             Py_DECREF(list);
             return nullptr;
@@ -746,6 +748,14 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mode_texture_image_bytes"), double(textures.imageBytes));
     o.insert(QStringLiteral("mode_texture_uploads"), double(textures.uploads));
     o.insert(QStringLiteral("mode_texture_chains"), double(textures.chains)); // ABI 35: the box kernel's item chains
+    // N5.2h: the mode surfaces' clears at a record's first surface run (or its only clear): by the pass's own clear
+    // (OpenGL), or by the full-triangle clearing draw (Vulkan, rule B; the control surface_clear_draw).
+    o.insert(QStringLiteral("mode_surface_pass_clears"), double(textures.surfacePassClears));
+    o.insert(QStringLiteral("mode_surface_draw_clears"), double(textures.surfaceDrawClears));
+    // N5.2h: the scene targets' first runs, cleared by the pass's own clear (OpenGL, a pass-clearable declaration) or
+    // by their clearing draw (Vulkan, a cube or transparency target; the control scene_clear_draw).
+    o.insert(QStringLiteral("mode_scene_pass_clears"), double(textures.scenePassClears));
+    o.insert(QStringLiteral("mode_scene_draw_clears"), double(textures.sceneDrawClears));
     // N5.7b: the backdrop items, their pyramids and the pyramids' QRhi objects, and the builds recorded.
     const srpss_core::BackdropCounts backdrops = srpss_core::backdropCounts();
     o.insert(QStringLiteral("backdrop_items"), backdrops.items);
@@ -2285,6 +2295,14 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSceneFrameSurface(value);
     else if (control == "card_triangle")
         srpss_core::setCardTriangle(value);
+    else if (control == "surface_clear_draw")
+        srpss_core::setSurfaceClearDraw(value);
+    else if (control == "scene_clear_draw")
+        srpss_core::setSceneClearDraw(value);
+    else if (control == "time_scene_passes")      // N5.2h: a record's units timed one by one (gpu_timer.h)
+        srpss_core::setTimeScenePasses(value);
+    else if (control == "time_scene_run_parts")   // N5.2h: a scene run's opening, passes and resolves apart (OpenGL)
+        srpss_core::setTimeSceneRunParts(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")
@@ -2342,6 +2360,32 @@ PyObject *scene_target_clamp(PyObject *, PyObject *args)
     if (!intsArgument(supported, &counts, "the supported sample counts"))
         return nullptr;
     return PyLong_FromLong(srpss_core::clampSamples(counts, requested));
+}
+
+// N5.2h (audit): the pure pass-clear rule (scenePassClearColour, GPU-free) for each scene target a program declares,
+// at `samples` (the effective count) or, when it is 0, at each declaration's own request.
+PyObject *scene_target_pass_clear(PyObject *, PyObject *args)
+{
+    const char *json = "";
+    Py_ssize_t length = 0;
+    PyObject *packs = nullptr;
+    int samples = 0;
+    if (!PyArg_ParseTuple(args, "s#O|i", &json, &length, &packs, &samples))
+        return nullptr;
+    srpss_core::ModeProgram program;
+    if (!programArgument(json, length, packs, &program))
+        return nullptr;
+    QJsonObject out;
+    for (const srpss_core::TargetDeclaration &decl : program.targets) {
+        QColor colour;
+        if (srpss_core::scenePassClearColour(decl, samples > 0 ? samples : decl.samples, &colour))
+            out.insert(QString::fromLatin1(decl.name),
+                       QJsonArray { double(colour.redF()), double(colour.greenF()), double(colour.blueF()),
+                                    double(colour.alphaF()) });
+        else
+            out.insert(QString::fromLatin1(decl.name), QJsonValue::Null);
+    }
+    return pyJson(out);
 }
 
 PyObject *mode_blocks(PyObject *, PyObject *args)
@@ -3127,7 +3171,8 @@ PyMethodDef methods[] = {
       "(handle, config_json) -> None: the GPU timer on or off from the next frame (enabled; keep_when_off and "
       "wait_for_results are negative controls)." },
     { "host_gpu_samples", host_gpu_samples, METH_VARARGS,
-      "(handle) -> list of (kind, frame, read_at, nanoseconds): the timer's results read since the last call." },
+      "(handle) -> list of (kind, frame, read_at, nanoseconds, pass, part): the timer's results read since the last "
+      "call (pass, part: a ScenePass figure's unit, N5.2h; -1, 0 otherwise)." },
     { "gpu_timer_live", gpu_timer_live, METH_NOARGS,
       "() -> JSON str: GPU timers alive in the process and their query objects (pools, queries)." },
     { "live_hosts", live_hosts, METH_NOARGS, "() -> int: hosts not closed." },
@@ -3324,7 +3369,10 @@ PyMethodDef methods[] = {
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
       "flush_defocus_between_draws, flush_defocus_after_sprites, declare_defocus_external, "
       "disable_defocus_compute_tracking (OpenGL; latter requires no compute passes), device_without_independent_blend: read at the next device's "
-      "creation); False for an unknown "
+      "creation; time_scene_passes (N5.2h: while the GPU timer is on, each surface's record is timed per unit as "
+      "ScenePass figures in place of its whole Surface figure, read at the next frame); time_scene_run_parts (N5.2h, "
+      "OpenGL, with time_scene_passes: a scene target's run as its opening, each pass and its end-of-pass resolves, "
+      "read at the next record)); False for an unknown "
       "name. fail_allocation (texture/target sync) and fail_build (sampler/bindings/pipeline build or rebind) accept "
       "integer create-attempt ordinals (0: off), bounded by the stage limits." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
@@ -3343,6 +3391,9 @@ PyMethodDef methods[] = {
       "QRhi's convention (GPU-free)." },
     { "scene_target_clamp", scene_target_clamp, METH_VARARGS,
       "([supported counts], requested) -> int: D14's sample clamp (GPU-free)." },
+    { "scene_target_pass_clear", scene_target_pass_clear, METH_VARARGS,
+      "(program_json, packs, samples=0) -> JSON str: N5.2h; per scene target the colour OpenGL's pass clears it to "
+      "instead of its clearing draw, or null (the draw); samples 0: each declaration's own (GPU-free)." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
       "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
       "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "

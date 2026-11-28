@@ -167,10 +167,10 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     samples: the Python renderer's ``SceneTarget`` scope, or Quick's framebuffer, which a one-sample target copies
     exactly), then the opaque composite onto the layer. Returns (passes, targets, images).
 
-    N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity as two
-    R16F attachments (``vx``, ``vy``: QRhi has no RG16F; cleared to no motion), written by the passes that move (the
-    others mask them, Python's ``velocity_writes``); then the tile max (a compute entry triggered by every drawn record,
-    into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
+    N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity, one
+    RGBA16F attachment (``velocity``: QRhi has no RG16F; its .xy the half floats of Python's RG16F, cleared to no
+    motion), written by the passes that move (the others mask it, Python's ``velocity_writes``); then the tile max (a
+    compute entry triggered by every drawn record, into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
     the composite of that. With trails each ghost pass (target ``ghosts``) is drawn once a ghost into an R8 buffer,
     MAX-blended, and the edges are a pass of the scene's list."""
     from rendering.gl_programs.scene3d import SCENE3D_TRAIL_GHOSTS
@@ -199,6 +199,12 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     populations = {population.draw: population for population in getattr(scene, "populations", ())}
     for population in populations.values():
         passes.extend(population_compute(renderer, population))
+    # N5.2h: the ghost passes (their own R8 target, reading only the pictures and the environment) go before every
+    # scene pass, so the scene target is drawn in one run: drawn between its passes, they split it into two runs, each
+    # paying the multisampled attachments' resolves at its end (0.43 ms at 4K on OpenGL, 0.13 on Vulkan, for
+    # crumble_both_4x), work Python never does (its framebuffer switch keeps the samples). Same pixels: nothing the
+    # ghosts read is written by a scene pass.
+    ghost_at = len(passes)
     for p in scene.passes:
         samplers = tuple(PassSampler(name, textures[kind], "nearest" if kind in nearest else "linear", "clamp",
                                      "linear" if kind in mipped else "none") for name, kind in p.samplers)
@@ -207,8 +213,7 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         # With motion blur every pass on the scene writes its colour; only a moving one writes the velocity.
         outputs = ()
         if motion and target == "scene":
-            outputs = (PassOutput(True),) + ((PassOutput(True),) * 2 if getattr(p, "moves", False)
-                                              else (PassOutput(False),) * 2)
+            outputs = (PassOutput(True), PassOutput(bool(getattr(p, "moves", False))))
         if getattr(p, "core_triangle", False):
             fragment = shared_pack_path(p.name, ".frag").read_bytes()
             passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
@@ -230,25 +235,31 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         if target == "ghosts":
             # One pass a ghost, each with its own values (<member>@<pass>): MAX-blended, no depth (trails.py).
             for age in range(SCENE3D_TRAIL_GHOSTS):
-                passes.append(ModePass(ghost_pass_name(p.name, age), fragment,
-                                       BlendState(("max", "one", "one"), ("max", "one", "one")), samplers,
-                                       target=SCENE_GHOSTS, geometry=geometry))
+                passes.insert(ghost_at, ModePass(ghost_pass_name(p.name, age), fragment,
+                                                 BlendState(("max", "one", "one"), ("max", "one", "one")), samplers,
+                                                 target=SCENE_GHOSTS, geometry=geometry))
+                ghost_at += 1
             continue
         passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
                                depth_test="less" if p.depth else None,
                                depth_write=bool(getattr(p, "writes_depth", p.depth)), geometry=geometry))
-    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears to 0).
+    # N5.2e: with bloom the colour's alpha is the light each pass emits, so nothing drawn is no light (Python clears
+    # to 0).
     bloom = float(getattr(scene, "bloom", 0.0) or 0.0)
     colour = [TargetAttachment("colour", "rgba8", clear=(0.0, 0.0, 0.0, 0.0 if bloom > 0.0 else 1.0))]
     targets: list = []
     images: list = []
     scene_texture = f"{SCENE_TARGET}.colour"
     if motion:
-        colour += [TargetAttachment("vx", "r16f"), TargetAttachment("vy", "r16f")]
+        # N5.2h: one RGBA16F, not two R16F attachments (x and y, as before): on OpenGL the pair cost 0.42 ms a 4K frame
+        # at 4x for crumble_both_4x (their clearing draw, the pieces' writes and QRhi's resolve blits; a raw-GL probe of
+        # the same shape: two R16F 0.86 ms, one RGBA16F 0.51, Python's RG16F 0.38). Only .xy is read (cleared to 0 as
+        # Python clears its RG16F); its alpha is the colour's, so both share the one clear colour that lets OpenGL clear
+        # the multisampled target by its pass (scene_targets.cpp scenePassClearColour: 0.022 ms at 4K, 0.058 by draw).
+        colour += [TargetAttachment("velocity", "rgba16f", clear=(0.0, 0.0, 0.0, colour[0].clear[3]))]
         geometry = motion_geometry(pixels if pixels is not None else destination_size)
         images.append(StorageImage(SCENE_MOTION_TILES, geometry.tiles, "rgba16f"))
-        velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.vx", "nearest"),
-                    PassSampler("uVelocityY", f"{SCENE_TARGET}.vy", "nearest"))
+        velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.velocity", "nearest"),)
         passes.append(ComputePass(MOTION_TILE_MAX, shared_pack_path(MOTION_TILE_MAX, ".comp").read_bytes(),
                                   (ComputeBinding("uTiles", SCENE_MOTION_TILES, "image", "write"),),
                                   groups=(geometry.tiles[0], geometry.tiles[1], 1), trigger="draw", samplers=velocity))

@@ -581,11 +581,10 @@ void main() {{
 
 
 def scene3d_motion_fragment(source: str) -> str:
-    """The same fragment shader, also writing its screen motion: (x, y) at location 1 and y again at location 2.
+    """The same fragment shader, also writing its screen motion (x, y) at location 1.
 
-    N5.2d (N4.i): the native core's velocity is two R16F attachments (QRhi has no RG16F), x at location 1 and y at 2; this
-    renderer's one RG16F attachment at location 1 keeps (x, y) and has no draw buffer at location 2, which OpenGL then
-    discards, so its pixels are unchanged (checklist 16 stills, byte-identical)."""
+    This renderer's velocity is one RG16F attachment there; the native core's one RGBA16F (QRhi has no RG16F; N5.2h: the
+    same half floats in .xy, where two R16F attachments, x at 1 and y at 2, cost 0.42 ms a 4K frame at 4x on OpenGL)."""
     if len(re.findall(r"\bout\s+vec4\s+FragColor\s*;", source)) != 1:
         raise ValueError("a shader for motion blur must write one vec4 FragColor")
     source = re.sub(r"(?:layout\s*\(\s*location\s*=\s*0\s*\)\s*)?\bout\s+vec4\s+FragColor\s*;",
@@ -593,14 +592,12 @@ def scene3d_motion_fragment(source: str) -> str:
     source = _rename_main(source, "sceneFragmentMain")
     velocity = "" if "sceneVelocity" in source else SCENE3D_VELOCITY_GLSL
     source = _after_version(source, "in vec4 vClipNow;\nin vec4 vClipBefore;\nuniform vec2 uViewport;\n"
-                                    "layout(location = 1) out vec4 SceneMotion;\n"
-                                    "layout(location = 2) out vec4 SceneMotionY;\n" + velocity)
+                                    "layout(location = 1) out vec4 SceneMotion;\n" + velocity)
     return source + """
 void main() {
     sceneFragmentMain();
     vec2 motion = sceneVelocity(vClipNow, vClipBefore, uViewport);
     SceneMotion = vec4(motion, 0.0, 1.0);
-    SceneMotionY = vec4(motion.y, 0.0, 0.0, 1.0);
 }
 """
 
@@ -718,12 +715,10 @@ def scene3d_ghost_fragment(source: str) -> str:
         raise ValueError("motion trails need a motion-writing fragment (a ghost must know how far its piece moved)")
     # N5.2d (N4.i): the ghost writes FragColor alone. Its motion outputs become plain variables (their writes are dead):
     # the native core refuses outputs past its one-attachment ghost target, and this renderer's R8 buffer discarded them.
-    # SceneMotionY is scene3d_motion_fragment's; Exploding Tiles' own motion fragment (N5.2e) writes SceneMotion only.
-    for output, required in (("SceneMotion", True), ("SceneMotionY", False)):
-        source, count = re.subn(rf"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*out\s+vec4\s+{output}\s*;",
-                                f"vec4 {output};", source)
-        if count > 1 or (required and count != 1):
-            raise ValueError(f"a motion-writing fragment declares its {output} output once")
+    source, count = re.subn(r"layout\s*\(\s*location\s*=\s*\d+\s*\)\s*out\s+vec4\s+SceneMotion\s*;",
+                            "vec4 SceneMotion;", source)
+    if count != 1:
+        raise ValueError("a motion-writing fragment declares its SceneMotion output once")
     source = _rename_main(source, "sceneTrailMain")
     source = _after_version(source, "uniform float uGhostFade;\n")
     return source + """

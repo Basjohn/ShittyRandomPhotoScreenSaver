@@ -183,6 +183,31 @@ def test_every_vertex_input_is_its_meshs_and_every_sampler_the_shaders(variant):
     assert scene.environment == reads
 
 
+def scene_target_runs(drawn, target: str) -> int:
+    """The core's runs on ``target`` (mode_content.cpp recordPasses: consecutive passes into one target are one run, and
+    each run's end resolves its multisampled attachments)."""
+    runs, previous = 0, None
+    for p in drawn:
+        if p.target == target and previous != target:
+            runs += 1
+        previous = p.target
+    return runs
+
+
+def velocity_is_one_attachment(target: dict) -> bool:
+    """A motion-blurred scene target's attachments: its colour, then the velocity as one RGBA16F (the half floats of
+    Python's RG16F in .xy; QRhi has no RG16F), and nothing else."""
+    colour = target["colour"]
+    return len(colour) == 2 and colour[1]["format"] == "rgba16f"
+
+
+def clears_as_one(target: dict) -> bool:
+    """N5.2h: every attachment of the target clears to the same four values, so OpenGL can clear the multisampled
+    target by its pass (one clear colour for every attachment) instead of by the clearing draw."""
+    clears = {tuple(a.get("clear", [0.0, 0.0, 0.0, 0.0])) for a in target["colour"]}
+    return len(clears) == 1
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(variant):
     from rendering.native.mode import CompositeStep, EnvironmentStep, ModePass, program_json
@@ -222,7 +247,15 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
         ghost = scene_pass.target == "ghosts"
         names = [ghost_pass_name(scene_pass.name, a) for a in range(SCENE3D_TRAIL_GHOSTS)] if ghost else [scene_pass.name]
         expected += [(name, scene_pass) for name in names]
+    # N5.2h: the ghost passes first (their own target), so the scene target is drawn in one run.
+    expected = ([e for e in expected if e[1].target == "ghosts"] + [e for e in expected if e[1].target != "ghosts"])
     assert [p.name for p in drawn] == [name for name, _p in expected] + ([MOTION_GATHER] if scene.motion else [])
+    assert scene_target_runs(drawn, nb.SCENE_TARGET) == (1 if any(p.target == nb.SCENE_TARGET for p in drawn) else 0)
+    if scene.trails:
+        # Negative control: the old order (the ghosts at their place among the scene's passes) splits the scene target.
+        old = [p for p in drawn if p.target == nb.SCENE_TARGET][:1] + [p for p in drawn if p.target == nb.SCENE_GHOSTS] \
+            + [p for p in drawn if p.target == nb.SCENE_TARGET][1:]
+        assert scene_target_runs(old, nb.SCENE_TARGET) == 2
     for native, (_name, scene_pass) in zip(drawn, expected):
         if scene_pass.core_triangle:
             assert native.pack == nb.shared_pack_path(scene_pass.name, ".frag").read_bytes() and native.geometry is None
@@ -246,6 +279,22 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
     target = program["targets"][0]
     assert target["depth"] is True and target.get("samples", 1) == max(1, scene.samples)
     assert len(program["targets"]) == 1 + int(scene.trails) + int(scene.motion)
+    # N5.2h: with motion blur the velocity is one four-channel half-float attachment (its .xy), never a pair of
+    # single-channel ones (0.42 ms a 4K frame at 4x on OpenGL), and each scene pass writes one output per attachment.
+    if scene.motion:
+        assert velocity_is_one_attachment(target)
+        assert all(len(p.outputs) == 2 for p in drawn if p.target == nb.SCENE_TARGET)
+        # Negative control: the ABI 37 declaration (x and y as two R16F attachments) fails.
+        pair = dict(target, colour=[target["colour"][0], {"name": "vx", "format": "r16f"},
+                                    {"name": "vy", "format": "r16f"}])
+        assert not velocity_is_one_attachment(pair)
+        assert clears_as_one(target)
+        # Negative control: a velocity whose alpha differs from the colour's (the first form, with bloom) fails.
+        alpha = target["colour"][0].get("clear", [0.0, 0.0, 0.0, 0.0])[3]
+        apart = dict(target, colour=[target["colour"][0], dict(target["colour"][1], clear=[0.0, 0.0, 0.0, 1.0 - alpha])])
+        assert not clears_as_one(apart)
+    else:
+        assert len(target["colour"]) == 1
     own_vertex = [p for p in drawn if p.geometry is not None]
     assert len(packs) == len(program["passes"]) + len(own_vertex)   # each own vertex pack after its fragment's
 
@@ -711,7 +760,7 @@ def test_the_merge_refuses_a_doubled_member_and_a_third_block():
 
 def test_the_motion_free_tiles_write_no_motion_and_the_motion_tiles_both_axes():
     """Without motion blur the scene target has its colour alone and the core refuses outputs past it: the tiles' pack
-    writes FragColor only; with it, x at location 1 and y at 2 (the conversion: Python's RG16F keeps both at 1)."""
+    writes FragColor only; with it, (x, y) at location 1 (N5.2h: the core's one RGBA16F, Python's RG16F)."""
     from rendering.quick.transitions.implementations.exploding_tiles import QuickExplodingTilesRenderer
     from rendering.quick.transitions.native_scene import native_without_motion
 
@@ -719,8 +768,8 @@ def test_the_motion_free_tiles_write_no_motion_and_the_motion_tiles_both_axes():
     plain = QuickExplodingTilesRenderer.scene_pass("tiles").fragment_source
     moving = QuickExplodingTilesRenderer.scene_pass("tiles_motion").fragment_source
     assert output.findall(plain) == [("0", "FragColor")]
-    assert output.findall(moving) == [("0", "FragColor"), ("1", "SceneMotion"), ("2", "SceneMotionY")]
-    assert "SceneMotionY = vec4(motion.y" in moving
+    assert output.findall(moving) == [("0", "FragColor"), ("1", "SceneMotion")]
+    assert "SceneMotion = vec4(motion, 0.0, 1.0);" in moving
     # Control: a fragment without the outputs is refused (it is not a motion-writing fragment).
     with pytest.raises(ValueError):
         native_without_motion(plain)
@@ -844,3 +893,64 @@ def test_the_n52f_bounds_cover_every_form_and_the_sampler_rule_keeps_its_guards(
     patch[20:30, 20:30, :3] += 2                                  # a compact patch past one level
     assert not trc.judge_piece_edges(patch, reference, 1000, np.ones_like(allowed), scatter_pixels=4305,
                                      compact_past=1)["pass"]                                  # control: still caught
+
+
+# ------------------------------------------------------------------------------------ the pass-clear rule, on the module
+
+
+def _built_core():
+    """The built module (release/native_module) with N5.2h's scene_target_pass_clear, or a skip saying why."""
+    import os
+
+    from rendering.native import loader
+
+    module_dir = ROOT / "release" / "native_module"
+    if not (os.name == "nt" and (module_dir / f"{loader.MODULE_NAME}.pyd").is_file()):
+        pytest.skip(f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd")
+    from rendering import native
+
+    core = native.load(module_dir)
+    if not hasattr(core.module, "scene_target_pass_clear"):
+        pytest.skip("the built module predates scene_target_pass_clear (N5.2h audit): build the branch")
+    return core
+
+
+def _pass_clears(core, program: dict, packs, samples: int = 0) -> dict:
+    return json.loads(core.module.scene_target_pass_clear(json.dumps(program), packs, samples))
+
+
+def test_the_motion_scene_clears_by_its_pass_and_a_target_the_rule_refuses_keeps_the_draw():
+    """N5.2h (audit, behaviour): the core's own scenePassClearColour answers the scene target crumble_both_4x declares
+    (RGBA8 colour, RGBA16F velocity, four samples) with one clear colour, the colour's; each refused shape answers
+    null (the clearing draw). The source is never matched: the module decides."""
+    from rendering.native.mode import program_json
+    from rendering.quick.render import native_background as nb
+
+    core = _built_core()
+    run = _run("crumble_both_4x")
+    renderer = _renderer(run.request.transition_id)
+    scene = renderer.native_scene(run, LOGICAL)
+    passes, targets, images = nb.scene_program(renderer, scene, nb.TEXTURE, nb.NEXT_TEXTURE, (2560, 1440), PIXELS)
+    declared, packs = program_json(passes, targets, images=images)
+    program = json.loads(declared)
+    index = next(i for i, t in enumerate(program["targets"]) if t["name"] == nb.SCENE_TARGET)
+    target = program["targets"][index]
+    assert target.get("samples", 1) > 1 and velocity_is_one_attachment(target)
+    colour = target["colour"][0].get("clear", [0.0, 0.0, 0.0, 0.0])
+    assert _pass_clears(core, program, packs)[nb.SCENE_TARGET] == pytest.approx(colour)
+
+    def answer(**changes) -> list | None:
+        edited = json.loads(declared)
+        velocity = edited["targets"][index]["colour"][1]
+        velocity.update(changes)
+        return _pass_clears(core, edited, packs)[nb.SCENE_TARGET]
+
+    # Negative controls: the velocity's alpha apart from the colour's (no one clear colour), a clear value other than
+    # 0 or 1, and the ABI 37 form's multisampled R16F (measured slower by glClear) each keep the draw.
+    assert answer(clear=[0.0, 0.0, 0.0, 1.0 - colour[3]]) is None
+    assert answer(clear=[0.5, 0.0, 0.0, colour[3]]) is None
+    assert answer(format="r16f", clear=[0.0, 0.0, 0.0, colour[3]]) is None
+    # ... while the same R16F single-sampled clears by its pass (the rule's multisample clause alone refused it).
+    single = json.loads(declared)
+    single["targets"][index]["colour"][1].update(format="r16f", clear=[0.0, 0.0, 0.0, colour[3]])
+    assert _pass_clears(core, single, packs, samples=1)[nb.SCENE_TARGET] is not None

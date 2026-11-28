@@ -190,6 +190,38 @@ int targetFormatBytes(TargetFormat format)
 
 // ------------------------------------------------------------------------------------------------- the declaration
 
+bool scenePassClearColour(const TargetDeclaration &decl, int samples, QColor *colour)
+{
+    if (decl.cube || decl.transparency() || decl.colour.isEmpty())
+        return false;
+    float value[4] = {};
+    bool known[4] = {};
+    for (const TargetAttachment &a : decl.colour) {
+        if (a.borrowed)
+            return false;
+        // Measured (N5.2h, RTX 4090, raw GL at 4K): a multisampled R16F attachment clears slower by glClear than by
+        // the draw (0.143 against 0.077 ms for two at 4x, any clear value, glClearBufferfv too), while every other
+        // shape measured clears faster or equal. A multisampled target keeps the draw unless all its attachments are
+        // RGBA8 (4x RGBA8 and depth: 0.008 against 0.017) or RGBA16F (the motion scene's RGBA8 colour, RGBA16F
+        // velocity and depth at 4x: 0.022 against 0.058 by the draw).
+        if (samples > 1 && a.format != TargetFormat::RGBA8 && a.format != TargetFormat::RGBA16F)
+            return false;
+        const bool single = a.format == TargetFormat::R16F || a.format == TargetFormat::R32F
+            || a.format == TargetFormat::R8;
+        for (int c = 0; c < (single ? 1 : 4); ++c) {
+            if (a.clear[c] != 0.0f && a.clear[c] != 1.0f)
+                return false;
+            if (known[c] && value[c] != a.clear[c])
+                return false;
+            value[c] = a.clear[c];
+            known[c] = true;
+        }
+    }
+    // A channel no attachment holds is free: its value is never stored.
+    *colour = QColor::fromRgbF(value[0], value[1], value[2], value[3]);
+    return true;
+}
+
 bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
 {
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
@@ -901,6 +933,8 @@ void SceneTargets::releaseTarget(Target &t)
         t.nearestTarget[s].reset();
         t.nearestRenderPass[s].reset();
     }
+    t.clearingTarget.reset();                 // N5.2h: names the same textures as renderTarget
+    t.clearingRenderPass.reset();
     t.renderTarget.reset();
     t.renderPass.reset();
     t.depthNearest.reset();
@@ -1196,10 +1230,22 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::PreserveColorContents;
             if (t.depthTexture())
                 flags |= QRhiTextureRenderTarget::PreserveDepthStencilContents;
+            t.clearingTarget.reset();         // N5.2h: before the objects it names go
+            t.clearingRenderPass.reset();
             t.renderTarget.reset(rhi->newTextureRenderTarget(description, flags));
             t.renderTarget->setName(label);
             t.renderPass.reset(t.renderTarget->newCompatibleRenderPassDescriptor());
             t.renderTarget->setRenderPassDescriptor(t.renderPass.get());
+            // N5.2h: on OpenGL, the same description without the preserving flags: a pass begun on it clears (glClear)
+            // what the clearing draw cleared. Vulkan keeps the draw (rule B, targets.h).
+            QColor passColour;
+            if (rhi->backend() == QRhi::OpenGLES2 && scenePassClearColour(t.decl, t.samples, &passColour)) {
+                t.clearingTarget.reset(rhi->newTextureRenderTarget(description));
+                t.clearingTarget->setName(label + QByteArrayLiteral(" clearing"));
+                t.clearingRenderPass.reset(t.clearingTarget->newCompatibleRenderPassDescriptor());
+                t.clearingTarget->setRenderPassDescriptor(t.clearingRenderPass.get());
+                t.clearingColour = passColour;
+            }
             ++m_layoutGeneration;
         }
         m_objectGeneration += 1;
@@ -1207,6 +1253,12 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             *error = QStringLiteral("target '%1': its render target could not be created at %2 x %3")
                          .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
             return false;
+        }
+        // N5.2h: re-created with renderTarget (the same objects at a new size too); a failure only drops it (the run
+        // clears by its draw).
+        if (t.clearingTarget && !t.clearingTarget->create()) {
+            t.clearingTarget.reset();
+            t.clearingRenderPass.reset();
         }
         if (t.decl.cube) {
             // ABI 42 (N4.d, the lead's decision: six passes, one render target per face): faces 1..5 of level 0, each

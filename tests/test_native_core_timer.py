@@ -186,8 +186,28 @@ def test_the_frame_driver_brackets_every_pass_it_records():
     assert len(re.findall(r"->record\(rhi, cb", edge)) == 3          # the probe, the known-cost pass, each surface
     assert unbracketed_passes(edge) == []
     # Negative control: the same reading with the surfaces' bracket taken out.
-    stripped = edge.replace("const int scope = timerBegin(rhi, cb, GpuPassKind::Surface);", "const int scope = -1;")
+    stripped = edge.replace("const int scope = units ? -1 : timerBegin(rhi, cb, GpuPassKind::Surface);",
+                            "const int scope = -1;")
     assert stripped != edge and unbracketed_passes(stripped)
+
+
+# N5.2h: under the harness's time_scene_passes a surface's record is timed per unit (GpuPassKind::ScenePass) in place of
+# its whole Surface figure, and under time_scene_run_parts a scene run in parts (OpenGL). What the record does is judged
+# on the built module by the cost round (transition_route_check.py ``_scene_passes``: scene_passes_replace_the_record,
+# scene_passes_control_has_none, run_parts_on_opengl_only, run_parts_cover_the_units; their harness logic in
+# test_native_surface_clear_route.py), not by matching the source.
+
+
+def test_the_unit_parts_are_one_list_in_cpp_and_python_and_a_row_carries_its_pass_and_part():
+    header = (CORE / "src" / "gpu_timer.h").read_text(encoding="utf-8")
+    enum = re.search(r"enum class GpuUnitPart : int \{(.*?)\};", header, re.S).group(1)
+    parts = {int(v): re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name, v in re.findall(r"(\w+) = (\d+)", enum)}
+    assert parts == gpu_timing.GPU_UNIT_PARTS
+    # Negative control: a part the Python list does not name is caught.
+    assert {**parts, 99: "run_extra"} != gpu_timing.GPU_UNIT_PARTS
+    six, four = gpu_timing.samples_from([(5, 9, 10, 1_000, 3, 1), (2, 9, 10, 2_000)])
+    assert (six.kind_name, six.pass_index, six.part_name) == ("scenepass", 3, "nearest")
+    assert (four.kind_name, four.pass_index, four.part_name) == ("surface", -1, "unit")
 
 
 def test_off_holds_no_timer_and_the_edge_tests_one_pointer_for_it():
