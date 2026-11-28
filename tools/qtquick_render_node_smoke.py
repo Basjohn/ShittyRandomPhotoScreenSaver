@@ -1255,7 +1255,9 @@ class _SmokeRunner(QObject):
                 "layer_kept": probe.layer is not None,
                 "layer_closed": probe.layer is not None and bool(probe.layer.closed),
                 "layer_mode_released": probe.layer is not None and probe.layer.mode is None,
-                "item_dropped_layer": probe.scene.background_item.native_layer is None,
+                # A retired scene has released its item; a live item must have dropped its layer.
+                "item_dropped_layer": getattr(probe.scene, "_background_item", None) is None
+                or probe.scene._background_item.native_layer is None,
             }
             initial_capture = probe.initial_capture or {}
             resized_capture = probe.resized_capture or {}
