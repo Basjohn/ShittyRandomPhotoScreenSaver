@@ -89,7 +89,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-ac0cda3c82727c8cd`, branch `worktree-agent-ac0cda3c82727c8cd` (merges the third), ABI 47:
     reference key, native player, P/T/C; signed-zero entry numbered R-254. Reference key `77ca27c7e`; defocus taps
     `89c3ceca8` (built); input-0 empty-geometry placeholder + mixed-blend refusal `29a844943` (C++), lens shift
-    `5feae1bc0`, in-process drift arena `8bf270aa7`; tip `8bf270aa7` building 28 Nov. Retired from use at 244k.
+    `5feae1bc0`, in-process drift arena `8bf270aa7`; tip `8bf270aa7` built 28 Nov. Retired from use at 244k.
+    Fifth **Opus Medium `a45099502ac294d6b`** (28 Nov), worktree `.claude/worktrees/agent-a45099502ac294d6b`, branch
+    `worktree-agent-a45099502ac294d6b` (merges the fourth), ABI 47: rule (a) on the build, R-258, rule (b) noise
+    floor, deliveries and references, the rest of P/T/C, the two side defects below.
     Open side defects for the successor: `schema.DRIFT` is one per process (two EB displays reset each other's
     projector, worker path too); raw `threading.Thread` at `packet_mailbox.py:491` from this branch's `8d635e313`
     fails `test_policy_compliance`. Retire the earlier worktrees only after the merge.
