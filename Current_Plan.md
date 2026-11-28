@@ -87,8 +87,12 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-ae9dbc46b60681ac3`, branch `worktree-agent-ae9dbc46b60681ac3` (merges the second), ABI 47,
     retired from use at 230k after L subset and coverage. Fourth **Opus High `ac0cda3c82727c8cd`** (28 Nov), worktree
     `.claude/worktrees/agent-ac0cda3c82727c8cd`, branch `worktree-agent-ac0cda3c82727c8cd` (merges the third), ABI 47:
-    reference key, native player, P/T/C; signed-zero entry numbered R-254. Retire the earlier worktrees only after its
-    merge.
+    reference key, native player, P/T/C; signed-zero entry numbered R-254. Reference key `77ca27c7e`; defocus taps
+    `89c3ceca8` (built); input-0 empty-geometry placeholder + mixed-blend refusal `29a844943` (C++), lens shift
+    `5feae1bc0`, in-process drift arena `8bf270aa7`; tip `8bf270aa7` building 28 Nov. Retired from use at 244k.
+    Open side defects for the successor: `schema.DRIFT` is one per process (two EB displays reset each other's
+    projector, worker path too); raw `threading.Thread` at `packet_mailbox.py:491` from this branch's `8d635e313`
+    fails `test_policy_compliance`. Retire the earlier worktrees only after the merge.
   - **N5.2h Gate merged** 28 Nov (`f12427a2e`; Opus Medium audit, should-fixes done in `a49087e7c`, harness reds in
     `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
     `.artifacts/evidence/native_core/n5_2h/`, journal `.artifacts/handover/n5_2h/JOURNAL.md`.
