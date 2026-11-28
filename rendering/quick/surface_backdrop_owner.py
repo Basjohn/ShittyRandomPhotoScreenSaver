@@ -7,17 +7,16 @@ the Context Menu, and forwards the controller's existing edges (image published,
 transition started/cleared, geometry changed, dimming changed) as backdrop refreshes.
 It has no timer, no frame request and no per-frame work of its own.
 
-Its source (Current_Plan.md N5.7b): on OpenGL the Python pyramid
-(``render.surface_backdrop.SurfaceBackdropSource``); on the native background's backend
-(Vulkan, with the native core loaded) the core's pyramid built from its background layer
-(``render.native_surface_backdrop``), whose item the same ``MaterialSurface`` samples.
+Its source (Current_Plan.md N5.7b, N5.2h): on every backend the core's pyramid built from
+its background layer (``render.native_surface_backdrop``), whose item the same
+``MaterialSurface`` samples. Without a core (the degraded display) there is no backdrop and
+the cards keep their Normal fill (``backdrop_available``).
 """
 from __future__ import annotations
 
 from typing import Any
 
 from PySide6.QtQuick import QQuickItem
-
 
 from .widgets.surface_material import transition_refresh_interval_s
 
@@ -27,7 +26,7 @@ BACKDROP_Z = 2.0
 
 
 def _make_source(root: QQuickItem, screen_index: int) -> tuple[Any, QQuickItem]:
-    """The display's backdrop source and its item: the core's on the native background's backend, else Python's."""
+    """The display's backdrop source and its item: the core's (no Python backdrop on any backend)."""
     from .render.native_surface_backdrop import NativeSurfaceBackdropSource, native_backdrop_core
 
     del screen_index
@@ -74,7 +73,7 @@ class SurfaceBackdropOwner:
 
     @property
     def source(self) -> Any:
-        """The Python ``SurfaceBackdropSource`` (the item itself) or the native source (N5.7b)."""
+        """The native source (N5.7b): the core's backdrop and its item."""
         return self._source
 
     @property

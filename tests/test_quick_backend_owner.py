@@ -132,8 +132,45 @@ def test_a_recorded_failure_survives_the_clean_quit_that_follows_it(tmp_path):
     assert record["state"] == "failed" and record["reason"] == "forced"
 
 
-def test_hosting_a_window_on_opengl_does_nothing():
-    assert bootstrap.host_quick_window(object()) is None
+def test_hosting_a_window_on_opengl_hosts_it_on_the_core_or_degrades(qt_app, caplog):
+    # N5.2h: OpenGL windows are hosted on the native core too (its frame driver records the background layer); with no
+    # core, or a host the core refuses, the process shows the degraded display (one error), never a quit.
+    from PySide6.QtQuick import QQuickWindow
+
+    attached: list = []
+
+    class Host:
+        handle, closed = 11, False
+
+        def close(self):
+            return {}
+
+    class Core:
+        def attach_host(self, window):
+            attached.append(window)
+            return Host()
+
+    class Refusing:
+        def attach_host(self, window):
+            raise RuntimeError("refused")
+
+    window = QQuickWindow()                                    # never shown: no frame, no device
+    try:
+        assert bootstrap._owner.backend.api == "opengl"
+        assert bootstrap.host_quick_window(window) is None and bootstrap.degraded_reason() == ""   # no core yet
+        bootstrap._owner.core = Core()
+        host = bootstrap.host_quick_window(window)
+        assert isinstance(host, Host) and attached == [window] and bootstrap._owner.window_hosts == {11: host}
+        bootstrap._owner.core = Refusing()
+        with caplog.at_level("ERROR"):
+            assert bootstrap.host_quick_window(window) is None
+            assert bootstrap.host_quick_window(window) is None
+        assert "could not be hosted" in bootstrap.degraded_reason()
+        assert bootstrap._owner.core is None
+        assert len([r for r in caplog.records if "Degraded display" in r.getMessage()]) == 1    # logged once
+    finally:
+        window.deleteLater()
+        qt_app.processEvents()
 
 
 @pytest.mark.parametrize("admitted", [False, True])
@@ -308,15 +345,52 @@ def test_the_rehearsal_window_renders_on_the_native_core_device_and_completes_it
     assert report["binding_lost"] is False and report["gl_validations_at_exit"] == []
 
 
-def test_the_default_path_loads_no_native_core_and_keeps_no_record(tmp_path):
-    configure = 'configured = bootstrap.configure_quick_graphics(reason="n27-default", start_state_dir=state_dir)\n'
-    report = _probe(_window_script(configure), tmp_path)
+#: N5.2h: the default path (OpenGL) in its own process with no window ever shown: the start loads the native core, the
+#: product window is hosted on it at its construction, and its destruction closes the host; no start record is kept.
+_DEFAULT_PATH = r'''
+configured = bootstrap.configure_quick_graphics(reason="n52h-default", start_state_dir=state_dir)
+from PySide6.QtGui import QGuiApplication
+from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.window import QuickDisplayWindow
+
+app = QGuiApplication(sys.argv[:1])
+start = {}
+if step == "no_module":
+    start = {"load_core": lambda: __import__("rendering.native", fromlist=["load"]).load(state_dir / "no_module")}
+backend = bootstrap.start_quick_backend(**start)
+report = {"configured_api": configured.graphics_api, "backend": [backend.api, backend.requested, backend.reason],
+          "module_loaded": "_srpss_native_core" in sys.modules, "core": bootstrap.native_core() is not None,
+          "degraded": bootstrap.degraded_reason()}
+window = QuickDisplayWindow(screen_index=0, runtime_generation=1, screen=app.primaryScreen(), policy=QuickWindowPolicy())
+hosts = list(bootstrap._owner.window_hosts.values())
+report["hosts"] = len(hosts)
+report["host"] = hosts[0].state() if hosts else None
+report["visible"] = window.isVisible()
+window.destroyed.connect(app.quit)
+window.deleteLater()
+app.exec()
+report["hosts_left"] = len(bootstrap._owner.window_hosts)
+report["records"] = records()
+emit(report)
+'''
+
+
+@needs_module
+def test_the_default_path_loads_the_native_core_and_hosts_its_windows_without_a_record(tmp_path):
+    report = _probe(_PRELUDE + _DEFAULT_PATH, tmp_path)
     assert report["configured_api"] == "OpenGL" and report["backend"] == ["opengl", "opengl", ""]
-    assert report["module_loaded"] is False and report["api"] == "OpenGL"
-    assert report["host"] is None and report["records_after_first_frame"] == []
-    assert not (tmp_path / bootstrap.START_RECORD_FOLDER).exists()
-    assert report["gl_validations"] == ["quick-display-scene-graph-screen-0-generation-1"]
-    assert report["binding_lost"] is False and report["gl_validations_at_exit"] == report["gl_validations"]
+    assert report["module_loaded"] is True and report["core"] is True and report["degraded"] == ""
+    assert report["hosts"] == 1 and report["host"]["kind"] == "window" and report["host"]["attached"]
+    assert report["visible"] is False and report["hosts_left"] == 0      # never shown; destroyed closes the host
+    assert report["records"] == [] and not (tmp_path / bootstrap.START_RECORD_FOLDER).exists()
+
+
+def test_the_default_path_without_a_module_runs_the_degraded_display(tmp_path):
+    (tmp_path / "no_module").mkdir()
+    report = _probe(_PRELUDE + _DEFAULT_PATH, tmp_path, step="no_module")
+    assert report["configured_api"] == "OpenGL" and report["backend"][0] == "opengl"
+    assert report["core"] is False and "did not load" in report["degraded"]
+    assert report["hosts"] == 0 and report["visible"] is False and report["records"] == []
 
 
 @needs_module
@@ -371,7 +445,8 @@ def test_a_forced_device_failure_quits_before_any_frame_and_the_next_start_runs_
     nxt = _probe(_window_script(_CONFIGURE_VULKAN), tmp_path)
     assert nxt["configured_api"] == "OpenGL" and nxt["api"] == "OpenGL"
     assert "no Vulkan process instance" in nxt["backend"][2]
-    assert nxt["module_loaded"] is False and nxt["records_after_first_frame"] == []
+    # N5.2h: the OpenGL start loads the core too (the native background on both APIs).
+    assert nxt["module_loaded"] is True and nxt["records_after_first_frame"] == []
 
     again = _probe(_window_script(_CONFIGURE_VULKAN), tmp_path)        # the one after tries Vulkan again
     assert again["api"] == "Vulkan" and again["records_after_first_frame"] == []

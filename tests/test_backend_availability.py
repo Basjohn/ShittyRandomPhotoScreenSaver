@@ -57,8 +57,17 @@ def test_on_opengl_every_mode_and_transition_has_its_renderer_and_nothing_change
             descriptor.mode_id, None)[0]
     for descriptor in transitions.iter_transition_descriptors():
         assert transitions.resolve_backend_transition_name(descriptor.setting_name) == descriptor.setting_name
-    assert transitions.background_family_available_on_backend()
     assert not modes.is_mode_available_on_backend("no_such_mode", "opengl")
+
+
+@pytest.mark.parametrize("backend", ["opengl", "vulkan"])
+def test_the_background_is_native_on_every_backend_and_the_python_family_on_none(backend):
+    # N5.2h: one route per API; the background comes from the native core on both, the Python family on neither.
+    from rendering.quick.render.native_background import native_background_wanted
+
+    assert native_background_wanted(backend)
+    assert not transitions.background_family_available_on_backend(backend)
+    assert not native_background_wanted("no_such_backend")                                  # control
 
 
 def test_each_descriptor_answers_for_itself_on_vulkan(on_vulkan):
@@ -177,22 +186,20 @@ def test_the_resolved_transition_on_vulkan_is_crossfade_with_its_own_duration(mo
 # ------------------------------------------------------------------------------------------ the background family
 
 
-def test_on_vulkan_no_background_or_backdrop_node_is_created(on_vulkan, qt_app):
+@pytest.mark.parametrize("backend", ["opengl", "vulkan"])
+def test_on_every_backend_no_python_background_or_backdrop_node_is_created(backend, monkeypatch, qt_app):
+    # N5.2h: the Python presenter and blit backdrop draw on no backend (the core's layer and backdrop replace them).
+    from rendering.quick import bootstrap
     from rendering.quick.render.background_item import BackgroundRenderItem
     from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
 
+    monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
     background = BackgroundRenderItem()
+    assert background._renderers_on_backend is False and background._native_layer_wanted is True
     background.setProofProgress(0.25)                 # a render that creates the node wherever the family runs
     assert background.updatePaintNode(None, None) is None
     assert background.schedule_warm_step("crossfade", {}, object(), 1) is False
     backdrop = SurfaceBackdropSource()
+    assert backdrop._renderers_on_backend is False
     backdrop.request_refresh()
     assert backdrop.armed and backdrop.updatePaintNode(None, None) is None
-
-
-def test_on_opengl_the_background_family_keeps_its_renderers(qt_app):
-    from rendering.quick.render.background_item import BackgroundRenderItem
-    from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
-
-    assert BackgroundRenderItem()._renderers_on_backend is True
-    assert SurfaceBackdropSource()._renderers_on_backend is True
