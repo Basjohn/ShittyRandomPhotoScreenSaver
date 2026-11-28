@@ -1155,6 +1155,11 @@ the feature (D3D11 is not stated).
     and troughs, reached less sharply. Prove it with `neon_lake_music_response.py` before and after on a recorded take
     (peak and trough heights kept, frame-to-frame height steps reduced) and a focused test with a control on the old
     code; then the port's references are taken.
+  - [ ] Also before the references (lead, 28 Nov, operator: "Neon Lake's relatively small defects will be handled
+    before its port though I imagine?"): 1C.10 a's two repairs (the ungrown-grid dormancy fault, the paused Studio
+    preview's reaction), 1C.8's lost Water Lines 0 WebP (one render, review), and 1B.5's one far-land smallest-brush
+    render. They change what the port is measured against. 1C.10's features (Spire Glow, Vertex Trace, Islands) are
+    not defects: they are built on the native mode after the port, not in Python first and ported twice.
   - Reading (reference; Sonnet agent ac4e1a1c9d1ad93c4, 21 Nov, merged), as Waveform's and Extruded Bubble's readings: the
     record per frame and per Settings or card change, stream size rules, every pass with its targets and formats, how
     it turns, its clear; then what the port needs that the ABI 29 core lacks beyond the Waveform and Extruded Bubble
