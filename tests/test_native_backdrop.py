@@ -1,11 +1,8 @@
 """N5.7b, the card-material backdrop pyramid on the native core (Current_Plan.md section N2b; D7 points 2 to 6), GPU-free:
 
-- the core's passes are the Python pyramid's chain and arithmetic (``native/core/src/backdrop.cpp``'s pass table against
-  ``surface_backdrop.py``'s constants; ``backdrop_down.frag``/``backdrop_up.frag`` against its ``_DOWN``/``_UP``), so
-  each level the core builds is the level the Python pyramid builds (the GPU proof is
-  ``native/core/python/backdrop_pyramid_check.py``);
-- the route: ``SurfaceBackdropOwner`` takes the native source on the native background's backend and the Python one
-  elsewhere, and maps the owner's edges onto the core's item (dimming handed over once per change, park and wake, no
+- every core shader's pack is staged (N5.2h: the Python pyramid the passes were proved against is deleted; the GPU proof
+  is ``native/core/python/backdrop_pyramid_check.py``);
+- the route: ``SurfaceBackdropOwner`` takes the native source, and maps the owner's edges onto the core's item (dimming handed over once per change, park and wake, no
   rate, retire destroys it).
 """
 from __future__ import annotations
@@ -19,60 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "native" / "core"
 
 
-# --------------------------------------------------------------------------- the passes are the Python pyramid's
-
-
-def _python_chain() -> list[tuple[str, str, str]]:
-    """The Python pyramid's passes as (kind, source, destination) by level name, from its own constants."""
-    from rendering.quick.render import surface_backdrop as sb
-
-    names = ["half", "quarter", "eighth", "sixteenth", "thirty_second"][: sb._LEVELS]
-    chain = [("seed", "layer", names[0])]
-    chain += [("down", a, b) for a, b in zip(names, names[1:])]
-    chain.append(("up", names[sb._LIGHT_FROM - 1], "light"))
-    scratch = ["scratch" for _index in range(sb._HEAVY_FROM - 2, 2, -1)]
-    source = names[sb._HEAVY_FROM - 1]
-    for name in scratch:
-        chain.append(("up", source, name))
-        source = name
-    chain.append(("up", source, "heavy"))
-    return chain
-
-
-def _core_chain(text: str) -> list[tuple[str, str, str]]:
-    table = re.search(r"constexpr PassSpec kPasses\[\] = \{(.*?)\};", text, re.S).group(1)
-    names = {"kSourceLayer": "layer", "0": "half", "1": "quarter", "2": "eighth", "3": "sixteenth",
-             "4": "thirty_second", "kScratch": "scratch", "kOutputLight": "light", "kOutputHeavy": "heavy"}
-    rows = re.findall(r"\{\s*PassKind::(\w+),\s*(\w+),\s*(\w+)\s*\}", table)
-    return [(kind.lower(), names[source], names[destination]) for kind, source, destination in rows]
-
-
-def test_the_core_builds_the_python_pyramids_chain() -> None:
-    text = (CORE / "src" / "backdrop.cpp").read_text(encoding="utf-8")
-    assert _core_chain(text) == _python_chain()
-    # Negative control: the light output read from another level is caught.
-    altered = text.replace("{ PassKind::Up, 2, kOutputLight }", "{ PassKind::Up, 3, kOutputLight }")
-    assert altered != text and _core_chain(altered) != _python_chain()
-
-
-def _arithmetic(source: str) -> list[str]:
-    """main()'s statements, with the half pixel named h (the Python passes read uHalfPixel itself or through h)."""
-    body = re.search(r"void main\(\)\s*\{(.*)\}", source, re.S).group(1)
-    statements = [re.sub(r"\s+", " ", s).strip() for s in body.split(";")]
-    statements = [s for s in statements if s and not re.match(r"vec2 h = uHalfPixel(\.xy)?$", s)]
-    return [s.replace("uHalfPixel", "h") for s in statements]
-
-
-@pytest.mark.parametrize("python_name, core_file", [("_DOWN", "backdrop_down.frag"), ("_UP", "backdrop_up.frag")])
-def test_the_core_passes_are_the_python_passes_term_for_term(python_name: str, core_file: str) -> None:
-    from rendering.quick.render import surface_backdrop as sb
-
-    python = _arithmetic(getattr(sb, python_name))
-    core = _arithmetic((CORE / "shaders" / core_file).read_text(encoding="utf-8"))
-    assert core == python
-    # Negative control: one weight changed is caught.
-    assert _arithmetic((CORE / "shaders" / core_file).read_text(encoding="utf-8").replace("/ 8.0", "/ 7.0")
-                       .replace("/ 12.0", "/ 11.0")) != python
+# --------------------------------------------------------------------------- the passes
 
 
 def test_every_core_shader_has_its_pack_staged_by_the_glob() -> None:

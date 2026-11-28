@@ -77,7 +77,7 @@ def test_background_stays_directly_composited_and_the_backdrop_sits_between_dimm
     guide_z = float(re.search(r'id: customLayoutGuideUnderlay[\s\S]*?z: ([\d.]+)', scene).group(1))
     assert dimming_z < BACKDROP_Z < min(cards_z, guide_z)
     # No timer, frame animation or frame request of its own.
-    for source in (owner, (ROOT / "rendering" / "quick" / "render" / "surface_backdrop.py").read_text(encoding="utf-8")):
+    for source in (owner,):
         for forbidden in ("QTimer", "FrameAnimation", "singleShot", "requestUpdate", "os.environ"):
             assert forbidden not in source
 
@@ -91,44 +91,6 @@ def test_material_shader_is_one_quad_per_surface_with_no_capture_of_its_own() ->
 
 
 # --------------------------------------------------------------------------- GL pipeline
-
-
-def test_backdrop_pipeline_restores_state_and_writes_an_opaque_two_level_backdrop(qt_app) -> None:
-    from OpenGL import GL as gl
-    import numpy
-    from rendering.quick import gl_query
-    from rendering.quick.offscreen_target import OffscreenRenderTarget
-    from rendering.quick.render.surface_backdrop import BackdropPipeline, pyramid_sizes
-
-    target = OffscreenRenderTarget(320, 180, label="surface-backdrop-test")
-    pipeline = BackdropPipeline()
-    try:
-        with target.current():
-            target.bind(clear=(0.8, 0.2, 0.1, 1.0))
-            gl.glEnable(gl.GL_SCISSOR_TEST)
-            gl.glScissor(3, 4, 50, 60)
-            gl.glViewport(7, 9, 111, 77)
-            gl.glEnablei(gl.GL_BLEND, 0)
-            before = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING), gl_query.get_ints(gl.GL_VIEWPORT, 4),
-                      gl_query.is_enabled(gl.GL_SCISSOR_TEST), bool(gl.glIsEnabledi(gl.GL_BLEND, 0)),
-                      gl_query.get_int(gl.GL_CURRENT_PROGRAM), gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING))
-            assert pipeline.refresh(target.fbo, 320, 180) is True
-            after = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING), gl_query.get_ints(gl.GL_VIEWPORT, 4),
-                     gl_query.is_enabled(gl.GL_SCISSOR_TEST), bool(gl.glIsEnabledi(gl.GL_BLEND, 0)),
-                     gl_query.get_int(gl.GL_CURRENT_PROGRAM), gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING))
-            assert after == before
-            gl.glBindTexture(gl.GL_TEXTURE_2D, pipeline.output_texture)
-            for level, (w, h) in enumerate(pyramid_sizes(320, 180)[1:3]):
-                data = gl.glGetTexImage(gl.GL_TEXTURE_2D, level, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
-                pixels = numpy.frombuffer(bytes(data), numpy.uint8).reshape(h, w, 4)
-                assert (pixels[..., 3] == 255).all()
-                # The scissor box must not have limited the blit: the whole target is copied.
-                assert abs(int(pixels[h // 2, w // 2, 0]) - 204) <= 2
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            pipeline.release()
-            assert pipeline.output_texture == 0
-    finally:
-        target.close()
 
 
 # --------------------------------------------------------------------------- ownership

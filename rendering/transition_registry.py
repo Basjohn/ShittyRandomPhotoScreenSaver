@@ -342,12 +342,6 @@ def is_transition_available(setting_name: str) -> bool:
 
 #: The transition every other one becomes on a backend where it has no renderer (D10 point 2).
 BACKEND_FALLBACK_TRANSITION = "Crossfade"
-#: The backends the Python background family runs on: its presenter, the card backdrop and every transition switch as
-#: one unit (D10 point 4). N5.2h: none; every backend draws the background natively (the core's background layer and
-#: backdrop), and no Python background surface is created anywhere.
-BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ()
-
-
 def _backend(backend: str | None) -> str:
     if backend is None:
         from rendering.quick.bootstrap import quick_backend_api
@@ -368,11 +362,6 @@ def resolve_backend_transition_name(setting_name: str, backend: str | None = Non
     if is_transition_available_on_backend(setting_name, backend):
         return setting_name
     return BACKEND_FALLBACK_TRANSITION
-
-
-def background_family_available_on_backend(backend: str | None = None) -> bool:
-    """Whether the background family (presenter, backdrop, transitions) has its renderers on ``backend``."""
-    return _backend(backend) in BACKGROUND_FAMILY_BACKENDS
 
 
 def transition_unavailability_reason(setting_name: str) -> str:

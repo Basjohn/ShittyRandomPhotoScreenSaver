@@ -1174,10 +1174,23 @@ def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BL
 PYTHON_COST_FIGURES = ("python_product_frame_gpu", "python_product_wall", "python_opengl", "python_stages")
 
 
+def hold_python_clock(clock):
+    """Record mode only (``--python-references record`` on a checkout that still holds the Python presenter, deleted
+    at N5.2h's switch): the presenter's ``time`` on ``clock``. Returns the restore; in cache mode nothing is touched."""
+    if refs.mode() != "record":
+        return lambda: None
+    import rendering.quick.render.background_node as background_node  # record mode only
+
+    saved = background_node.time
+    background_node.time = _ClockTime(clock)
+
+    def restore() -> None:
+        background_node.time = saved
+    return restore
+
+
 def round_cost(core, engine, app, api: str, variants) -> dict:
     from PIL import Image
-
-    import rendering.quick.render.background_node as background_node
 
     facts: dict = {}
     checks: dict = {}
@@ -1191,8 +1204,7 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
         scene.layer._clock_ns = clock
         live_python = api == "opengl" and refs.mode() == "record"   # cache: Python's figures are the stored ones
         python = _product_python(core, engine, size, photos) if live_python else None
-        saved_time = background_node.time
-        background_node.time = _ClockTime(clock)
+        restore_time = hold_python_clock(clock) if live_python else (lambda: None)
         try:
             for index, variant in enumerate(variants):
                 run = production_run(variant, [image for image, _rows in photos], index + 1)
@@ -1273,7 +1285,7 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.present(photos[1][0])
                 scene.settle()
         finally:
-            background_node.time = saved_time
+            restore_time()
             scene.close(app)
             facts.setdefault("host_close", []).append(blc._close_host(app, host))
             if python is not None:

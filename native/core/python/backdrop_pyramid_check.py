@@ -186,8 +186,11 @@ def _native_levels(backdrop) -> dict | None:
 
 
 def _install_python_capture() -> None:
-    """The Python pyramid's levels read on the render thread right after its refresh (its GL context current there)."""
-    from rendering.quick.render import surface_backdrop as sb
+    """The Python pyramid's levels read on the render thread right after its refresh (its GL context current there).
+    Record mode only: the blit is deleted from the product (N5.2h), so only a checkout that still holds it records."""
+    if refs.mode() != "record":
+        return
+    from rendering.quick.render import surface_backdrop as sb  # record mode only
 
     original = sb.BackdropPipeline.refresh
     if getattr(original, "_n57b_capture", False):
@@ -207,7 +210,7 @@ def _install_python_capture() -> None:
 def _python_levels(pipeline) -> dict:
     import numpy as np
     from OpenGL import GL as gl
-    from rendering.quick.render.surface_backdrop import pyramid_sizes
+    from rendering.quick.render.surface_backdrop import pyramid_sizes  # record mode only
 
     names = ("half", "quarter", "eighth", "sixteenth", "thirty_second")
     out: dict = {}
@@ -269,22 +272,26 @@ class BackdropScene:
         self.kind = backdrop
         self.native = None
         self.python = None
-        if backdrop == "native":
+        self.backdrop_item = None
+        if backdrop == "owner":
+            pass                                                 # the product's SurfaceBackdropOwner makes it
+        elif backdrop == "native":
             self.native = core.backdrop(self.scene)
             self.backdrop_item = self.native.item
             if dimming:
                 self.native.set_dimming(dimming)
         else:
-            from rendering.quick.render.surface_backdrop import SurfaceBackdropSource
+            from rendering.quick.render.surface_backdrop import SurfaceBackdropSource  # record mode only
 
             self.python = SurfaceBackdropSource(self.scene, screen_index=0)
             # The Python blit as the reference (N5.2h: no Python backdrop in the product on any API; the harness keeps
             # it until the references are cached and the blit is deleted).
             self.python._renderers_on_backend = True
             self.backdrop_item = self.python
-        self.backdrop_item.setZ(2.0)
-        self.backdrop_item.setWidth(self.scene.width())
-        self.backdrop_item.setHeight(self.scene.height())
+        if self.backdrop_item is not None:
+            self.backdrop_item.setZ(2.0)
+            self.backdrop_item.setWidth(self.scene.width())
+            self.backdrop_item.setHeight(self.scene.height())
         self.cards: list = []
         self.card_component = None
 
@@ -973,11 +980,10 @@ def round_route(core, engine, app, api: str) -> dict:
     saved = (owner_state.core, owner_state.backend)
     owner_state.core, owner_state.backend = core, bootstrap.QuickBackend(api=api, requested=api)
     host = _host(core, blc.WINDOW, 1.0)
-    scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="route", backdrop="python")
+    scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="route", backdrop="owner")
     owner = None
     try:
-        # The scene's own Python source stands aside: the owner makes the display's backdrop as the product does.
-        scene.python.set_parked(True)
+        # The scene has no backdrop of its own (N5.2h: the blit is deleted): the owner makes it as the product does.
         owner = SurfaceBackdropOwner(scene.scene, screen_index=0)
         # N5.2h: the owner's backdrop is the core's on both APIs (Vulkan since N5.7b, OpenGL since the switch).
         checks["native_on_both_apis"] = owner.native is True
@@ -1041,7 +1047,6 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
     import numpy as np
     import transition_route_check as trc
     from rendering.quick import bootstrap
-    from rendering.quick.render import background_node
 
     if api != "opengl":
         return {"pass": True, "skipped": "the blit is OpenGL only"}
@@ -1052,8 +1057,7 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
     owner_state = bootstrap._owner
     saved = (owner_state.core, owner_state.backend)
     clock = trc.Clock()
-    saved_time = background_node.time
-    background_node.time = trc._ClockTime(clock)
+    restore_time = trc.hold_python_clock(clock)
 
     def python_scene(dpr: float, dimming: float):
         owner_state.core, owner_state.backend = saved          # today's route: the Python presenter and blit
@@ -1201,7 +1205,7 @@ def round_blit(core, engine, app, api: str, out: Path) -> dict:
     finally:
         if pair is not None:
             close(pair)
-        background_node.time = saved_time
+        restore_time()
         owner_state.core, owner_state.backend = saved
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 

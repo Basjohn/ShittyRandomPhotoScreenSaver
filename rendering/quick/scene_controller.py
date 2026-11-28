@@ -22,7 +22,6 @@ from rendering.custom_layout_session import (
     CustomLayoutSession,
     CustomLayoutSessionItem,
 )
-from rendering.transition_registry import background_family_available_on_backend
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
@@ -600,11 +599,6 @@ class QuickSceneController(QObject):
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
         )
-        # D10: on a backend without the background family's renderers the
-        # presented frame, not a wallpaper frame, is the reveal's input. Read
-        # once: the process's backend never changes.
-        self._publishes_frame_presented = not background_family_available_on_backend()
-
         context, root = factory.create_display_root(
             owner=self,
             screen_index=window.screen_index,
@@ -3782,7 +3776,8 @@ class QuickSceneController(QObject):
             intentional_base_frame_ready=intentional_image_ready,
             error=snapshot.error,
         )
-        if self._publishes_frame_presented and not self._readiness.frame_presented:
+        # D10, N5.2h: the native background draws the photo, so the presented frame is the reveal's input.
+        if not self._readiness.frame_presented:
             self._publish_readiness(frame_presented=True)
         if self._surface_probe_frames_remaining > 0:
             self._surface_probe_frames_remaining -= 1

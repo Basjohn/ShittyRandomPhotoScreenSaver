@@ -44,15 +44,13 @@ def test_a_pending_gl_error_is_drained_and_raised_once_per_frame(qt_app):
 
 
 def test_both_quick_render_nodes_check_once_inside_their_failure_handling():
-    """The check sits in each GL render node's ``try`` before success is noted, so an error
-    reaches its ``RenderFailureLog`` like any render failure."""
+    """The check sits in the GL render node's ``try`` before success is noted, so an error
+    reaches its ``RenderFailureLog`` like any render failure (N5.2h: the Python background node is gone)."""
     import inspect
 
-    from rendering.quick.render.background_node import BackgroundRenderNode
     from rendering.quick.visualizer.node import VisualizerRenderNode
 
-    for node, label in ((BackgroundRenderNode, "Background render node"),
-                        (VisualizerRenderNode, "Visualizer render node")):
+    for node, label in ((VisualizerRenderNode, "Visualizer render node"),):
         source = inspect.getsource(node.render)
         check = source.index(f'raise_pending_gl_error(gl, "{label}")')
         assert source.index("try:") < check < source.index("note_success()") < source.index("except Exception")
