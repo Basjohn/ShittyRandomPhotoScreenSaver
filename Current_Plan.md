@@ -915,7 +915,25 @@ the feature (D3D11 is not stated).
     A Python reference with a late window needs the whole take for that key. Decide which 30 s alternates need
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
+    28 Nov (successor `ae9dbc46b60681ac3`, `561bb70d3`): `WARMUP_INPUTS["extruded_bubble"] = 0` with
+    `COMPUTE_FROM_COLD_START` (each window's drift dispatched from input 0); continuity and the restart control proved
+    at layer L (`tests/test_coverage_windows.py`). Selection on the three base takes (60 s): all 137 fields COVERED,
+    late window in the last 15 s on each (human_heavy1 11 windows, 1,511 of 5,313 inputs, late 43.8-44.9 s;
+    nightsolong 15, 1,813, 57.1-58.9 s; ragdoll 14, 1,689, 45.1-46.1 s; `n5_6/20261128_coverage_<take>/`).
+    Decision on the alternates: each of the 12 needs a late window, and a late window needs its whole take drawn
+    (the Python drift is GPU history from the cold start), so each gets one full 30 s Python reference on one take,
+    not three: audio block size 0, 2, 3 on ragdoll (its quiet-to-loud range), collision scope 0, 2 and drift
+    direction 4, 5 on human_heavy1 (densest collisions), drift direction 0, 2, 3, 6, 7 on nightsolong. Not started:
+    the cached references' key does not match this tree (P box below). Open: EB has no native stream player yet,
+    so the ABI 42 draw skip with drift from the cold start is not exercised natively.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
+    Blocker found 28 Nov (successor `ae9dbc46b60681ac3`): the 18 cached references carry three producer source
+    hashes (`renderer_sources`: 12 at `23f88094`, 5 at `eb776f4d`, 1 at `9d34c13b`, the main checkout's now), so no
+    one revision reads them all; this branch differs from main in the hashed set only by `native_route.py`
+    (`8c0cbad9c`, +3 lines), which `python_references._source_files` hashes although it is native-only, so here none
+    match. Lead's call before P: drop native-only files from the key (re-keys every mode's references once) and
+    redraw the stale ones at one revision. Also to build: EB's native player and `owner_render_parity --native` entry
+    (the harness-side registration of `native_record_identity.py` line 436 is the pattern).
     - [ ] Verify shaft and backdrop placement through the complete route at nonzero lens shift and odd,
       padded targets. The [ABI 45 component proof](.artifacts/evidence/native_core/n5_6/20261123_abi45_matrix_and_targets/report.md)
       validates the writer, blur and sampling. Reuse the core's scene-item matrix for the backdrop vertex under
