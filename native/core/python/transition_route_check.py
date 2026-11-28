@@ -42,6 +42,7 @@ comparison in work/: delete it once judged). Exit 0 whenever the harness ran; th
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import subprocess
 import sys
@@ -814,15 +815,331 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
 #: The performance step's cost (``--cost``; Native_Parity_And_Timing_Proof.md section 3, "A transition port": C per pass
 #: at 2560 x 1440 and 4K on both backends): the layer's record of the run (the environment's copy and chain once, the
 #: scene's passes, the composite) timed by the core's GPU timer over COST_FRAMES frames of the effect, median and p90;
-#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context. Frames run back to
+#: OpenGL also times the Python renderer (``TransitionCapture.benchmark``, 12 frames) for context, and (N5.2h) the
+#: Python presenter on the product route on the same frames by the same instrument (``python_product_frame_gpu``
+#: against ``qrhi_frame_gpu``: the comparable pair; the benchmark is the draw alone in a bare FBO on a hot cache, which
+#: read 0.04 ms at 4K against the product's 0.057). Crossfade also runs the clear route's negative control
+#: (``_clear_control``). Both scenes are the product's display scene (a plain root). Frames run back to
 #: back (no readback between them, which let the GPU idle and downclock: the first run's 4K figures were below its
 #: 1440p ones); Crossfade, timed in the same run, is the control the others are read against.
 COST_SIZES = ((2560, 1440), (3840, 2160))
 COST_FRAMES = 240
+#: The clear route control's alternating blocks (``_clear_control``): ten blocks of 24 frames a route, 240 frames each.
+CLEAR_CONTROL_BLOCKS = 10
+CLEAR_CONTROL_BLOCK_FRAMES = 24
+
+
+class _ClockTime:
+    """``time`` for the Python presenter's node (``background_node.run.sample(time.monotonic_ns())``) on the round's own
+    clock, so the product route's Python frames sample the run at the native layer's progress (a harness patch)."""
+
+    def __init__(self, clock: Clock) -> None:
+        self.monotonic_ns = clock
+
+
+def _product_python(core, engine, size, photos):
+    """N5.2h: the Python presenter on the product route (``BackgroundRenderItem``'s render node drawing into the window)
+    in a hidden host of the native layer's size, timed by the same instrument as the native layer (QRhi's whole-frame
+    GPU time, the timer's kind 0) on the same frames (interleaved one by one), under the product's display scene (a
+    plain root, nothing drawn under the background: DisplayScene.qml). ``python_opengl`` stays the bare-FBO benchmark
+    (``TransitionCapture.benchmark``: the draw alone on a hot cache), which no product frame is."""
+    host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
+    scene = blc.Scene(core, engine, host, 1.0, size, kind="python")
+    scene.root.setProperty("color", "transparent")
+    scene.present(photos[0][0])
+    scene.frames(6)
+    return host, scene
+
+
+#: N5.2h's clear-route controls: the ``stage_control`` name and the ``composite_live`` count prefix of the mode surface's
+#: first-run clear (Crossfade's control) and of a scene target's (SCENE_CLEAR_CONTROL_VARIANTS', box 3).
+CLEAR_ROUTES = {"surface": ("surface_clear_draw", "mode_surface"), "scene": ("scene_clear_draw", "mode_scene")}
+#: The scene variants that run the scene clear control in the cost round: a single-sampled scene and the 4x scene with
+#: motion blur and trails (three attachments, four samples: the draw's largest share).
+SCENE_CLEAR_CONTROL_VARIANTS = ("crumble_plain", "crumble_both_4x")
+
+
+def _clear_control(core, api: str, scene, host, clock, run, route: str = "surface") -> tuple[dict, dict]:
+    """N5.2h's negative control on Crossfade: the surface cleared at its first run by the pass's own clear (OpenGL;
+    Vulkan keeps the clearing draw, rule B) against the full-triangle clearing draw again (``stage_control``'s
+    ``surface_clear_draw``): the same pixels (the display read at one progress), the clears counted by their route
+    (``composite_live``'s ``mode_surface_pass_clears`` and ``mode_surface_draw_clears``), and the record and frame GPU
+    time with the draw back (its share returns). ``route`` "scene": the same for a scene target's first run
+    (``scene_clear_draw``, ``mode_scene_*``). A module without the control: ``available`` False, nothing judged."""
+    control_name, prefix = CLEAR_ROUTES[route]
+    if not core.module.stage_control(control_name, False):
+        return {"available": False}, {}
+
+    def counts() -> tuple[int, int]:
+        live = core.composite_live()
+        return int(live.get(f"{prefix}_pass_clears", 0)), int(live.get(f"{prefix}_draw_clears", 0))
+
+    def drawn(progress: float):
+        clock.at(run, progress)
+        scene.layer.tick()
+        scene.frames(3)
+        return scene.read()
+
+    before = counts()
+    by_pass = drawn(0.5)
+    middle = counts()
+    core.module.stage_control(control_name, True)
+    try:
+        by_draw = drawn(0.5)
+        neighbour = drawn(0.55)                                  # the comparison's own control: another progress
+        after = counts()
+        # Both routes timed under the same conditions (N5.2h successor): the round's main loop interleaves the Python
+        # host's frames, which this loop does not, so its figures are not comparable with the main loop's; here the
+        # pass route and the draw route alternate in blocks over the same progress span (the control is read per
+        # record), each block's samples taken after a flush.
+        timed: dict = {False: [], True: []}
+        host.set_gpu_timer(True)
+        host.gpu_samples()
+        frame = 0
+        for _block in range(CLEAR_CONTROL_BLOCKS):
+            for draw_route in (False, True):
+                core.module.stage_control(control_name, draw_route)
+                for _ in range(CLEAR_CONTROL_BLOCK_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
+                    frame += 1
+                    scene.layer.tick()
+                    scene.frames(1)
+                scene.frames(2)
+                timed[draw_route].extend(host.gpu_samples())
+        host.set_gpu_timer(False)
+    finally:
+        core.module.stage_control(control_name, False)
+    pixels = blc.compare(by_pass, by_draw)
+    control = blc.compare(by_draw, neighbour)
+
+    def stats(draw_route: bool, kind: int) -> dict:
+        return blc._ms_stats([x.nanoseconds / 1e6 for x in timed[draw_route] if x.kind == kind])
+
+    record = {"available": True, "pixels_pass_against_draw": pixels, "pixels_against_next_progress": control,
+              "pass_clears": [middle[0] - before[0], after[0] - middle[0]],
+              "draw_clears": [middle[1] - before[1], after[1] - middle[1]],
+              # The alternating blocks: the record (kind 2) and the whole frame (kind 0) on each route.
+              "core_record_gpu_clear_pass": stats(False, 2), "core_record_gpu_clear_draw": stats(True, 2),
+              "qrhi_frame_gpu_clear_pass": stats(False, 0), "qrhi_frame_gpu_clear_draw": stats(True, 0)}
+    opengl = api == "opengl"
+    pass_ms = record["core_record_gpu_clear_pass"].get("median_ms")
+    draw_ms = record["core_record_gpu_clear_draw"].get("median_ms")
+    checks = {"clear_route_pixels_equal": pixels["equal"], "clear_route_control_differs": not control["equal"],
+              # OpenGL: the draw's share comes back under the control (the record's median above the pass route's);
+              # Vulkan draws on both phases, so nothing is judged there but that both were timed.
+              "clear_route_share_returns": pass_ms is not None and draw_ms is not None
+              and (draw_ms > pass_ms if opengl else True),
+              # [default, control]: OpenGL clears by the pass by default (a scene's multisampled non-RGBA8 targets
+              # keep the draw, so a scene may count both) and every clear by the draw under the control; Vulkan by the
+              # draw in both. The surface has no such target: on OpenGL it counts no draw clear by default.
+              "clear_route_counted": (record["pass_clears"][0] > 0) == opengl and record["pass_clears"][1] == 0
+              and record["draw_clears"][1] > 0
+              and (route != "surface" or (record["draw_clears"][0] == 0) == opengl)}
+    return record, checks
+
+
+#: N5.2h's scene-pass gap: the variants timed per unit (``_scene_passes``) and per Python stage (``_python_stages``), in
+#: alternating blocks of SCENE_PASS_BLOCK_FRAMES frames over the cost round's progress span (units on, then off).
+SCENE_PASS_VARIANTS = ("crumble_both_4x", "glass_shatter_both_4x")
+SCENE_PASS_BLOCKS = 6
+SCENE_PASS_BLOCK_FRAMES = 24
+#: N5.2h successor: a run timed in parts (``time_scene_run_parts``) sums to the run timed whole within this fraction
+#: (the brackets inside the pass flush QRhi's command list and rebind its framebuffer, which moves no GPU work; the
+#: alternating blocks' own spread at 4K is a few percent).
+RUN_PARTS_SUM_TOLERANCE = 0.1
+
+
+def _program_pass_names(scene) -> tuple[list, str]:
+    """The mode program's pass names in the core's order (the index a scene-pass figure names), and where they were
+    read; ([], "none") when the state names none (the figures are then labelled by index alone)."""
+    mode = scene.layer.state().get("mode") or {}
+    for source, passes in (("program", (mode.get("program") or {}).get("passes")),
+                           ("facts", (mode.get("facts") or {}).get("passes")), ("mode", mode.get("passes"))):
+        if passes:
+            return [p.get("name") if isinstance(p, dict) else str(p) for p in passes], source
+    return [], "none"
+
+
+def _scene_passes(core, scene, host, clock, run, api: str = "opengl") -> tuple[dict, dict]:
+    """N5.2h: the record timed per unit (``stage_control("time_scene_passes")``: each run with its primes, passes and
+    the pass's own resolves; its nearest copies; its self mips; each compute, step and the texture chains) against the
+    whole record (the Surface figure) in alternating blocks over the same frames. The off blocks are the control: no
+    scene-pass figure without the switch, and the Surface figure with it off only. A module without the switch:
+    ``available`` False, nothing judged."""
+    from rendering.native.gpu_timing import GPU_UNIT_PARTS
+
+    if not core.module.stage_control("time_scene_passes", False):
+        return {"available": False}, {}
+    # N5.2h successor: a scene run's parts (its opening, each pass, its end-of-pass resolves; OpenGL) as a third block,
+    # against the runs timed whole (the units block) on the same frames; a module without the control runs two blocks.
+    parts_available = bool(core.module.stage_control("time_scene_run_parts", False))
+    names, names_from = _program_pass_names(scene)
+    modes = ("units", "parts", "off") if parts_available else ("units", "off")
+    timed: dict = {mode: [] for mode in modes}
+    host.set_gpu_timer(True)
+    host.gpu_samples()
+    frame = 0
+    try:
+        for _block in range(SCENE_PASS_BLOCKS):
+            for mode in modes:
+                core.module.stage_control("time_scene_passes", mode != "off")
+                if parts_available:
+                    core.module.stage_control("time_scene_run_parts", mode == "parts")
+                for _ in range(SCENE_PASS_BLOCK_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
+                    frame += 1
+                    scene.layer.tick()
+                    scene.frames(1)
+                scene.frames(2)
+                timed[mode].extend(host.gpu_samples())
+    finally:
+        core.module.stage_control("time_scene_passes", False)
+        if parts_available:
+            core.module.stage_control("time_scene_run_parts", False)
+        host.set_gpu_timer(False)
+
+    def by_units(samples) -> tuple[dict, dict, int]:
+        on = [s for s in samples if s.kind == 5]
+        grouped: dict = {}
+        frames: dict = {}
+        for s in on:
+            name = names[s.pass_index] if 0 <= s.pass_index < len(names) else "-"
+            grouped.setdefault(f"{s.pass_index}:{name}:{GPU_UNIT_PARTS.get(s.part, s.part)}", []).append(
+                s.nanoseconds / 1e6)
+            frames[s.frame] = frames.get(s.frame, 0.0) + s.nanoseconds / 1e6
+        ordered = {key: blc._ms_stats(values) for key, values in sorted(
+            grouped.items(), key=lambda kv: (int(kv[0].split(":")[0]), kv[0]))}
+        return ordered, frames, len(on)
+
+    units, per_frame, units_count = by_units(timed["units"])
+    whole = [s.nanoseconds / 1e6 for s in timed["off"] if s.kind == 2]
+    record = {"available": True, "pass_names_from": names_from, "pass_names": names, "units": units,
+              "units_per_frame": round(units_count / max(1, len(per_frame)), 2),
+              "units_sum_per_frame": blc._ms_stats(list(per_frame.values())),
+              "core_record_gpu_units_off": blc._ms_stats(whole),
+              "qrhi_frame_gpu_units_on": blc._ms_stats([s.nanoseconds / 1e6 for s in timed["units"] if s.kind == 0]),
+              "qrhi_frame_gpu_units_off": blc._ms_stats([s.nanoseconds / 1e6 for s in timed["off"] if s.kind == 0])}
+    checks = {"scene_passes_timed": len(per_frame) >= SCENE_PASS_BLOCKS * SCENE_PASS_BLOCK_FRAMES // 2,
+              # The switch replaces the whole bracket (GL_TIME_ELAPSED cannot nest) and nothing else times units.
+              "scene_passes_replace_the_record": not any(s.kind == 2 for s in timed["units"]),
+              "scene_passes_control_has_none": not any(s.kind == 5 for s in timed["off"]) and bool(whole)}
+    if parts_available:
+        part_units, part_frames, _count = by_units(timed["parts"])
+        run_parts = {5, 6, 7}
+        has_parts = any(s.kind == 5 and s.part in run_parts for s in timed["parts"])
+        record["run_parts"] = part_units
+        record["run_parts_sum_per_frame"] = blc._ms_stats(list(part_frames.values()))
+        record["qrhi_frame_gpu_run_parts"] = blc._ms_stats(
+            [s.nanoseconds / 1e6 for s in timed["parts"] if s.kind == 0])
+        # The parts are OpenGL's only (Vulkan keeps the unit: a bracket inside its pass needs an ExternalContent pass).
+        # The control: the units block (runs timed whole) holds no part; the parts' sum per frame is the units' (the
+        # brackets inside the pass do not move the work: within RUN_PARTS_SUM_TOLERANCE of the units' median).
+        units_ms = record["units_sum_per_frame"].get("median_ms")
+        parts_ms = record["run_parts_sum_per_frame"].get("median_ms")
+        checks["run_parts_on_opengl_only"] = has_parts == (api == "opengl")
+        checks["run_parts_control_has_none"] = not any(s.kind == 5 and s.part in run_parts for s in timed["units"])
+        if has_parts:
+            record["run_parts_sum_against_units"] = round(parts_ms / units_ms, 4) if units_ms and parts_ms else None
+            checks["run_parts_sum_is_the_units"] = bool(units_ms and parts_ms) and abs(
+                parts_ms / units_ms - 1.0) <= RUN_PARTS_SUM_TOLERANCE
+    return record, checks
+
+
+def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BLOCK_FRAMES) -> dict:
+    """N5.2h: the Python renderer's same work on the same progress span, each stage between two GL timestamps (they
+    nest, unlike GL_TIME_ELAPSED): the underlay, the trails (ghosts into R8 and the edges), the scene target's begin,
+    the pieces (chunks or shards), the debris, and the scope's end (its resolve and motion blur stamped inside it, the
+    composite the rest); ``frame`` the whole render. A harness patch of the implementation's instance only, restored
+    after; the capture's bare FBO (``TransitionCapture``), not the product route."""
+    from OpenGL import GL as gl
+
+    with capture._target.current():
+        capture.host.render(capture.frame(run, 0.5))              # the implementation and its run resources exist
+        impl = capture.host._implementations[run.request.transition_id]
+        target = impl._target
+        owners = [("underlay", impl._resources, "draw_image"), ("trails", impl._trails, "draw"),
+                  ("begin", target, "begin"), ("end", target, "end"), ("resolve", target, "_resolve"),
+                  ("pieces", impl, "_draw_chunks" if hasattr(impl, "_draw_chunks") else "_draw_shards")]
+        if hasattr(impl, "_draw_debris"):
+            owners.append(("debris", impl, "_draw_debris"))
+        if hasattr(impl, "_draw_ghosts"):
+            owners.append(("ghosts", impl, "_draw_ghosts"))          # inside "trails": the R8 ghosts alone
+        motion = getattr(target, "_motion", None)
+        if motion is not None:
+            owners.append(("motion_blur", motion, "apply"))
+        stamps: list = []
+        pending: list = []
+
+        def stamp() -> int:
+            query = int(gl.glGenQueries(1)[0])
+            gl.glQueryCounter(query, gl.GL_TIMESTAMP)
+            return query
+
+        def wrapped(label, original):
+            def call(*args, **kwargs):
+                before = stamp()
+                try:
+                    return original(*args, **kwargs)
+                finally:
+                    pending.append((label, before, stamp()))
+            return call
+
+        saved = [(owner, attr, owner.__dict__.get(attr)) for _label, owner, attr in owners]
+        for label, owner, attr in owners:
+            setattr(owner, attr, wrapped(label, getattr(owner, attr)))
+        try:
+            for index in range(frames):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+                before = stamp()
+                capture.host.render(capture.frame(run, 0.1 + 0.8 * (index % COST_FRAMES) / (COST_FRAMES - 1)))
+                pending.append(("frame", before, stamp()))
+                gl.glFlush()                                     # per frame, as the benchmark does
+                stamps.append(pending[:])
+                pending.clear()
+            per_label: dict = {}
+            queries = []
+            for frame_stamps in stamps:
+                seen: dict = {}
+                edges: dict = {}                                 # label: (its first start, its last end), ns
+                for label, first, last in frame_stamps:
+                    queries += [first, last]
+                    values = []
+                    for query in (first, last):
+                        value = ctypes.c_uint64()
+                        gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
+                        values.append(value.value)
+                    seen[label] = seen.get(label, 0.0) + (values[1] - values[0]) / 1e6
+                    start, end = edges.get(label, (values[0], values[1]))
+                    edges[label] = (min(start, values[0]), max(end, values[1]))
+                # N5.2h successor: the native scene run's span timed directly, one pair of stamps: the target's begin
+                # (its clear) to its resolve's end (the underlay, the trails and the pieces between); less the ghosts
+                # (the native layer draws them in their own unit before the run), its own stamped sub-span.
+                if "begin" in edges and "resolve" in edges:
+                    span = (edges["resolve"][1] - edges["begin"][0]) / 1e6
+                    seen["scene_span"] = span
+                    seen["scene_span_less_ghosts"] = span - seen.get("ghosts", 0.0)
+                for label, ms in seen.items():
+                    per_label.setdefault(label, []).append(ms)
+            gl.glDeleteQueries(len(queries), queries)
+        finally:
+            for owner, attr, original in saved:
+                if original is None:
+                    owner.__dict__.pop(attr, None)
+                else:
+                    setattr(owner, attr, original)
+    stats = {label: blc._ms_stats(values) for label, values in per_label.items()}
+    end = stats.get("end", {}).get("median_ms")
+    inner = sum(stats.get(k, {}).get("median_ms") or 0.0 for k in ("resolve", "motion_blur"))
+    if end is not None:
+        stats["composite_rest_of_end_median_ms"] = round(end - inner, 4)
+    return stats
 
 
 def round_cost(core, engine, app, api: str, variants) -> dict:
     from PIL import Image
+
+    import rendering.quick.render.background_node as background_node
 
     facts: dict = {}
     checks: dict = {}
@@ -831,14 +1148,25 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
         photos = [blc.processed(path, "fill", size) for path in PHOTOS]
         host = blc._host(core, (size[0] + 4, size[1] + 6), 1.0, timestamps=True)
         scene = blc.Scene(core, engine, host, 1.0, size, kind="layer")
+        scene.root.setProperty("color", "transparent")           # N5.2h: the product's display scene, as Python's
         clock = Clock()
         scene.layer._clock_ns = clock
+        python = _product_python(core, engine, size, photos) if api == "opengl" else None
+        saved_time = background_node.time
+        background_node.time = _ClockTime(clock)
         try:
             for index, variant in enumerate(variants):
                 run = production_run(variant, [image for image, _rows in photos], index + 1)
                 scene.present(photos[0][0])
                 scene.settle()
                 clock.at(run, 0.1)
+                if python is not None:
+                    python[1].present(photos[0][0])
+                    python[1].frames(2)
+                    python[1].item.set_transition_run(run)
+                    python[1].frames(8)                          # its per-run resources made before the timing
+                    python[0].set_gpu_timer(True)
+                    python[0].gpu_samples()
                 host.set_gpu_timer(True)                         # N5.2g: the fields' frames timed too (OpenGL's
                 host.gpu_samples()                               # in-frame form records them at the commit)
                 started = time.perf_counter()
@@ -849,15 +1177,30 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.frames(4)
                 start_records = [s.nanoseconds / 1e6 for s in host.gpu_samples() if s.kind == 2]
                 walls = []
+                python_walls = []
+                if python is not None:
+                    python[0].gpu_samples()                      # the timing starts with the native layer's
                 for frame in range(COST_FRAMES):
                     clock.at(run, 0.1 + 0.8 * frame / (COST_FRAMES - 1))  # the effect, never the plain ends
                     started = time.perf_counter()
                     scene.layer.tick()
                     scene.frames(1)
                     walls.append((time.perf_counter() - started) * 1000.0)
+                    if python is not None:
+                        started = time.perf_counter()
+                        python[1].item.update()
+                        python[1].frames(1)
+                        python_walls.append((time.perf_counter() - started) * 1000.0)
                 scene.frames(4)
                 samples = host.gpu_samples()
                 host.set_gpu_timer(False)
+                python_frame_gpu = []
+                if python is not None:
+                    python[1].frames(4)
+                    python_frame_gpu = [s.nanoseconds / 1e6 for s in python[0].gpu_samples() if s.kind == 0]
+                    python[0].set_gpu_timer(False)
+                    python[1].item.set_transition_run(None)
+                    python[1].frames(2)
                 surface = [s.nanoseconds / 1e6 for s in samples if s.kind == 2]
                 frame_gpu = [s.nanoseconds / 1e6 for s in samples if s.kind == 0]
                 facts[f"{label}_{variant}"] = {"core_record_gpu": blc._ms_stats(surface),
@@ -869,14 +1212,35 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                                                "fields_ready_wall_ms": round(ready_ms, 3),
                                                "start_record_gpu_max_ms": round(max(start_records, default=0.0), 4),
                                                "fields": (scene.layer.state().get("mode") or {}).get("fields")}
+                if python is not None:
+                    # N5.2h: the comparable pair (same instrument, same frames): qrhi_frame_gpu against this.
+                    facts[f"{label}_{variant}"]["python_product_frame_gpu"] = blc._ms_stats(python_frame_gpu)
+                    facts[f"{label}_{variant}"]["python_product_wall"] = blc._ms_stats(python_walls)
+                    checks[f"{label}_{variant}_python_timed"] = len(python_frame_gpu) >= COST_FRAMES // 4
                 checks[f"{label}_{variant}_fields_in"] = fields_in
+                if variant == "crossfade":
+                    control, control_checks = _clear_control(core, api, scene, host, clock, run)
+                    facts[f"{label}_{variant}"]["clear_control"] = control
+                    checks.update({f"{label}_{variant}_{k}": v for k, v in control_checks.items()})
+                if variant in SCENE_CLEAR_CONTROL_VARIANTS:
+                    control, control_checks = _clear_control(core, api, scene, host, clock, run, route="scene")
+                    facts[f"{label}_{variant}"]["scene_clear_control"] = control
+                    checks.update({f"{label}_{variant}_scene_{k}": v for k, v in control_checks.items()})
+                if variant in SCENE_PASS_VARIANTS:
+                    units, unit_checks = _scene_passes(core, scene, host, clock, run, api)
+                    facts[f"{label}_{variant}"]["scene_passes"] = units
+                    checks.update({f"{label}_{variant}_{k}": v for k, v in unit_checks.items()})
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
                 scene.settle()
         finally:
+            background_node.time = saved_time
             scene.close(app)
             facts.setdefault("host_close", []).append(blc._close_host(app, host))
+            if python is not None:
+                python[1].close(app)
+                facts.setdefault("host_close", []).append(blc._close_host(app, python[0]))
         if api == "opengl":
             pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
             capture = product_capture(size[0], size[1], *pictures, 1.0)
@@ -885,6 +1249,8 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     run = production_run(variant, [image for image, _rows in photos], index + 1)
                     capture.render(run, 0.5)                     # its per-run resources made before the timing
                     facts[f"{label}_{variant}"]["python_opengl"] = capture.benchmark(run)
+                    if variant in SCENE_PASS_VARIANTS:
+                        facts[f"{label}_{variant}"]["python_stages"] = _python_stages(capture, run)
             finally:
                 capture.close()
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}

@@ -115,6 +115,16 @@ struct TargetAttachment
     bool mipsRead = false;
 };
 
+struct TargetDeclaration;
+// N5.2h: whether a scene target's first run may be cleared by its pass's own clear on OpenGL instead of its clearing
+// draw (scene_clear<n>), and the one colour that pass clears to (`colour`): not a cube (each face cleared by its run) and
+// not a transparency target (its borrowed attachments are the owner's, never cleared by it, nor its depth); every
+// attachment's clear equal to that colour on the channels its format holds (all four for RGBA8/RGBA16F, red for
+// R16F/R32F/R8), each value exactly 0 or 1 (a QColor clear is 16 bits a channel: any other value could differ from the
+// draw's float); multisampled (`samples`, the effective count) only when every attachment is RGBA8 (a multisampled R16F
+// clears slower by glClear than by the draw: measured). Anything else keeps the draw.
+bool scenePassClearColour(const TargetDeclaration &decl, int samples, QColor *colour);
+
 // The nearest resolve's slots of a target: its colour attachments, then its depth.
 constexpr int kNearestDepthSlot = kMaxTargetColour;
 constexpr int kNearestSlots = kMaxTargetColour + 1;
@@ -315,6 +325,14 @@ public:
         RhiOwned<QRhiTexture> depthNearest;              // the depth's nearest resolve (R32F window depth)
         RhiOwned<QRhiRenderPassDescriptor> renderPass;
         RhiOwned<QRhiTextureRenderTarget> renderTarget;
+        // N5.2h, OpenGL only: renderTarget's attachments (resolves and depth too) without PreserveColorContents or
+        // PreserveDepthStencilContents, so a pass begun on it clears every attachment to the pass's colour and the
+        // depth to 1 (glClear), as the clearing draw did, without the draw's fragments; made and created beside
+        // renderTarget when the declaration is pass-clearable (scenePassClearColour), null otherwise. Compatible
+        // with renderPass's (OpenGL's descriptors are; the load is the only difference).
+        RhiOwned<QRhiRenderPassDescriptor> clearingRenderPass;
+        RhiOwned<QRhiTextureRenderTarget> clearingTarget;
+        QColor clearingColour;                // the colour a pass begun on clearingTarget clears to
         // The nearest resolves' render targets (slot: a colour attachment, or kNearestDepthSlot).
         RhiOwned<QRhiRenderPassDescriptor> nearestRenderPass[kNearestSlots];
         RhiOwned<QRhiTextureRenderTarget> nearestTarget[kNearestSlots];

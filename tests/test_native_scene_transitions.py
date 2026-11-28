@@ -183,6 +183,17 @@ def test_every_vertex_input_is_its_meshs_and_every_sampler_the_shaders(variant):
     assert scene.environment == reads
 
 
+def scene_target_runs(drawn, target: str) -> int:
+    """The core's runs on ``target`` (mode_content.cpp recordPasses: consecutive passes into one target are one run, and
+    each run's end resolves its multisampled attachments)."""
+    runs, previous = 0, None
+    for p in drawn:
+        if p.target == target and previous != target:
+            runs += 1
+        previous = p.target
+    return runs
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(variant):
     from rendering.native.mode import CompositeStep, EnvironmentStep, ModePass, program_json
@@ -222,7 +233,15 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
         ghost = scene_pass.target == "ghosts"
         names = [ghost_pass_name(scene_pass.name, a) for a in range(SCENE3D_TRAIL_GHOSTS)] if ghost else [scene_pass.name]
         expected += [(name, scene_pass) for name in names]
+    # N5.2h: the ghost passes first (their own target), so the scene target is drawn in one run.
+    expected = ([e for e in expected if e[1].target == "ghosts"] + [e for e in expected if e[1].target != "ghosts"])
     assert [p.name for p in drawn] == [name for name, _p in expected] + ([MOTION_GATHER] if scene.motion else [])
+    assert scene_target_runs(drawn, nb.SCENE_TARGET) == (1 if any(p.target == nb.SCENE_TARGET for p in drawn) else 0)
+    if scene.trails:
+        # Negative control: the old order (the ghosts at their place among the scene's passes) splits the scene target.
+        old = [p for p in drawn if p.target == nb.SCENE_TARGET][:1] + [p for p in drawn if p.target == nb.SCENE_GHOSTS] \
+            + [p for p in drawn if p.target == nb.SCENE_TARGET][1:]
+        assert scene_target_runs(old, nb.SCENE_TARGET) == 2
     for native, (_name, scene_pass) in zip(drawn, expected):
         if scene_pass.core_triangle:
             assert native.pack == nb.shared_pack_path(scene_pass.name, ".frag").read_bytes() and native.geometry is None

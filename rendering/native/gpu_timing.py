@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 #: The figure kinds (``GpuPassKind`` in ``gpu_timer.h``); the frame trace's ``logical_timestamp_ns`` field carries them.
-GPU_PASS_KINDS = {0: "frame", 1: "probe", 2: "surface", 3: "load", 4: "backdrop"}
+GPU_PASS_KINDS = {0: "frame", 1: "probe", 2: "surface", 3: "load", 4: "backdrop", 5: "scenepass"}
+#: A scene-pass figure's part (``GpuUnitPart`` in ``gpu_timer.h``, N5.2h): the unit itself, its nearest copies, its own
+#: mips, the texture chains before the passes, the closing clear; and (``time_scene_run_parts``, OpenGL) a scene run's
+#: opening (begin, clear, clearing draw), each of its passes and its end-of-pass resolves in place of its unit.
+GPU_UNIT_PARTS = {0: "unit", 1: "nearest", 2: "self_mips", 3: "chains", 4: "last_clear", 5: "run_open", 6: "run_draw",
+                  7: "run_resolve"}
 #: The timer's options (``GpuTimerConfig``): ``keep_when_off`` and ``wait_for_results`` are negative controls.
 TIMER_OPTIONS = ("enabled", "keep_when_off", "wait_for_results")
 #: The known-cost pass's options (``LoadConfig`` in ``load_pass.h``); ``timing="before"`` is a negative control.
@@ -32,12 +37,19 @@ LOAD_TIMINGS = ("pass", "before")
 @dataclass(frozen=True)
 class GpuSample:
     """One figure: ``kind`` (``GPU_PASS_KINDS``), the frame edge the pass was recorded at (-1 for QRhi's frame figure,
-    whose frame Qt does not name), the edge its result was read at, and the GPU time in nanoseconds."""
+    whose frame Qt does not name), the edge its result was read at, and the GPU time in nanoseconds. A scene-pass figure
+    (N5.2h) also names its program pass (-1: none) and its part (``GPU_UNIT_PARTS``)."""
 
     kind: int
     frame: int
     read_at: int
     nanoseconds: int
+    pass_index: int = -1
+    part: int = 0
+
+    @property
+    def part_name(self) -> str:
+        return GPU_UNIT_PARTS.get(self.part, str(self.part))
 
     @property
     def kind_name(self) -> str:
@@ -54,8 +66,8 @@ class GpuSample:
 
 
 def samples_from(raw: Iterable[Any]) -> tuple[GpuSample, ...]:
-    """The module's rows (``host_gpu_samples``: kind, frame, read_at, nanoseconds) as samples."""
-    return tuple(GpuSample(int(kind), int(frame), int(read_at), int(ns)) for kind, frame, read_at, ns in raw)
+    """The module's rows (``host_gpu_samples``: kind, frame, read_at, nanoseconds[, pass, part]) as samples."""
+    return tuple(GpuSample(*(int(value) for value in row)) for row in raw)
 
 
 def gpu_pass_timing_wanted(flags: Any, sink: Any) -> bool:
@@ -83,5 +95,5 @@ def write_to_frame_trace(sink: Any, samples: Iterable[GpuSample], *, screen_inde
     return written
 
 
-__all__ = ["GPU_PASS_KINDS", "GpuSample", "LOAD_OPTIONS", "LOAD_TIMINGS", "TIMER_OPTIONS", "gpu_pass_timing_wanted",
+__all__ = ["GPU_PASS_KINDS", "GPU_UNIT_PARTS","GpuSample", "LOAD_OPTIONS", "LOAD_TIMINGS", "TIMER_OPTIONS", "gpu_pass_timing_wanted",
            "samples_from", "write_to_frame_trace"]

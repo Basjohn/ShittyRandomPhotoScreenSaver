@@ -96,8 +96,11 @@ private:
     void setError(const QString &error);
     // N3.6: the window's frame edge now (the stamp of a raw object retired at it); -1 before connectTo.
     qint64 windowEdge() const;
-    int timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind);
+    int timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind, int pass = -1, int part = 0);
     void timerEnd(QRhi *rhi, QRhiCommandBuffer *cb, int scope);
+    // N5.2h: GpuUnitBrackets' thunks (owner: this driver), a unit of a record timed as GpuPassKind::ScenePass.
+    static int unitBegin(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int pass, int part);
+    static void unitEnd(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int scope);
     // N5.7b: the window's backdrop pyramids after its background layer (each timed whole); true when one built.
     bool recordBackdropPyramids(QRhi *rhi, QRhiCommandBuffer *cb);
 
