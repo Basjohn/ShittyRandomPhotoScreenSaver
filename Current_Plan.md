@@ -115,6 +115,11 @@ Continue the native sequence below with the repaired timing receipts. The report
        levels, two frames at 30/38) on speck glints. This is OpenGL-only and has a separate cause. Side defect for this agent after defect 3.
        Defect 2 FIXED `5396351bb` (C++, ABI stays 47): the cap is now the layer's whole chain less two (4K: 4→9), matching
        Python's full mip chain. The 15 Nov core-downsample line is superseded. Building 28 Nov.
+       Built `85f1baf9`: forced level 5 and level 7 draw on Vulkan, where the old module drew black (no zoomed-in card
+       or Python comparison yet). The sixth agent was retired at 197k (journal `582fc37fd`). References made before the snow
+       fix carry the same random snow depth (Python draws the same shader), so **Sonnet `afdd41cbae2c31521`** is
+       regenerating all 30 and rerunning P (human_heavy1 60 s, plus the smoke), measurement only. Then defect 3 proper
+       and the OpenGL speck residual go to a fresh Opus Medium.
        Before the fix: On a 30 s delivery, 2,576 of 2,586 frames differ across two
        runs (median 68 px, up to 149 levels, isolated pixels on specks/snow). The OpenGL floor is median 0, max 3 px.
        Ruled out by reading: unzeroed compute storage and atomic append order. Untested: per-frame-slot Dynamic buffers
