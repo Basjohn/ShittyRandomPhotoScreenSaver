@@ -262,6 +262,23 @@ Continue the native sequence below with the repaired timing receipts. The report
       per already-rendered frame. Backend-neutral (OpenGL and Vulkan). First attribute how much of the 204 ms is
       pipeline building against meshes, fields and targets. Control: a first-run child test where the warmed run's first
       record builds 0 pipelines and the unwarmed one builds some.
+      a37b0 result (28 Nov, retired at 246k, branch `worktree-agent-a37b0453cae98f514` at `6b7e6fb02`, pushed): the
+      stall is NOT pipeline building. Render thread first effect frame 15-27 ms on every run (Crossfade alone 10-18 ms,
+      shared first-record work); pipelines + meshes + fields + targets about 5-10 ms, in the noise; unchanged with Qt's
+      and NVIDIA's disk caches empty. GUI thread run start without warm-up: Exploding Tiles 80, Jigsaw 166-174,
+      Volumetric 52, Disintegrate 45 ms, later runs ~6 ms; with the product's warm units first ~6 ms (Jigsaw 94 ms:
+      `build_jigsaw_geometry` on the GUI thread in the probe, product path unchecked). So no core warm entry. Low done:
+      `6419b4d4c` (`mip_chain`, `environment` out of `SHARED_RENDERER_MODULES`, fresh-process check + control).
+      Evidence `<a37b0>/.artifacts/evidence/native_core/n5_2h/20261128_fix7_attribution/`.
+      Lead, 28 Nov, bytecode cached (`-X importtime`, fresh process): one warm unit, the transition's own module
+      import, costs Exploding Tiles 174-180 ms (133 ms of it PyOpenGL: `implementations.exploding_tiles` →
+      `scene3d.particles` → `OpenGL.GL`), Jigsaw 35, Volumetric Dissolve and Disintegrate 11 ms. Every `scene3d/*.py`
+      imports `OpenGL.GL` at module level (the unported Python 3D modes still draw with it).
+    - [ ] Fix 7 (replaces the core warm entry): no transition module's import closure loads `OpenGL` (move the value
+      code transitions use out of the GL modules, or import GL lazily inside the GL-only functions); every warm unit at
+      most 8 ms on the GUI thread with bytecode cached (split what is not); Jigsaw's `build_jigsaw_geometry` off the GUI
+      thread or into small units if the product path runs it there. Guard: a fresh-process test importing every
+      transition module never loads `OpenGL`, with its control. Then the D1 hitch rows retaken.
     - [ ] The audit's lows below (**Sonnet Medium `a528d802aa63fd169`**, own worktree, merges aeba3's), minus the PhotoEnvironment box (Backlog), plus the two side defects:
       the owner exit probe's lifecycle barrier timeout (one QuickDisplayRuntime still live, probably the probe's own
       global), and the backdrop and Visualizer taking the core on an unhosted window (no window check; they draw
