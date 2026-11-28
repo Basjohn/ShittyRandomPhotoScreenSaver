@@ -1,3 +1,16 @@
+# N5.2h switch side defect: Qt GL sets sampler state on multisampled textures (GL_INVALID_ENUM), agent ad3b55
+
+2026-11-28. Merged worktree-agent-a6b16aeef142dc895 (7dc955488). Module 163d41b8 copied into release/native_module.
+- Box 1 done: synchronous logger probe (.artifacts/scratch/gl_ms_sampler/probe_bind.py) shows ONE error per multisampled
+  texture at its creation (eb_4x textures 3,5,7,11,12: RGBA16F x3, D32F, R16F; tiles_4x one RGBA8), program 31 (Quick's,
+  no core sampler on the unit). Cause: QGles2Texture::create() ends with glTexParameteri(target, MIN_FILTER, LINEAR)
+  for every uncompressed texture. Not bindCombinedSampler (that would be 5 calls on one texture). Advisor refuted.
+- Box 2: createTexture() in gl_sampler_state.cpp (GL + MS: glGenTextures, createFrom, glTexStorage2DMultisample, owns=true);
+  scene_targets.cpp make lambda uses it. Source test test_every_multisampled_texture_is_created_without_sampler_state
+  (failed before the C++ change at scene_targets.cpp:1141). Not built (lead builds). Commit 158531ad9.
+- Box 3 done 123cf29d0: fragment 'no mips' -> 'reads mips of'. Evidence native_core/n5_2h/20261128_gl_ms_create_attribution.
+
+---- previous agent's journal ----
 # N5.2h switch delete sub-box, successor (agent a6b16aeef142dc895)
 
 started 2026-11-28. Merged ac5eb + main; release/native_module copied (f475358aa).
