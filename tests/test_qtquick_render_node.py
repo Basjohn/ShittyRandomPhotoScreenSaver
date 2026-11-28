@@ -10,11 +10,10 @@ import subprocess
 import sys
 
 import pytest
-from PySide6.QtQuick import QQuickItem, QSGRenderNode
+from PySide6.QtQuick import QQuickItem
 
 from rendering.quick.render import (
     BackgroundRenderItem,
-    BackgroundRenderNode,
     RenderNodeTelemetry,
 )
 from rendering.quick.transitions import TransitionSample
@@ -66,9 +65,9 @@ def test_transition_pixel_probes_keep_nearest_frame_across_cadence_jump():
     assert telemetry.snapshot().transition_probe_colors[-1] == ("second-before",)
 
 
-def test_background_item_and_node_use_the_selected_inline_primitive():
+def test_background_item_uses_the_selected_inline_primitive():
+    # N5.2h: the item's Python render node is deleted; the native core draws the background.
     assert issubclass(BackgroundRenderItem, QQuickItem)
-    assert issubclass(BackgroundRenderNode, QSGRenderNode)
 
     item_tree = ast.parse(
         (ROOT / "rendering" / "quick" / "render" / "background_item.py").read_text(
@@ -82,26 +81,6 @@ def test_background_item_and_node_use_the_selected_inline_primitive():
     }
     assert "setFlag" in calls
     assert "updatePaintNode" not in calls
-
-
-def test_render_node_owns_direct_gl_and_render_thread_cleanup():
-    source = (
-        ROOT / "rendering" / "quick" / "render" / "background_node.py"
-    ).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    methods = {
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    assert {"render", "releaseResources", "changedStates", "rect"} <= methods
-    assert "glDrawArrays" in source
-    assert "QOpenGLContext.currentContext" in source
-    assert "self.renderTarget()" in source
-    assert "gl.glViewport(*viewport)" in source
-    assert "gl.glViewport(*prior_viewport)" in source
-    assert "beginExternalCommands" not in source
-    assert "endExternalCommands" not in source
 
 
 def test_quick_render_node_path_has_no_prohibited_surface_or_compatibility_owner():

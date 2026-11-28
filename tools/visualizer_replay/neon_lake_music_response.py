@@ -167,7 +167,7 @@ def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.neon_lake_capture import _draw
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.visualizer_replay.driver import replay_clip
     from widgets.spotify_visualizer.feature_frame import load_jsonl
 
@@ -175,7 +175,7 @@ def response(clips, preset, size, fps, out: Path, overrides, start=0.0, duration
     activation = resolve_visualizer_activation_payload(
         {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
     settings = {**activation.resolved_config, **overrides}
-    target = TransitionCapture(width, height)
+    target = OffscreenRenderTarget(width, height)
     host = QuickVisualizerRenderHost()
     rows = []
     try:

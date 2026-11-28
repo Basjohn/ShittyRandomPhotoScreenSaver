@@ -46,6 +46,9 @@ Run alone:
            and with the highlight's few sprites only).
   showcase (each API) the primitive's animated WebP.
   big_frames (each API) the EB scene's targets and frame at 4K with and without the sprites (the cost's diagnosis).
+  gl_errors (OpenGL) every case without a control, one and four samples, on a debug context: the driver's debug log
+           holds no error and no undefined-behaviour message over each case's first frames (N5.2h: Qt 6.12.0 set
+           sampler state on the multisampled textures the resolves read, GL_INVALID_ENUM; gl_sampler_state.h).
   python_cost, python_defocus_cost (the reference child, OpenGL) the Python stages on the same loads; the Python
            defocus steps each timed by GL timestamps, and glGenerateTextureMipmap on immutable and mutable storage.
 
@@ -83,7 +86,9 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries", "accounting")
+ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries", "accounting",
+                "gl_errors")
+GL_ERROR_FRAMES = 4                # a case's first frame (its textures' first binds), a record after a change, two more
 PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
@@ -1461,6 +1466,63 @@ DEFOCUS_DIAGNOSTIC_CONTROLS = ("time_defocus_draws", "flush_defocus_draws", "dec
                                "disable_defocus_compute_tracking")
 
 
+def gl_errors_verdict(record: dict) -> dict:
+    """The gl_errors round's judgement: a proof only on a debug context with the logger reading its log; then no
+    error or undefined-behaviour message in any case."""
+    checks = {"debug_context": bool(record.get("debug_context")), "logger_initialised": bool(record.get("logger")),
+              "cases_drawn": bool(record.get("cases")) and all(c.get("frames") for c in record["cases"].values()),
+              "no_gl_errors": all(not c.get("messages") for c in (record.get("cases") or {}).values())}
+    return {**record, "checks": checks, "pass": all(checks.values())}
+
+
+def round_gl_errors(core, engine, app, api: str, packs: dict) -> dict:
+    """OpenGL with a debug context (the child sets it before the application): every control-free case's first frames
+    on a host rendering on this thread, the driver's message log read after each frame."""
+    if api != "opengl":
+        return {"pass": True, "skipped": "OpenGL only"}
+    from PySide6.QtGui import QOpenGLContext, QSurfaceFormat
+    from PySide6.QtOpenGL import QOpenGLDebugLogger, QOpenGLDebugMessage
+
+    bad = (QOpenGLDebugMessage.Type.ErrorType, QOpenGLDebugMessage.Type.UndefinedBehaviorType)
+    record: dict = {"cases": {}}
+    host = core.hidden_host(CARD[0] + 2 * MARGIN, CARD[1] + 2 * MARGIN, threaded=False)
+    try:
+        host.frames(1)
+        context = QOpenGLContext.currentContext()
+        record["debug_context"] = bool(context and context.format().testOption(
+            QSurfaceFormat.FormatOption.DebugContext))
+        logger = QOpenGLDebugLogger()
+        record["logger"] = bool(context) and logger.initialize()
+        if not record["logger"]:
+            return gl_errors_verdict(record)
+        logger.loggedMessages()                # the host's own first frame: drained
+        for case in CASES:
+            if case.controls or case.card != CARD:
+                continue
+            passes, targets, values = build(case, packs)
+            scene = stc.Scene(core, engine, host, case.card, 1.0, packs, passes=passes, targets=targets, settings=values)
+            entry = {"samples": case.samples, "frames": 0, "messages": []}
+            try:
+                bump = BUMP[case.scene]
+                for frame in range(GL_ERROR_FRAMES):
+                    if frame == 1:
+                        scene.mode.settings(dict(values, **{bump: values[bump] * 0.9}))
+                    host.frames(1)
+                    app.processEvents()
+                    entry["frames"] += 1
+                    for message in logger.loggedMessages():
+                        if message.type() in bad and len(entry["messages"]) < 8:
+                            entry["messages"].append(f"frame {frame}: id {message.id()}: {message.message()}")
+                entry["records"] = scene.mode.state().get("records")
+            finally:
+                _close(scene, host, app)
+            record["cases"][case.name] = entry
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return gl_errors_verdict(record)
+
+
 def _compute_free_program(passes) -> bool:
     """The tracking-disabled precondition covers the whole canonical pass list, including dormant entries."""
     return bool(passes) and all("compute" not in entry.declaration() for entry in passes)
@@ -2336,6 +2398,12 @@ def child(args) -> dict:
         from rendering.quick.bootstrap import configure_quick_graphics
 
         configure_quick_graphics(reason="post-stage-check")
+        if args.api == "opengl" and "gl_errors" in args.rounds:
+            from PySide6.QtGui import QSurfaceFormat
+
+            debug = QSurfaceFormat.defaultFormat()     # the round's driver message log (QRhi takes the default)
+            debug.setOption(QSurfaceFormat.FormatOption.DebugContext)
+            QSurfaceFormat.setDefaultFormat(debug)
         from PySide6.QtWidgets import QApplication
 
         app = QApplication([sys.argv[0]])
@@ -2398,7 +2466,8 @@ def child(args) -> dict:
                           "showcase": lambda: round_showcase(core, engine, app, args.api, packs, out),
                           "big_frames": lambda: round_big_frames(core, engine, app, args.api, packs, out),
                           "defocus_draws": lambda: round_defocus_draws(core, engine, app, args.api, packs),
-                          "defocus_boundaries": lambda: round_defocus_boundaries(core, engine, app, args.api, packs)}
+                          "defocus_boundaries": lambda: round_defocus_boundaries(core, engine, app, args.api, packs),
+                          "gl_errors": lambda: round_gl_errors(core, engine, app, args.api, packs)}
                 for name in args.rounds:
                     if vulkan:
                         core.set_vulkan_phase(f"n34 {name}")
@@ -2478,8 +2547,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
-    if "accounting" in args.rounds and len(args.rounds) != 1:
-        parser.error("accounting runs alone in its own child process")
+    for alone in ("accounting", "gl_errors"):
+        if alone in args.rounds and len(args.rounds) != 1:
+            parser.error(f"{alone} runs alone in its own child process")
 
     if args.child:
         try:

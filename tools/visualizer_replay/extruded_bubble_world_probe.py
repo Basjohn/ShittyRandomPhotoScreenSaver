@@ -103,7 +103,7 @@ def main():
     from rendering.gl_programs.extruded_bubble_scene import bubble_instances
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.extruded_bubble_capture import _draw
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.visualizer_replay.driver import replay_clip
     from tools.visualizer_replay.extruded_bubble_forensics import load_clip
     activation=resolve_visualizer_activation_payload({'mode':'extruded_bubble','preset_extruded_bubble':args.preset-1},mode='extruded_bubble')
@@ -113,7 +113,7 @@ def main():
     state=snapshot.logical.mode_state
     shells=bubble_instances(state.bubbles)
     points=shells[:,:3];radii=shells[:,3]
-    host=QuickVisualizerRenderHost();target=TransitionCapture(*size)
+    host=QuickVisualizerRenderHost();target=OffscreenRenderTarget(*size)
     rows=[];tiles=[]
     try:
         poses=[(i/6.,float(dict(state.parameters)['extruded_bubble_tilt']),1.,0.) for i in range(12)]

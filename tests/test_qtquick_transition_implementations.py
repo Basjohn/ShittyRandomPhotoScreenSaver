@@ -541,7 +541,6 @@ def test_wipe_mode_defaults_left_to_right_and_rejects_unknown_direction():
 
 def test_common_runtime_owners_have_no_transition_specific_dispatch_tree():
     paths = (
-        ROOT / "rendering" / "quick" / "render" / "background_node.py",
         ROOT / "rendering" / "quick" / "transitions" / "render_host.py",
         ROOT / "rendering" / "quick" / "transitions" / "controller.py",
         ROOT / "rendering" / "quick" / "scene_controller.py",

@@ -8,7 +8,7 @@ from OpenGL import GL as gl
 
 from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
 
@@ -34,7 +34,7 @@ void main() {
 
 @pytest.fixture
 def capture(qt_app):
-    result = TransitionCapture(SIZE, SIZE)
+    result = OffscreenRenderTarget(SIZE, SIZE)
     yield result
     result.close()
 

@@ -23,6 +23,7 @@ from rendering.gl_programs.scene3d import (
     scene3d_screen_uv,
 )
 from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 
 def _inside(point, half_box) -> bool:
@@ -136,29 +137,6 @@ def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app)
         capture.close()
 
 
-def test_parking_the_background_node_parks_the_transition_host(qt_app, monkeypatch):
-    from rendering.quick.render import background_node
-    from rendering.quick.render.telemetry import RenderNodeTelemetry
-
-    node = background_node.BackgroundRenderNode(RenderNodeTelemetry(gui_thread_id=1), screen_index=0)
-
-    class _Host:
-        has_resources = True
-        parks = 0
-
-        def park(self):
-            self.parks += 1
-
-        def release_resources(self):
-            self.has_resources = False
-
-    host = _Host()
-    node._transition_renderer = host
-    monkeypatch.setattr(background_node.QOpenGLContext, "currentContext", staticmethod(lambda: object()))
-    node.release_presentation_textures()
-    assert host.parks == 1
-
-
 _MIGRATED = (("glass_shatter", "center_out"), ("crumble", None), ("pixel_accretion", "left"), ("block_spins", "left"))
 
 
@@ -224,7 +202,7 @@ def test_the_bloom_pass_takes_only_the_alpha_marked_light(qt_app):
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.scene3d.target import SceneTarget
 
-    capture = TransitionCapture(256, 144)
+    capture = OffscreenRenderTarget(256, 144)
     resources, target = MeshResources("bloom test"), SceneTarget("bloom test")
     texture = int(gl.glGenTextures(1))
     try:

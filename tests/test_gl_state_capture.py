@@ -14,9 +14,9 @@ pytest.importorskip("OpenGL")
 
 @pytest.fixture
 def gl_context(qt_app):
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(32, 32)
+    capture = OffscreenRenderTarget(32, 32)
     yield capture
     capture.close()
 

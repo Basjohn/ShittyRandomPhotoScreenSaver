@@ -148,3 +148,25 @@ def test_the_import_check_passes_the_built_module(core, tmp_path, monkeypatch):
         assert report["ok"] and report["runtime_info"]["abi"] == loader.EXPECTED_ABI
     finally:
         sys.modules.pop("import_check", None)
+
+
+def test_a_validation_on_opengl_frame_logs_no_gl_errors(tmp_path):
+    """N5.2h (found by N5.6): Qt 6.12.0's OpenGL backend set sampler state on the multisampled textures the core's
+    resolves read per sample (GL_INVALID_ENUM at each texture's first bind). post_stage_check's gl_errors round in its
+    own process on a debug context: every control-free case at one and four samples, the driver's log after each frame
+    holds no error. The negative control is the module before gl_sampler_state.cpp (f475358aa): eb_4x logs 20."""
+    import subprocess
+
+    record_path = tmp_path / "child.json"
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "native" / "core" / "python" / "post_stage_check.py"), "--child", "--api",
+         "opengl", "--rounds", "gl_errors", "--repo", str(ROOT), "--module-dir", str(MODULE_DIR), "--out-dir",
+         str(tmp_path), "--child-json", str(record_path)],
+        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert not record.get("error"), record.get("error")
+    entry = record["gl_errors"]
+    assert any(case["samples"] > 1 for case in entry.get("cases", {}).values()), entry
+    messages = {name: case["messages"] for name, case in (entry.get("cases") or {}).items() if case["messages"]}
+    assert entry["pass"], {"checks": entry.get("checks"), "error": entry.get("error"), "messages": messages}

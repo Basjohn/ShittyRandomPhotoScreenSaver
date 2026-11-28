@@ -14,7 +14,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs import scene3d as lib
 from rendering.quick.scene3d.resources import MeshResources
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 
 WIDTH, HEIGHT = 320, 180
 
@@ -53,9 +53,16 @@ def test_shake_is_deterministic_bounded_and_real_time():
 
 @pytest.fixture
 def capture(qt_app):
-    result = TransitionCapture(WIDTH, HEIGHT)
+    result = OffscreenRenderTarget(WIDTH, HEIGHT)
     yield result
     result.close()
+
+
+def _photo(capture) -> int:
+    """The fixture photograph (the source scene the transition tools use) as a texture of the target's context."""
+    from tools.transition_contact_sheet import fixture_images
+
+    return capture.upload_image(fixture_images(WIDTH, HEIGHT)[0].resize((WIDTH, HEIGHT)))
 
 
 def _frame(capture):
@@ -83,7 +90,7 @@ def _exposed(pixels: np.ndarray) -> int:
 def test_the_camera_plane_at_rest_is_the_photograph(capture):
     resources = MeshResources("camera test")
     try:
-        frame, texture = _frame(capture), capture.textures[0]
+        frame, texture = _frame(capture), _photo(capture)
         flat = _draw(capture, lambda: resources.draw_image(frame, texture))
         plane = _draw(capture, lambda: resources.draw_camera_plane(frame, texture, (3.4, 1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 0.0)))
         assert np.abs(flat - plane).max() <= 1
@@ -97,7 +104,7 @@ def test_a_moving_camera_never_exposes_the_frame_edges(capture):
     rng = random.Random(9)
     aspect = WIDTH / HEIGHT
     try:
-        frame, texture = _frame(capture), capture.textures[0]
+        frame, texture = _frame(capture), _photo(capture)
         for _ in range(12):
             offset = (rng.uniform(-0.04, 0.04), rng.uniform(-0.04, 0.04))
             tilt = (rng.uniform(-0.08, 0.08), rng.uniform(-0.08, 0.08))
