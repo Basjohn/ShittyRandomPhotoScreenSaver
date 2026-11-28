@@ -314,14 +314,14 @@ def drawn_radii(snapshots, frames, times, presentation, frame_dir: Path | None =
     from rendering.quick.visualizer.implementations.bubble import bubble_presentation_layout
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.extruded_bubble_capture import _draw
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     outer_x, outer_y, outer_w, outer_h = presentation.outer_rect
     size = (int(round(outer_w)), int(round(outer_h)))
     cx0, cy0, content_w, content_h = presentation.content_rect
     cx0, cy0 = cx0 - outer_x, cy0 - outer_y
     dpr = float(presentation.dpr)
-    target = TransitionCapture(int(round(outer_w * dpr)), int(round(outer_h * dpr)))   # device pixels
+    target = OffscreenRenderTarget(int(round(outer_w * dpr)), int(round(outer_h * dpr)))   # device pixels
     host = QuickVisualizerRenderHost()
     rows = []
     origin = times[0]
@@ -378,12 +378,12 @@ def drawn_frames(snapshots, presentation, *, width: int):
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from tools.extruded_bubble_capture import _draw
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     _x, _y, outer_w, outer_h = presentation.outer_rect
     size = (int(round(outer_w)), int(round(outer_h)))
     dpr = float(presentation.dpr)
-    target = TransitionCapture(int(round(outer_w * dpr)), int(round(outer_h * dpr)))
+    target = OffscreenRenderTarget(int(round(outer_w * dpr)), int(round(outer_h * dpr)))
     host = QuickVisualizerRenderHost()
     images = []
     try:

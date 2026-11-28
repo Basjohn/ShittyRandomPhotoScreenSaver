@@ -13,7 +13,8 @@ from rendering.gl_error_policy import disable_per_call_gl_error_checking
 if not disable_per_call_gl_error_checking():
     raise RuntimeError("GL imported before production policy")
 from OpenGL import GL as gl
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
+from tools.transition_contact_sheet import fixture_images
 from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.gl_programs.extruded_bubble_program import (
     BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT, EB_SAMPLERS, GLASS_BLOCK,
@@ -34,7 +35,7 @@ root=Path(__file__).resolve().parents[2]
 paths=[root/'rendering/gl_programs/extruded_bubble_program.py',root/'rendering/gl_programs/scene3d_spheres.py']
 source_hashes={str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
 W,H=1200,800
-capture=TransitionCapture(W,H)
+capture=OffscreenRenderTarget(W,H)
 gl=PassBlockGL(gl)
 programs=[]
 objects=[]
@@ -55,7 +56,12 @@ try:
     gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR)
     gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
     gl.glActiveTexture(gl.GL_TEXTURE0)
-    gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], capture.textures[0])
+    background=int(gl.glGenTextures(1)); objects.append(background)   # the fixed captured background: the fixture source image
+    gl.glBindTexture(gl.GL_TEXTURE_2D,background)
+    for axis in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):gl.glTexParameteri(gl.GL_TEXTURE_2D,axis,gl.GL_CLAMP_TO_EDGE)
+    for filt in (gl.GL_TEXTURE_MIN_FILTER,gl.GL_TEXTURE_MAG_FILTER):gl.glTexParameteri(gl.GL_TEXTURE_2D,filt,gl.GL_LINEAR)
+    gl.glTexImage2D(gl.GL_TEXTURE_2D,0,gl.GL_RGBA8,W,H,0,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,np.asarray(fixture_images(W,H)[0].convert("RGBA").resize((W,H))))
+    gl.glBindTextureUnit(EB_SAMPLERS["uBackground"], background)
     projection=camera(0,0,W/H)[3]
     tan=camera(0,0,W/H)[2]
     gl.glVertexAttrib1f(2,1.0)

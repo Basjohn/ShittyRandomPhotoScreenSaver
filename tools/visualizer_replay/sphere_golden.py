@@ -298,7 +298,7 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
     from OpenGL import GL as gl
 
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from widgets.spotify_visualizer.render_state import freeze_render_fields
 
     from .driver import replay_clip
@@ -326,7 +326,7 @@ def render_visual_cases(cases=VISUAL_CASES) -> dict:
                                               logical=dataclasses.replace(snapshot.logical, mode_state=state))
         window_w, window_h = 3 * width, 3 * height
         matrix = (2 / window_w, 0, 0, 0, 0, -2 / window_h, 0, 0, 0, 0, 1, 0, -1 / 3, 1 / 3, 0, 1)
-        capture = TransitionCapture(window_w, window_h)
+        capture = OffscreenRenderTarget(window_w, window_h)
         host = QuickVisualizerRenderHost()
         try:
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
