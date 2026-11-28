@@ -169,7 +169,7 @@ def test_display_steam_routes_profile_and_private_clipboard_actions(
 ):
     from engine.display_manager import DisplayManager
     from rendering import runtime_input
-    from core import build_profile, mc
+    from core import build_profile, dashboard
     from core.windows import secure_url_launcher
 
     opened = []
@@ -184,7 +184,7 @@ def test_display_steam_routes_profile_and_private_clipboard_actions(
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: False)
-    monkeypatch.setattr(mc, "is_dashboard_build", lambda: False)
+    monkeypatch.setattr(dashboard, "is_dashboard_build", lambda: False)
     monkeypatch.setattr(
         secure_url_launcher,
         "open_steam_target",

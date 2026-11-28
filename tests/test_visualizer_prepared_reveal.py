@@ -102,8 +102,8 @@ def test_hidden_frames_prepare_spaced_and_the_first_visible_frame_creates_nothin
 def test_extruded_bubbles_first_visible_frame_asks_gl_for_no_uniform_location(rig):
     """1C.2: the preparation resolves each drawing program's uniform locations, so the first visible frame asks GL for
     none (before: 864 lookups over 11 programs, 480 of them names a program does not have; on the real 4K display
-    that frame took 120 ms beside a second render thread). Every location the renderer then holds equals GL's own
-    answer, inactive names included. Control: on the pre-fix renderer the first visible frame made every lookup."""
+    that frame took 120 ms beside a second render thread). Control: on the pre-fix renderer the first visible frame
+    made every lookup."""
     import rendering.quick.visualizer.implementations.extruded_bubble as eb
     from rendering.quick.visualizer.render_host import PREPARE_SPACING_S
 
@@ -134,10 +134,10 @@ def test_extruded_bubbles_first_visible_frame_asks_gl_for_no_uniform_location(ri
         pixels = target.render(host, _snapshot("extruded_bubble", 1.0), backdrop=(0.1, 0.2, 0.3, 1.0))
     assert np.abs(pixels - pixels[0, 0]).max() > 0                       # it drew
     assert asked == []
-    held = host._implementations["extruded_bubble"]._uniforms._locations
-    assert any(location < 0 for location in held.values()) and any(location >= 0 for location in held.values())
-    assert {key: location for key, location in held.items()} == {
-        (program, name): int(real_lookup(program, name)) for program, name in held}
+    # Uniforms are std140 pass blocks now, no per-name locations: the preparation registered every drawing program's
+    # block, so the first visible frame had nothing left to resolve.
+    uniforms = host._implementations["extruded_bubble"]._uniforms
+    assert uniforms._blocks and all(uniforms.registered(program) for program in uniforms._blocks)
 
 
 @pytest.mark.parametrize("mode", sorted(_CASES))
