@@ -978,16 +978,18 @@ def _scene_passes(core, scene, host, clock, run, api: str = "opengl") -> tuple[d
     timed: dict = {mode: [] for mode in modes}
     host.set_gpu_timer(True)
     host.gpu_samples()
-    frame = 0
     try:
-        for _block in range(SCENE_PASS_BLOCKS):
+        for block in range(SCENE_PASS_BLOCKS):
             for mode in modes:
                 core.module.stage_control("time_scene_passes", mode != "off")
                 if parts_available:
                     core.module.stage_control("time_scene_run_parts", mode == "parts")
-                for _ in range(SCENE_PASS_BLOCK_FRAMES):
+                # Every mode of a block draws the same frames (the block's progress span; _python_stages' frames over
+                # the blocks): the motion blur's and the pieces' cost varies with the progress, so blocks on different
+                # spans compare different work (measured: the gather 0.08 against 0.18 ms at 4K on Vulkan, where both
+                # blocks time the same unit).
+                for frame in range(block * SCENE_PASS_BLOCK_FRAMES, (block + 1) * SCENE_PASS_BLOCK_FRAMES):
                     clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
-                    frame += 1
                     scene.layer.tick()
                     scene.frames(1)
                 scene.frames(2)
