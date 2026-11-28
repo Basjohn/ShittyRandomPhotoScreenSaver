@@ -2455,7 +2455,11 @@ read once (`:770-808`).
   core caps the defocus read level at two levels above the last level made only from even-sized levels (the clip's
   local mean and the sprites read level + 2): `defocusReadLevelCap`, derived from the near target's allocation; a
   deeper level is refused with its reason, the content's failure latched and noted once. A consumer that ever needs a
-  deeper level gets its own downsample then.
+  deeper level gets its own downsample then. *Superseded (N5.6, 28 Nov 2026):* Extruded Bubble needs one (level 5
+  below aperture ~0.54 on the 3840 x 2112 card, cap 4), and Python reads every level of its chain with the driver's
+  `glGenerateTextureMipmap`, so an own downsample would differ from Python on OpenGL too. The cap is now the layer's
+  chain (its last level less two); odd-built levels are each backend's own, judged by rule (b) and reported apart
+  (choice G), as ABI 33's exact mipped targets.
 - *The bloom prime's negative control is not observable.* With the upsample's rule C prime skipped, synchronisation
   validation (shader accesses on) reports nothing: QRhi's transition into the larger level has the load's stage
   (colour attachment output) in its second scope, and the layer does not flag the access-mask gap there (it does for

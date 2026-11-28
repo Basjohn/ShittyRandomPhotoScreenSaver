@@ -414,15 +414,16 @@ void countStageRecordTime(qint64 recordNs)
 
 int defocusReadLevelCap(const QSize &layer)
 {
-    // The last level made only from even-sized levels (generateMips is the driver's filter on OpenGL and a linear blit on
-    // Vulkan: they agree on a halving of an even size and not on an odd one, GL 4.6 section 8.14.4).
-    int exact = 0;
-    for (QSize s = layer; s.width() > 1 || s.height() > 1; ++exact) {
-        if ((s.width() > 1 && s.width() % 2) || (s.height() > 1 && s.height() % 2))
-            break;
-        s = QSize(qMax(1, s.width() / 2), qMax(1, s.height() / 2));
-    }
-    return qMax(0, exact - 2);                // the clip's local mean and the sprites' read level + 2
+    // The layer's last level (QRhi's full chain: floor(log2) of the longer side), two above it for the clip's local mean
+    // and the sprites' read level + 2. A level made from an odd size is each backend's own generateMips filter (the
+    // driver's on OpenGL, which is Python's glGenerateTextureMipmap; a linear blit on Vulkan; GL 4.6 section 8.14.4):
+    // judged by rule (b) and reported apart (choice G), as ABI 33's exact mipped targets. N5.6 (28 Nov): a cap at the
+    // even-built levels refused Extruded Bubble's zoomed-in worlds (level 5 below aperture ~0.54 at 3840 x 2112, cap 4)
+    // and faded the mode out where Python draws them.
+    int last = 0;
+    for (int m = qMax(layer.width(), layer.height()); m > 1; m >>= 1)
+        ++last;
+    return qMax(0, last - 2);
 }
 
 void countTransparencyResolve() { g_transparencyResolves.fetchAndAddRelaxed(1); }
@@ -996,11 +997,10 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
         const QSize layer = near->allocation;
         const int maxLevel = defocusReadLevelCap(layer);
         if (spec.level < 0 || spec.level > maxLevel) {
-            // Checked against its resource (the layer's mips): never a read past the levels both backends make alike
-            // (the lead, 15 Nov). A refusal is the content's failure, latched and noted once.
+            // Checked against its resource (the layer's mips): never a read past the layer's chain. A refusal is the
+            // content's failure, latched and noted once.
             *error = QStringLiteral("defocus step %1: its read level %2 is outside 0 to %3 at %4 x %5 (the clip and the "
-                                    "sprites read two levels deeper, and a level made from an odd-sized one is each "
-                                    "backend's own filter: D17 as built)")
+                                    "sprites read two levels deeper, and the layer's chain ends there)")
                          .arg(spec.pass).arg(spec.level).arg(maxLevel).arg(layer.width()).arg(layer.height());
             return false;
         }

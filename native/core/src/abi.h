@@ -286,4 +286,7 @@
 // with it on is refused with a named error ("mixed blend", mode_content.cpp mixedBlendRefusal; R-256: OpenGL draws the
 // unblended one with stale factors), on its own outputs and on its sorted pack's; a replace there is an enabled ONE,
 // ZERO blend. Not backward compatible for such a program (none ships: the harness's two moved to ONE, ZERO).
+// And defocusReadLevelCap is the layer's chain (its last level less two), no longer the even-built levels: Python reads
+// every level, so Extruded Bubble's zoomed-in worlds drew in Python and were refused natively. Backward compatible (it
+// only admits more).
 #define SRPSS_NATIVE_CORE_ABI 47

@@ -379,23 +379,60 @@ def test_the_defocus_run_chains_its_two_stage_reads() -> None:
     assert "sampledTexture(1, vertex, d.colour, d.mipSampler.get())" in stages
 
 
-def test_the_defocus_read_level_cap_keeps_reads_on_even_built_levels() -> None:
-    """The lead's cap (15 Nov): two levels above the last level made only from even-sized levels; the core's function
-    and the harness's mirror agree, and the sync refuses past it."""
+def _even_built_cap(allocation: tuple[int, int]) -> int:
+    """The 15 Nov cap (two above the last level made only from even-sized levels), superseded in N5.6."""
+    width, height = allocation
+    exact = 0
+    while (width > 1 or height > 1) and not ((width > 1 and width % 2) or (height > 1 and height % 2)):
+        width, height = max(1, width // 2), max(1, height // 2)
+        exact += 1
+    return max(0, exact - 2)
+
+
+def test_the_defocus_read_level_cap_is_the_layers_chain_and_admits_every_level_python_reads() -> None:
+    """N5.6 (28 Nov): Python reads every level of its near layer's chain (glGenerateTextureMipmap), so the core's cap is
+    the chain's last level less two (the clip's and the sprites' level + 2). Extruded Bubble's read level stays inside
+    it over the card sizes and framed apertures a card can take; the even-built cap refused zoomed-in worlds."""
+    import math
     import sys
 
     sys.path.insert(0, str(CORE / "python"))
     import post_stages
+    from core.settings.framed_camera import FOV_RANGE, effective_aperture_scale
+    from rendering.native.scene_targets import bucket_pixels
+    from rendering.quick.scene3d.defocus import DEFOCUS_TAPS
+    from rendering.quick.visualizer.implementations import extruded_bubble as eb
 
-    assert post_stages.read_level_cap((640, 384)) == 5        # 5 x 3 is level 7, made from 10 x 6
-    assert post_stages.read_level_cap((64, 64)) == 4          # down to 1 x 1, every level even-built
-    assert post_stages.read_level_cap((3840, 2176)) == 5      # 30 x 17 is level 7
-    # Negative control: a cap that ignored odd sides would allow 8 at 640 x 384.
-    assert post_stages.read_level_cap((640, 384)) != max((640).bit_length() - 2, 0)
+    for size in ((640, 384), (64, 64), (3840, 2176), (1, 1), (65, 3)):
+        last = max(size).bit_length() - 1             # QRhi's and Python's chain: floor(log2) of the longer side
+        assert post_stages.read_level_cap(size) == max(0, last - 2)
+
+    def level(optical: float) -> int:                 # extruded_bubble_values' u_defocus_level, defocus.py _read_size
+        radius = eb._near_spread(optical)
+        return max(int(math.floor(math.log2(max(math.sqrt(math.pi * radius * radius / DEFOCUS_TAPS), 1.0)))), 0)
+
+    def past(cap) -> list:
+        out = []
+        for fov in FOV_RANGE:
+            for w in (64, 420, 640, 1280, 1920, 2560, 3840):
+                for h in (64, 280, 400, 720, 1080, 1440, 2112, 2160):
+                    for aperture in (1.0, 0.75, 0.5, 0.35, 0.25, 0.1, 1.0 / 32.0):
+                        optical = h / effective_aperture_scale(fov, w / h, aperture)
+                        allocation = (bucket_pixels(w), bucket_pixels(h))
+                        if level(optical) > cap(allocation):
+                            out.append((fov, w, h, aperture, level(optical), cap(allocation)))
+        return out
+
+    assert past(post_stages.read_level_cap) == []
+    # Negative control: the even-built cap refused these (level 5 at aperture 0.5 on the 4K expanded card, cap 4).
+    refused = past(_even_built_cap)
+    assert any(w == 3840 and h == 2112 and aperture == 0.5 for _, w, h, aperture, _, _ in refused)
+
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
-    cap = stages[stages.index("int defocusReadLevelCap("):]
-    assert "(s.width() > 1 && s.width() % 2) || (s.height() > 1 && s.height() % 2)" in cap
-    assert "return qMax(0, exact - 2);" in cap
+    cap = stages[stages.index("int defocusReadLevelCap("):stages.index("void countTransparencyResolve()")]
+    assert "for (int m = qMax(layer.width(), layer.height()); m > 1; m >>= 1)" in cap
+    assert "return qMax(0, last - 2);" in cap
+    assert "% 2" not in cap                           # no even-built stop left
     sync = stages[stages.index("bool PostStages::sync("):]
     assert "const int maxLevel = defocusReadLevelCap(layer);" in sync
 
