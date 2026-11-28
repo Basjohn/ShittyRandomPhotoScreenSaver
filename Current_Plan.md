@@ -93,7 +93,12 @@ Continue the native sequence below with the repaired timing receipts. The report
     `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
     `.artifacts/evidence/native_core/n5_2h/`, journal `.artifacts/handover/n5_2h/JOURNAL.md`.
   - **Opus Medium `acd9164542fb33bfc`**: N5.2h "The switch" (28 Nov), worktree `.claude/worktrees/agent-acd9164542fb33bfc`,
-    branch `worktree-agent-acd9164542fb33bfc`, ABI 45, journal `<worktree>/.artifacts/handover/JOURNAL.md`.
+    branch `worktree-agent-acd9164542fb33bfc`, ABI 45, journal `<worktree>/.artifacts/handover/JOURNAL.md`; caller
+    list + production route `5c81280f4` (no C++), retired from use at 231k. Successor **Opus Medium
+    `a5767acce80d30d07`** (28 Nov), worktree `.claude/worktrees/agent-a5767acce80d30d07`, branch
+    `worktree-agent-a5767acce80d30d07` (merges the first): finish the route (9 red tests, window-free
+    `test_quick_backend_owner`, degraded-display negative control, a failed live layer fades to the degraded display),
+    then the backdrop against the blit.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
