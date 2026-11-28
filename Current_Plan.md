@@ -127,8 +127,8 @@ Continue the native sequence below with the repaired timing receipts. The report
     `9caada852`. Side defects: `tests/test_native_scene_targets.py::test_the_admission_refuses_with_its_reasons` wording vs
     the f475358aa module (goes to the GL fix agent); `rendering/quick/scene3d` PhotoEnvironment/MotionTrails/trails may
     now be dead for transitions (the visualizers still use them; check before any deletion). Retired at 231k.
-    **Next: Opus Medium GL_INVALID_ENUM fix** (diagnosis in the switch box) on this branch, from after the 07:00Z usage
-    reset.
+    **Opus Medium `ad3b55fdd7e2d3dcd`** (28 Nov, own worktree, merges a6b16's): GL_INVALID_ENUM fix (diagnosis in the switch box)
+    and the admission wording red; stops at a commit, lead builds.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
