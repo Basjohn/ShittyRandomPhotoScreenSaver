@@ -1558,6 +1558,9 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       Open: about 0.42 ms at 4K OpenGL inside the single scene run (0.875 against about 0.45 for Python's stages,
       an estimate from the bare-FBO stamps). Suspects: QRhi's end-of-pass resolves and the kept clearing draws on the
       4x R16F attachments; split them with a C++ bracket ("ready for build"), and time Python's same span directly.
+      Lead's Vulkan hitch row on Display 1 after the ghosts-first order (28 Nov, `d5e9371ab` on the `ff29e64e` module,
+      primed, operator's load): Crumble and Glass Shatter pass, no gap over 33 ms, max 16.9 / 17.8 ms, first frame
+      11.4 / 13.0 ms (`tools/baselines/preflip/20261128_n52h_ghosts_first_vulkan_hitch.md`).
     - [x] The composite pass: decided, not built (lead, 28 Nov). D5.2 stands: the core's output reaches the window as a
       texture, never as a draw inside Qt's pass (QRhi cannot record into the window before Qt's pass, which clears it,
       so a direct route would need an underlay or render node). The composite, Qt drawing the kept surface, is the
