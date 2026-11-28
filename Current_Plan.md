@@ -91,7 +91,10 @@ Continue the native sequence below with the repaired timing receipts. The report
     worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
     branch) retired from use at 211k; its branch holds `ff29e64ee` (built, module in its `release/native_module/`) and
     `d5e9371ab`. Third agent **Opus `ab7f236afc86eb6b2`** (28 Nov), worktree `.claude/worktrees/agent-ab7f236afc86eb6b2`,
-    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second). Retire the earlier worktrees only after the merge.
+    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second) retired from use at 206k; `9add8a67d` (run-parts
+    timer) built on GitHub, module in its `release/native_module/`. Fourth agent **Opus `a7162539fc47dd8dc`** (28 Nov),
+    worktree `.claude/worktrees/agent-a7162539fc47dd8dc`, branch `worktree-agent-a7162539fc47dd8dc` (merges the
+    third). Retire the earlier worktrees only after the merge.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
