@@ -8,9 +8,13 @@ Second pass (coordinator's a-e), 2026-11-28:
   coordinator runs them; their new assertions have no negative control seen.
 - (c) 67b9aa995 (C++, needs build): composite handle table drops an item's entry on its destroyed signal (module.cpp); test
   test_native_core_module::test_a_composite_deleted_with_its_parent_leaves_the_handle_table red on the old module
-  (2 == 1), needs a build. Backdrop table (backdrops()) has the same shape: side defect.
+  (2 == 1), needs a build.
 - (d) test_native_scene_targets green (24 pass).
 - (e) c7f13e229: R-260 entry + index row.
+Third pass (same day): c6895519c backdrop table, same fix + composite_live backdrop_handles (C++, same build batch;
+its test red on the old module: KeyError backdrop_handles); 0d71788b6 readiness flags + ready_for_reveal deleted (the
+as_dict check red on the old state.py); 807187adf Primitives; 0d0878941 Harness_Index section 3. Section 4's
+"real-GL wrappers" sentence is still stale (not asked).
 
 2026-11-28. Merged worktree-agent-aa7af460a1382fb30 (9744222bb). Module f9d4399e copied into release/native_module.
 - Item 1 (card-material pixel tests) DONE: tools/surface_material_capture.NativeHiddenScene (the scene root as the
