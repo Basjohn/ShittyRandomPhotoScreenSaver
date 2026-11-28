@@ -203,9 +203,7 @@ def test_block_values_is_the_renderers_one_owner_of_its_values():
     from rendering.quick.transitions import fullscreen_pass
 
     source = Path(fullscreen_pass.__file__).read_text(encoding="utf-8")
-    render = source.split("    def render(self", 1)[1].split("\n    def ", 1)[0]
-    assert "pack_block(self._layout, self.block_values(frame))" in render
-    assert "self.values(" not in render                          # values come through block_values only
+    assert "    def render(self" not in source and "OpenGL" not in source   # N5.2h: no Python GL draw; values only
     for transition_id in check.PROVED:
         values = _frame_values(transition_id)[0.5]
         assert set(values) == set(check.block_members(transition_id))
