@@ -1440,9 +1440,13 @@ def attach_native_route(item: Any, content_host: Any, backend: str | None = None
         return None
     from rendering.quick.bootstrap import native_core
 
+    from rendering.quick.bootstrap import window_hosted
+
     core = native_core()
     if core is None:
         raise RuntimeError("the Visualizer's native route needs the native core (start_quick_backend on Vulkan)")
+    if not window_hosted(content_host.window()):
+        return None                    # a window the core did not host (its degraded display): nothing to draw on
     route = NativeVisualizerRoute(core, content_host)
     item.attach_native_route(route)                # the item hands the route its update (round 2, M3, M4)
     route.prepare()

@@ -1172,7 +1172,7 @@ class QuickSceneController(QObject):
             if root is None or not _qobject_is_alive(root) or not self._readiness.admission_open:
                 return
             created = owner is None
-            if created and not backdrop_available():
+            if created and not backdrop_available(self._window):
                 return                     # N5.2h: the degraded display keeps the Normal fill (fail closed)
             if created:
                 owner = SurfaceBackdropOwner(root, screen_index=self._window.screen_index)

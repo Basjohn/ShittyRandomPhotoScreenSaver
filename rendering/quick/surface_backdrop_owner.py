@@ -31,19 +31,28 @@ def _make_source(root: QQuickItem, screen_index: int) -> tuple[Any, QQuickItem]:
 
     del screen_index
     core = native_backdrop_core()
-    if core is None:
-        # N5.2h: one route per API, no Python backdrop; the degraded display has none (``backdrop_available``).
+    if core is None or not _window_hosted(root.window()):
+        # N5.2h: one route per API, no Python backdrop; the degraded display (no core, or a window the core did not
+        # host: nothing draws a layer there for the pyramid to read) has none (``backdrop_available``).
         raise RuntimeError("the surface backdrop needs the native core")
     source = NativeSurfaceBackdropSource(core, root)
     return source, source.item
 
 
-def backdrop_available() -> bool:
-    """Whether a display can have a backdrop (the native core loaded); on the degraded display the cards keep their
-    Normal fill (fail closed)."""
+def _window_hosted(window: Any) -> bool:
+    """The core did not refuse ``window`` (None: not asked, the core's presence is the caller's check)."""
+    from .bootstrap import window_hosted
+
+    return window is None or window_hosted(window)
+
+
+def backdrop_available(window: Any = None) -> bool:
+    """Whether a display can have a backdrop (the native core loaded and, given ``window``, hosting it); on the
+    degraded display (a process without the core, or one window the core refused) the cards keep their Normal fill
+    (fail closed)."""
     from .render.native_surface_backdrop import native_backdrop_core
 
-    return native_backdrop_core() is not None
+    return native_backdrop_core() is not None and _window_hosted(window)
 
 
 class SurfaceBackdropOwner:

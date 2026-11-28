@@ -53,6 +53,47 @@ def test_the_route_is_the_vulkan_backends_only(backend, wanted):
         assert native_route.attach_native_route(item, object(), backend) is None and attached == []
 
 
+def test_a_window_the_core_did_not_host_gets_no_route(monkeypatch):
+    """N5.2h audit side defect: the core is loaded but did not host this window (its degraded display): no route is
+    made on it. Control: the same call on a hosted window makes one."""
+    from rendering.quick import bootstrap
+    from rendering.quick.visualizer import native_route
+
+    made: list = []
+
+    class _Route:
+        def __init__(self, core, host):
+            made.append((core, host))
+
+        def prepare(self):
+            pass
+
+    class _Host:
+        def __init__(self, window):
+            self._window = window
+
+        def window(self):
+            return self._window
+
+    class _Window:
+        pass
+
+    refused, hosted = _Window(), _Window()
+    core = object()
+    monkeypatch.setattr(bootstrap._owner, "core", core)
+    bootstrap._owner.unhosted_windows.add(refused)
+    monkeypatch.setattr(native_route, "NativeVisualizerRoute", _Route)
+    attached: list = []
+    item = SimpleNamespace(attach_native_route=attached.append)
+    try:
+        assert native_route.attach_native_route(item, _Host(refused), "vulkan") is None
+        assert made == [] and attached == []
+        assert native_route.attach_native_route(item, _Host(hosted), "vulkan") is not None   # control
+        assert len(made) == 1 and len(attached) == 1
+    finally:
+        bootstrap._owner.unhosted_windows.discard(refused)
+
+
 def _not_drawn_natively() -> str:
     """A registered mode the route does not draw (derived from both owners, never named here)."""
     from core.settings import visualizer_mode_registry as modes

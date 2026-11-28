@@ -152,6 +152,38 @@ def test_without_a_core_there_is_no_backdrop_and_never_a_python_one(qt_app, monk
         del engine
 
 
+def test_a_window_the_core_did_not_host_has_no_backdrop_though_the_core_is_loaded(qt_app, monkeypatch) -> None:
+    # N5.2h audit side defect: one window refused by the core shows the degraded display alone; no layer draws there for
+    # the pyramid to read, so its cards keep the Normal fill. The control is the hosted window of the same process.
+    from PySide6.QtQuick import QQuickItem, QQuickWindow
+
+    from rendering.quick import bootstrap
+    from rendering.quick.render import native_surface_backdrop as nsb
+    from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner, backdrop_available
+
+    core = _FakeCore()
+    monkeypatch.setattr(bootstrap._owner, "core", core)
+    monkeypatch.setattr(nsb, "native_backdrop_core", lambda: core)
+    refused, hosted = QQuickWindow(), QQuickWindow()
+    bootstrap._owner.unhosted_windows.add(refused)
+    engine, root = _root(False, 0.0)
+    try:
+        assert backdrop_available(refused) is False
+        assert backdrop_available(hosted) is True            # control: the same process's hosted window
+        root.setParentItem(refused.contentItem())
+        with pytest.raises(RuntimeError, match="native core"):
+            SurfaceBackdropOwner(root, screen_index=0)
+        assert core.made == [] and [c for c in root.childItems() if isinstance(c, QQuickItem)] == []
+        root.setParentItem(hosted.contentItem())
+        assert SurfaceBackdropOwner(root, screen_index=0).native is True and len(core.made) == 1
+    finally:
+        bootstrap._owner.unhosted_windows.discard(refused)
+        root.setParentItem(None)
+        root.deleteLater()
+        qt_app.processEvents()
+        del engine
+
+
 def test_the_native_backdrop_core_follows_the_native_background_backend(monkeypatch) -> None:
     from rendering.quick import bootstrap
     from rendering.quick.render import native_background, native_surface_backdrop as nsb
