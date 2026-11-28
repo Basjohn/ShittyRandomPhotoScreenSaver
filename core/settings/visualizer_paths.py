@@ -47,7 +47,10 @@ def admit_path(value, default, kind='stream') -> tuple[float, ...]:
 
 
 def world_point(normalized, half=WORLD_HALF):
-    return tuple(float(normalized[i]) * half[i] for i in range(3))
+    # "+ 0.0" turns a negative zero (a legacy path's -sin(0), or 0 times a negative half) into +0.0 and changes no other
+    # value: the native core reads its settings through Qt's JSON, which stores -0.0 as the integer 0, so a signed zero
+    # here would reach the shaders of one renderer and not the other.
+    return tuple(float(normalized[i]) * half[i] + 0.0 for i in range(3))
 
 
 def direction_of(path, half=WORLD_HALF):
