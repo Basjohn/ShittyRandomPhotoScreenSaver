@@ -50,8 +50,8 @@ def _ready(screen_index: int) -> QuickSceneReadiness:
         runtime_generation=GENERATION,
         qml_root_created=True,
         scene_graph_initialized=True,
-        background_renderer_ready=True,
-        intentional_base_frame_ready=True,
+        frame_presented=True,
+        background_drawn=True,
     )
 
 
@@ -201,49 +201,51 @@ def test_retired_manager_deadline_never_reveals(two_display_manager, qtbot):
 
 
 def _presented_without_background(screen_index: int) -> QuickSceneReadiness:
-    """A scene that presented a frame and has no background facts (no background renderer drew)."""
-    return QuickSceneReadiness(
-        screen_index=screen_index,
-        runtime_generation=GENERATION,
-        qml_root_created=True,
-        scene_graph_initialized=True,
-        frame_presented=True,
-    )
+    """A scene that presented a frame whose background has drawn no photo yet (the frame may be black or the desktop)."""
+    return replace(_ready(screen_index), background_drawn=False)
 
 
 @pytest.mark.parametrize("backend", ["vulkan", "opengl"])
-def test_without_a_background_renderer_a_display_reveals_on_its_first_presented_frame(
+def test_on_every_backend_a_display_reveals_only_once_its_first_wallpaper_is_displayed_and_drawn(
     backend,
     qt_app,
     qtbot,
     monkeypatch,
 ):
-    # D10 (Current_Plan.md 8b, N2.7 leftovers): on a backend without the background family's renderers no wallpaper
-    # frame can draw, so the reveal's owner reveals each display on its first presented frame. With them (OpenGL)
-    # the same facts reveal nothing: the wallpaper frame is still awaited.
-    from rendering import transition_registry
+    # N5.2h audit item 1: on both backends a presented frame alone reveals nothing (the widgets would fade in over
+    # black or the desktop); nor does a drawn background before the display's first authored wallpaper is displayed.
+    # Only both, per display, open the shared reveal.
     from rendering.quick import bootstrap
 
     monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
-    without_background = not transition_registry.background_family_available_on_backend()
     manager, _units, reveals, first_frames = _make_manager(monkeypatch, reveal_ms=40)
     try:
         coordinator = manager._quick_startup_reveal
         startup = manager._display_startup_generation
-        # Before any frame: a presentable scene alone is never enough.
-        for unit in manager.displays:
-            manager._on_quick_readiness_changed(
-                unit, replace(_presented_without_background(unit.screen_index), frame_presented=False), startup)
-        qtbot.wait(200)
-        assert coordinator.is_started is False and reveals == []
+        # A presented frame with no photo drawn, and the first wallpaper displayed: still nothing.
         for unit in manager.displays:
             manager._on_quick_readiness_changed(unit, _presented_without_background(unit.screen_index), startup)
-        if without_background:
-            qtbot.waitUntil(lambda: reveals == [GENERATION], timeout=2000)
-            assert first_frames == []                     # no wallpaper was displayed: none was waited for
-        else:
-            qtbot.wait(300)
-            assert coordinator.is_started is False and reveals == []
+            manager._on_image_displayed(unit.screen_index, f"first{unit.screen_index}.jpg")
+        assert first_frames == [GENERATION]
+        qtbot.wait(300)
+        assert coordinator.is_started is False and reveals == []
+    finally:
+        _retire(manager)
+
+    manager, _units, reveals, first_frames = _make_manager(monkeypatch, reveal_ms=40)
+    try:
+        coordinator = manager._quick_startup_reveal
+        startup = manager._display_startup_generation
+        # The background drew (the desktop snapshot, say) but no authored wallpaper is displayed: nothing.
+        for unit in manager.displays:
+            manager._on_quick_readiness_changed(unit, _ready(unit.screen_index), startup)
+        qtbot.wait(300)
+        assert coordinator.is_started is False and reveals == []
+        # Each display's first wallpaper displayed: the shared reveal opens.
+        for unit in manager.displays:
+            manager._on_image_displayed(unit.screen_index, f"first{unit.screen_index}.jpg")
+        qtbot.waitUntil(lambda: reveals == [GENERATION], timeout=2000)
+        assert first_frames == [GENERATION]
     finally:
         _retire(manager)
 
@@ -284,7 +286,7 @@ def test_late_display_fades_in_on_its_own_after_its_first_wallpaper(
         qtbot.waitUntil(lambda: 0.2 < widgets0.value < 0.8, timeout=2000)
         assert widgets1.value == 0.0 and visualizer1.value == 0.0
 
-        # Quick readiness alone (its wallpaper not yet presented) is not enough.
+        # Quick readiness alone (its wallpaper not yet displayed) is not enough.
         manager._on_quick_readiness_changed(unit1, _ready(1), startup)
         qtbot.wait(100)
         assert widgets1.value == 0.0 and visualizer1.value == 0.0

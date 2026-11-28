@@ -153,8 +153,7 @@ def test_render_thread_modules_do_not_import_live_qt_image_or_widget_state():
     render_paths = [
         ROOT / "rendering" / "quick" / "image_state.py",
         ROOT / "rendering" / "quick" / "render" / "background_item.py",
-        ROOT / "rendering" / "quick" / "render" / "background_node.py",
-        ROOT / "rendering" / "quick" / "render" / "image_textures.py",
+        ROOT / "rendering" / "quick" / "render" / "native_background.py",
     ]
     source = "\n".join(path.read_text(encoding="utf-8") for path in render_paths)
 

@@ -116,37 +116,15 @@ def test_retired_result_cannot_start_another_display():
     assert not deferred and len(requested) == 1
 
 
-def test_preparation_does_not_schedule_repaint_or_rely_on_frame_signals():
+def test_preparation_waits_for_a_frame_the_window_renders_anyway_through_the_one_window_edge():
+    """The GUI warm unit asks for no frame: it rides the window's own ``afterRendering`` through ``_WindowEdge`` (the
+    one queued, one-shot edge owner), and the item has no render-thread job, no ``beforeRendering`` and no repaint."""
     source = ITEM.read_text(encoding='utf-8')
-    assert 'QQuickWindow.RenderStage.NoStage' in source
-    assert 'window.scheduleRenderJob(job,' in source
-    # PySide-defined QRunnable subclasses must not be handed to Qt to destroy
-    # on the render thread. Qt owns a callable runnable with a weak-only payload.
-    assert 'QRunnable.create(payload.run)' in source
-    tree = ast.parse(source)
-    job_class = next(node for node in tree.body
-                     if isinstance(node, ast.ClassDef) and node.name == '_TransitionWarmStepJob')
-    assert not job_class.bases
-    job_source = ast.get_source_segment(source, job_class)
-    assert 'weakref.ref(window)' in job_source
-    assert 'weakref.ref(reporter)' in job_source
-    assert 'self._window = window' not in job_source
-    assert 'self._reporter = reporter' not in job_source
-    assert 'beforeRendering.connect' not in source
+    assert '_WindowEdge("afterRendering", self._run_gui_warm)' in source
+    assert 'beforeRendering' not in source and 'scheduleRenderJob' not in source
+    assert '_FrameEdgeReceiver' not in source
     method = source.split('def schedule_warm_step(', 1)[1].split('def _cancel_warm_up(', 1)[0]
     assert '.update(' not in method
-    assert 'window.update(' not in job_source
-
-
-def test_render_item_imports_direct_signal_connection_authority():
-    """Scene graph invalidation still binds with DirectConnection at window attach."""
-    tree = ast.parse(ITEM.read_text(encoding='utf-8'))
-    qt_imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)
-                  and node.module == 'PySide6.QtCore']
-    assert len(qt_imports) == 1
-    assert 'Qt' in {name.name for name in qt_imports[0].names}
-    source = ITEM.read_text(encoding='utf-8')
-    assert 'Qt.ConnectionType.DirectConnection' in source
 
 
 def test_cancel_releases_existing_delayed_one_shot():
@@ -199,74 +177,3 @@ def test_idle_preparation_uses_no_unowned_timer_closures():
     assert 'def _admit(' not in method
     assert 'threading.Timer(' not in method
     assert 'QTimer.singleShot(' not in method
-
-
-def _qt_free_render_job_class():
-    """Execute the *production* QRunnable implementation with Qt-free adapters."""
-    import threading
-    import weakref
-
-    tree = ast.parse(ITEM.read_text(encoding='utf-8'))
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef)
-               and n.name == '_TransitionWarmStepJob')
-    class QRunnable:
-        def __init__(self):
-            pass
-    class QOpenGLContext:
-        @staticmethod
-        def currentContext():
-            return object()
-    env = {'QRunnable': QRunnable, 'QOpenGLContext': QOpenGLContext,
-           'weakref': weakref}
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[cls], type_ignores=[])),
-                 str(ITEM), 'exec'), env)
-    return env['_TransitionWarmStepJob']
-
-
-def test_idle_render_job_does_not_own_gui_qobjects_at_render_thread_deletion():
-    """Regression for the paired QBasicTimer wrong-thread warnings and abort."""
-    import gc
-    import threading
-    import weakref
-
-    Job = _qt_free_render_job_class()
-    class Window:
-        def __init__(self): self.calls = []
-        def beginExternalCommands(self): self.calls.append('begin')
-        def endExternalCommands(self): self.calls.append('end')
-    class Reporter:
-        def __init__(self):
-            self.results = []
-            self.finished = SimpleNamespace(emit=lambda *args: self.results.append(args))
-    class Retirement:
-        def warm_step(self, *args):
-            assert args == ('block_spins', {'seed': 123})
-            return True
-
-    window, reporter = Window(), Reporter()
-    job = Job(window, Retirement(), ('block_spins', {'seed': 123}),
-              threading.Event(), reporter, 7)
-    assert job._window_ref() is window and job._reporter_ref() is reporter
-    assert all(obj is not window and obj is not reporter for obj in vars(job).values())
-    job.run()
-    assert window.calls == ['begin', 'end']
-    assert reporter.results == [(7, True)]
-    window_ref, reporter_ref = weakref.ref(window), weakref.ref(reporter)
-    del window, reporter
-    gc.collect()
-    assert window_ref() is None and reporter_ref() is None
-    job.run()  # stale window: no crash, no new work
-
-
-def test_idle_render_job_cancelled_before_execution_touches_no_qt_wrappers():
-    import threading
-    Job = _qt_free_render_job_class()
-    class GuiWrapper:
-        pass
-    window = GuiWrapper()
-    reporter = GuiWrapper()
-    token = threading.Event()
-    token.set()
-    job = Job(window, object(), ('not_started', {}), token, reporter, 12)
-    job.run()  # no GL, no Qt calls, no signal
-    assert job._window_ref() is window

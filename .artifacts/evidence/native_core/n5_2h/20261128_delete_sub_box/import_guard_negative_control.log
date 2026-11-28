@@ -1,0 +1,52 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_______________ test_the_deleted_python_route_modules_are_gone ________________
+
+    def test_the_deleted_python_route_modules_are_gone():
+        present = [dotted for dotted in DELETED if (ROOT / Path(*dotted.split("."))).with_suffix(".py").exists()]
+>       assert present == []
+E       AssertionError: assert ['rendering.q....render_host'] == []
+E         
+E         Left contains 6 more items, first extra item: 'rendering.quick.render.background_image_node'
+E         Use -v to get more diff
+
+tests\test_python_route_deleted.py:51: AssertionError
+_____________ test_nothing_imports_a_deleted_python_route_module ______________
+
+    def test_nothing_imports_a_deleted_python_route_module():
+        found = {dotted: _importers(dotted) for dotted in DELETED}
+>       assert {dotted: hits for dotted, hits in found.items() if hits} == {}
+E       AssertionError: assert {'rendering.q...off.py'], ...} == {}
+E         
+E         Left contains 6 more items:
+E         {'rendering.quick.render.background_image_node': ['tests/test_native_background_layer.py',
+E                                                           'tests/test_qtquick_black_flash_contract.py',
+E                                                           'tests/test_qtquick_native_image_lifetime.py',
+E                                                           'tests/test_qtquick_native_texture_handoff.py',
+E                                                           'tests/test_qtquick_native_texture_wrapper_retention.py',...
+E         
+E         ...Full output truncated (28 lines hidden), use '-vv' to show
+
+tests\test_python_route_deleted.py:56: AssertionError
+________________ test_nothing_names_the_python_route_selectors ________________
+
+    def test_nothing_names_the_python_route_selectors():
+        found = {name: sorted(path.relative_to(ROOT).as_posix() for path in _sources()
+                              if name in path.read_text(encoding="utf-8", errors="replace")) for name in NAMES}
+>       assert {name: hits for name, hits in found.items() if hits} == {}
+E       AssertionError: assert {'BACKGROUND_...ntroller.py']} == {}
+E         
+E         Left contains 2 more items:
+E         {'BACKGROUND_FAMILY_BACKENDS': ['tests/test_backend_availability.py'],
+E          'background_family_available_on_backend': ['rendering/quick/render/surface_backdrop.py',
+E                                                     'tests/test_backend_availability.py',
+E                                                     'tests/test_native_background_layer.py',
+E                                                     'tests/test_qtquick_scene_controller.py']}
+E         Use -v to get more diff
+
+tests\test_python_route_deleted.py:62: AssertionError
+=========================== short test summary info ===========================
+FAILED tests\test_python_route_deleted.py::test_the_deleted_python_route_modules_are_gone
+FAILED tests\test_python_route_deleted.py::test_nothing_imports_a_deleted_python_route_module
+FAILED tests\test_python_route_deleted.py::test_nothing_names_the_python_route_selectors
+3 failed in 12.21s

@@ -440,10 +440,9 @@ For the expanded effects, render deterministic textured progressions through the
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
 ./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect melt_drip --source <source-photo> --destination <destination-photo> --animate --output-dir <output-directory>
-./.venv/Scripts/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
 ```
 
-The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
+The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. The frames are the native core's (`tools/native_transition_capture.py`, N5.2h), no window. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
 
 These commands are retained regression/acceptance harnesses for the current Quick transition implementations; they are not an implementation checklist.
 
@@ -451,34 +450,9 @@ These commands are retained regression/acceptance harnesses for the current Quic
 
 **Headless cost baselines on a busy machine** (how to run them, read them and what to expect: `Docs/Reference/Benchmarks.md`). `tools/overhead_baseline.py` measures every showcase transition and Visualizer mode offscreen (no window) and stays usable while the machine is busy (`tools/bench_stability.py`): transitions and Visualizer modes (each mode's Guided Setup preview snapshot) share one context and run round-robin; every sampled frame is rendered three times right after a fixed Crossfade control and only the fastest repeat counts; each case is also recorded relative to that control (`gpu_rel`, `cpu_rel`), which cancels GPU clock state (an idle GPU downclocks between flushes and read Particle at twice its loaded cost), contention and a busy core's slowdown; passes whose control GPU time ran 35% over the controls' lower quartile are re-measured; CPU submit is also recorded as thread CPU time (`QueryThreadCycleTime`); and system usage (other processes' CPU, memory, GPU utilisation, clock, temperature) is recorded per pass and per run, printed with every comparison, with a warning when two runs' conditions differ. Per-frame GL and Python call counts (Visualizer modes included since 2026-10-11) remain the load-proof signal: any rise is real added work.
 
-### Blinds
-
-```powershell
-python tools\qtquick_blinds_smoke.py --direction horizontal --windows 1
-python tools\qtquick_blinds_smoke.py --direction vertical   --windows 1
-python tools\qtquick_blinds_smoke.py --direction diagonal   --windows 1
-```
-
-Use `--windows 2` only when physical multi-display evidence is intentionally being exercised.
-
-### Parameterized effects
-
-```powershell
-python tools\qtquick_phase_c_effect_smoke.py --effect <effect> --case <case> --windows 1
-```
-
-Canonical case families include:
-
-- Ripple: count1, count3, count8;
-- Crumble: top, bottom, random-weighted, random-choice, age-weighted;
-- Particle: authored modes/directions including directional variants, swirl and converge;
-- Burn: six directions plus smoke/ash toggle cases.
-
-Use exact tool/source case names if they differ from this human-readable summary.
-
 ## 3. Transition discriminator expectations
 
-The real-GL smokes protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.
+The transition tests on the native core's hidden host (`NativeTransitionCapture`, `tools/native_transition_capture.py`, N5.2h; the real-GL smokes that judged the deleted Python node are gone) protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.
 
 For parameter-sensitive cases hold constant, as applicable:
 
@@ -506,7 +480,7 @@ Do not restore retired mosaic assumptions: Crumble owns weighted parent release 
 ## 4. Transition request/uniform and GL-state tests
 
 Direct parameter -> uniform wiring and common GL-state-fence coverage are ordinary focused pytest
-regressions. They supplement rather than replace the real-GL wrappers.
+regressions. They supplement the core's hidden-host transition tests (`NativeTransitionCapture`).
 
 The common fence includes the exception path where renderer execution raises.
 
@@ -942,7 +916,7 @@ python native/core/python/backdrop_pyramid_check.py --module-dir release/native_
     [--apis opengl vulkan] [--rounds levels cards cost rest route lifetime] [--label n57b_backdrop_pyramid]
 # N5.2a: the seven fullscreen transitions on the background layer (NativeBackgroundLayer.transition), hidden hosts only:
 # every variant of fullscreen_pass_check.VARIANTS from a dark to a bright PERSONALSET photo at nine progress values, dpr
-# 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (TransitionCapture);
+# 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (recorded references from the proof cache; the Python host is deleted);
 # rule (b) Vulkan within 1 level; each run's end draws the destination with no upload and nothing at rest; the route
 # through BackgroundRenderItem.set_transition_run on Vulkan; Vulkan validated. N5.2b widened it to the five item-quad
 # programs (N52B_VARIANTS: Chromatic Shear, Liquid Lens, Melt Drip, Surface Tension, VHS; --topic n5_2b), the reference

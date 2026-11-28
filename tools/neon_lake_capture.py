@@ -62,7 +62,7 @@ def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, wi
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from rendering.quick.scene3d.frame import item_pixel_rect
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     activation = resolve_visualizer_activation_payload(
         {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
@@ -76,7 +76,7 @@ def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, wi
             logical.mode_state, events=tuple(tuple(float(v) for v in event) for event in events))))
     window_width, window_height = window or (width, height)
     pixel_width, pixel_height = round(window_width * dpr), round(window_height * dpr)
-    target = TransitionCapture(pixel_width, pixel_height)
+    target = OffscreenRenderTarget(pixel_width, pixel_height)
     host = QuickVisualizerRenderHost()
     try:
         offset_x, offset_y = (window_width - width) / 2, (window_height - height) / 2
@@ -129,7 +129,7 @@ def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window,
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
     from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
     from tools.visualizer_replay.driver import replay_clip
 
@@ -155,7 +155,7 @@ def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window,
     activation = resolve_visualizer_activation_payload(
         {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
     settings = {**activation.resolved_config, **overrides}
-    target = TransitionCapture(round(window[0]*dpr), round(window[1]*dpr))
+    target = OffscreenRenderTarget(round(window[0]*dpr), round(window[1]*dpr))
     host = QuickVisualizerRenderHost()
     output.mkdir(parents=True, exist_ok=True)
     try:

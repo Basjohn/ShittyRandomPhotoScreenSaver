@@ -242,7 +242,7 @@ def test_runtime_owns_transition_lifecycle_without_renderer_dispatch():
         ROOT / "rendering" / "quick" / "scene_controller.py"
     ).read_text(encoding="utf-8")
     node_source = (
-        ROOT / "rendering" / "quick" / "render" / "background_node.py"
+        ROOT / "rendering" / "quick" / "render" / "native_background.py"
     ).read_text(encoding="utf-8")
 
     assert "QuickTransitionController(" in runtime_source
@@ -251,7 +251,7 @@ def test_runtime_owns_transition_lifecycle_without_renderer_dispatch():
         runtime_source.index("self.frame_pacer.close()")
     )
     assert "scene.set_presentation_image(request.destination_image)" in runtime_source
-    assert "run.sample(time.monotonic_ns())" in node_source
+    assert "run.sample(self._clock_ns()" in node_source
     assert "last_transition_run_id" in scene_source
     for source in (runtime_source, scene_source):
         assert "transition_id ==" not in source

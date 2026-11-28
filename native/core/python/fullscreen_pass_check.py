@@ -67,6 +67,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import pixel_tolerance as pt  # noqa: E402
+import transition_references as refs  # noqa: E402  (native/core/python)
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("shape", "draw", "textures", "timing")
@@ -477,10 +478,30 @@ class Scene:
 
 
 def python_frames(images, size: tuple[int, int], variants: Mapping[str, Mapping[str, Any]]) -> dict:
+    """The Python renderer's frames and its block values per variant and progress (``draw_python_frames``), from the
+    reference cache (``transition_references``; drawn live and stored with ``--python-references record``)."""
+    import numpy as np
+
+    pictures = refs.arrays_digest(np.asarray(image, dtype=np.uint8) for image in images)
+    cases = {}
+    for variant, overrides in variants.items():
+        transition_id = variant_transition(variant)
+        parameters = _run_without_gl(transition_id, overrides, images, size).request.parameter_dict()
+        for progress in PROGRESS:
+            cases[(variant, progress)] = {"variant": variant, "overrides": dict(overrides), "parameters": parameters,
+                                          "duration_ms": DURATION_MS, "progress": progress, "size": list(size),
+                                          "photos": pictures}
+    stored = refs.references("fullscreen_pass_check", cases, lambda: {
+        key: {"frame": frame, "values": values}
+        for key, (frame, values) in draw_python_frames(images, size, variants).items()})
+    return {key: (stored[key]["frame"], stored[key]["values"]) for key in cases}
+
+
+def draw_python_frames(images, size: tuple[int, int], variants: Mapping[str, Mapping[str, Any]]) -> dict:
     """The Python renderer's frames (the production GL host) and its block values, per variant and progress."""
     import numpy as np
 
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.transition_contact_sheet import TransitionCapture  # record mode only
 
     capture = TransitionCapture(size[0], size[1], *images)
     out: dict = {}
@@ -566,29 +587,23 @@ def round_shape(core, folder: Path) -> dict:
     card = probe_rings.harness_card(CARD, 1.0)
     target = target_pixels(1.0)
     images = photos(PHOTOS, target)
-    from tools.transition_contact_sheet import TransitionCapture
-
-    capture = TransitionCapture(target[0], target[1], *images)
-    try:
-        for variant, overrides in VARIANTS.items():
-            transition_id = variant_transition(variant)
-            run = runs(capture, transition_id, overrides)
-            values = renderer_class(transition_id)().block_values(capture.frame(run, 0.5))
-            core_values, settings, record = split_values(transition_id, values)
-            members = block_members(transition_id)
-            filled = sorted([*core_values, *settings, *record])
-            checks[f"{variant}_every_member_filled_once"] = filled == sorted(members)
-            agreement = core_agreement(core_values, card, target)
-            checks[f"{variant}_core_members_agree"] = bool(agreement) and all(agreement.values())
-            facts.setdefault("split", {})[variant] = {"core": sorted(core_values), "settings": sorted(settings),
-                                                      "record": sorted(record), "agreement": agreement}
-            blocks, info = core.mode_blocks(frame_schema(transition_id),
-                                            [transition_pass(transition_id, folder / f"blocks_{variant}")],
-                                            settings, frame_schema(transition_id).encode(record), card, target)
-            checks[f"{variant}_core_packs_the_split"] = len(blocks) == 1 and set(info["passes"][0]["sources"]) == set(
-                members)
-    finally:
-        capture.close()
+    for variant, overrides in VARIANTS.items():
+        transition_id = variant_transition(variant)
+        # N5.2h: the run's block values with no GL draw (the Python transition host is deleted).
+        values = _values(transition_id, overrides, images, target, {}, variant)[0.5]
+        core_values, settings, record = split_values(transition_id, values)
+        members = block_members(transition_id)
+        filled = sorted([*core_values, *settings, *record])
+        checks[f"{variant}_every_member_filled_once"] = filled == sorted(members)
+        agreement = core_agreement(core_values, card, target)
+        checks[f"{variant}_core_members_agree"] = bool(agreement) and all(agreement.values())
+        facts.setdefault("split", {})[variant] = {"core": sorted(core_values), "settings": sorted(settings),
+                                                  "record": sorted(record), "agreement": agreement}
+        blocks, info = core.mode_blocks(frame_schema(transition_id),
+                                        [transition_pass(transition_id, folder / f"blocks_{variant}")],
+                                        settings, frame_schema(transition_id).encode(record), card, target)
+        checks[f"{variant}_core_packs_the_split"] = len(blocks) == 1 and set(info["passes"][0]["sources"]) == set(
+            members)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -998,6 +1013,7 @@ def child(args) -> dict:
     import vk_validation
 
     root = host_check._root(args.repo)
+    refs.configure_from(args)
     out = Path(args.out_dir)
     photo_paths = tuple(Path(p) for p in args.photos)
     record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False,
@@ -1116,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    refs.add_arguments(parser)
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -1148,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds, "--photos", *args.photos]
+                   "--rounds", *args.rounds, "--photos", *args.photos, *refs.child_arguments(args)]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))

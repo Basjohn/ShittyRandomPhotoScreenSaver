@@ -60,6 +60,7 @@ if str(ROOT) not in sys.path:
 
 import background_layer_check as blc  # noqa: E402  (native/core/python)
 import fullscreen_pass_check as fsc  # noqa: E402
+import transition_references as refs  # noqa: E402
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
@@ -458,7 +459,7 @@ def product_capture(width: int, height: int, old, new, dpr: float, *, core_frame
     the runtime's render frame gives them on a window of that ratio. N5.2d: ``core_frame`` draws it upside down (the
     frame matrix's y negated: the core's top-row-first frame, F1), so the frame read back is flipped by the caller
     (``references``); only for a scene drawn straight into the frame (no SceneTarget: its gather reads GL's rows)."""
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.transition_contact_sheet import TransitionCapture  # record mode only
 
     class _ProductFrameCapture(TransitionCapture):
         def frame(self, run, progress: float):
@@ -503,7 +504,34 @@ def production_run(variant: str, images, run_id: int):
     return TransitionRun.start(run_id=run_id, request=request, start_ns=1_000_000_000)
 
 
+def reference_cases(variants, photos, dpr: float, *, core_frame: bool = False) -> dict:
+    """The cache's case of each (variant, progress) ``references`` gives (``transition_references``): the variant, its
+    overrides and its run's parameters (the value owners'), the progress, the dpr and frame, the display's size and
+    the processed photos' digest."""
+    images = [image for image, _rows in photos]
+    pictures = refs.arrays_digest(rows for _image, rows in photos)
+    cases = {}
+    for index, variant in enumerate(variants):
+        run = production_run(variant, images, index + 1)
+        parameters = run.request.parameter_dict()
+        for progress in variant_progress(variant):
+            cases[(variant, progress)] = {
+                "variant": variant, "overrides": VARIANTS[variant], "parameters": parameters,
+                "duration_ms": DURATION_MS, "progress": progress, "dpr": float(dpr), "core_frame": bool(core_frame),
+                "display": list(blc.DISPLAY), "photos": pictures}
+    return cases
+
+
 def references(variants, photos, dpr: float, *, core_frame: bool = False) -> dict:
+    """The Python renderer's frames of each variant's run at each progress (``draw_references``), from the reference
+    cache (``transition_references``; drawn live and stored with ``--python-references record``)."""
+    cases = reference_cases(variants, photos, dpr, core_frame=core_frame)
+    stored = refs.references("transition_route_check", cases, lambda: {
+        key: {"frame": rows} for key, rows in draw_references(variants, photos, dpr, core_frame=core_frame).items()})
+    return {key: stored[key]["frame"] for key in cases}
+
+
+def draw_references(variants, photos, dpr: float, *, core_frame: bool = False) -> dict:
     """The Python renderer's frames (the production GL host) of each variant's run at each progress, at the display's
     pixels, in the product's frame at ``dpr`` (``product_capture``); ``core_frame``: drawn in the core's frame and read
     back the right way up (N5.2d's gather-free forms)."""
@@ -1141,10 +1169,28 @@ def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BL
     return stats
 
 
+#: The Python renderer's cost figures on OpenGL (timed live with ``--python-references record``, else read from
+#: ``tools/baselines/preflip/python_cost_transition_route_check.json``).
+PYTHON_COST_FIGURES = ("python_product_frame_gpu", "python_product_wall", "python_opengl", "python_stages")
+
+
+def hold_python_clock(clock):
+    """Record mode only (``--python-references record`` on a checkout that still holds the Python presenter, deleted
+    at N5.2h's switch): the presenter's ``time`` on ``clock``. Returns the restore; in cache mode nothing is touched."""
+    if refs.mode() != "record":
+        return lambda: None
+    import rendering.quick.render.background_node as background_node  # record mode only
+
+    saved = background_node.time
+    background_node.time = _ClockTime(clock)
+
+    def restore() -> None:
+        background_node.time = saved
+    return restore
+
+
 def round_cost(core, engine, app, api: str, variants) -> dict:
     from PIL import Image
-
-    import rendering.quick.render.background_node as background_node
 
     facts: dict = {}
     checks: dict = {}
@@ -1156,9 +1202,9 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
         scene.root.setProperty("color", "transparent")           # N5.2h: the product's display scene, as Python's
         clock = Clock()
         scene.layer._clock_ns = clock
-        python = _product_python(core, engine, size, photos) if api == "opengl" else None
-        saved_time = background_node.time
-        background_node.time = _ClockTime(clock)
+        live_python = api == "opengl" and refs.mode() == "record"   # cache: Python's figures are the stored ones
+        python = _product_python(core, engine, size, photos) if live_python else None
+        restore_time = hold_python_clock(clock) if live_python else (lambda: None)
         try:
             for index, variant in enumerate(variants):
                 run = production_run(variant, [image for image, _rows in photos], index + 1)
@@ -1221,7 +1267,6 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     # N5.2h: the comparable pair (same instrument, same frames): qrhi_frame_gpu against this.
                     facts[f"{label}_{variant}"]["python_product_frame_gpu"] = blc._ms_stats(python_frame_gpu)
                     facts[f"{label}_{variant}"]["python_product_wall"] = blc._ms_stats(python_walls)
-                    checks[f"{label}_{variant}_python_timed"] = len(python_frame_gpu) >= COST_FRAMES // 4
                 checks[f"{label}_{variant}_fields_in"] = fields_in
                 if variant == "crossfade":
                     control, control_checks = _clear_control(core, api, scene, host, clock, run)
@@ -1240,13 +1285,13 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                 scene.present(photos[1][0])
                 scene.settle()
         finally:
-            background_node.time = saved_time
+            restore_time()
             scene.close(app)
             facts.setdefault("host_close", []).append(blc._close_host(app, host))
             if python is not None:
                 python[1].close(app)
                 facts.setdefault("host_close", []).append(blc._close_host(app, python[0]))
-        if api == "opengl":
+        if live_python:
             pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
             capture = product_capture(size[0], size[1], *pictures, 1.0)
             try:
@@ -1258,6 +1303,19 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                         facts[f"{label}_{variant}"]["python_stages"] = _python_stages(capture, run)
             finally:
                 capture.close()
+        if api == "opengl":
+            pictures = refs.arrays_digest(rows for _image, rows in photos)
+            cases = {}
+            for index, variant in enumerate(variants):
+                parameters = production_run(variant, [image for image, _rows in photos],
+                                            index + 1).request.parameter_dict()
+                cases[f"{label}_{variant}"] = {"round": "cost", "variant": variant, "parameters": parameters,
+                                               "size": list(size), "frames": COST_FRAMES, "photos": pictures}
+            figures = refs.cost_figures("transition_route_check", cases, lambda: {
+                key: {name: facts[key][name] for name in PYTHON_COST_FIGURES if name in facts[key]} for key in cases})
+            for key, stored in figures.items():
+                facts[key].update(stored)
+                checks[f"{key}_python_timed"] = int(stored["python_product_frame_gpu"].get("n", 0)) >= COST_FRAMES // 4
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -1294,7 +1352,7 @@ def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: st
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     host = blc._host(core, blc.WINDOW, dpr)
-    scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
+    scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="route")
     try:
         scene.present(photos[0][0])
         scene.settle()
@@ -1522,10 +1580,12 @@ def child(args) -> dict:
     import vk_validation
 
     root = host_check._root(args.repo)
+    refs.configure_from(args)
     out = Path(args.out_dir)
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
-    record: dict = {"api": args.api, "module_loaded": False, "instance_created": False}
+    record: dict = {"api": args.api, "module_loaded": False, "instance_created": False,
+                    "python_references": refs.mode()}
     if args.api == "opengl":
         from rendering.quick.bootstrap import configure_quick_graphics
 
@@ -1603,6 +1663,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
     parser.add_argument("--cost", action="store_true",
                         help="the performance step instead of the draw: GPU time per run at COST_SIZES (round_cost)")
+    refs.add_arguments(parser)
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -1635,7 +1696,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--variants", *args.variants, *(["--cost"] if args.cost else [])]
+                   "--variants", *args.variants, *(["--cost"] if args.cost else []), *refs.child_arguments(args)]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))

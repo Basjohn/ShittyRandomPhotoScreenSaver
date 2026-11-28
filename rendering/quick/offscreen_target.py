@@ -29,6 +29,7 @@ class OffscreenRenderTarget:
         self.width = self.height = 0
         self._mesh = None
         self._vao = 0
+        self._images = []
         self._closed = False
         previous = QOpenGLContext.currentContext()
         previous_surface = previous.surface() if previous is not None else None
@@ -156,6 +157,24 @@ class OffscreenRenderTarget:
         self._delete_target(*previous)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
 
+    def upload_image(self, image):
+        """A PIL image as an RGBA8 texture of this context (linear filter, clamped edges), top row first. The
+        target owns it and deletes it at close(); the returned name is a borrowed view."""
+        import numpy as np
+        from OpenGL import GL as gl
+        pixels = np.asarray(image.convert("RGBA"))
+        height, width = pixels.shape[:2]
+        self.make_current()
+        texture = int(gl.glGenTextures(1))
+        self._images.append(texture)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+        for axis in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, axis, gl.GL_CLAMP_TO_EDGE)
+        for filt in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, filt, gl.GL_LINEAR)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, pixels)
+        return texture
+
     def bind(self, *, clear=(0., 0., 0., 0.)):
         from OpenGL import GL as gl
         self.make_current()
@@ -192,7 +211,8 @@ class OffscreenRenderTarget:
         previous_surface = previous.surface() if previous is not None else None
         owned_context = self.context
         try:
-            has_resources = bool(self.fbo or self.depth or self.color_texture or self._mesh is not None)
+            has_resources = bool(self.fbo or self.depth or self.color_texture or self._mesh is not None
+                                 or self._images)
             if has_resources:
                 self.make_current()
                 if self._mesh is not None:
@@ -200,6 +220,9 @@ class OffscreenRenderTarget:
                     self._mesh = None
                     self._vao = 0
                 gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+                if self._images:
+                    gl.glDeleteTextures(self._images)
+                    self._images = []
                 self._delete_target(self.fbo, self.depth, self.color_texture)
                 self.fbo = self.depth = self.color_texture = 0
             if self.context is not None and QOpenGLContext.currentContext() == self.context:

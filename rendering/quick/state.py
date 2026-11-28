@@ -122,20 +122,22 @@ class QuickSceneReadiness:
     runtime_generation: int | None
     qml_root_created: bool = False
     scene_graph_initialized: bool = False
-    background_renderer_ready: bool = False
-    intentional_base_frame_ready: bool = False
     scene_graph_invalidated: bool = False
     admission_open: bool = True
     qml_objects_retired: bool = False
     error: str | None = None
-    # A frame of this scene was presented. Published only on a backend without the background family's renderers
-    # (the Vulkan rehearsal, D10), where it is the reveal's input instead of the background facts above; on OpenGL
-    # the scene never sets it (DisplayManager._startup_reveal_admits holds the one rule).
+    # A frame of this scene was presented, published once on every backend (D10, N5.2h).
     frame_presented: bool = False
+    # The display's background drew a photo, published once at the first frame swap after it did (N5.2h audit item 1):
+    # the native background layer's content recorded a frame with its photo (``NativeBackgroundLayer.photo_drawn``), or
+    # the degraded display's image node holds one (``BackgroundRenderItem.background_drawn``). With the presented frame
+    # and the display's first authored wallpaper it is the reveal's input (``DisplayManager._startup_reveal_admits``):
+    # a presented frame alone may be black or the desktop.
+    background_drawn: bool = False
 
     @property
     def scene_presentable(self) -> bool:
-        """Every fact of the reveal but the background's: the scene exists, renders and is admitted."""
+        """The scene exists, renders and is admitted (the reveal adds its presented frame and its drawn background)."""
         return bool(
             self.qml_root_created
             and self.scene_graph_initialized
@@ -145,18 +147,8 @@ class QuickSceneReadiness:
             and self.error is None
         )
 
-    @property
-    def ready_for_reveal(self) -> bool:
-        return bool(
-            self.scene_presentable
-            and self.background_renderer_ready
-            and self.intentional_base_frame_ready
-        )
-
     def as_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["ready_for_reveal"] = self.ready_for_reveal
-        return payload
+        return asdict(self)
 
 
 def _rect_tuple(rect: QRect) -> RectTuple:

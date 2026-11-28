@@ -14,6 +14,7 @@ from PySide6.QtQuick import QQuickWindow
 from .bootstrap import (
     active_quick_backend,
     host_or_quit_quick_window,
+    host_quick_window,
     validate_or_quit_current_opengl_context,
 )
 from .state import (
@@ -130,6 +131,9 @@ class QuickDisplayWindow(QQuickWindow):
                 ),
             )
         else:
+            # N5.2h: OpenGL windows are hosted too (the background layer's frame
+            # driver); a failure leaves the degraded display, never a quit.
+            host_quick_window(self)
             # This is the first actual context boundary even when the retained
             # background has no image/node yet. Direct delivery keeps the scene
             # graph context current for the one startup validation query.

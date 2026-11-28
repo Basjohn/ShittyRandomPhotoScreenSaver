@@ -1,7 +1,7 @@
 """Capture card surface materials on the production display scene, never on screen.
 
-The production ``DisplayScene.qml`` renders through ``QQuickRenderControl`` into a hidden
-OpenGL texture (the Guided Setup foundry's ``_HiddenQuickScene``; Windows QPA, no window is
+The production ``DisplayScene.qml`` renders in the native core's hidden host
+(``NativeHiddenScene``: the core's render control on its own render thread; no window is
 shown or mapped). It carries the real ``BackgroundRenderItem`` (wallpapers and production
 transitions), the real ``SurfaceBackdropOwner`` and real family presentations (Weather,
 Media, Reddit, System Stats, a digital Clock) with fixture data. Each material is drawn
@@ -11,7 +11,7 @@ beside Normal under a dark and a light Widget Theme, on still wallpapers and mid
 
 ``--cadence`` measures how far a backdrop refreshed every Nth frame drifts from one
 refreshed every frame through whole transitions (the refresh-rate decision); ``--cost``
-times the backdrop refresh and the whole frame per material with ``GL_TIME_ELAPSED``.
+times the whole frame per material with the native host's QRhi frame GPU timer.
 ``--style`` writes full frames per theme/wallpaper/material plus one mid-transition frame and the
 scene rectangles of named items (``regions.json``) for before/after crops; ``--card-set lists`` swaps
 in Gmail, a news Feed, Friend Pulse and System Stats; ``--themes DARK LIGHT`` picks the themes.
@@ -47,18 +47,139 @@ OPACITY_ADJUST = 0.0
 # --------------------------------------------------------------------------- scene
 
 
+class NativeHiddenScene:
+    """The production ``DisplayScene`` in the process's hidden host of the native core (N5.2h: the wallpaper and the
+    surface backdrop are the core's on both APIs, so a scene without it has neither).
+
+    The face of the foundry's ``_HiddenQuickScene`` (``root``, ``find``, ``host``, ``qml_context``, ``owner``,
+    ``factory``, ``window``, ``dpr``, ``render``, ``settle``, ``read``, ``close``), drawn the way
+    ``tools.native_transition_capture.NativeTransitionCapture`` draws: the scene root is the content of
+    ``bootstrap.native_hidden_host`` (the core's render control on its own render thread; never shown), kept at one
+    size per process and made again only when a capture asks for another. ``width`` and ``height`` are logical; the
+    host renders ``dpr`` times as many device pixels. ``timestamps`` (``--cost``): the scene owns a hidden host whose
+    QRhi times its whole frames (the kept host is made without, so QRhi creates no query objects), closed with it.
+    """
+
+    def __init__(self, width: int, height: int, *, dpr: float = 1.0, timestamps: bool = False) -> None:
+        from PySide6.QtCore import QObject
+        from PySide6.QtQuick import QQuickItem
+
+        from rendering.quick import bootstrap
+        from rendering.quick.scene_controller import QuickSceneFactory
+        from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost
+        from tools.native_transition_capture import _close_host_at_exit, ensure_application
+
+        self.app = ensure_application()
+        self.dpr = float(dpr)
+        # Device pixels, as the foundry's scene counts them.
+        self.width, self.height = round(width * self.dpr), round(height * self.dpr)
+        # The owner's one host (facts J1), timed for --cost; another size or timing than the kept one's: a tool's
+        # choice, so the kept host is closed and made again (the product never does). The owner closes it at exit.
+        try:
+            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr, timestamps=timestamps)
+        except ValueError:
+            bootstrap.close_native_hidden_host()
+            self.native = bootstrap.native_hidden_host(self.width, self.height, dpr=self.dpr, timestamps=timestamps)
+        _close_host_at_exit()
+        self._owns_host = bool(timestamps)        # a timed host goes with the scene (the next untimed one is made again)
+        self.owner = QObject()
+        self.factory = QuickSceneFactory(self.owner)
+        self.qml_context, self.root = self.factory.create_display_root(
+            owner=self.owner, screen_index=0, runtime_generation=1)
+        self.native.set_content(self.root)        # parented to the host's window and sized to it
+        self.window = self.root.window()
+        self.root.setWidth(width)
+        self.root.setHeight(height)
+
+        def item(name: str) -> QQuickItem:
+            found = self.root.findChild(QQuickItem, name)
+            if found is None:
+                raise RuntimeError(f"the hidden scene is missing {name}")
+            return found
+
+        self.find = item
+        self.host = OrdinaryWidgetPresentationHost(
+            host_item=item("ordinaryWidgetHost"), shadow_host_item=item("ordinaryWidgetShadowLane"),
+            foreground_host_item=item("systemAudioOSDForegroundHost"),
+            foreground_shadow_host_item=item("systemAudioOSDShadowHost"), context=self.qml_context,
+            create_overlay_item=self.factory.create_overlay_widget,
+            create_shadow_item=self.factory.create_overlay_card_shadow,
+            create_family_item=self.factory.create_ordinary_widget_family,
+        )
+        self._closed = False
+
+    def render(self) -> None:
+        if self._closed:
+            raise RuntimeError("the hidden scene is closed")
+        self.app.processEvents()
+        self.native.frames(1)
+
+    def settle(self, *, minimum_ms: int, until, timeout_ms: int = 8000) -> None:
+        """Render until ``until`` holds and the minimum settle time has passed."""
+        from PySide6.QtCore import QElapsedTimer
+
+        elapsed = QElapsedTimer()
+        elapsed.start()
+        while True:
+            self.render()
+            if elapsed.elapsed() >= minimum_ms and until():
+                return
+            if elapsed.elapsed() > timeout_ms:
+                raise RuntimeError("the hidden scene did not settle before its deadline")
+
+    def read(self):
+        """The frame (one more rendered and read back at its end) as a straight-alpha top-down PIL image."""
+        from tools.native_transition_capture import _HARNESS
+        from tools.onboarding_preview_foundry import _straight_alpha
+
+        if str(_HARNESS) not in sys.path:
+            sys.path.insert(0, str(_HARNESS))
+        from composite_analysis import frame_rows
+
+        self.app.processEvents()
+        frame = self.native.read()
+        return _straight_alpha(frame_rows({"rgba": frame.rgba, "width": frame.width, "height": frame.height,
+                                           "y_up_in_framebuffer": frame.y_up_in_framebuffer}))
+
+    def close(self) -> None:
+        """The scene gone before this returns: its widgets, then the root off the host and deleted with its context and
+        owner (deferred deletions delivered here: outside an event loop nothing else delivers them, R-173). The native
+        items in it (the background layer, the backdrop) are closed by their owners first. The hidden host is the
+        process's and stays (closed at the quit or the process's exit; a timed one goes here). Idempotent."""
+        from PySide6.QtCore import QCoreApplication, QEvent
+        import shiboken6
+
+        from rendering.quick import bootstrap
+
+        if self._closed:
+            return
+        self._closed = True
+        self.host.retire_all()
+        if not self.native.closed:
+            self.native.set_content(None)
+        if shiboken6.isValid(self.root):
+            self.root.setParentItem(None)
+            self.root.deleteLater()
+        self.qml_context.deleteLater()
+        self.owner.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.app.processEvents()
+        if not self.native.closed:
+            self.native.frames(1)                 # the core releases what the closed items held at this sync
+            if self._owns_host:
+                bootstrap.close_native_hidden_host()
+
+
 class MaterialScene:
     """The hidden production scene with a wallpaper background, backdrop owner and cards."""
 
-    def __init__(self, width: int, height: int, *, dpr: float = 1.0) -> None:
-        from tools.onboarding_preview_foundry import _HiddenQuickScene
+    def __init__(self, width: int, height: int, *, dpr: float = 1.0, timestamps: bool = False) -> None:
         from rendering.quick.render.background_item import BackgroundRenderItem
-        from rendering.quick.render.telemetry import RenderNodeTelemetry
 
-        self.scene = _HiddenQuickScene(width, height, dpr=dpr)
+        self.scene = NativeHiddenScene(width, height, dpr=dpr, timestamps=timestamps)
         self.scene.window.setColor("black")
         root = self.scene.root
-        self.background = BackgroundRenderItem(root, telemetry=RenderNodeTelemetry(), screen_index=0)
+        self.background = BackgroundRenderItem(root, screen_index=0)
         self.background.setZ(0.0)
         self.background.setWidth(root.width())
         self.background.setHeight(root.height())
@@ -85,6 +206,27 @@ class MaterialScene:
         if self.owner is not None:
             self.owner.set_transition_active(False)
             self.owner.note_background_changed()
+        self.settle_background()
+
+    def settle_background(self, timeout_s: float = 10.0) -> None:
+        """The photo uploaded and drawn, and the layer's first fade-in run to its end (a harness's wait, never the
+        product's: the core's upload job runs beside the frames, and the layer fades in over wall time)."""
+        from PySide6.QtCore import QCoreApplication, QEventLoop
+
+        from rendering.quick.bootstrap import native_core
+
+        core = native_core()
+        self.render(1)
+        if core is not None and not core.wait_jobs_idle(20000):
+            raise RuntimeError("the native upload jobs did not finish within 20 s")
+        self.render(2)
+        layer = self.background.native_layer
+        mode = None if layer is None else layer.mode
+        deadline = time.monotonic() + timeout_s
+        while mode is not None and time.monotonic() < deadline and mode.composite.state().get("fading"):
+            QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 16)
+            self.render(1)
+        self.render(1)
 
     def ensure_owner(self) -> None:
         """As the scene controller does on the first non-Normal surface (or a woken one)."""
@@ -170,7 +312,13 @@ class MaterialScene:
                 presentation.retire()
             except Exception:
                 pass
-        self.drop_owner()
+        # As a display generation retires: the backdrop (its consumers unbound first) and the background layer go
+        # before the scene root.
+        if self.owner is not None:
+            if not self.owner.parked:
+                self.host.set_surface_backdrop(None)
+            self.owner.retire()
+        self.background.close_native_layer()
         self.render(2)
         self.scene.close()
 
@@ -392,50 +540,45 @@ def measure_cadence(scene: MaterialScene, wallpapers: list[Path]) -> dict:
 
 
 def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80) -> dict:
-    """Whole-frame GPU time (GL_TIME_ELAPSED around the scene's render) per material, relative
-    to Normal measured alternately beside it, on a still wallpaper with no backdrop refresh: the
-    steady cost of the card quads. Five cards on the 1600x900 scene."""
-
-    import ctypes
-    from OpenGL import GL as gl
+    """Whole-frame GPU time (the native host's QRhi frame timer, ``set_gpu_timer``) per material, relative to Normal
+    measured alternately beside it (the scene made with ``timestamps``), on a still wallpaper with no backdrop refresh: the steady cost of the card quads.
+    The CPU figure is the wall time of one hidden-host frame (polish, sync and render on the core's render thread).
+    Five cards on the 1600x900 scene."""
 
     image = presentation_image(wallpapers[0], SCENE, "cost")
     scene.set_wallpaper(image)
-
-    def timed() -> tuple[float, float]:
-        scene.scene._make_current()
-        query = int(gl.glGenQueries(1)[0])
-        gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
-        cpu = time.perf_counter()
-        scene.scene.control.render()
-        scene.scene.control.endFrame()      # the GL backend executes the recorded frame here
-        cpu = time.perf_counter() - cpu
-        scene.scene._make_current()
-        gl.glEndQuery(gl.GL_TIME_ELAPSED)
-        value = ctypes.c_uint64()
-        gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
-        gl.glDeleteQueries(1, [query])
-        return value.value / 1e6, cpu * 1e3
+    native = scene.scene.native
 
     def frame_cost(material: str) -> tuple[float, float]:
-        """(GPU ms, render-thread CPU ms of sync + render) for one steady frame."""
+        """(GPU ms, frame wall ms) for one steady frame."""
         scene.set_material(material)
         scene.render(4)              # settle: refresh once, then disarmed
-        app = scene.scene.app
-        app.processEvents()
-        scene.scene.control.polishItems()
+        scene.scene.app.processEvents()
+        native.gpu_samples()         # the settle frames' results, dropped
         cpu = time.perf_counter()
-        scene.scene.control.beginFrame()
-        scene.scene.control.sync()
-        sync = (time.perf_counter() - cpu) * 1e3
-        gpu, render_cpu = timed()
-        return gpu, sync + render_cpu
+        native.frames(1)
+        cpu = (time.perf_counter() - cpu) * 1e3
+        native.frames(4)             # the timed frame's result is read once its frame completed: the oldest one
+        gpu = [s.milliseconds for s in native.gpu_samples() if s.kind == 0]
+        if not gpu:
+            raise RuntimeError("the native host's GPU timer returned no frame sample")
+        return gpu[0], cpu
 
     def best(material: str) -> tuple[float, float]:
         samples = [frame_cost(material) for _ in range(4)]
         return min(s[0] for s in samples), min(s[1] for s in samples)
 
     results = {}
+    native.set_gpu_timer(True)
+    native.frames(4)
+    try:
+        _cost_rounds(results, best, frames)
+    finally:
+        native.set_gpu_timer(False)
+    return results
+
+
+def _cost_rounds(results: dict, best, frames: int) -> None:
     # "normal" against itself first: the floor of the alternating method (must read zero).
     for material in MATERIALS:
         normal, case = [], []
@@ -451,7 +594,6 @@ def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80)
                              "normal_cpu_ms": round(n_cpu, 4), "material_cpu_ms": round(c_cpu, 4),
                              "delta_cpu_ms": round(c_cpu - n_cpu, 4)}
         print(material, results[material], flush=True)
-    return results
 
 
 # --------------------------------------------------------------------------- legibility
@@ -813,7 +955,7 @@ def main(argv: list[str] | None = None) -> int:
     fixtures = args.output / "_fixtures"
     fixtures.mkdir(exist_ok=True)
     art = foundry._gradient_art(fixtures / "_media_art.png", (480, 480), ("#27336e", "#e7678a"), 1)
-    scene = MaterialScene(*SCENE, dpr=args.dpr)
+    scene = MaterialScene(*SCENE, dpr=args.dpr, timestamps=args.cost)
     report ={"scene": list(SCENE), "wallpapers": [p.name for p in args.wallpapers]}
     try:
         activate_theme(DARK_THEME)

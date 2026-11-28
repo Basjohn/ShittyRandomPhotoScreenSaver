@@ -34,9 +34,9 @@ _LAYOUTS = (
 
 @pytest.fixture
 def context(qt_app):
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(16, 16)
+    capture = OffscreenRenderTarget(16, 16)
     yield capture
     capture.close()
 

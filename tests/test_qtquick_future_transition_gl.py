@@ -4,38 +4,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 
 @pytest.fixture
 def capture(qt_app):
-    result = TransitionCapture(256, 144)
+    result = NativeTransitionCapture(256, 144)
     yield result
     result.close()
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize("effect", [
-    "glass_shatter", "exploding_tiles", "pixel_accretion",
-    "melt_drip", "slide", "crumble",
-])
-def test_driver_endpoints_continuity_repeatability_and_retirement(capture, effect):
-    run = capture.run(effect)
-    source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
-    frames = {t: np.asarray(capture.render(run, t)[0], dtype=np.int16)
-              for t in (0., .0001, .28, .53, .78, .9999, 1.)}
-    assert np.array_equal(frames[0.], source)
-    assert np.array_equal(frames[1.], destination)
-    # Endpoint branches alone must not conceal a first/last-frame pop.
-    assert np.abs(frames[.0001]-source).mean() < .5
-    assert np.abs(frames[.9999]-destination).mean() < .5
-    assert np.abs(frames[.53]-source).mean() > 2
-    assert np.abs(frames[.53]-destination).mean() > .25
-    assert np.array_equal(np.asarray(capture.render(run, .53)[0]), frames[.53])
-    assert capture.host.has_resources
-    capture.host.set_enabled_transition_ids(())
-    assert not capture.host.has_resources
-    assert not capture.host.resolved_transition_ids
 
 
 @pytest.mark.qt
@@ -91,7 +67,7 @@ def test_glass_optical_controls_independently_reach_the_rendered_surface(capture
 @pytest.mark.parametrize("effect", ("glass_shatter", "exploding_tiles"))
 @pytest.mark.parametrize("size", ((160, 480), (720, 180)))
 def test_complete_fracture_geometry_leaves_extreme_aspects_before_retirement(qt_app, effect, size):
-    result = TransitionCapture(*size)
+    result = NativeTransitionCapture(*size)
     try:
         destination = np.asarray(result.images[1], dtype=np.int16)
         # Exercise weakest launch / maximum thickness, especially an upward

@@ -4,31 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from OpenGL import GL as gl
 
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_VECTORS
-from rendering.gl_programs.membrane_program import (
-    MEMBRANE_BLOCK,
-    MEMBRANE_DONE,
-    MEMBRANE_FRAGMENT_SOURCE,
-    MEMBRANE_VERTEX_SOURCE,
-)
-from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.membrane_program import MEMBRANE_DONE, MEMBRANE_FRAGMENT_SOURCE, MEMBRANE_VERTEX_SOURCE
 from rendering.gl_programs.scene3d import (
     scene3d_detail,
     scene3d_grid_size,
     scene3d_grid_vertices,
     scene3d_request_samples,
 )
-from rendering.quick.scene3d.environment import (PHOTO_ENVIRONMENT_MIPS_PROGRAM, PHOTO_ENVIRONMENT_PROGRAM,
-                                                 PhotoEnvironment)
-from rendering.quick.scene3d.grid import draw_grid
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM
 from rendering.quick.scene3d.resources import pack_floats
 from ..native_scene import (NativeScene, NativeSceneMesh, NativeScenePass, NativeScenePasses, eased_show,
                             item_quad_pass, native_clip_depth)
-from ..render_contract import QuickTransitionRenderFrame
 
 # N5.2e (N4.l's bendable grid): the native scene's passes, the texts this renderer compiles (the sheet's vertex stage
 # with its native clip depth): the new picture under the sheet, then the sheet over the run's grid, blended straight.
@@ -94,103 +82,6 @@ class QuickMembraneRenderer(NativeScenePasses):
 
     # The photographs bind_frame binds (units 0 and 1); every other value is in MEMBRANE_BLOCK.
     _SAMPLERS = ("uOldTex", "uNewTex")
-
-    def __init__(self) -> None:
-        self._resources = MeshResources("Quick Membrane Turnover")
-        self._target = SceneTarget("Quick Membrane Turnover")
-        self._environment = PhotoEnvironment("Quick Membrane Turnover")
-
-    @property
-    def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources or self._environment.has_resources
-
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
-        sweep = MEMBRANE_SWEEP_VECTORS.get(str(frame.run.request.direction))
-        if sweep is None:
-            raise ValueError(f"unknown resolved Membrane Turnover sweep: {frame.run.request.direction!r}")
-        parameters = frame.run.request.parameter_dict()
-        gloss, seed, detail = membrane_parameters(parameters)
-        try:
-            if progress <= 0.0:
-                self._resources.draw_image(frame, frame.source_texture_id)
-                return
-            # Every part of the membrane has landed and faded away: the new picture.
-            if progress >= MEMBRANE_DONE:
-                self._resources.draw_image(frame, frame.destination_texture_id)
-                return
-            samples = scene3d_request_samples(parameters)
-            environment = self._environment.texture(frame, self._resources)
-            if samples:
-                with self._target.scope(frame, samples, self._resources):
-                    self._draw(frame, progress, sweep, gloss, seed, detail, environment)
-            else:
-                self._draw(frame, progress, sweep, gloss, seed, detail, environment)
-        except Exception:
-            self.release_resources()
-            raise
-
-    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing and, given the
-        render ``size`` in device pixels, allocate nothing."""
-        _gloss, _seed, detail = membrane_parameters(parameters)
-        samples = scene3d_request_samples(parameters)
-        r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM), (r, *PHOTO_ENVIRONMENT_MIPS_PROGRAM),
-                   (r, "membrane", MEMBRANE_VERTEX_SOURCE, MEMBRANE_FRAGMENT_SOURCE)]
-        if samples:
-            entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
-        if not warm_programs(entries):
-            return False
-        if size is not None:
-            columns, rows = scene3d_grid_size(scene3d_detail(detail), size[0] / max(1, size[1]))
-            key = f"scene_grid_{columns}x{rows}"
-            if not r.has_mesh(key):
-                r.mesh(key, scene3d_grid_vertices(columns, rows), (2,))
-                return False
-        if not warm_pass_blocks(self._resources, size):
-            return False
-        return warm_run_resources(self._target, None, size, samples)
-
-    def park(self) -> None:
-        """Drop the per-run target and photo copy; programs and grids stay warm."""
-        self._target.release()
-        self._environment.release()
-
-    def _draw(self, frame, progress: float, sweep, gloss: float, seed: int, detail: str, environment: int) -> None:
-        r = self._resources
-        r.draw_image(frame, frame.destination_texture_id)        # the new picture under the membrane
-        r.begin_depth(frame)
-        program = r.program("membrane", MEMBRANE_VERTEX_SOURCE, MEMBRANE_FRAGMENT_SOURCE)
-        # The new picture is drawn underneath, so the sheet itself never reads uNewTex.
-        uniforms = r.uniforms("membrane", self._SAMPLERS, required=False)
-        values = r.values("membrane")
-        bind_frame(program, uniforms, frame, values)
-        width, height = frame.logical_size
-        columns, rows = scene3d_grid_size(scene3d_detail(detail), width / height)
-        values.update(self._sheet_values(progress, sweep, gloss, seed, detail, frame.logical_size))
-        # Units 0 and 1 hold the photographs (bind_frame); the copy goes on 2 (restored by the host fence).
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
-        try:
-            with r.pass_blocks.bound(pack_block(MEMBRANE_BLOCK, values)):
-                draw_grid(r, columns, rows)
-        finally:
-            gl.glDisable(gl.GL_BLEND)
-
-    def release_resources(self) -> None:
-        errors: list[str] = []
-        for release in (self._target.release, self._environment.release, self._resources.release_resources):
-            try:
-                release()
-            except Exception as exc:
-                errors.append(str(exc))
-        if errors:
-            raise RuntimeError(" | ".join(errors))
 
 
 def create_transition_renderer() -> QuickMembraneRenderer:

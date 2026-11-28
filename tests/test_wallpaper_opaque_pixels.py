@@ -21,8 +21,6 @@ from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.image_state import PresentationImage
-from rendering.quick.render.background_image_node import RetainedBackgroundSceneNode
-from rendering.quick.render.telemetry import RenderNodeTelemetry
 
 # Straight-alpha source colour and its expected result over opaque black.
 _SOURCE_RGBA = (200, 100, 40, 128)
@@ -136,49 +134,3 @@ def test_processed_route_captures_opaque_presentation_pixels(qt_app) -> None:
     presentation = presentation_image_from_processed_qimage(processed, image_path="t.png")
     _assert_opaque_over_black(presentation.rgba8)
 
-
-def test_native_background_labels_opaque_pixels_premultiplied(qt_app, monkeypatch) -> None:
-    from PySide6.QtQuick import QSGSimpleTextureNode
-
-    # This pixel-label seam uses a fake window and deliberately performs no GL upload.
-    monkeypatch.setattr(
-        "rendering.quick.render.background_image_node.validate_or_quit_current_opengl_context",
-        lambda **_kwargs: None,
-    )
-
-    handed: list[QImage] = []
-
-    class _Window:
-        def createImageNode(self):
-            return QSGSimpleTextureNode()
-
-        def createTextureFromImage(self, image, _options):
-            handed.append(QImage(image))
-            return None  # stop after the upload hand-off; no scene graph here
-
-    width, height = 8, 4
-    rgba = bytes(255 if i % 4 == 3 else (10 * i) % 256 for i in range(width * height * 4))
-    image = PresentationImage(
-        identity="opaque-8x4",
-        source_path="",
-        logical_size=(float(width), float(height)),
-        device_pixel_ratio=1.0,
-        pixel_size=(width, height),
-        row_stride=width * 4,
-        rgba8=rgba,
-    )
-    node = RetainedBackgroundSceneNode(
-        window=_Window(),
-        telemetry=RenderNodeTelemetry(gui_thread_id=1),
-        screen_index=0,
-        frame_trace=None,
-    )
-    with pytest.raises(RuntimeError, match="did not create a retained background texture"):
-        node._synchronize_native_image(image, logical_size=(float(width), float(height)))
-
-    assert len(handed) == 1
-    assert handed[0].format() == QImage.Format.Format_RGBA8888_Premultiplied
-    # Same bytes: premultiplied and straight RGBA agree for opaque pixels.
-    assert _rgba_pixels(handed[0]) == rgba
-    straight = QImage(rgba, width, height, width * 4, QImage.Format.Format_RGBA8888)
-    assert _rgba_pixels(straight) == _rgba_pixels(handed[0])
