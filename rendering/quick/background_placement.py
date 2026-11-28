@@ -1,10 +1,9 @@
-"""Where a display's photo lies over its background item: the presenter's fit and crop, one owner for both paths.
+"""Where a display's photo lies over its background item: the presenter's fit and crop, in one owner.
 
 The fit and crop to the display (FILL, FIT, SHRINK) happens before any presenter, in the image worker, at the display's
-device pixels (``rendering/image_processor_async.py``, ``rendering/image_quality.process_image``): both presenters draw
-the same ``PresentationImage``. What is left to the presenter is this rule, read by both of them:
+device pixels (``rendering/image_processor_async.py``, ``rendering/image_quality.process_image``). What is left to the
+presenter is this rule (its other reader, the Python presenter, is deleted: N5.2h), read by:
 
-- the Python presenter's retained ``QSGImageNode`` (``render/background_image_node.py``: its source rect and its rect);
 - the native core's background layer (``render/native_background.py``, N5.7a, D7 point 1: its pass's ``u_source_uv``
   over the background item's own rect).
 
