@@ -274,7 +274,7 @@ Continue the native sequence below with the repaired timing receipts. The report
       import, costs Exploding Tiles 174-180 ms (133 ms of it PyOpenGL: `implementations.exploding_tiles` →
       `scene3d.particles` → `OpenGL.GL`), Jigsaw 35, Volumetric Dissolve and Disintegrate 11 ms. Every `scene3d/*.py`
       imports `OpenGL.GL` at module level (the unported Python 3D modes still draw with it).
-    - [ ] Fix 7 (replaces the core warm entry): no transition module's import closure loads `OpenGL` (move the value
+    - [ ] Fix 7 (replaces the core warm entry; **Opus Medium `a753cf2202b0e8cde`**, merges a37b0's and a528d's): no transition module's import closure loads `OpenGL` (move the value
       code transitions use out of the GL modules, or import GL lazily inside the GL-only functions); every warm unit at
       most 8 ms on the GUI thread with bytecode cached (split what is not); Jigsaw's `build_jigsaw_geometry` off the GUI
       thread or into small units if the product path runs it there. Guard: a fresh-process test importing every
