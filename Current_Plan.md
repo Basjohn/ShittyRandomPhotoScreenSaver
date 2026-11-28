@@ -125,7 +125,7 @@ Continue the native sequence below with the repaired timing receipts. The report
     - the 15-run L set;
     - music response: human_heavy1 preset 1 youngest bubbles fell 0.91→0.73 against 22 Nov. Check after fix 3.
     N3.9 drift history was checked by reading only: nothing registers `on_state_lost` for EB.
-    Sixth **Opus Medium** (28 Nov, own worktree, merges the fifth's branch): defects 1–3 above, then the not-done
+    Sixth **Opus Medium `a5f086921473dd17e`** (28 Nov, own worktree, merges the fifth's branch): defects 1–3 above, then the not-done
     items in order.
   - **N5.2h Gate merged** 28 Nov (`f12427a2e`; Opus Medium audit, should-fixes done in `a49087e7c`, harness reds in
     `ce80c0eeb`); main built on GitHub at `421a16bd` (ABI 45). Its four worktrees retired; evidence in
