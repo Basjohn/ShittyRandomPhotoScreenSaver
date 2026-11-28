@@ -438,7 +438,7 @@ def field_deadline_ms(run: Any, settled: float) -> int:
 #: this module stays light; the warm-up imports each at its own unit ahead of a run (the hitch rows, 22 Nov: the first
 #: scene frame paid them).
 _RUN_MODULES = ("rendering.gl_programs.scene3d", "rendering.native.mode", "rendering.native.composite",
-                "rendering.quick.scene3d.environment", "rendering.quick.transitions.native_scene",
+                "rendering.gl_programs.mip_chain", "rendering.quick.scene3d.environment", "rendering.quick.transitions.native_scene",
                 "rendering.quick.transitions.fullscreen_pass", "rendering.quick.scene3d.motion",
                 "rendering.quick.scene3d.trails")
 

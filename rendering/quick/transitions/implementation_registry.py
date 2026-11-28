@@ -158,9 +158,10 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
 #: The modules the renderer classes' modules still import (shared by them, leaves first), so the idle warm-up imports
 #: each at its own unit before a renderer module itself (the hitch rows, 22 Nov: one import pulled them all in one go).
 #: N5.2h: the classes are value owners, so only the modules their values and scene descriptions read remain here. A
-#: module missing here is still imported, with the renderer's module: a larger unit, never a wrong one.
+#: module missing here is still imported, with the renderer's module: a larger unit, never a wrong one. Fix 7 (28 Nov):
+#: each entry is one a renderer module still imports (measured per module in a fresh process); the photo environment
+#: and its box kernel are the native layer's run modules (``native_background._RUN_MODULES``), not a renderer's.
 SHARED_RENDERER_MODULES = (
-    "rendering.gl_programs.mip_chain",
     "rendering.quick.gl_query",
     "rendering.quick.scene3d.stream",
     "rendering.quick.scene3d.compute",
@@ -170,7 +171,6 @@ SHARED_RENDERER_MODULES = (
     "rendering.quick.scene3d.uniforms",
     "rendering.quick.scene3d.resources",
     "rendering.quick.scene3d.post",
-    "rendering.quick.scene3d.environment",
     "rendering.quick.transitions.directions",
 )
 

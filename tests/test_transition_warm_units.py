@@ -69,6 +69,27 @@ def test_each_unit_builds_at_most_one_piece(transition_id):
             assert len([name for name in unit["imported"] if name.startswith("rendering.")]) <= 1, units
 
 
+def _unused_shared(*names: str) -> dict:
+    child = CHILD.with_name("transition_warm_shared_child.py")
+    done = subprocess.run([sys.executable, str(child), *names], capture_output=True, text=True, timeout=300,
+                          cwd=str(CHILD.parents[1]))
+    assert done.returncode == 0, done.stderr[-2000:]
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_every_shared_warm_module_is_one_a_renderer_module_imports():
+    """Fix 7 (the audit's low): a shared unit is a module some renderer module (or its resolve) imports, so the warm-up never
+    spends a unit on a module no run needs from a renderer (the deleted Python GL route's leftovers). Each entry is
+    checked in a fresh interpreter after the native layer's own module."""
+    result = _unused_shared()
+    assert result["renderers"] > 0 and result["unused"] == []
+
+
+def test_the_shared_warm_module_check_names_a_module_no_renderer_imports():
+    """The control: a module only the native layer's run imports (its photo environment) is reported unused."""
+    assert _unused_shared("rendering.quick.scene3d.environment")["unused"] == ["rendering.quick.scene3d.environment"]
+
+
 class _Reporter:
     def __init__(self) -> None:
         from PySide6.QtCore import QObject, Signal
