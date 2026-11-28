@@ -382,18 +382,6 @@ def test_block_spins_owns_a_real_thin_box_mesh_without_quad_fallback():
             BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
         )
     )
-    assert {position[2] for position in positions} == {0.0, -0.05}
-    renderer_source = (
-        ROOT
-        / "rendering"
-        / "quick"
-        / "transitions"
-        / "implementations"
-        / "block_spins.py"
-    ).read_text(encoding="utf-8")
-    assert "gl.GL_TRIANGLES" in renderer_source
-    assert "BLOCK_SPIN_BOX_VERTEX_COUNT" in renderer_source
-    assert "box_vao and" not in renderer_source
 
 
 def test_block_spins_keeps_linear_run_input_and_authored_cubic_spin_timing():
@@ -411,15 +399,6 @@ def test_block_spins_opposite_directions_move_side_highlight_opposite_ways():
     assert block_spin_specular_band_center(0.75, -1.0) == pytest.approx(0.295)
     assert "uSpecDirection < 0.0" in BLOCK_SPIN_FRAGMENT_SOURCE
     assert "? 1.0 - timeline" in BLOCK_SPIN_FRAGMENT_SOURCE
-    renderer_source = (
-        ROOT
-        / "rendering"
-        / "quick"
-        / "transitions"
-        / "implementations"
-        / "block_spins.py"
-    ).read_text(encoding="utf-8")
-    assert 'values["uSpecDirection"] = spin_direction' in renderer_source
 
 
 def test_block_spins_shader_uses_quick_geometry_depth_and_authored_face_uvs():

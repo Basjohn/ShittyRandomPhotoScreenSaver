@@ -244,31 +244,6 @@ def test_crumble_preserves_fractional_seed_identity_and_seam_origins():
         assert on_edge
 
 
-def test_crumble_failed_instance_deletion_keeps_handle_and_releases_other_resources(
-    monkeypatch,
-):
-    from rendering.quick.transitions.implementations import crumble
-    import pytest
-
-    renderer = crumble.QuickCrumbleRenderer()
-    renderer._debris_vbo = 71
-    released = []
-    monkeypatch.setattr(
-        renderer._resources, "release_resources", lambda: released.append(True)
-    )
-
-    def fail(*args):
-        raise RuntimeError("injected instance deletion failure")
-
-    monkeypatch.setattr(crumble.gl, "glDeleteBuffers", fail)
-    with pytest.raises(RuntimeError, match="cleanup incomplete"):
-        renderer.release_resources()
-    assert renderer._debris_vbo == 71 and released == [True]
-    monkeypatch.setattr(crumble.gl, "glDeleteBuffers", lambda *args: None)
-    renderer.release_resources()
-    assert renderer._debris_vbo == 0 and released == [True, True]
-
-
 @pytest.mark.qt
 def test_cracks_grow_before_the_intact_wall_or_debris_moves(qt_app):
     capture=NativeTransitionCapture(640,360)

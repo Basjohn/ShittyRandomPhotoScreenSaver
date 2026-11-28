@@ -155,20 +155,21 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
     return frozenset(enabled)
 
 
-#: The modules the scene renderers' modules import (shared by them, leaves first), so the idle warm-up imports each at
-#: its own unit before a renderer module itself (the hitch rows, 22 Nov: one import pulled them all in one go). A
+#: The modules the renderer classes' modules still import (shared by them, leaves first), so the idle warm-up imports
+#: each at its own unit before a renderer module itself (the hitch rows, 22 Nov: one import pulled them all in one go).
+#: N5.2h: the classes are value owners, so only the modules their values and scene descriptions read remain here. A
 #: module missing here is still imported, with the renderer's module: a larger unit, never a wrong one.
 SHARED_RENDERER_MODULES = (
     "rendering.gl_programs.mip_chain",
+    "rendering.quick.gl_query",
+    "rendering.quick.scene3d.stream",
     "rendering.quick.scene3d.compute",
     "rendering.quick.scene3d.passes",
-    "rendering.quick.scene3d.population",
+    "rendering.quick.render.gl_program_cache",
+    "rendering.quick.render.gl_resources",
+    "rendering.quick.scene3d.uniforms",
     "rendering.quick.scene3d.resources",
     "rendering.quick.scene3d.post",
-    "rendering.quick.scene3d.shafts",
-    "rendering.quick.scene3d.motion",
-    "rendering.quick.scene3d.trails",
-    "rendering.quick.scene3d.target",
     "rendering.quick.scene3d.environment",
     "rendering.quick.transitions.directions",
 )
