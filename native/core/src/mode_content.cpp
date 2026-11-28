@@ -7144,10 +7144,14 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
     }
     const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv
+    // The same triangle with its output named vUv, for a fragment that reads vUv: Qt's OpenGL backend matches the
+    // stages' varyings by name (it warned "Vertex output name 'v_uv' does not match fragment input 'vUv'" for each).
+    const QShader vsUp = shaderFrom(mode_up_vert_qsb, mode_up_vert_qsb_size);
+    const auto vertexFor = [&vs, &vsUp](PassUv uv) -> const QShader & { return uv == PassUv::Up ? vsUp : vs; };
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);
     const QShader capture = shaderFrom(scene_capture_frag_qsb, scene_capture_frag_qsb_size); // N3.1
     const QShader nearestShader = shaderFrom(scene_nearest_frag_qsb, scene_nearest_frag_qsb_size); // D14 point 10
-    if (!vs.isValid() || !clear.isValid() || !capture.isValid() || !nearestShader.isValid()) {
+    if (!vs.isValid() || !vsUp.isValid() || !clear.isValid() || !capture.isValid() || !nearestShader.isValid()) {
         *error = QStringLiteral("the core's triangle, clear, capture or nearest resolve shader does not load");
         return false;
     }
@@ -7512,7 +7516,8 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             p.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
         p.pipeline->setName(label);
         p.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
-        p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, fragment } });
+        p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vertexFor(pass.uv) },
+                                      { QRhiShaderStage::Fragment, fragment } });
         p.pipeline->setVertexInputLayout(layout(pass.uv));
         p.pipeline->setCullMode(QRhiGraphicsPipeline::None);
         p.pipeline->setShaderResourceBindings(p.bindings.get());
@@ -7539,7 +7544,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                 defocusBlock = quint32(qMax(0, pass.block.size()));
         }
         int made = 0;
-        ok = m_post.build(rhi, m_targets, vs, layout(PassUv::Up), m_streams.arena(), quint32(sizeof(ConventionsBlock)),
+        ok = m_post.build(rhi, m_targets, vertexFor(PassUv::Up), layout(PassUv::Up), m_streams.arena(), quint32(sizeof(ConventionsBlock)),
                           defocusBlock, &reason, &made);
         m_postObjectsSeen = m_post.objectGeneration();
     }

@@ -96,6 +96,34 @@ def test_the_cores_triangle_gives_each_quad_its_uv_by_the_python_quads_names():
     assert out_name(item_quad_vertex_source("").replace("out vec2 vUv;", "out vec2 vTex;")) != item
 
 
+def vertex_names_match(up_vert: str, mode_cpp: str) -> bool:
+    """The core's triangle reaches a vUv fragment under the fragment's own name: mode_up.vert outputs vUv (the same
+    triangle as mode.vert otherwise), and the fragment passes' and the post steps' pipelines (whose fragments read vUv)
+    take it. Qt's OpenGL backend matches varyings by name and warned once per mismatched pipeline."""
+    code = _code(up_vert)
+    triangle = ("layout(location = 1) in vec2 uv;" in code and "layout(location = 0) out vec2 vUv;" in code
+                and "vUv = uv;" in code and "v_uv" not in code)
+    return (triangle and "shaderFrom(mode_up_vert_qsb, mode_up_vert_qsb_size)" in mode_cpp
+            and "{ QRhiShaderStage::Vertex, vertexFor(pass.uv) }" in mode_cpp
+            and "m_post.build(rhi, m_targets, vertexFor(PassUv::Up), layout(PassUv::Up)" in mode_cpp
+            and "return uv == PassUv::Up ? vsUp : vs;" in mode_cpp)
+
+
+def test_a_vuv_fragment_is_drawn_by_a_triangle_that_outputs_vuv():
+    up = (CORE / "shaders" / "mode_up.vert").read_text(encoding="utf-8")
+    cpp = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    assert vertex_names_match(up, cpp)
+    # The post steps' fragments all read vUv (or no uv), so the up triangle is the one they need.
+    for name in ("composite_opaque", "composite_overlay", "composite_opaque_glow", "composite_overlay_glow",
+                 "environment", "bloom_down_first", "bloom_down", "bloom_up"):
+        declared = shape((CORE / "shaders" / f"{name}.frag").read_text(encoding="utf-8"))
+        assert declared["inputs"] == [("0", "vUv")], name
+    # Negative controls: the up triangle still naming v_uv, and the passes all drawn by mode.vert, are both caught.
+    assert not vertex_names_match(up.replace("vUv", "v_uv"), cpp)
+    assert not vertex_names_match(up, cpp.replace("{ QRhiShaderStage::Vertex, vertexFor(pass.uv) }",
+                                                  "{ QRhiShaderStage::Vertex, vs }"))
+
+
 def _frame_values(transition_id: str, overrides=None, size=(320, 180)) -> dict:
     from PIL import Image
 
