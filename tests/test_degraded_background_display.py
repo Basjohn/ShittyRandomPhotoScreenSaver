@@ -162,11 +162,13 @@ def test_the_layers_failure_fades_to_the_photo_on_opengl(tmp_path):
     if os.name != "nt" or not (module_dir / f"{loader.MODULE_NAME}.pyd").is_file():
         pytest.skip(f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd")
     record_path = tmp_path / "child.json"
+    env = os.environ.copy()
+    env.pop("QT_QPA_PLATFORM", None)        # hidden hosts need Qt's own platform (offscreen has no GPU device)
     proc = subprocess.run(
         [sys.executable, str(root / "native" / "core" / "python" / "background_layer_check.py"), "--child", "--api",
          "opengl", "--rounds", "fail", "--repo", str(root), "--module-dir", str(module_dir), "--out-dir",
          str(tmp_path), "--child-json", str(record_path)],
-        capture_output=True, text=True, timeout=1800, cwd=str(root))
+        capture_output=True, text=True, timeout=1800, cwd=str(root), env=env)
     assert proc.returncode == 0, proc.stderr[-2000:]
     record = json.loads(record_path.read_text(encoding="utf-8"))
     assert not record.get("error"), record.get("error")

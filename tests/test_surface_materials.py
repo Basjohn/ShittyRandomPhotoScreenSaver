@@ -248,11 +248,13 @@ def test_the_native_backdrop_rounds_pass_on_opengl(tmp_path) -> None:
         pytest.skip(f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd")
     record_path = tmp_path / "child.json"
     rounds = ("rest", "transition", "route", "blit")
+    env = os.environ.copy()
+    env.pop("QT_QPA_PLATFORM", None)        # hidden hosts need Qt's own platform (offscreen has no GPU device)
     proc = subprocess.run(
         [sys.executable, str(ROOT / "native" / "core" / "python" / "backdrop_pyramid_check.py"), "--child", "--api",
          "opengl", "--rounds", *rounds, "--repo", str(ROOT), "--module-dir", str(module_dir), "--out-dir",
          str(tmp_path), "--child-json", str(record_path)],
-        capture_output=True, text=True, timeout=1800, cwd=str(ROOT))
+        capture_output=True, text=True, timeout=1800, cwd=str(ROOT), env=env)
     assert proc.returncode == 0, proc.stderr[-2000:]
     record = json.loads(record_path.read_text(encoding="utf-8"))
     assert not record.get("error"), record.get("error")
