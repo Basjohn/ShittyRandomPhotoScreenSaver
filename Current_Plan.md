@@ -180,7 +180,13 @@ Continue the native sequence below with the repaired timing receipts. The report
     switch-caused retargets + the exit-crash attribution. First pass 28 Nov: card-material tests on the hidden native host
     (`9f4a5b731`, 54+57 pass), composer discovery (`87c0063f5`), exit crash attributed (`418d137ce`: the deleted
     background slot ran on the render thread in PySide's exit sweep; R-260). Sent back for: merging main, the
-    `qtquick_render_node_smoke` rewrite, the composite handle table's null entry, R-260. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
+    `qtquick_render_node_smoke` rewrite, the composite handle table's null entry, R-260.
+    Second and third passes done (retired at 195k): discovery reconciled (`0ced3d9aa`), smoke rewritten on native
+    layer state (`87c4a2c86`, `RenderNodeTelemetry` and phase-C smokes deleted), composite + backdrop handle tables
+    (`67b9aa995`, `c6895519c`, C++), dead readiness flags (`0d71788b6`), docs, R-260 (`c7f13e229`). Lead: smoke
+    retired-item read fixed (`0faaf09c0`). Built `c9b9f0a6`: native core module 9/9, gl_errors PASS, `test_qtquick_runtime`
+    isolated PASS. **Opus High audit `a68c6dfb962986ed2`** (read-only) of `main...worktree-agent-aa3b364fd31f5d860`. Then
+    merge; D1 run + hitch rows when Display 1 is on. **Sonnet Medium `a47d806ed60c9ed51`** (own worktree from
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
     with N5.6's merge); 109 pass on main; worktree retired.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
