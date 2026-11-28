@@ -266,6 +266,12 @@ Continue the native sequence below with the repaired timing receipts. The report
       the owner exit probe's lifecycle barrier timeout (one QuickDisplayRuntime still live, probably the probe's own
       global), and the backdrop and Visualizer taking the core on an unhosted window (no window check; they draw
       nothing). Leave the warm-up code to fix 7.
+      Done 28 Nov (a528d, branch `worktree-agent-a528d802aa63fd169`, pushed, no C++; 142 tests pass): `436f8ba3c` exit
+      probe barrier, `c87b25e22` unhosted window refused, `6d7251eb7` degraded flag through the fade, `8a4c11c91`
+      wanted() raising → degraded, `1b37e7d8b` premultiplied test retargeted, `6bd598587` docstrings, `d9ee34f38` R-260
+      note (node overrides no virtual, connects no signal; no swap without a GPU test). Each behaviour control fails on
+      the old code. Left: the `qtquick_render_node_smoke` inverted control opens real windows, so the lead runs it at
+      the D1 stage; `SHARED_RENDERER_MODULES` GL modules go to fix 7 (warm-up code).
     - [ ] Then: one build, D1 reveal rerun, GL and Vulkan hitch rows retaken and stored in `tools/baselines/preflip/`,
       merge, retire worktrees a5767, ac12d, ac5eb, a6b16, acd91, ad3b5, aa7af, aa3b, aeba3.
     main): the 9 reds that predate the switch. Done and merged to main `86b9faa4e` (8 fixed; policy_compliance comes
