@@ -106,7 +106,8 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
     assert 'vec2 hit = rayOrigin.xz + (ray * distance_).xz;' in shader
     assert '"uNearCoc": 22.0 * optical_height / 941.0' in owner
     assert '"uNearMax": _near_spread(optical_height)' in owner
-    assert 'shift = (0.0, 0.0)' in owner
+    # The product's lens shift is zero; the owner's one constant (a proof sets it on both routes) is all it reads.
+    assert 'LENS_SHIFT: tuple[float, float] = (0.0, 0.0)' in owner and 'shift = LENS_SHIFT' in owner
 
 
 def test_pan_follow_screen_pointer_sign_is_not_inverted_again():

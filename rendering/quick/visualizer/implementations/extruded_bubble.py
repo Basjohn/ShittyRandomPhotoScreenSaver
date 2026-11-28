@@ -89,6 +89,10 @@ _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment i
 # The probe's cube face size per 3D Detail tier (what bubbles mirror; smaller is softer and cheaper).
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
 _BLOOM = 0.55
+# The shafts' and the backdrop's lens shift (uLensShift). The physical camera has none (Pan translates the camera),
+# so the product draws at zero; it is the one owner both routes read (``extruded_bubble_values.settings_values``),
+# set only by the parity proof's nonzero-shift run (``owner_render_parity --lens-shift``, N5.6's odd-target bullet).
+LENS_SHIFT: tuple[float, float] = (0.0, 0.0)
 _NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a giant over (pixels)
 _SHELL_CAPACITY = MAX_BUBBLES   # the simulation's bubbles
 _CLUSTER_CAPACITY = MAX_BUBBLES // 2
@@ -454,7 +458,7 @@ class QuickExtrudedBubbleRenderer:
             distance = math.sqrt(sum(v*v for v in to_emitter))
             if distance > 1e-6:
                 knobs = {**knobs, "sun_below": tuple(v/distance for v in to_emitter)}
-        shift = (0.0, 0.0)
+        shift = LENS_SHIFT
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
         shells = bubble_instances(state.bubbles)

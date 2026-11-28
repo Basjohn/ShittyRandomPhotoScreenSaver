@@ -346,6 +346,43 @@ def test_the_old_key_retires_only_after_a_frame_using_the_new_one_was_recorded()
     assert "const bool withPasses = texturesReady() && meshesReady() && !m_geometryWaiting;" in mode_cpp
 
 
+def a_record_naming_no_key_draws(storage_cpp: str) -> bool:
+    """N5.6 (ABI 47): a geometry buffer whose record names no key, with none resident (the family has no geometry
+    yet: Extruded Bubble's first frame), binds a 16-byte zero buffer and is not waited on, so the frame draws as
+    Python's does with the family absent; the zero buffer is never a residency, so an entry binding it holds."""
+    sync = _function(storage_cpp, "bool ModeStorage::syncGeometry(", "\nvoid ModeStorage::geometryRecorded()")
+    absent = sync[sync.index("if (wanted == keys.cend() || !wanted.value().valid()) {"):
+                  sync.index("const GeometryKey &key = wanted.value();")]
+    lookup = _function(storage_cpp, "const ModeStorage::Buffer *ModeStorage::buffer(", "\n}\n")
+    resident = _function(storage_cpp, "bool ModeStorage::geometryResident(", "\n}\n")
+    empty = _function(storage_cpp, "ModeStorage::Buffer *emptyGeometry(", "\n}\n")
+    return ("*waiting = *waiting || !slot->current;" not in absent
+            and "slot->empty = emptyGeometry(rhi, updates, decl);" in absent
+            and "g_geometryResident" not in absent and "g_geometryResident" not in empty
+            and "updates->uploadStaticBuffer(made.get(), 0, 16, zeros);" in empty
+            and "b = slot->empty;" in lookup
+            and "return slot->current != nullptr && slot->currentKey == key;" in resident)
+
+
+def test_a_record_naming_no_geometry_key_draws_and_its_entries_hold():
+    storage_cpp = _source("compute_passes.cpp")
+    assert a_record_naming_no_key_draws(storage_cpp)
+    # The zero buffer goes once a key is resident and with the slot (never counted as a residency).
+    sync = _function(storage_cpp, "bool ModeStorage::syncGeometry(", "\nvoid ModeStorage::geometryRecorded()")
+    assert sync.count("releaseGeometryBuffer(slot->empty);") == 2
+    assert "releaseGeometryBuffer(slot->empty);" in _function(storage_cpp, "void ModeStorage::releaseGeometry()",
+                                                              "\n}\n")
+    # Negative controls: the absent key waited on again (the first frame missing), and the zero buffer counted as
+    # resident (an entry would dispatch over 16 zero bytes).
+    sync_start = storage_cpp.index("if (wanted == keys.cend() || !wanted.value().valid()) {")
+    waited = (storage_cpp[:sync_start] + storage_cpp[sync_start:].replace(
+        "if (!slot->current && !slot->empty) {", "*waiting = *waiting || !slot->current;\n            if (false) {", 1))
+    assert not a_record_naming_no_key_draws(waited)
+    counted = storage_cpp.replace("return slot->current != nullptr && slot->currentKey == key;",
+                                  "return (slot->current != nullptr || slot->empty != nullptr) && slot->currentKey == key;")
+    assert not a_record_naming_no_key_draws(counted)
+
+
 def teardown_releases_every_residency(storage_cpp: str, mode_cpp: str) -> bool:
     release = _function(storage_cpp, "void ModeStorage::release()", "\n}\n")
     every = _function(storage_cpp, "void ModeStorage::releaseGeometry()", "\n}\n")
@@ -602,3 +639,39 @@ def test_a_cube_is_sampled_with_mips_and_primed_on_every_layer():
     assert not every_colour_prime_takes_every_layer(targets.replace(
         "barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;", "barrier.subresourceRange.layerCount = 1;",
         1))
+
+
+# ------------------------------------------------------- ABI 46: a compute entry waits for its geometry key (D3)
+
+def geometry_hold_is_wired(mode_cpp: str, storage_cpp: str) -> bool:
+    """decideDispatches holds an entry whose bound geometry buffer lacks the record's key: after the due check and
+    before anything of the dispatch (its flag, u_srpss_compute, its track), so the held entry's last trigger is the last
+    step it applied; the residency check compares the current key whole, strips "@previous" and never holds an entry
+    over a buffer that is not a geometry buffer."""
+    decide = _function(mode_cpp, "void ModeContent::decideDispatches()", "bool ModeContent::geometryKeysResident(")
+    keys = _function(mode_cpp, "bool ModeContent::geometryKeysResident(", "quint64 ModeContent::entryFreshKey(")
+    resident = _function(storage_cpp, "bool ModeStorage::geometryResident(", "bool ModeStorage::syncGeometry(")
+    hold = decide.find("if (!geometryKeysResident(pass)) {")
+    held = decide[hold:decide.find("        }", hold)]
+    return (0 <= decide.find("if (!due) {") < hold < decide.find("m_dispatch[i] = true;")
+            < decide.find("t.lastTrigger = value;")
+            and "countGeometryHold();" in held and "continue;" in held
+            and 'b.resource.endsWith("@previous") ? b.resource.chopped(9) : b.resource' in keys
+            and "!m_storage.geometryResident(base, key.value())" in keys
+            and "return slot->current != nullptr && slot->currentKey == key;" in resident
+            and "return true;                              // not a geometry buffer" in resident)
+
+
+def test_a_compute_entry_over_a_geometry_key_not_yet_resident_is_held_with_its_trigger_kept():
+    mode_cpp, storage_cpp = _source("mode_content.cpp"), _source("compute_passes.cpp")
+    assert geometry_hold_is_wired(mode_cpp, storage_cpp)
+    assert "compute_geometry_holds" in _source("module.cpp")
+    # Negative controls: no hold (the ABI 45 core dispatched a new epoch's steps over the old key's geometry); a hold
+    # after the track moved (the held record's steps counted as applied); a residency matching any resident key.
+    hold = "        if (!geometryKeysResident(pass)) {"
+    assert not geometry_hold_is_wired(mode_cpp.replace(hold, "        if (false) {"), storage_cpp)
+    moved = mode_cpp.replace("        t.lastTrigger = value;\n", "").replace(
+        hold, "        t.lastTrigger = value;\n" + hold)
+    assert not geometry_hold_is_wired(moved, storage_cpp)
+    assert not geometry_hold_is_wired(mode_cpp, storage_cpp.replace(
+        "return slot->current != nullptr && slot->currentKey == key;", "return slot->current != nullptr;"))

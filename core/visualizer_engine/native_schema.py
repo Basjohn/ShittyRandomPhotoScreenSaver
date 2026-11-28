@@ -50,6 +50,7 @@ _RUNTIME_SCHEMA_MODULES: dict[str, str] = {
     "bubble": "core.visualizer_engine.bubble_native_schema",
     "oscilloscope": "core.visualizer_engine.oscilloscope_native_schema",
     "waveform_ribbon": "core.visualizer_engine.waveform_native_schema",
+    "extruded_bubble": "core.visualizer_engine.extruded_bubble_native_schema",
 }
 
 PayloadKind = Literal["codec", "native"]

@@ -404,6 +404,151 @@ class WaveformPython:
         self._context = self._surface = self._host = None
 
 
+#: Extruded Bubble's native passes by the Python program they draw (``extruded_bubble_values``): a program bound more
+#: than once a frame takes its passes' names in bind order (the cube's faces, the blur's two directions).
+def _eb_pass_names() -> dict[str, tuple[str, ...]]:
+    from rendering.native.extruded_bubble_shaders import PROGRAMS
+    from rendering.native.extruded_bubble_values import BLUR_PASSES, FACE_PASSES, PROXY_PASSES
+
+    names = {program: (program,) for program in PROGRAMS}
+    names.update({"probe_backdrop": FACE_PASSES, "proxies": PROXY_PASSES, "blur": BLUR_PASSES})
+    return names
+
+
+def _eb_layouts() -> dict:
+    from rendering.native.extruded_bubble_shaders import block_layout
+
+    return {name: block_layout(program) for program, passes in _eb_pass_names().items() for name in passes}
+
+
+#: The instance buffers the Python renderer uploads, by the record's stream (``extruded_bubble_native_schema``).
+_EB_INSTANCES = {"_shells": "shells", "_clusters": "clusters", "_proxies": "proxies", "_wakes": "wakes"}
+
+
+@contextlib.contextmanager
+def _eb_registered():
+    """The route draws Extruded Bubble for this run only (its registration is the port's last step, after P, T, C):
+    its settings, its program by the scene's samples and its explicit target sizes."""
+    from rendering.native import extruded_bubble_program as program
+    from rendering.native.extruded_bubble_values import settings
+    from rendering.quick.visualizer import native_route as route
+
+    saved = (route.GENERIC_MODE_SETTINGS, route.GENERIC_MODE_PROGRAM_VARIANTS, route.GENERIC_MODE_TARGET_SIZES,
+             route.NATIVE_MODE_IDS)
+    route.GENERIC_MODE_SETTINGS = {**saved[0], "extruded_bubble": settings}
+    route.GENERIC_MODE_PROGRAM_VARIANTS = {**saved[1], "extruded_bubble": (program.variant_of, program.program)}
+    route.GENERIC_MODE_TARGET_SIZES = {**saved[2], "extruded_bubble": program.target_sizes}
+    route.NATIVE_MODE_IDS = saved[3] | {"extruded_bubble"}
+    try:
+        yield
+    finally:
+        (route.GENERIC_MODE_SETTINGS, route.GENERIC_MODE_PROGRAM_VARIANTS, route.GENERIC_MODE_TARGET_SIZES,
+         route.NATIVE_MODE_IDS) = saved
+
+
+class ExtrudedBubblePython(WaveformPython):
+    """Extruded Bubble's Python side of layer L: its real renderer drawing the frame on a real offscreen OpenGL 4.6
+    context (its drift compute, probe, shafts, scene target and near layer run as in the product; nothing is read
+    back), with what that draw used captured: each pass block as it was bound (``_bound``), named by its program and
+    bind order (``_eb_pass_names``), the values its programs held at that bind (``_Uniforms``: the value each member
+    was last set to, else its block's initial value), the instance buffers' uploads by stream, and the post steps'
+    own values (the scene's bloom and exposure, the near layer's radius, highlight and read level)."""
+
+    def draw(self, frame) -> dict:
+        from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS
+        from rendering.native.extruded_bubble_shaders import block_layout, member_name
+        from rendering.quick.scene3d.defocus import DefocusLayer
+        from rendering.quick.scene3d.target import SceneTarget
+        from rendering.quick.visualizer.implementations import extruded_bubble as python_eb
+
+        import numpy as np
+        from OpenGL import GL as gl
+
+        width, height = int(frame.viewport[2]), int(frame.viewport[3])
+        self._current(width, height)
+        gl.glViewport(0, 0, width, height)
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        renderers: list = []
+        binds: list = []
+        uploads: dict = {}
+        post: dict = {}
+        Renderer = python_eb.QuickExtrudedBubbleRenderer
+        render, bound, upload = Renderer.render, Renderer._bound, python_eb._Instances.upload
+        scope, composite, read_size = SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size
+
+        def rendering(renderer, render_frame):
+            renderers.append(renderer)
+            return render(renderer, render_frame)
+
+        def binding(renderer, program):
+            held = renderer._uniforms._values
+            binds.append((program, renderer._uniforms.packed(program),
+                          {name: value for (owner, name), value in held.items() if owner == program}))
+            return bound(renderer, program)
+
+        def uploading(instances, rows):
+            count = upload(instances, rows)
+            uploads[id(instances)] = np.ascontiguousarray(rows[:instances.capacity], dtype=np.float32).tobytes()
+            return count
+
+        def scoping(target, *args, **kwargs):
+            post["u_bloom_strength"] = float(kwargs.get("bloom", 0.0))
+            post["u_hdr_exposure"] = float(kwargs["hdr"]) if kwargs.get("hdr") is not None else None
+            return scope(target, *args, **kwargs)
+
+        def compositing(layer, max_radius, highlight=0.25):
+            post["u_defocus_radius"], post["u_defocus_highlight"] = float(max_radius), float(highlight)
+            return composite(layer, max_radius, highlight)
+
+        def sizing(layer, max_radius):
+            found = read_size(layer, max_radius)
+            post["u_defocus_level"] = int(found[0])
+            return found
+
+        Renderer.render, Renderer._bound, python_eb._Instances.upload = rendering, binding, uploading
+        SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size = scoping, compositing, sizing
+        try:
+            self._host.render(snapshot=frame.snapshot, viewport=tuple(frame.viewport),
+                              logical_size=tuple(frame.logical_size), matrix_values=tuple(frame.matrix_values))
+        finally:
+            Renderer.render, Renderer._bound, python_eb._Instances.upload = render, bound, upload
+            SceneTarget.scope, DefocusLayer.composite, DefocusLayer._read_size = scope, composite, read_size
+        if not renderers or not binds:
+            return {"blocks": {}, "uploads": {}, "values": {}}
+        renderer = renderers[-1]
+        keys = {int(number): key for key, number in renderer._resources._programs.items()
+                if key in python_eb._BLOCKS}
+        names = _eb_pass_names()
+        taken: dict[str, int] = {}
+        blocks: dict[str, bytes] = {}
+        values: dict = {}
+        for program, data, held in binds:
+            key = keys[int(program)]
+            at = taken.get(key, 0)
+            if at >= len(names[key]):
+                raise RuntimeError(f"Extruded Bubble's Python renderer bound {key!r} more than {len(names[key])} times")
+            taken[key] = at + 1
+            pass_name = names[key][at]
+            blocks[pass_name] = data
+            layout = block_layout(key)
+            initial = FULLSCREEN_DEFAULTS if layout is FULLSCREEN_BLOCK else {}
+            for member, kind in layout.fields:
+                value = held.get(member, initial.get(member))
+                if value is None:
+                    count = {"vec2": 2, "vec3": 3, "vec4": 4, "mat3": 9, "mat4": 16}.get(kind, 1)
+                    zero = 0 if kind in ("int", "uint", "bool") else 0.0
+                    value = zero if count == 1 else (zero,) * count
+                name = member_name(key, member)
+                values.setdefault(name, value)                 # unscoped: the program's first pass this frame
+                if len(names[key]) > 1:
+                    values[f"{name}@{pass_name}"] = value      # scoped: this pass's own
+        values.update({name: value for name, value in post.items() if value is not None})
+        streams = {stream: uploads[id(getattr(renderer, attribute))] for attribute, stream in _EB_INSTANCES.items()
+                   if id(getattr(renderer, attribute)) in uploads}
+        return {"blocks": blocks, "uploads": streams, "values": values}
+
+
 MODES: dict[str, LMode] = {
     "spectrum": LMode(
         "spectrum", (f"{_IMPL}.spectrum",), {"Quick Spectrum pass blocks": "spectrum"}, _spectrum_layouts,
@@ -449,6 +594,20 @@ MODES: dict[str, LMode] = {
         streams={"ribbon_knots": ("ribbon_knot_floats", (), ""), "ribbon_cohorts": ("ribbon_cohort_floats", (), ""),
                  "ribbon_bursts": ("ribbon_burst_floats", (), ""), "ribbon_pulse": ("ribbon_pulse_floats", (), "")},
         ulp_field="ribbon_u_mvp", python=lambda d: WaveformPython(d)),
+    # Every drawn pass of the one program (``extruded_bubble_program``): the cube's faces and glints, the shafts and
+    # their blur, the scene's backdrop, specks, glass and near layer. Its drift entries, probe prefilter, capture,
+    # resolve, defocus, bloom and composite are the core's own steps (layer P's pixels); the drift window travels in
+    # the record (its record level) and the Python solver integrates its own copy on its GPU (P's pixels judge both).
+    # Its Python side draws for real (``ExtrudedBubblePython``).
+    "extruded_bubble": LMode(
+        "extruded_bubble", (),
+        {"Extruded Bubble pass blocks (QuickExtrudedBubbleRenderer._bound, by program and bind order)": tuple(
+            name for passes in _eb_pass_names().values() for name in passes)}, _eb_layouts,
+        # The drawn target's pixels, the core's own (the Python renderer sets the shafts' half size and the scene's
+        # bucketed allocation there): placement, proved by P's pixels.
+        positional={"u_target_px": "the core's target pixels: the pass's placement in its target (layer P)"},
+        streams={stream: (f"{stream}_floats", (), "") for stream in _EB_INSTANCES.values()},
+        ulp_field="backdrop_u_time", register=_eb_registered, python=lambda d: ExtrudedBubblePython(d)),
 }
 
 
@@ -715,6 +874,9 @@ class _Item:
     def on_textures_lost(self, _callback) -> None:
         pass
 
+    def geometry_arena(self, name) -> None:              # N5.6 (D3): the stream's arena, told by its schema
+        self.arena = str(name)
+
     def drop_retained_frame(self) -> None:
         pass
 
@@ -887,7 +1049,8 @@ class Comparator:
             else:
                 program = build(mode_fragment_pack(mode), dict(sizes))
             declared, packs = program_json(program["passes"], program["targets"], program["streams"],
-                                           images=program.get("images", ()), unread=program.get("unread", ()))
+                                           program.get("buffers", ()), images=program.get("images", ()),
+                                           unread=program.get("unread", ()))
             table = json.dumps(dict(schema_table_entry(self.schema)))
             cached = self._program_cache[key] = (program, declared, packs, table)
         program, declared, packs, table = cached
@@ -1043,26 +1206,75 @@ def _jsonable(value):
     return value
 
 
+def _record_writes(writer: Any, deliveries: "DeliveryStream") -> None:
+    """Every write ``writer`` (a ``GeometryArenaWriter``) makes is recorded with ``deliveries`` as it is made."""
+    write = writer._write
+
+    def recording(index, number, key, payload):
+        done = write(index, number, key, payload)
+        if done:
+            deliveries.write(index, number, key, payload)
+        return done
+
+    writer._write = recording
+
+
 class DeliveryStream:
     """What the product's route delivered to the native core, input by input (fast-proof part 2 step 4b): the record
     the core holds, the settings, the card and the target sizes, each written when it changes, and whether the native
     side draws. ``deliveries.jsonl`` holds one line per input; ``records.bin`` the records, each stored once per change
-    (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API."""
+    (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API.
 
-    def __init__(self, folder: Path, mode: str, keep: tuple[int, int] | None = None) -> None:
-        """``keep``: only the inputs in ``[start, end)`` are written (a window run), the first with its whole state."""
+    Format 2 (a mode with a geometry arena, Extruded Bubble's drift, N5.6 D3): the header names the arena's layout and
+    its writer's key namespace (``arena``: families, bank bytes, namespace), and a line's ``geometry`` lists the arena
+    writes made for that input's frame before its record (``[family, bank, key words, offset, size]``, the payload at
+    ``offset`` in ``geometry.bin``). A window's first line holds every bank live then."""
+
+    def __init__(self, folder: Path, mode: str, keep: tuple[int, int] | None = None,
+                 arena: dict | None = None) -> None:
+        """``keep``: only the inputs in ``[start, end)`` are written (a window run), the first with its whole state.
+        ``arena``: the geometry arena's layout and writer namespace (format 2; ``write`` records each write)."""
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self._lines = (self.folder / "deliveries.jsonl").open("w", encoding="utf-8")
         self._records = (self.folder / "records.bin").open("wb")
+        self._geometry = (self.folder / "geometry.bin").open("wb") if arena is not None else None
+        self._writes: list[tuple[int, int, tuple, bytes]] = []
+        self._banks: dict[tuple[int, int], tuple[tuple, bytes]] = {}     # every bank's live key and payload
+        self._started = False
         self._last: dict = {}
         self._keep = keep
-        self._lines.write(json.dumps({"mode": mode, "format": 1, "keep": keep}) + "\n")
+        header: dict = {"mode": mode, "format": 1 if arena is None else 2, "keep": keep}
+        if arena is not None:
+            header["arena"] = dict(arena)
+        self._lines.write(json.dumps(header) + "\n")
+
+    def write(self, family: int, bank: int, key: tuple, payload: bytes) -> None:
+        """One arena write of the coming input's frame (``GeometryArenaWriter._write``'s arguments)."""
+        entry = (int(family), int(bank), tuple(int(v) for v in key), bytes(payload))
+        self._writes.append(entry)
+        self._banks[entry[:2]] = entry[2:]
+
+    def _geometry_line(self) -> list:
+        writes, self._writes = self._writes, []
+        if not self._started:
+            self._started = True
+            writes = [(family, bank, key, payload) for (family, bank), (key, payload) in sorted(self._banks.items())]
+        out = []
+        for family, bank, key, payload in writes:
+            out.append([family, bank, list(key), self._geometry.tell(), len(payload)])
+            self._geometry.write(payload)
+        return out
 
     def add(self, index: int, native: dict) -> None:
         if self._keep is not None and not self._keep[0] <= index < self._keep[1]:
+            self._writes = []                    # the banks still follow every write (a window's first line)
             return
         line: dict = {"input": index, "drawn": bool(native["drawn"])}
+        if self._geometry is not None:
+            geometry = self._geometry_line()
+            if geometry:
+                line["geometry"] = geometry
         if native["drawn"]:
             record = native["record"]
             if record is not self._last.get("record_object") and record != self._last.get("record"):
@@ -1075,11 +1287,15 @@ class DeliveryStream:
                 if value != self._last.get(key):
                     line[key] = value
                     self._last[key] = value
+            if native.get("variant") is not None and native["variant"] != self._last.get("variant"):
+                line["variant"] = self._last["variant"] = list(native["variant"])
         self._lines.write(json.dumps(line) + "\n")
 
     def close(self) -> None:
         self._lines.close()
         self._records.close()
+        if self._geometry is not None:
+            self._geometry.close()
 
 
 # --------------------------------------------------------------------------------------------- the mirror
@@ -1241,8 +1457,10 @@ class IdentityMirror:
             self.applied["block"] = self.index
             self.applied["block_member"] = f"{pass_name}.{member}"
         revision = getattr(route._snapshot, "logical_revision", None)
+        variant = getattr(content, "_program_variant", None)
         return {"drawn": True, "record": self._core_record, "settings": settings, "card": card, "blocks": blocks,
-                "sources": sources, "revision": revision, "sizes": sizes}
+                "sources": sources, "revision": revision, "sizes": sizes,
+                "variant": list(variant) if isinstance(variant, (tuple, list)) else variant}
 
     def _python(self) -> dict:
         import dataclasses
@@ -1270,8 +1488,23 @@ class IdentityMirror:
         if not drawn["blocks"]:
             return {"drawn": False}
         del dataclasses
-        return {"drawn": True, "record": self.comparator.schema.encode(snapshot.logical), "logical": snapshot.logical,
+        return {"drawn": True, "record": self._reference_record(snapshot.logical), "logical": snapshot.logical,
                 "revision": snapshot.logical_revision, **drawn}
+
+    def _reference_record(self, logical: Any) -> bytes:
+        """The Python side's record. With a geometry arena (``reference_drift``, Extruded Bubble's), its drift fields
+        are projected by a drift side of its own over the same arena: the route's projector has already taken newer
+        frames than the drawn snapshot's, and a projector's serial never goes back."""
+        drift = getattr(self, "reference_drift", None)
+        if drift is None:
+            return self.comparator.schema.encode(logical)
+        from core.visualizer_engine import extruded_bubble_native_schema as ebs
+
+        saved, ebs.DRIFT = ebs.DRIFT, drift
+        try:
+            return self.comparator.schema.encode(logical)
+        finally:
+            ebs.DRIFT = saved
 
     def close(self) -> None:
         if self.route is not None:
@@ -1363,11 +1596,27 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
             raise ValueError(f"{mode} has the runs {sorted(runs)}, not {run_key!r}")
         settings = runs[run_key]
         mirror.meta["run"] = run_key
-    if deliveries is not None:
-        mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep)
     register = MODES[mode].register
     try:
-        with (register() if register is not None else contextlib.nullcontext()):
+        with contextlib.ExitStack() as stack:
+            arena = None
+            if mode == "extruded_bubble":
+                # The worker's D3 side in process (the run has no worker): the drift families named as the product's
+                # are, each write recorded with the deliveries (format 2) for the native-only player. The Python
+                # side's record projects through a drift side of its own (projection only, no writes).
+                from core.visualizer_engine import extruded_bubble_native_schema as ebs
+
+                mirror.reference_drift = type("ReferenceDrift", (ebs.DriftStream,),
+                                              {"project": ebs.DriftStream.project})()
+                arena = stack.enter_context(parity.in_process_drift_arena())
+            if deliveries is not None:
+                layout = None if arena is None else {"families": list(arena._names), "bank_bytes": arena._bank_bytes,
+                                                     "namespace": arena.namespace}
+                mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep, arena=layout)
+                if arena is not None:
+                    _record_writes(arena, mirror.deliveries)
+            if register is not None:
+                stack.enter_context(register())
             run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
                                            settings=settings, scene_mirror=mirror)
     finally:

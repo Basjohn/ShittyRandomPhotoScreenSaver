@@ -482,6 +482,14 @@ def quick_backend_api() -> str:
     return _owner.backend.api
 
 
+def native_visualizer_route_wanted(backend: str | None = None) -> bool:
+    """Whether the Visualizer draws through the native route on ``backend`` (the process's when None): Vulkan. The
+    scene asks this before it imports the route (``rendering.quick.visualizer.native_route``), so an OpenGL process
+    never imports the native route: a cached Python reference is keyed on what its drawing used, and a native-only
+    edit then never re-keys it (N5.6)."""
+    return str(quick_backend_api() if backend is None else backend) == "vulkan"
+
+
 def native_core() -> Any:
     """The process's native core (``rendering.native.NativeCore``) once the owner loaded it (the Vulkan start, or the
     first hidden host); None before. The Visualizer's native route draws through it (N2.5)."""

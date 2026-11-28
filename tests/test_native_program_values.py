@@ -122,6 +122,15 @@ def test_settings_travel_as_plain_name_to_number_json():
         settings_json({"a": float("nan")})
 
 
+def test_a_negative_zero_travels_as_the_string_the_core_reads_as_one():
+    # N5.6: Qt's JSON parser stores -0.0 as the integer 0, so the sign of a negative-zero setting (Extruded Bubble's
+    # uLightEnd x, uLightTravel) would never reach the core's block; it travels as "-0" (program_blocks.h settingNumber).
+    from rendering.native.program_values import settings_json
+
+    assert json.loads(settings_json({"a": -0.0, "b": (0.0, -0.0, -1.5), "c": 0.0, "d": 0})) == {
+        "a": "-0", "b": [0.0, "-0", -1.5], "c": 0.0, "d": 0}
+
+
 def _qsb():
     from tools import regen_qrc
     import sys
