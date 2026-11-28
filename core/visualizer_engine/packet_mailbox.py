@@ -171,7 +171,7 @@ class PacketMailbox(LatestStateMailbox):
         self._wake_sender = wake_sender
         self._wakes_dropped = 0                      # writer side: wake bytes a full pipe refused (never blocked)
         self._wake_lock = threading.Lock()          # a sender close (``close_wake_sender``) never races a send
-        self._wake_thread: threading.Thread | None = None
+        self._wake_thread: Any = None                # reader side: the wake listener (``listener_threads.ListenerHandle``)
         self._wake_receiver: Any = None
         self._last_taken: LogicalPublication | None = None   # reader side: the newest publication handed out
         self._frame_completion: Callable[[Any], Any] | None = None   # reader side: the owner's frame completion
@@ -488,8 +488,11 @@ class PacketMailbox(LatestStateMailbox):
                 if callback is not None:
                     callback()
 
-        self._wake_thread = threading.Thread(target=listen, name="srpss-visualizer-engine-wake", daemon=True)
-        self._wake_thread.start()
+        # The project's blocking-listener primitive: its own thread for exactly the pipe's life (closing the mailbox
+        # closes the pipe and ends it), never a pool worker or a lane that outlives it.
+        from core.threading.listener_threads import start_listener
+
+        self._wake_thread = start_listener(listen, name="srpss-visualizer-engine-wake", category="visualizer_engine_wake")
 
     def clear(self) -> None:
         with self._lock:
