@@ -15,13 +15,11 @@ logger = get_logger(__name__)
 
 
 def _native_background_wanted() -> bool:
-    """Whether the process's backend draws the background natively (N5.2h: OpenGL and Vulkan). Read once per item."""
+    """Whether the process's backend draws the background natively (N5.2h: OpenGL and Vulkan). Read once per item; it
+    raises where the backend cannot be read (the item then shows the degraded display, never nothing)."""
     from .native_background import native_background_wanted
 
-    try:
-        return native_background_wanted()
-    except Exception:
-        return False
+    return native_background_wanted()
 
 
 class BackgroundRenderItem(QQuickItem):
@@ -42,9 +40,16 @@ class BackgroundRenderItem(QQuickItem):
         # layer, a composite item in this one, made at the first image. This item keeps owning the image, its identity
         # rule and the timing of every change.
         self._native_layer = None
-        self._native_layer_wanted = _native_background_wanted()
         # N5.2h point 5: the degraded display, once the layer cannot be made (no native core on either API).
         self._degraded = False
+        try:
+            self._native_layer_wanted = _native_background_wanted()
+        except Exception:
+            # The backend could not be read: no layer, but the photos still show (never a background that draws nothing).
+            self._native_layer_wanted = False
+            self._degraded = True
+            logger.error("[BACKGROUND][NATIVE] The process's backend could not be read; the degraded display shows the "
+                         "photos", exc_info=True)
         self._degraded_drawn = False             # the degraded node was given a photo (background_drawn)
         # The hitch rows (22 Nov): a GUI-thread warm-up unit (the renderer module's import with its shader text build,
         # then the native layer's own) waits for the next frame the window renders anyway (afterRendering, queued),

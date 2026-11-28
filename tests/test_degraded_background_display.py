@@ -152,6 +152,26 @@ def test_a_layer_that_fails_after_it_was_made_fades_to_the_degraded_display(qt_a
     assert not item.degraded and len(layer.presented) == 5
 
 
+def test_a_backend_that_cannot_be_read_shows_the_degraded_display_not_nothing(qt_app, fresh_owner, monkeypatch, caplog):
+    """Audit low: `_native_background_wanted()` raising used to mean "not wanted": no layer and no degraded node, so the
+    photos drew nothing. Control: a backend that reads (not wanted) leaves the item plain."""
+    from rendering.quick.render import background_item
+    from rendering.quick.render.background_item import BackgroundRenderItem
+
+    def unreadable():
+        raise RuntimeError("the backend could not be read")
+
+    monkeypatch.setattr(background_item, "_native_background_wanted", unreadable)
+    with caplog.at_level(logging.ERROR):
+        item = BackgroundRenderItem()
+    assert item.degraded and item.native_layer is None
+    item.set_presentation_image(_image("a", 40))
+    assert item.degraded and item.native_layer is None and any("could not be read" in r.getMessage()
+                                                               for r in caplog.records)
+    monkeypatch.setattr(background_item, "_native_background_wanted", lambda: False)
+    assert not BackgroundRenderItem().degraded           # control
+
+
 def test_the_degraded_node_goes_at_the_layers_recovery_edge_not_at_the_next_photo(qt_app, fresh_owner, monkeypatch):
     """Audit low: the degraded flag cleared as soon as the layer drew again (the start of its fade-in), and the node
     lingered until a photo arrived. It goes at the layer's own recovery edge (its fade ended), with an update."""
