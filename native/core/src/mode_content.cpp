@@ -6526,7 +6526,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         adoptMultisampleSamplerState(rhi, p.bindings.get());
     }
     if (!pass.ownVertex()) {
-        cb->setGraphicsPipeline(p.pipeline.get());
+        setGraphicsPipelineAdopting(cb, p.pipeline.get());
         setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
         cb->setShaderResources(nullptr, count, offsets);
         cb->setVertexInput(0, 1, &triangle);
@@ -6534,7 +6534,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         return;
     }
     const bool clockwise = pass.frontSelector.kind == DrawCount::Kind::Named && resolveCount(pass.frontSelector, 0) == 1;
-    cb->setGraphicsPipeline(clockwise && p.pipelineCw ? p.pipelineCw.get() : p.pipeline.get());
+    setGraphicsPipelineAdopting(cb, clockwise && p.pipelineCw ? p.pipelineCw.get() : p.pipeline.get());
     setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
     const ModeMeshes::Gpu *mesh = p.meshBinding ? m_meshes.find(pass.mesh) : nullptr;
     const ModeStreams::Stream *instanceStream = p.instanceBinding ? m_streams.find(pass.instanceFrom) : nullptr;
@@ -7039,7 +7039,7 @@ void ModeContent::recordCompute(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
         *open = true;
         countComputePass();
     }
-    cb->setComputePipeline(p.computePipeline.get());
+    setComputePipelineAdopting(cb, p.computePipeline.get());
     if (pass.block.valid()) {
         const QRhiCommandBuffer::DynamicOffset offset { pass.block.binding(), p.blockOffset };
         cb->setShaderResources(nullptr, 1, &offset);
@@ -7714,7 +7714,7 @@ void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
         countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target, textures)));
     cb->beginPass(onto->renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, nullptr, m_post.defocusPassFlags());
     if (!cleared[pass.target]) {
-        cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
+        setGraphicsPipelineAdopting(cb, r.targetClears[pass.target].pipeline.get());
         setViewportAndScissor(cb, QRect(QPoint(), onto->allocation));
         const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[pass.target].offset };
         cb->setShaderResources(nullptr, 1, &clearOffset);
@@ -7832,7 +7832,7 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
             continue;
         cb->beginPass(t.nearestTarget[s].get(), QColor(255, 0, 0, 255), { 1.0f, 0 });
         adoptMultisampleSamplerState(n.pipeline->rhi(), n.bindings.get()); // the multisampled source: OpenGL only
-        cb->setGraphicsPipeline(n.pipeline.get());
+        setGraphicsPipelineAdopting(cb, n.pipeline.get());
         setViewportAndScissor(cb, whole);
         const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, n.offset }, { kConventionsBinding, r.conventionsOffset } };
         cb->setShaderResources(nullptr, 2, offsets); // N3.2: the arena
@@ -7907,7 +7907,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             primeForLoad(rhi, cb, captured, 2); // no list per capture (audit 2, M5)
             cb->beginPass(t.captureTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
-            cb->setGraphicsPipeline(r.passes[i].pipeline.get());
+            setGraphicsPipelineAdopting(cb, r.passes[i].pipeline.get());
             setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
             const QRhiCommandBuffer::DynamicOffset captureOffsets[2] = { { 0, r.passes[i].blockOffset },
                                                                          { kConventionsBinding, r.conventionsOffset } };
@@ -7983,7 +7983,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 g_surfacePassClears.fetchAndAddRelaxed(1);
                 surfaceOpened = true;
             } else if (!surfaceOpened) {
-                cb->setGraphicsPipeline(r.clearPipeline.get());
+                setGraphicsPipelineAdopting(cb, r.clearPipeline.get());
                 setViewportAndScissor(cb, surfaceViewport);
                 cb->setShaderResources();
                 cb->setVertexInput(0, 1, &cardInput);
@@ -8046,7 +8046,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 g_scenePassClears.fetchAndAddRelaxed(1);
             } else if (!cleared[runTarget]) {
                 g_sceneDrawClears.fetchAndAddRelaxed(1);
-                cb->setGraphicsPipeline(r.targetClears[runTarget].pipeline.get());
+                setGraphicsPipelineAdopting(cb, r.targetClears[runTarget].pipeline.get());
                 setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
                 const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[runTarget].offset };
                 cb->setShaderResources(nullptr, 1, &clearOffset); // N3.2: the arena
@@ -8106,7 +8106,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         if (clearingTarget) {
             g_surfacePassClears.fetchAndAddRelaxed(1);
         } else {
-            cb->setGraphicsPipeline(r.clearPipeline.get());
+            setGraphicsPipelineAdopting(cb, r.clearPipeline.get());
             setViewportAndScissor(cb, surfaceViewport);
             cb->setShaderResources();
             cb->setVertexInput(0, 1, &cardInput);
