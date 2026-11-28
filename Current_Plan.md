@@ -923,6 +923,13 @@ the feature (D3D11 is not stated).
     that full draw before starting them. Drift direction 0 and 2–7, collision scope 0 and 2, and audio block
     sizes 0, 2 and 3 need coverage windows for their record/settings changes.
   - [ ] **P, T and C, then register.** Follow the [proof guide](Docs/Guides/Native_Parity_And_Timing_Proof.md).
+    - Lead, 28 Nov: the rest of the rule (a) failure came from the harness comparing the 4x scene against Python's
+      single-sampled one (`19d5525ea`), plus the defocus gather mirroring its taps for EB's bottom-up near layer
+      (`89c3ceca8`, C++, building). Input 0's undrawn native first frame (252k px, max 211) is **not excluded**: find
+      and fix the cause (a first frame must fade in, never be missing). Side defects to fix in this box: the
+      in-process (no worker) drift arena gap; lens shift hardcoded to (0,0) (make it settable so the odd-target
+      bullet can test it); the core's missing guard against a pass mixing blended and unblended attachments (C++,
+      refuse with a named error).
     - [ ] First (lead, 28 Nov): the Python reference key. `python_references._source_files` hashes the whole
       `rendering/quick/visualizer` package, so a native-only edit (`native_route.py`, `8c0cbad9c`) re-keys every mode's
       references, and N5.6's 18 references sit at three producer revisions (12 `23f88094`, 5 `eb776f4d`, 1 `9d34c13b`).
@@ -1652,6 +1659,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       agent confirms it offscreen meanwhile). OpenGL's background (presenter, backdrop, all 28 transitions) goes native, as Vulkan already
       does; one route per API, no Python fallback in the product (point 5's degraded display only). The product
       changes per the caller list.
+      Side defect (found by N5.6, 28 Nov; product-relevant now that OpenGL is native): Qt's OpenGL backend sets
+      sampler parameters on multisampled textures and logs GL_INVALID_ENUM every frame. Find which core texture or
+      sampler pairing triggers it (a multisample texture bound through a sampler, or a QRhiSampler on a
+      `QRhiTexture::sampleCount > 1`), fix it in the core (C++), and test that a validation-on OpenGL frame logs
+      no GL errors.
     - [ ] The native backdrop against the blit on the same frames (the D7 pyramid's input): pixels or a named bound.
     - [ ] Cache the Python references (point 1) and retarget the four checks to the cache; native capture for the two
       media tools (point 2: scratch capture only, no asset rerender); the `TransitionCapture` → `OffscreenRenderTarget` move
