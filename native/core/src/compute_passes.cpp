@@ -397,6 +397,7 @@ QAtomicInteger<qint64> g_geometryUploads { 0 };
 QAtomicInteger<qint64> g_geometryFailed { 0 };
 QAtomicInteger<qint64> g_geometryReleased { 0 };
 QAtomicInteger<qint64> g_geometryWaits { 0 };
+QAtomicInteger<qint64> g_geometryHolds { 0 };          // ABI 46 (N5.6)
 QAtomicInteger<qint64> g_checkReadbacks { 0 };      // ABI 42 (N5.6)
 QAtomicInteger<qint64> g_checkReadbackBytes { 0 };
 QAtomicInteger<qint64> g_checkReports { 0 };
@@ -410,6 +411,7 @@ ComputeCounts computeCounts()
     c.geometryFailed = g_geometryFailed.loadRelaxed();
     c.geometryReleased = g_geometryReleased.loadRelaxed();
     c.geometryWaits = g_geometryWaits.loadRelaxed();
+    c.geometryHolds = g_geometryHolds.loadRelaxed();
     c.checkReadbacks = g_checkReadbacks.loadRelaxed();
     c.checkReadbackBytes = g_checkReadbackBytes.loadRelaxed();
     c.checkReports = g_checkReports.loadRelaxed();
@@ -432,6 +434,7 @@ ComputeCounts computeCounts()
 void countDispatch() { g_dispatches.fetchAndAddRelaxed(1); }
 void countComputePass() { g_computePasses.fetchAndAddRelaxed(1); }
 void countSkipped() { g_skipped.fetchAndAddRelaxed(1); }
+void countGeometryHold() { g_geometryHolds.fetchAndAddRelaxed(1); }
 void countStateLost() { g_statesLost.fetchAndAddRelaxed(1); }
 void countCheckReadback(quint32 bytes)
 {
@@ -631,6 +634,15 @@ int ModeStorage::geometryResidencies() const
     for (const GeometrySlot *slot : m_geometry)
         n += (slot->current ? 1 : 0) + (slot->previous ? 1 : 0);
     return n + int(m_geometryRetiring.size());
+}
+
+bool ModeStorage::geometryResident(const QByteArray &name, const GeometryKey &key) const
+{
+    for (const GeometrySlot *slot : m_geometry) {
+        if (slot->name == name)
+            return slot->current != nullptr && slot->currentKey == key;
+    }
+    return true;                              // not a geometry buffer: nothing to wait for
 }
 
 bool ModeStorage::syncGeometry(QRhi *rhi, QRhiResourceUpdateBatch *updates, const GeometryArena *arena,

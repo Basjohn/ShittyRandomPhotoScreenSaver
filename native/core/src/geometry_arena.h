@@ -14,7 +14,9 @@
 //
 // Layout (little-endian, every offset fixed; rendering/native's writer is its Python twin):
 //   arena header, 64 bytes: u32 magic 'SRGA', u32 version 1, u32 families, u32 banks (2), u64 bank bytes (a bank's
-//   payload capacity), u32 header bytes (64), u32 bank header bytes (64), 32 bytes reserved;
+//   payload capacity), u32 header bytes (64), u32 bank header bytes (64), u64 the writer's key namespace (ABI 46:
+//   core/visualizer_engine/geometry_arena.py's writer stamps it for the owner's projection; this reader ignores it),
+//   24 bytes reserved;
 //   then for family f, bank b (offset geometryBankOffset): a 64-byte bank header (u32 sequence, u32 payload bytes, the
 //   key: u64 namespace, u32 engine, u32 activation, u32 family, u32 capacity, u64 revision; 24 bytes reserved) and
 //   `bank bytes` of payload.

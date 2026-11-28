@@ -45,6 +45,10 @@ def _plain(value: Any) -> Any:
     if isinstance(value, (int, float)):
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f"a setting is not finite: {value!r}")
+        if isinstance(value, float) and value == 0.0 and math.copysign(1.0, value) < 0.0:
+            # Qt's JSON parser stores -0.0 as the integer 0: the core reads "-0" as negative zero (program_blocks.h
+            # settingNumber), so the sign reaches the block as the Python renderer packs it (N5.6).
+            return "-0"
         return value
     if isinstance(value, (tuple, list)):
         return [_plain(item) for item in value]

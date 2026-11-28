@@ -1247,6 +1247,9 @@ class _ModeContent:
                 images = program.get("images", ())
                 if images:
                     unread["images"] = images
+                if program.get("buffers"):
+                    # The storage and geometry buffers its compute entries write (N5.6, Extruded Bubble's drift).
+                    unread["buffers"] = program["buffers"]
                 self._resources_for(mode_id, snapshot)
                 self.item.program(program["passes"], values, targets=program["targets"],
                                   streams=program["streams"], **unread)

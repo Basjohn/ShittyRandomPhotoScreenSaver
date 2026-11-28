@@ -245,21 +245,39 @@ bool BlockValues::set(const QByteArray &name, const double *values, int count, Q
     return false;
 }
 
+bool settingNumber(const QJsonValue &value, double *out)
+{
+    if (value.isDouble()) {
+        *out = value.toDouble();
+        return true;
+    }
+    if (value.isBool()) {
+        *out = value.toBool() ? 1.0 : 0.0;
+        return true;
+    }
+    if (value.isString() && value.toString() == QLatin1String("-0")) {
+        *out = -0.0;
+        return true;
+    }
+    return false;
+}
+
 bool BlockValues::setJson(const QJsonObject &values, QString *error)
 {
     BlockValues staged = *this;
     for (auto it = values.begin(); it != values.end(); ++it) {
         QList<double> numbers;
-        if (it.value().isDouble() || it.value().isBool()) {
-            numbers.append(it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
+        double number = 0.0;
+        if (settingNumber(it.value(), &number)) {
+            numbers.append(number);
         } else if (it.value().isArray()) {
             for (const QJsonValue &item : it.value().toArray()) {
-                if (!item.isDouble() && !item.isBool()) {
+                // A boolean inside a list is 0 or 1, as a boolean scalar is (audit 14 Nov, L2).
+                if (!settingNumber(item, &number)) {
                     *error = QStringLiteral("'%1' holds a value that is not a number").arg(it.key());
                     return false;
                 }
-                // A boolean inside a list is 0 or 1, as a boolean scalar is (audit 14 Nov, L2).
-                numbers.append(item.isBool() ? (item.toBool() ? 1.0 : 0.0) : item.toDouble());
+                numbers.append(number);
             }
         } else {
             *error = QStringLiteral("'%1' is not a number or a list of numbers").arg(it.key());

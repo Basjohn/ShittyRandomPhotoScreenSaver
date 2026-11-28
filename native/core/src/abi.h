@@ -266,4 +266,13 @@
 // The existing limit of 8 storage bindings per compute entry still applies. Earlier programs remain valid.
 // 45 (N5.6): reflected column-major mat3 members, including arrays, take nine numbers per matrix in settings and
 // f64 record fields. Columns use the qsb matrix stride.
-#define SRPSS_NATIVE_CORE_ABI 45
+// 46 (N5.6, Extruded Bubble's record and route; reserved by the lead, 27 Nov): a compute entry binding a geometry
+// buffer is dispatched only at a record whose key for it is resident (ModeContent::geometryKeysResident); a held entry
+// keeps its trigger, so u_srpss_compute's last-dispatch value names the last step it applied and the next record
+// dispatches the window's suffix after it; composite_live's compute_geometry_holds. Backward compatible for every
+// earlier program (an entry binding no geometry buffer is never held).
+// 47 (N5.6, Extruded Bubble's program; awaiting the lead's reservation): a pass between a transparency target's first
+// pass and its resolve may sample the owner's capture (<owner>.capture_colour / capture_depth: its own texture, copied
+// before the first pass, which no capture of the owner follows there); the owner's attachments stay refused. Backward
+// compatible for every earlier program (it only admits more).
+#define SRPSS_NATIVE_CORE_ABI 47

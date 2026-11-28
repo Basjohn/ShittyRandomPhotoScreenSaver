@@ -243,8 +243,16 @@ class ModeTarget:
     #: ABI 33 (N5.4): ``"exact"``: allocated at the content's exact size (no bucket: the coarse levels and the 1x1 mean
     #: hold the content alone, Python's reflection target's), ``"bucket"``: D14 point 2's 64 px buckets.
     allocation: str = "bucket"
+    #: ABI 42 (N5.6, the scene probe): a cube target (an explicit square size, one RGBA16F attachment, one sample, the
+    #: exact allocation, a D32F depth its faces share when ``depth``): each face drawn by passes declaring their
+    #: ``face``, then one :class:`PrefilterStep` makes its levels before any pass samples it.
+    cube: bool = False
 
     def __post_init__(self) -> None:
+        if self.cube and (self.size is None or int(self.size[0]) != int(self.size[1]) or len(self.colour) != 1
+                          or self.colour[0].format != "rgba16f" or int(self.samples) != 1 or self.mips
+                          or self.previous_frame or self.allocation != "exact"):
+            raise ValueError("a cube target is square, one rgba16f attachment, one sample, exact, without mips")
         if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
             raise ValueError(f"a target has 1 to {MAX_TARGET_COLOUR} colour attachments")
         if not 1 <= int(self.samples) <= MAX_TARGET_SAMPLES:
@@ -268,6 +276,8 @@ class ModeTarget:
             entry["mips"] = True
         if self.allocation != "bucket":
             entry["allocation"] = self.allocation
+        if self.cube:
+            entry["cube"] = True
         return entry
 
 
@@ -491,9 +501,17 @@ class ModePass:
     #: ABI 37 (N4.i): ``"allocation"`` draws the core's triangle over the scene target's whole allocation (Python's
     #: post passes over its SceneTarget's allocation: the trails' edges); ``"content"`` (the default) its content.
     viewport: str = "content"
+    #: ABI 42 (N5.6): the cube face (0..5, OpenGL's order) a pass into a cube target draws (None for any other pass);
+    #: such a pass draws unculled over its content viewport.
+    face: int | None = None
+    #: ABI 42 (N5.6): a record u32 scalar; at a record where it is 0 the pass draws nothing (Python's ``if count:``).
+    when: str | None = None
 
     def __post_init__(self) -> None:
         _blend_declaration(self.blend)
+        if self.face is not None and not (0 <= int(self.face) < CUBE_FACES and self.viewport == "content"
+                                          and (self.geometry is None or self.geometry.cull == "none")):
+            raise ValueError(f"a cube face is 0 to {CUBE_FACES - 1}, drawn unculled over the content viewport")
         if self.depth_test is not None and self.depth_test not in DEPTH_TESTS:
             raise ValueError(f"unknown depth test {self.depth_test!r} (the tests are {', '.join(DEPTH_TESTS)})")
         if self.viewport not in PASS_VIEWPORTS:
@@ -521,7 +539,27 @@ class ModePass:
             entry["depth"] = {"test": self.depth_test, "write": bool(self.depth_write)}
         if self.viewport != "content":
             entry["viewport"] = self.viewport
+        if self.face is not None:
+            entry["face"] = int(self.face)
+        if self.when is not None:
+            entry["when"] = self.when
         return entry
+
+
+#: ABI 42 (N5.6): a cube target's faces.
+CUBE_FACES = 6
+
+
+@dataclass(frozen=True)
+class PrefilterStep:
+    """ABI 42 (N5.6): the cube target ``cube``'s levels made from what its faces hold (``probe.py``'s 32-tap cone filter
+    per level and face); it follows every pass drawing a face and precedes every pass sampling the cube. No pack."""
+
+    name: str
+    cube: str
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "prefilter": self.cube}
 
 
 #: N3.3 (D16): a compute binding's access and resource kinds, a storage image's formats and dimensions.
@@ -529,7 +567,8 @@ STORAGE_ACCESS = ("read", "write", "read_write")
 #: A compute entry's named triggers (any other trigger is a record u32 field's name). ABI 37 (N4.i): ``"draw"``,
 #: every record that draws the program's passes (a derived kernel of what the record drew: the motion blur's tile
 #: max); the one trigger a still (the background layer's scene transitions) admits.
-COMPUTE_TRIGGERS = ("frame", "draw")
+#: ABI 42 (N5.6): ``"once"``, the entry's first record with its storage and never again (a check, with ``readback``).
+COMPUTE_TRIGGERS = ("frame", "draw", "once")
 COMPUTE_RESOURCES = ("buffer", "image", "stream", "mesh")
 STORAGE_IMAGE_FORMATS = ("rgba8", "rgba16f", "rgba32f", "r16f", "r32f")
 MAX_STORAGE_BUFFERS = 16              # ABI 44 (N5.6): declarations across the program
@@ -564,6 +603,29 @@ class StorageBuffer:
         if self.layout is not None:
             entry["layout"] = self.layout.declaration()
         return entry
+
+
+#: ABI 42 (D3): the geometry families a program's geometry buffers name.
+GEOMETRY_FAMILIES = 8
+
+
+@dataclass(frozen=True)
+class GeometryBuffer:
+    """ABI 42 (D3, ``geometry_arena.h``): a read-only storage buffer holding the bytes the activation's geometry arena
+    holds under the key in the record's u32 array field ``key`` (8 words) for family ``family``, uploaded once per key;
+    a compute entry may bind ``"<name>@previous"`` (the key the current one replaces). ABI 46: an entry whose key is
+    not resident is held, its trigger kept."""
+
+    name: str
+    family: int
+    key: str
+
+    def __post_init__(self) -> None:
+        if not 0 <= int(self.family) < GEOMETRY_FAMILIES:
+            raise ValueError(f"a geometry family is 0 to {GEOMETRY_FAMILIES - 1}")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "geometry": {"family": int(self.family), "key": self.key}}
 
 
 @dataclass(frozen=True)
@@ -625,8 +687,13 @@ class ComputePass:
     over: str | None = None
     trigger: str = "frame"
     samplers: tuple[PassSampler, ...] = ()
+    #: ABI 42 (N5.6): a ``"once"`` entry's results buffer (one a program, at most 4096 bytes), read once after its
+    #: dispatch and reported once (the content's state ``"check"``).
+    readback: str | None = None
 
     def __post_init__(self) -> None:
+        if self.readback is not None and self.trigger != "once":
+            raise ValueError("a readback is a \"once\" entry's (a check)")
         if (self.groups is None) == (self.over is None):
             raise ValueError("a compute entry's groups are three counts or `over` a resource, one of the two")
         if self.groups is not None and len(self.groups) != 3:
@@ -642,6 +709,8 @@ class ComputePass:
                                  "bindings": [b.declaration() for b in self.bindings]}
         if self.samplers:
             entry["samplers"] = [s.declaration() for s in self.samplers]
+        if self.readback is not None:
+            entry["readback"] = self.readback
         return entry
 
 
@@ -765,9 +834,14 @@ class DefocusStep:
     name: str
     layer: str
     onto: str
+    #: ABI 42 (N5.6): a record u32 scalar; at 0 the step makes none of its passes (Python's layer left undrawn).
+    when: str | None = None
 
     def declaration(self) -> dict:
-        return {"name": self.name, "defocus": self.layer, "onto": self.onto}
+        entry: dict[str, Any] = {"name": self.name, "defocus": self.layer, "onto": self.onto}
+        if self.when is not None:
+            entry["when"] = self.when
+        return entry
 
 
 #: N5.2c (N4.j): the most environment steps a program takes, and the most texels a side.
@@ -795,11 +869,11 @@ class EnvironmentStep:
         return {"name": self.name, "environment": self.source, "size": [int(self.size[0]), int(self.size[1])]}
 
 
-_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep, EnvironmentStep)
+_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep, EnvironmentStep, PrefilterStep)
 
 
 def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
-                 streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer] = (),
+                 streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer | GeometryBuffer] = (),
                  images: Sequence[StorageImage] = (), *, unread: Sequence[str] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
     ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
@@ -881,6 +955,16 @@ class NativeMode:
         table = schema if isinstance(schema, Mapping) else schema_table_entry(schema)
         self._module.composite_mode_bind(self._handle(), str(mapping_name), json.dumps(dict(table)),
                                          reader_config(expect, tuple(controls)))
+        # N5.6 (D3): a schema whose stream carries side mappings (Extruded Bubble's geometry arena) is told which item
+        # draws which stream, so it can name the stream's arena to the core (``geometry_arena``).
+        bound = getattr(schema, "bound", None)
+        if callable(bound):
+            bound(self, dict(expect or {}))
+
+    def geometry_arena(self, name: str) -> None:
+        """ABI 42 (D3): the stream's geometry arena by mapping name (the main process's ``GeometryArenaOwner``), opened
+        read-only by the core once per name; "" closes it."""
+        self._module.composite_mode_geometry_arena(self._handle(), str(name))
 
     def unbind(self) -> None:
         self._module.composite_mode_unbind(self._handle())

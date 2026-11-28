@@ -173,6 +173,9 @@ struct ComputeCounts
     qint64 geometryFailed = 0;
     qint64 geometryReleased = 0;
     qint64 geometryWaits = 0;
+    // ABI 46 (N5.6, D3): compute entries held at a record because a geometry buffer they bind had no resident key for
+    // it (the arena had not given the record's key yet); the entry's trigger is kept, so a later record dispatches it.
+    qint64 geometryHolds = 0;
     // ABI 42 (N5.6): a check entry's one-shot readbacks started, their bytes, and the results reported (each once).
     qint64 checkReadbacks = 0;
     qint64 checkReadbackBytes = 0;
@@ -182,6 +185,7 @@ ComputeCounts computeCounts();
 void countDispatch();
 void countComputePass();
 void countSkipped();
+void countGeometryHold();     // ABI 46 (N5.6)
 void countStateLost();
 void countCheckReadback(quint32 bytes);
 void countCheckReport();
@@ -339,6 +343,9 @@ public:
     // release).
     void releaseGeometry();
     int geometryResidencies() const;
+    // ABI 46 (N5.6, D3): whether geometry buffer `name`'s current residency is `key` (a compute entry binding it is
+    // dispatched only then; a buffer that is not a geometry buffer is always "resident").
+    bool geometryResident(const QByteArray &name, const GeometryKey &key) const;
 
 private:
     struct GeometrySlot
