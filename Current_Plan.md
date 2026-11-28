@@ -89,7 +89,9 @@ Continue the native sequence below with the repaired timing receipts. The report
     First agent (Opus Medium `a57f8463d6a354e23`, 211k context) retired from use; built on GitHub from `b483770b`
     (module in that worktree's `release/native_module/`). Successor **Opus Medium `a0c4a0b53ffc18f96`** (28 Nov),
     worktree `.claude/worktrees/agent-a0c4a0b53ffc18f96`, branch `worktree-agent-a0c4a0b53ffc18f96` (merges the first
-    branch). Retire the first worktree only after the successor's merge.
+    branch) retired from use at 211k; its branch holds `ff29e64ee` (built, module in its `release/native_module/`) and
+    `d5e9371ab`. Third agent **Opus `ab7f236afc86eb6b2`** (28 Nov), worktree `.claude/worktrees/agent-ab7f236afc86eb6b2`,
+    branch `worktree-agent-ab7f236afc86eb6b2` (merges the second). Retire the earlier worktrees only after the merge.
   - Qt 6.12.1 wheels: all four still 404 on PyPI (checked 27 Nov, this session).
 
   All six retained worktrees are clean, detached and merged into main:
@@ -1545,6 +1547,14 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
       (GPU timestamps per pass: scene, motion-blur taps, trails, resolve, 4x) for `crumble_both_4x` and
       `glass_shatter_both_4x` against Python's same work on the same frames; name every share over 0.02 ms with its
       owner and a negative control; fix at the owner. Any C++ change: "ready for build".
+      28 Nov (`ff29e64ee` per-pass timing built; `d5e9371ab` fix, Python; evidence `n5_2h/20261128_n52h_scene_passes_*`,
+      `20261128_n52h_route_ghosts_first/`): share 1 named and fixed. The ghost passes split the 4x scene target into
+      two runs, each paying the multisampled resolves (0.505 ms OpenGL / 0.230 Vulkan at 4K); owner the pass order in
+      `scene_program`, now ghosts first, one run (`scene_target_runs` test with its control). `crumble_both_4x` 4K
+      OpenGL 1.383 -> 1.109, Vulkan 1.058 -> 0.844; `glass_shatter_both_4x` 1.483 -> 1.204 / 1.143 -> 0.976.
+      Open: about 0.42 ms at 4K OpenGL inside the single scene run (0.875 against about 0.45 for Python's stages,
+      an estimate from the bare-FBO stamps). Suspects: QRhi's end-of-pass resolves and the kept clearing draws on the
+      4x R16F attachments; split them with a C++ bracket ("ready for build"), and time Python's same span directly.
     - [x] The composite pass: decided, not built (lead, 28 Nov). D5.2 stands: the core's output reaches the window as a
       texture, never as a draw inside Qt's pass (QRhi cannot record into the window before Qt's pass, which clears it,
       so a direct route would need an underlay or render node). The composite, Qt drawing the kept surface, is the
