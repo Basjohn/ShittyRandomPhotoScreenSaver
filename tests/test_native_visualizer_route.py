@@ -44,9 +44,12 @@ def _identity(mode_id: str):
 
 @pytest.mark.parametrize("backend,wanted", (("vulkan", True), ("opengl", False)))
 def test_the_route_is_the_vulkan_backends_only(backend, wanted):
+    from rendering.quick import bootstrap
     from rendering.quick.visualizer import native_route
 
     assert native_route.native_route_wanted(backend) is wanted
+    # The scene asks the bootstrap's owner before importing the route (an OpenGL scene never loads it, N5.6).
+    assert bootstrap.native_visualizer_route_wanted(backend) is wanted
     attached: list = []
     item = SimpleNamespace(attach_native_route=attached.append)
     if not wanted:

@@ -551,7 +551,7 @@ def shape_program(packs: dict, layer_packs: dict, *, extra_pass: bool = False, e
     passes added, ABI 42 raised the limit past the shape), 9 storage images (10 with
     ``extra_image``), 4 targets. ``layer_packs`` are N3.4's transparent layer packs (``post_stages``: ``eb_layer1`` and
     its sorted pack), drawn on the transparency target as Waveform's ribbon body."""
-    from rendering.native.mode import (MAX_PASSES, BloomStep, ComputeBinding, ComputePass, CompositeStep, ModePass,
+    from rendering.native.mode import (MAX_PASSES, BlendState, BloomStep, ComputeBinding, ComputePass, CompositeStep, ModePass,
                                        ModeTarget,
                                        PassOutput, PassSampler, StorageImage, TargetAttachment, TransparencyResolve,
                                        TransparencyTarget)
@@ -573,7 +573,8 @@ def shape_program(packs: dict, layer_packs: dict, *, extra_pass: bool = False, e
     for name in SHAPE_REFLECTION_DRAWS:
         passes.append(ModePass(name, packs["shape_out1"], "additive", target="reflection"))
     passes.append(ModePass("prepass", packs["shape_out1"], "replace", target="prepass"))
-    two = (PassOutput(True, "replace"), PassOutput(True, "additive"))
+    # ABI 47 (R-256): a replace beside a blend is an enabled ONE, ZERO blend (the core refuses a mixed pass).
+    two = (PassOutput(True, BlendState(("add", "one", "zero"), ("add", "one", "zero"))), PassOutput(True, "additive"))
     for name in SHAPE_SCENE_DRAWS:
         if name == "floor":
             passes.append(ModePass(name, packs["shape_reads"], "replace", target="scene", outputs=two,

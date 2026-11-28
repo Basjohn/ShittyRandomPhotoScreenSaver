@@ -18,7 +18,8 @@ its hash. Then:
   frame listed (no tolerance).
 
 The modes: the generic modes the harnesses place (``MODES``: Spline Curve, Bubble, the Oscilloscope, whose Glow chooses
-its program: ``oscilloscope_check.configure_from_settings``). Spectrum's hand-written item has its
+its program: ``oscilloscope_check.configure_from_settings``; Extruded Bubble, whose delivery stream is format 2: its
+variant and its drift arena's writes, replayed through ``eb_stream_check.Arena``). Spectrum's hand-written item has its
 own placement (``spectrum_check.py``) and is not played yet. Hidden only, no window is shown.
 """
 from __future__ import annotations
@@ -44,7 +45,7 @@ from tools import artifact_paths, evidence_media  # noqa: E402
 APIS = ("opengl", "vulkan")
 #: mode id -> the generic mode harness module whose ``Scene``, ``Stream`` and ``program_item`` place its item.
 MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check", "oscilloscope": "oscilloscope_check",
-         "waveform_ribbon": "waveform_check"}
+         "waveform_ribbon": "waveform_check", "extruded_bubble": "eb_stream_check"}
 CHILD_TIMEOUT_S = 7200
 #: The method proof's shader controls (guide section 7: the selected windows must catch a one-ulp shader change):
 #: mode -> name -> (shader file, the line, its replacement). ``ulp_ring``: every bubble outline's coverage one float
@@ -70,7 +71,7 @@ def _harness(mode: str):
 
     module = importlib.import_module(MODES[mode])
     base = getattr(module, "base", module)
-    if mode in ("bubble", "oscilloscope", "waveform_ribbon"):
+    if mode in ("bubble", "oscilloscope", "waveform_ribbon", "extruded_bubble"):
         base.use_mode(SLOT_BYTES=module._slot_bytes())
     return module, base
 
@@ -160,40 +161,50 @@ def child(args) -> dict:
     frames_dir.mkdir(parents=True, exist_ok=True)
     frames_file = (frames_dir / f"frames_{api}.bin").open("wb")
     index_rows: list = []
-    scene = stream = None
+    scene = stream = arena = None
     drawn_count = 0
     started = time.perf_counter()
     try:
+        if header.get("arena"):
+            # Format 2 (N5.6 D3): the drift geometry's arena, each input's recorded writes made before its record.
+            arena = module.Arena(header["arena"], Path(args.deliveries) / "geometry.bin")
         records = records_path.open("rb")
-        settings = card = sizes = current = None
-        dpr = None
+        settings = card = sizes = current = variant = None
+        dpr = placed_variant = None
         for line in inputs:
-            for key in ("settings", "card", "sizes"):
+            for key in ("settings", "card", "sizes", "variant"):
                 if key in line:
                     if key == "settings":
                         settings = line[key]
                     elif key == "card":
                         card = line[key]
+                    elif key == "variant":
+                        variant = line[key]
                     else:
                         sizes = line[key]
             if "record" in line:
                 offset, size = line["record"]
                 records.seek(offset)
                 current = records.read(size)
+            if arena is not None and line.get("geometry"):
+                arena.apply(line["geometry"])             # every input's, drawn or not: the banks follow the take
             row = {"input": line["input"], "drawn": False}
             if allowed is not None and line["input"] not in allowed:
                 row["skipped"] = True                     # outside every window: state kept, nothing drawn
             elif line["drawn"] and current is not None:
-                if scene is None or float(card["dpr"]) != dpr:
+                fresh = scene is None or float(card["dpr"]) != dpr or variant != placed_variant
+                if fresh:
                     if scene is not None:
                         scene.close(app)
                         stream.close()
-                    dpr = float(card["dpr"])
+                    dpr, placed_variant = float(card["dpr"]), variant
                     host.set_device_pixel_ratio(dpr)
                     scene = base.Scene(core, engine, host)
                     stream = base.Stream()
-                entry = {"card": card, "shown": card, "settings": settings, "sizes": sizes or {}}
+                entry = {"card": card, "shown": card, "settings": settings, "sizes": sizes or {}, "variant": variant}
                 placed = scene.place(entry, dpr, stream)
+                if fresh and arena is not None:
+                    scene.mode.geometry_arena(arena.name)  # after the bind, as the route's DriftStream tells it
                 published = current
                 if args.control and api == "vulkan":
                     published = module.control_record(current)        # the mode's own record control
@@ -217,6 +228,9 @@ def child(args) -> dict:
             scene.close(app)
         if stream is not None:
             stream.close()
+        if arena is not None:
+            record["arena_writes"] = arena.writes
+            arena.close()
         host.frames(2)
         host.close()
     (work / f"index_{api}.json").write_text(json.dumps(index_rows), encoding="utf-8")

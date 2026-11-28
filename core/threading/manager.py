@@ -26,6 +26,7 @@ from core.logging.tags import (
     LOG_SIDECAR_ONLY_FIELD,
 )
 from core.task_control import ExpectedTaskCancellation
+from core.threading.listener_threads import snapshot as _listener_snapshot
 
 logger = get_logger(__name__)
 
@@ -1211,6 +1212,9 @@ class ThreadManager:
                     "priority_mode": "not_started",
                 }
             ),
+            # Process-wide blocking listeners (``listener_threads``: one thread per open source, e.g. the visualizer
+            # engine's wake pipe); not this manager's to stop: each ends when its owner closes the source.
+            "listeners": _listener_snapshot(),
         }
 
     def get_lifecycle_ownership_snapshot(self) -> Dict[str, Any]:

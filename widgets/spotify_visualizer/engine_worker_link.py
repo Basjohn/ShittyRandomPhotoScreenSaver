@@ -247,6 +247,8 @@ class EngineWorkerLink:
         self._thread_manager = thread_manager
         self._on_lost = on_lost
         self._mailbox: Any = None
+        self._geometry_arena: Any = None    # N5.6 (D3): the stream's drift geometry arena (its owner), or None
+        self._staged_arenas: set = set()     # arenas staged by mode changes whose reply is still pending
         # The session's wake pipe as the main side holds it (``wake_channel``): its own writer end, and on POSIX the
         # pipe's name, until the session answers the configure.
         self._wake_channel: Any = None
@@ -500,7 +502,7 @@ class EngineWorkerLink:
         the session opens its own end and nothing is handed over through the resource sharer."""
         from core.process.types import MessageType
         from core.visualizer_engine.packet_mailbox import PacketMailbox
-        from core.visualizer_engine.frame_capacity import required_slot_bytes
+        from core.visualizer_engine.frame_capacity import geometry_bank_bytes, required_slot_bytes
         from core.visualizer_engine.wake_channel import open_wake_channel
 
         missing = [key for key in ACTIVATION_KEYS if key not in activation]
@@ -517,6 +519,21 @@ class EngineWorkerLink:
             raise
         logger.info('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity admitted mode=%s slot_bytes=%d', mode, slot_bytes)
         self.label_namespace = next_label_namespace()
+        # N5.6 (D3): Extruded Bubble's drift geometry arena, owned here beside the frame mapping for the stream's life
+        # (unlinked at close); the worker writes it, the native route's projection and the core read it. Registered
+        # under the session's label namespace, which every drift revision of the session carries in its high word.
+        bank_bytes = geometry_bank_bytes(str(mode), activation['logical_kwargs'])
+        arena = None
+        if bank_bytes:
+            from core.visualizer_engine.extruded_bubble_native_schema import open_stream_arena
+
+            try:
+                arena = open_stream_arena(self.label_namespace, bank_bytes)
+            except BaseException:
+                mailbox.close()
+                receiver.close()
+                channel.release_sender()
+                raise
         payload: dict[str, Any] = {
             "mapping": mailbox.mapping_name, "mode": str(mode), "runtime_generation": int(runtime_generation),
             "bar_count": int(bar_count), "label_namespace": self.label_namespace, "wake": channel.transfer,
@@ -527,9 +544,12 @@ class EngineWorkerLink:
             # the reader records as the trace's publish (native core P2 gate 3). Nothing is stamped at rest.
             "publish_stamps": mailbox.traces_publications,
         }
+        if arena is not None:
+            payload["geometry_arena"] = arena.transfer()
         if _test_session_overrides is not None:
             payload.update(_test_session_overrides)
         self._mailbox = mailbox
+        self._geometry_arena = arena
         self._wake_channel = channel
         self.mapping_name = mailbox.mapping_name
         try:
@@ -668,11 +688,27 @@ class EngineWorkerLink:
         ``adopt_presentation_inputs``); a failure calls ``on_failed`` (the session closes on a failed apply, A6-M2)."""
         from core.process.types import MessageType
 
-        from core.visualizer_engine.frame_capacity import required_slot_bytes
+        from core.visualizer_engine.frame_capacity import geometry_bank_bytes, required_slot_bytes
 
         change = self._mailbox.stage_capacity(required_slot_bytes(str(mode), activation['logical_kwargs']))
         if change is not None:
             self._capacity_candidates = (change['previous_mapping'], change['mapping'])
+        # N5.6 (D3): an activation whose drift geometry outgrows the stream's arena (or that first has a live drift
+        # family) stages a larger arena beside it; the worker attaches it at the commit, which retires the old one.
+        bank_bytes = geometry_bank_bytes(str(mode), activation['logical_kwargs'])
+        current = self._geometry_arena
+        staged = None
+        if bank_bytes and (current is None or current.closed or bank_bytes > current.bank_bytes):
+            from core.visualizer_engine.extruded_bubble_native_schema import stage_stream_arena
+
+            staged = stage_stream_arena(bank_bytes)
+            self._staged_arenas.add(staged)       # closed with the link while its reply is pending
+
+        def drop_staged() -> None:
+            if staged is not None:
+                self._staged_arenas.discard(staged)
+                if not staged.closed:
+                    staged.close()
 
         def committed(reply: dict) -> None:
             if change is not None:
@@ -686,6 +722,12 @@ class EngineWorkerLink:
                     return
                 self.mapping_name = self._mailbox.mapping_name
                 self._capacity_candidates = ()
+            if staged is not None:
+                from core.visualizer_engine.extruded_bubble_native_schema import replace_stream_arena
+
+                self._staged_arenas.discard(staged)
+                replace_stream_arena(self.label_namespace, staged)   # registered; the previous arena retired
+                self._geometry_arena = staged
             on_committed((int(reply["engine_generation"]), int(reply["activation_id"])),
                          dict(reply.get("view_records") or {}))
 
@@ -694,9 +736,12 @@ class EngineWorkerLink:
                 self.capacity_failure_report = self._mailbox.capacity_failure
             if change is not None and self._mailbox is not None:
                 self._mailbox.abort_capacity(change)
+            drop_staged()
             on_failed(failure)
 
         payload = {'mode': str(mode), 'activation': {key: activation[key] for key in ACTIVATION_KEYS}, 'at_once': True}
+        if staged is not None:
+            payload['geometry_arena'] = staged.transfer()
         if change is not None:
             payload['capacity_change'] = change
             logger.info('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity growth admitted mode=%s old_slot_bytes=%d '
@@ -707,6 +752,7 @@ class EngineWorkerLink:
         except BaseException:
             if change is not None:
                 self._mailbox.abort_capacity(change)
+            drop_staged()
             raise
 
     def _await(self, message: Any, payload: Mapping[str, Any], *, timeout_ms: int) -> Any:
@@ -812,6 +858,16 @@ class EngineWorkerLink:
             mailbox, self._mailbox = self._mailbox, None
             if mailbox is not None:
                 mailbox.close()
+            arena, self._geometry_arena = self._geometry_arena, None
+            if arena is not None:
+                from core.visualizer_engine.extruded_bubble_native_schema import close_stream_arena
+
+                close_stream_arena(arena)        # the stream retired: unregistered and unlinked
+            # An activation's staged arena whose reply was abandoned above (neither committed nor failed runs).
+            staged, self._staged_arenas = self._staged_arenas, set()
+            for owner in staged:
+                if not owner.closed:
+                    owner.close()
             self._events.deleteLater()
         finally:
             if lease is not None:

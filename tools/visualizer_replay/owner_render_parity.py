@@ -170,12 +170,16 @@ def single_sample_scene_targets():
     same passes, programs, post chain and tier. The native route's Waveform program takes the same single sample
     (``native_route.waveform_program`` reads ``waveform.SCENE_SAMPLES`` when it builds): rule (a) judges a multisampled
     scene by its single-sampled form, as the transitions' (D8 point 1; the proof guide, section 3), and its 4x form by
-    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one)."""
+    rule (b) (N5.4: P's first run compared the route's 4x scene with Python's single-sampled one). Extruded Bubble's
+    native program variant is its tier's samples (``extruded_bubble_program.variant_of`` reads ``_scene_samples``), so
+    that reads one sample too (N5.6: its first rule (a) runs compared the core's 4x scene with Python's one)."""
     from rendering.quick.scene3d import waveform
     from rendering.quick.scene3d.target import SceneTarget
+    from rendering.quick.visualizer.implementations import extruded_bubble
 
     begin = SceneTarget.begin
     samples_before = waveform.SCENE_SAMPLES
+    bubble_samples = extruded_bubble._scene_samples
 
     def single(self, frame, samples, *args, **kwargs):
         del samples
@@ -183,11 +187,13 @@ def single_sample_scene_targets():
 
     SceneTarget.begin = single
     waveform.SCENE_SAMPLES = 1
+    extruded_bubble._scene_samples = lambda parameters: 1
     try:
         yield
     finally:
         SceneTarget.begin = begin
         waveform.SCENE_SAMPLES = samples_before
+        extruded_bubble._scene_samples = bubble_samples
 
 
 class _SpilledFrames:
@@ -283,6 +289,10 @@ class SceneMirror:
         #: ``frames``: each frame's region with the cleared rectangle as it stood before the clear (``under_frame``).
         self.under = _SpilledFrames() if _UNDER_CAPTURE["active"] else None
         self._fbo = 0
+        #: GL error codes the drawn frames left pending, by code (``_read`` takes them before its own calls). Qt's GL
+        #: backend applies sampler state to a multisample texture a binding samples (the core's transparency resolve),
+        #: which the driver refuses with GL_INVALID_ENUM and ignores; PyOpenGL would report it at the read's first call.
+        self.left_gl_errors: dict[int, int] = {}
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
         self._saved: dict = {}
@@ -342,6 +352,11 @@ class SceneMirror:
         host = self.host
         gl = host._gl
         host._current()
+        for _ in range(64):                              # the frame's own errors, not the read's (``left_gl_errors``)
+            code = int(gl.glGetError())
+            if code == gl.GL_NO_ERROR:
+                break
+            self.left_gl_errors[code] = self.left_gl_errors.get(code, 0) + 1
         previous = int(gl.glGetIntegerv(gl.GL_READ_FRAMEBUFFER_BINDING))
         if not self._fbo:
             self._fbo = int(gl.glGenFramebuffers(1))
@@ -967,6 +982,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     report["native_published"] = mirror.native_published
     report["mapping"] = {"compared": mirror.mapping_compared, "identical": mirror.mapping_identical}
     report["outer_origin"] = mirror.first_outer_origin
+    report["left_gl_errors"] = {hex(code): count for code, count in mirror.left_gl_errors.items()}
     return report
 
 
@@ -1379,6 +1395,18 @@ def _python_masks(mode: str, script, settings: dict, python: dict) -> tuple[dict
     return rule_a_masks(python, backdrop), len(backdrop["pixels"])
 
 
+def _recorded_python_reference(mode: str, script, settings: dict) -> tuple[dict, list, dict, int, dict]:
+    """The Python run, its window maps, its masks and the backdrop's frame count (``_python_reference``,
+    ``_python_masks``), with what drew them (``python_references.recording``: the sources a cached reference is
+    checked against)."""
+    from tools.visualizer_replay import python_references
+
+    with python_references.recording() as used:
+        python, mappings = _python_reference(mode, script, settings)
+        masks, backdrop_frames = _python_masks(mode, script, settings, python)
+    return python, mappings, masks, backdrop_frames, used.drawing()
+
+
 def python_references_root() -> Path:
     from tools.visualizer_replay.python_references import DEFAULT_ROOT
     return DEFAULT_ROOT
@@ -1415,9 +1443,9 @@ def references_only(out: Path, *, mode: str, offers: bool, seconds: float, recor
         else:
             script = parity_script(clip.frames, mode)
             with single_sample_scene_targets(), card_placement(placement):
-                python, mappings = _python_reference(mode, script, settings)
-                masks, backdrop_frames = _python_masks(mode, script, settings, python)
-                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+                python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script,
+                                                                                               settings)
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
             state, frames = "drawn and stored", len(python["pixels"])
         report["results"][key_name] = {"key": key, "folder": str(folder), "state": state, "frames": frames,
                                        "seconds": round(time.perf_counter() - started, 1)}
@@ -1555,10 +1583,9 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
         if cached is not None:
             python, masks, mappings, backdrop_frames = cached
         else:
-            python, mappings = _python_reference(mode, script, settings)
-            masks, backdrop_frames = _python_masks(mode, script, settings, python)
+            python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script, settings)
             if references is not None:
-                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
         draw_inputs = None
         if windows is not None:
             from tools.visualizer_replay.coverage_windows import window_inputs
@@ -1580,9 +1607,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
             # The simulation moved since the reference was drawn: never judged against it; drawn again.
             reference_state = "stale (logical digests differ): drawn again and stored"
             python_references.release(cached)             # the stale reference's open files (audit 9 M2)
-            python, mappings = _python_reference(mode, script, settings)
-            masks, backdrop_frames = _python_masks(mode, script, settings, python)
-            python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+            python, mappings, masks, backdrop_frames, drawing = _recorded_python_reference(mode, script, settings)
+            python_references.store(folder, made_of, python, masks, mappings, backdrop_frames, drawing=drawing)
         if accepted is not None and (reference_state != "read" or accepted.get("reference") != str(folder)):
             accepted = None                               # another reference: every frame is judged
             reference_state += "; the accepted run's reference differs: every frame judged"
@@ -1599,6 +1625,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "outer_origin": origin, "outer_origin_device_fraction": fraction, "dpr": dpr,
                "frames_drawn": [len(python["pixels"]), len(native["pixels"])],
                "native_frames": native["native_frames"], "native_published": native["native_published"],
+               "left_gl_errors": native["left_gl_errors"],
                "switch_input": switch_input, "paths": paths, "differing_inputs": len(rows),
                "differing_pixels_total": sum(row["pixels"] for row in rows),
                "max_level": max((row["max_level"] for row in rows), default=0),
@@ -1666,15 +1693,100 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     return verdict
 
 
-def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
-               recording: str | None = None, references: Path | None = None,
-               native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None) -> dict:
+def harness_registration(mode: str):
+    """A context manager under which the route draws ``mode`` for the run: ``native_record_identity.MODES[mode].
+    register`` for a port the product's route does not draw yet (its registration is the port's last step, after P, T
+    and C: Extruded Bubble's ``_eb_registered``), else nothing."""
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    if mode in NATIVE_MODE_IDS:
+        return contextlib.nullcontext()
+    from tools.visualizer_replay import native_record_identity
+
+    spec = native_record_identity.MODES.get(mode)
+    register = None if spec is None else spec.register
+    return contextlib.nullcontext() if register is None else register()
+
+
+def _largest_geometry_bank() -> int:
+    """The D3 bank bytes no admitted activation exceeds (``frame_capacity.geometry_bank_bytes`` at every family's
+    canonical maximum): a bank larger than a session's own changes no byte the core reads."""
+    from core.constants.extruded_bubble_world import SNOW_FULL, SPECKS_FULL
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS
+
+    largest = max(CHAIN_PATHS * CHAIN_GEOMETRY_BYTES, max(SNOW_FULL, SPECKS_FULL) * CLOUD_GEOMETRY_BYTES)
+    return (largest + 15) // 16 * 16
+
+
+#: The in-process drift arena's writer key namespace (odd and non-zero, as ``GeometryArenaWriter`` draws its own).
+IN_PROCESS_WRITER_NAMESPACE = 0x5E5D_0001
+
+
+@contextlib.contextmanager
+def in_process_drift_arena():
+    """The engine worker's D3 side, in process (N5.6): the owner replay runs without a worker, so no session opened
+    Extruded Bubble's geometry arena and the route names no drift family (``DriftStream.project``: every family absent,
+    the drift held). For the run the harness stands in for the worker: the session's arena opened under the in-process
+    label namespace (0) as ``engine_worker_link.configure`` opens it, and each logical frame's new keys written by the
+    worker's own ``GeometryArenaWriter`` before the route projects that frame (as ``PacketMailbox.publish`` writes them
+    before the slot), the previous frame counted consumed (the in-process route takes every frame it projects).
+
+    The writer's key namespace is the fixed ``IN_PROCESS_WRITER_NAMESPACE``, not a fresh random one: the record carries
+    it in every geometry key, so two runs of one take (a coverage window against the continuous run, layer L's runs)
+    hold the same record bytes only under one namespace. The route's shared projector (``schema.DRIFT``) forgets its
+    streams when the arena opens and closes, as a replacement worker's new namespace makes it: another run in the same
+    process starts its epochs and serials again under the same namespace."""
+    from core.visualizer_engine import extruded_bubble_native_schema as schema
+    from core.visualizer_engine import geometry_arena as ga
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import FAMILIES
+
+    owner = schema.open_stream_arena(0, _largest_geometry_bank())
+    writer = ga.GeometryArenaWriter(owner.name, families=FAMILIES)
+    writer.namespace = IN_PROCESS_WRITER_NAMESPACE
+    ga._WRITER_NAMESPACE.pack_into(writer._memory.buf, ga._WRITER_NAMESPACE_AT, writer.namespace)
+    schema.DRIFT._projectors = {}
+    project = schema.DriftStream.project
+    sequence = [0]
+
+    def projecting(self, logical):
+        writer.before_publish(logical, sequence[0])
+        sequence[0] += 1
+        writer.published(sequence[0])
+        return project(self, logical)
+
+    schema.DriftStream.project = projecting
+    try:
+        yield writer
+    finally:
+        schema.DriftStream.project = project
+        schema.DRIFT._projectors = {}
+        writer.close()
+        schema.close_stream_arena(owner)
+
+
+def run_native(out: Path, **kwargs) -> dict:
+    """``_run_native`` with ``mode`` registered on the route for the run (``harness_registration``); Extruded Bubble's
+    drift geometry through the in-process arena (``in_process_drift_arena``), a fresh one for each run: a second run
+    (the overscan placement, another variant) replays the take's drift from its first step, which the previous run's
+    projector, writer and banks would refuse ("drift serial went backwards") or hold."""
+    mode = kwargs.get("mode", "spectrum")
+    if mode == "extruded_bubble":
+        kwargs.setdefault("run_context", in_process_drift_arena)
+    with harness_registration(mode):
+        return _run_native(out, **kwargs)
+
+
+def _run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
+                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
+                recording: str | None = None, references: Path | None = None,
+                native_only_run: bool = False, windows: dict | None = None, accepted: Path | None = None,
+                run_context=None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
     (``against_baseline``). ``native_only_run``: ``native_only`` instead (no Python render; with ``against``, each
-    run's native hashes against that report's)."""
+    run's native hashes against that report's). ``run_context``: a context manager factory entered around each run."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     accepted_report = json.loads(Path(accepted).read_text(encoding="utf-8")) if accepted is not None else None
     import tools.expanded_visualizer_evidence as evidence
@@ -1700,8 +1812,12 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = _placed_runs(mode, runs, placements, only)
+    run_scope = contextlib.ExitStack()
     try:
         for key, suffix, settings, placement in planned:
+            run_scope.close()                  # the previous run's context (its drift arena) ends before this one's
+            if run_context is not None:
+                run_scope.enter_context(run_context())
             engine_worker_link.reset_run_state_for_testing()
             if native_only_run:
                 entry = None if baseline is None else (baseline.get("results") or {}).get(key)
@@ -1738,6 +1854,7 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                   f"frame {verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
                   f"{'PASS under tolerance' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
+        run_scope.close()
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
         report["pass"] = bool(report["results"]) and all(v["pass"] for v in report["results"].values())
@@ -1933,7 +2050,14 @@ def main(argv=None) -> int:
                              "the same verdicts either way)")
     parser.add_argument("--api", choices=("opengl", "vulkan"), default="opengl",
                         help="with --native: the graphics API the owner's scene and the native item draw on")
+    parser.add_argument("--lens-shift", nargs=2, type=float, default=None, metavar=("X", "Y"),
+                        help="extruded_bubble: the shafts' and backdrop's lens shift both routes draw at (the Python "
+                             "owner's LENS_SHIFT, zero in the product; N5.6's odd-target bullet); Python is drawn live, "
+                             "so --references is refused with it")
     args = parser.parse_args(argv)
+    if args.lens_shift is not None:
+        if args.references is not None or args.references_only:
+            parser.error("--lens-shift: a cached Python reference is drawn at the product's zero shift; draw it live")
     if args.api != "opengl":
         parser.error("--api vulkan: the owner replay's hidden host draws OpenGL only; the native item on Vulkan is "
                      "drawn from the take's delivery stream by tools/visualizer_replay/native_stream_player.py "
@@ -1956,6 +2080,10 @@ def main(argv=None) -> int:
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(["owner-render-parity"])
+    if args.lens_shift is not None:
+        from rendering.quick.visualizer.implementations import extruded_bubble as eb_owner
+
+        eb_owner.LENS_SHIFT = (float(args.lens_shift[0]), float(args.lens_shift[1]))
     try:
         if args.references_only:
             report = references_only(args.out, mode=args.mode, offers=args.offers, seconds=args.seconds,

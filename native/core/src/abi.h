@@ -266,4 +266,24 @@
 // The existing limit of 8 storage bindings per compute entry still applies. Earlier programs remain valid.
 // 45 (N5.6): reflected column-major mat3 members, including arrays, take nine numbers per matrix in settings and
 // f64 record fields. Columns use the qsb matrix stride.
-#define SRPSS_NATIVE_CORE_ABI 45
+// 46 (N5.6, Extruded Bubble's record and route; reserved by the lead, 27 Nov): a compute entry binding a geometry
+// buffer is dispatched only at a record whose key for it is resident (ModeContent::geometryKeysResident); a held entry
+// keeps its trigger, so u_srpss_compute's last-dispatch value names the last step it applied and the next record
+// dispatches the window's suffix after it; composite_live's compute_geometry_holds. Backward compatible for every
+// earlier program (an entry binding no geometry buffer is never held).
+// 47 (N5.6, Extruded Bubble's program; awaiting the lead's reservation): a pass between a transparency target's first
+// pass and its resolve may sample the owner's capture (<owner>.capture_colour / capture_depth: its own texture, copied
+// before the first pass, which no capture of the owner follows there); the owner's attachments stay refused. Backward
+// compatible for every earlier program (it only admits more). And the defocus step's gather reads the core member
+// u_scene_rows_up (its block, the clip's and the sprites' alike) and steps its taps' rows by it: Python's +sin(a)
+// where the program's scene holds OpenGL's rows (Extruded Bubble's near layer), mirrored as before where it holds the
+// core's top-first rows; the scene's card (sceneAnchor) carries the program's rows as the composite's does. Backward
+// compatible for every earlier program (no defocus step before Extruded Bubble's reads a scene in OpenGL's rows).
+// A record naming no key for a declared geometry buffer (Extruded Bubble's first frame, before its drift has
+// families) no longer waits the frame: the buffer binds a 16-byte zero placeholder (compute_passes.cpp emptyGeometry,
+// never a residency) and the entries that bind it hold as before, so the first frame draws and fades in. Backward
+// compatible (a record naming its keys is unchanged). And a pass writing an attachment with blending off beside one
+// with it on is refused with a named error ("mixed blend", mode_content.cpp mixedBlendRefusal; R-256: OpenGL draws the
+// unblended one with stale factors), on its own outputs and on its sorted pack's; a replace there is an enabled ONE,
+// ZERO blend. Not backward compatible for such a program (none ships: the harness's two moved to ONE, ZERO).
+#define SRPSS_NATIVE_CORE_ABI 47

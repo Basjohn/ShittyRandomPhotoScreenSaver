@@ -178,6 +178,9 @@ bool sceneAnchor(const ModeProgram &program, const ModeCard &card, const QSize &
                  QSize *sceneSize)
 {
     *sceneCard = card;
+    // N5.6: a pass into the scene (the defocus step's gather) reads u_scene_rows_up as the composite does: the program's
+    // scene rows, which its scene and near layer hold alike.
+    sceneCard->sceneRowsUp = program.sceneRowsUp();
     *sceneSize = surface;
     if (!card.valid || !card.hasSceneItem || bloomAtTargetOrigin())
         return false;
@@ -565,17 +568,18 @@ QRhiGraphicsPipeline::CompareOp rhiCompare(DepthTest test)
 bool settingNumbers(const QString &key, const QJsonValue &value, QList<double> *out, QString *error)
 {
     out->clear();
-    if (value.isDouble() || value.isBool()) {
-        out->append(value.isBool() ? (value.toBool() ? 1.0 : 0.0) : value.toDouble());
+    double number = 0.0;
+    if (settingNumber(value, &number)) { // a negative zero arrives as "-0" (settingNumber)
+        out->append(number);
         return true;
     }
     if (value.isArray()) {
         for (const QJsonValue &item : value.toArray()) {
-            if (!item.isDouble() && !item.isBool()) {
+            if (!settingNumber(item, &number)) {
                 *error = QStringLiteral("'%1' holds a value that is not a number").arg(key);
                 return false;
             }
-            out->append(item.isBool() ? (item.toBool() ? 1.0 : 0.0) : item.toDouble());
+            out->append(number);
         }
         return true;
     }
@@ -997,6 +1001,28 @@ bool sameOutput(const PassOutput &a, const PassOutput &b)
     if (a.custom || b.custom)
         return a.custom == b.custom && sameBlendState(a.customBlend, b.customBlend); // N3.2
     return a.blend == b.blend;
+}
+
+// N5.6 (ABI 47; R-256): a pass writing one attachment with blending off beside one with it on is refused on every
+// backend, so a program means the same everywhere: Qt's OpenGL backend leaves the unblended attachment's blend factors
+// stale (the last pipeline's), and Extruded Bubble's backdrop kept its scene's alpha 0 so. A replace beside a blend is
+// declared as an enabled ONE, ZERO blend. A masked attachment writes nothing and counts as neither.
+QString mixedBlendRefusal(const QList<PassOutput> &outputs, const QByteArray &pass, const char *which)
+{
+    int on = -1;
+    int off = -1;
+    for (int a = 0; a < int(outputs.size()); ++a) {
+        if (!outputs.at(a).write)
+            continue;
+        int &first = outputBlend(outputs.at(a)).enable ? on : off;
+        if (first < 0)
+            first = a;
+    }
+    if (on < 0 || off < 0)
+        return QString();
+    return QStringLiteral("mixed blend: pass '%1'%2 writes attachment %3 with blending off beside attachment %4 with "
+                          "it on (OpenGL draws the first with stale blend factors); declare its replace as an enabled "
+                          "one, zero blend").arg(QString::fromLatin1(pass), QLatin1String(which)).arg(off).arg(on);
 }
 
 // N3.2 (D15 point 1): a blend value, a preset's name or a full declaration.
@@ -2047,6 +2073,11 @@ bool checkSortedPack(ModePass &pass, const QByteArray &pack, const QList<TargetD
         }
         pass.sortedOutputs.append(output);
     }
+    const QString mixed = mixedBlendRefusal(pass.sortedOutputs, pass.name, "'s sorted pack"); // ABI 47 (R-256)
+    if (!mixed.isEmpty()) {
+        *error = mixed;
+        return false;
+    }
     return true;
 }
 
@@ -2185,8 +2216,8 @@ bool parseStageStep(const QJsonObject &o, int index, const QByteArray &pack, Mod
 }
 
 // D17 point 2: each transparency target's passes all precede its one resolve step; between its first pass and the
-// resolve nothing samples or captures the owner or blooms from it (the owner's borrowed attachments are resolved by the
-// owner's run that the resolve step is).
+// resolve nothing samples or captures the owner or blooms from it, sampling its capture excepted (ABI 47; the owner's
+// borrowed attachments are resolved by the owner's run that the resolve step is).
 bool checkTransparencyOrder(const ModeProgram &program, QString *error)
 {
     for (int t = 0; t < int(program.targets.size()); ++t) {
@@ -2221,8 +2252,13 @@ bool checkTransparencyOrder(const ModeProgram &program, QString *error)
             bool reads = (pass.capture && pass.target == target.owner)
                 || (pass.stage == StageKind::Bloom && pass.stageSource == target.owner)
                 || (pass.stage == StageKind::Defocus && pass.target == target.owner);
-            for (const PassSampler &s : pass.samplers)
-                reads = reads || s.texture.startsWith(owner + '.');
+            // ABI 47: the owner's capture (``<owner>.capture_colour`` / ``capture_depth``) is its own texture, copied
+            // before the first pass (no capture of the owner follows it here), so every pass may sample it, as the
+            // first pass does: Extruded Bubble's glass passes each read the background behind them.
+            for (const PassSampler &s : pass.samplers) {
+                const bool captured = s.texture == owner + ".capture_colour" || s.texture == owner + ".capture_depth";
+                reads = reads || (s.texture.startsWith(owner + '.') && !captured);
+            }
             if (reads) {
                 *error = QStringLiteral("pass '%1' reads '%2' between its transparency target's first pass and the "
                                         "resolve step").arg(QString::fromLatin1(pass.name), QString::fromLatin1(owner));
@@ -2927,6 +2963,11 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 || !parsePassTargetState(o, pass, program.targets, error)
                 || !transparentPassState(o, pass, program.targets, !sortedPack.isEmpty(), error)) // N3.4
                 return false;
+            const QString mixed = mixedBlendRefusal(pass.outputs, pass.name, ""); // ABI 47 (R-256)
+            if (!mixed.isEmpty()) {
+                *error = mixed;
+                return false;
+            }
             if (o.contains(QStringLiteral("viewport"))) {
                 // ABI 37 (N4.i): "allocation" draws the core's triangle over the scene target's whole allocation (its
                 // viewport and scissor), as Python draws a post pass over its SceneTarget's allocation (the trails'
@@ -3613,8 +3654,9 @@ QHash<QByteArray, double> ModeProgram::drawSettingNumbers(const QJsonObject &set
     QHash<QByteArray, double> numbers;
     for (auto it = settings.begin(); it != settings.end(); ++it) {
         const QByteArray name = it.key().toLatin1();
-        if (drawNames(name) && (it.value().isDouble() || it.value().isBool()))
-            numbers.insert(name, it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
+        double number = 0.0;
+        if (drawNames(name) && settingNumber(it.value(), &number))
+            numbers.insert(name, number);
     }
     return numbers;
 }
@@ -6944,6 +6986,14 @@ void ModeContent::decideDispatches()
             countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
             continue;
         }
+        if (!geometryKeysResident(pass)) {
+            // ABI 46 (N5.6, D3): an entry binding a geometry buffer whose record key is not resident yet (the arena
+            // has not given it: its bank unwritten or torn at this record) is held, its trigger kept, so the next
+            // record holding the key dispatches from where the entry last did (the drift window's suffix), never this
+            // record's work over the previous key's geometry.
+            countGeometryHold();
+            continue;
+        }
         m_dispatch[i] = true;
         // u_srpss_compute: (the trigger, its value at the last dispatch, fresh, the dispatches since the storage was
         // made), into the arena's copy (written whole after this).
@@ -6961,6 +7011,20 @@ void ModeContent::decideDispatches()
         t.lastTrigger = value;
         t.freshSeen = freshKey;
     }
+}
+
+bool ModeContent::geometryKeysResident(const ModePass &pass) const
+{
+    for (const ComputeBinding &b : pass.computeBindings) {
+        if (b.kind != ComputeResource::Buffer)
+            continue;
+        // "<name>@previous" reads the key its current one replaces: the entry waits on the current key alone.
+        const QByteArray base = b.resource.endsWith("@previous") ? b.resource.chopped(9) : b.resource;
+        const auto key = m_geometryKeys.constFind(base);
+        if (key != m_geometryKeys.cend() && !m_storage.geometryResident(base, key.value()))
+            return false;
+    }
+    return true;
 }
 
 quint64 ModeContent::entryFreshKey(const ModePass &pass) const

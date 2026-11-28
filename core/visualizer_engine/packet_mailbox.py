@@ -171,7 +171,7 @@ class PacketMailbox(LatestStateMailbox):
         self._wake_sender = wake_sender
         self._wakes_dropped = 0                      # writer side: wake bytes a full pipe refused (never blocked)
         self._wake_lock = threading.Lock()          # a sender close (``close_wake_sender``) never races a send
-        self._wake_thread: threading.Thread | None = None
+        self._wake_thread: Any = None                # reader side: the wake listener (``listener_threads.ListenerHandle``)
         self._wake_receiver: Any = None
         self._last_taken: LogicalPublication | None = None   # reader side: the newest publication handed out
         self._frame_completion: Callable[[Any], Any] | None = None   # reader side: the owner's frame completion
@@ -195,6 +195,9 @@ class PacketMailbox(LatestStateMailbox):
         # Writer side: checked before every publish, so a host can refuse a frame before it reaches the mapping
         # (the engine session's production-order admission failure; None otherwise: one attribute read).
         self._publish_guard: Callable[[], None] | None = None
+        # Writer side (N5.6, D3): Extruded Bubble's geometry arena writer (``geometry_arena.GeometryArenaWriter``):
+        # a frame's new geometry keys are written whole into their banks before the slot naming them (None: no arena).
+        self._geometry_writer: Any = None
 
     # ---------------------------------------------------------------------------------------------- producer
 
@@ -210,6 +213,11 @@ class PacketMailbox(LatestStateMailbox):
             if previous is not None and previous[1] == int(generation) and previous[2] == int(activation_id):
                 state = _coalesce_protected_state(previous[0], state)
             produced = float(now_ts if now_ts is not None else authored_now())
+            geometry = self._geometry_writer
+            if geometry is not None:
+                # D3 point 2: each new key's bank written whole (its seqlock even) before this slot can name it; a
+                # bank is reused only once the reader took a frame after the last one naming its key.
+                geometry.before_publish(state, consumed)
             if self._payload == "native":
                 # The mode's fixed-layout record (its identity and timing travel in the slot head); a mode without
                 # a native schema raises here, before anything is published.
@@ -230,6 +238,8 @@ class PacketMailbox(LatestStateMailbox):
                 activation_id=int(activation_id), mode_code=mode_code(getattr(state, "mode_id", None)),
                 publish_ns=time.perf_counter_ns() if self._publish_stamps else 0,
             )
+            if geometry is not None:
+                geometry.published(sequence)          # the keys this slot names, live through its sequence
             if previous is not None:
                 # Superseded only now that its successor is in the slot: an encode or a slot that raised above leaves
                 # the unread frame the newest, and uncounted (N2.3 side defect).
@@ -250,6 +260,15 @@ class PacketMailbox(LatestStateMailbox):
         if guard is not None and not callable(guard):
             raise TypeError("a publish guard must be callable or None")
         self._publish_guard = guard
+
+    def set_geometry_writer(self, writer: Any) -> None:
+        """Writer side (N5.6, D3): the stream's geometry arena writer (``before_publish(state, consumed_sequence)``
+        before each slot, ``published(sequence)`` after it), or None."""
+        if writer is not None and not (callable(getattr(writer, "before_publish", None))
+                                       and callable(getattr(writer, "published", None))):
+            raise TypeError("a geometry writer has before_publish and published")
+        with self._lock:
+            self._geometry_writer = writer
 
     def write_identity(self, *, runtime_generation: int, engine_generation: int, activation_id: int,
                        mode: str | None) -> None:
@@ -469,8 +488,11 @@ class PacketMailbox(LatestStateMailbox):
                 if callback is not None:
                     callback()
 
-        self._wake_thread = threading.Thread(target=listen, name="srpss-visualizer-engine-wake", daemon=True)
-        self._wake_thread.start()
+        # The project's blocking-listener primitive: its own thread for exactly the pipe's life (closing the mailbox
+        # closes the pipe and ends it), never a pool worker or a lane that outlives it.
+        from core.threading.listener_threads import start_listener
+
+        self._wake_thread = start_listener(listen, name="srpss-visualizer-engine-wake", category="visualizer_engine_wake")
 
     def clear(self) -> None:
         with self._lock:
