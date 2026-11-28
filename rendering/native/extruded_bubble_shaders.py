@@ -19,7 +19,9 @@ folder's own files, which these never are). Variants the core needs and OpenGL d
   an unattached output; the core requires a program to write exactly its target's attachments);
 - an input or output without a location gets the location its stage pairs it with (SPIR-V requires one);
 - every anonymous block gets an instance name, the same in every stage (``_instanced``: OpenGL links the translated
-  uniforms by name across stages).
+  uniforms by name across stages);
+- a program drawn into a bucketed scene target (``PLACED``) places its clip position in the bucket's first scene
+  pixels and draws nothing in its slack (``placed_vertex``, ``placed_fragment``), as Python's viewport does.
 """
 from __future__ import annotations
 
@@ -211,10 +213,67 @@ def unemitted_text(fragment: str) -> str:
     return fragment.replace(emission, "vec4 Emission;")
 
 
+#: The programs drawn into the core's surface-sized scene targets (the scene, its transparency target and the near
+#: layer), each its 64-pixel bucket (``mode_content.cpp`` sceneAnchor), where Python's SceneTarget draws them through a
+#: viewport of the scene's own pixels (``SceneTarget.scope``). The shafts, their blur and the probe draw into exact
+#: targets (the viewport is the target) and stay as they are.
+PLACED = ("backdrop", "specks", "shells", "clusters", "beads", "trails", "near", "near_clusters")
+#: The core's members a placed program reads (``MODE_CORE_MEMBERS``): the scene's cover in the target (its width and
+#: height are the scene's pixels) and the target's pixels.
+PLACEMENT_MEMBERS = ("vec4 u_scene_item;", "vec2 u_target_px;")
+_OWN_BLOCK = re.compile(r"(uniform\s+Eb\w+\s*\{)([^{}]*)(\}\s*;)")
+_MAIN = "void main() {"
+
+
+def _with_placement_members(text: str) -> str:
+    """The text with ``PLACEMENT_MEMBERS`` its program's own block lacks at the block's end (each stage declares it
+    alike; the fullscreen family's block already holds ``u_target_px``)."""
+    if len(_OWN_BLOCK.findall(text)) != 1:
+        raise ValueError("a placed program's stage declares its own Eb block once")
+
+    def appended(m: re.Match) -> str:
+        held = set(_BLOCK_MEMBER.findall(m.group(2)))
+        missing = [member for member in PLACEMENT_MEMBERS if _BLOCK_MEMBER.findall(member)[0] not in held]
+        return m.group(1) + m.group(2).rstrip() + "\n" + "".join(f"    {member}\n" for member in missing) + m.group(3)
+
+    return _OWN_BLOCK.sub(appended, text)
+
+
+def placed_vertex(text: str) -> str:
+    """A placed program's vertex stage: its own ``main`` run as written, then its clip position placed in the bucket
+    (``conventions.srpssTargetClip``: the scene's pixels ``u_scene_item.zw`` at the target's first columns and memory
+    rows, clip -1 kept where it is, and the clip depth into 0 to 1 where the target's runs so), as Python's viewport
+    places it. Drawn over the whole bucket, every pass was the bucket's size: the scene magnified by the bucket over the
+    scene's pixels about its first texel (N5.6 P, 28 Nov: 640/630 by 448/420 on a 630 x 420 card)."""
+    from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_VERTEX_GLSL
+
+    if text.count(_MAIN) != 1:
+        raise ValueError("a placed vertex stage has one main")
+    text = _with_placement_members(text).replace(_MAIN, SRPSS_TARGET_CLIP_VERTEX_GLSL + "void ebPlacedMain() {")
+    return text + (f"{_MAIN}\n    ebPlacedMain();\n"
+                   "    gl_Position = srpssTargetClip(gl_Position, u_scene_item.zw, u_target_px);\n}\n")
+
+
+def placed_fragment(text: str) -> str:
+    """A placed program's fragment stage: nothing drawn in the bucket's slack beyond the scene's pixels
+    (``conventions.srpssItemOnly``; Python's viewport clips there, and the bloom and the background capture read the
+    slack), the rest as written."""
+    from rendering.gl_programs.conventions import SRPSS_TARGET_CLIP_FRAGMENT_GLSL, SRPSS_TARGET_CLIP_GLSL
+
+    if text.count(_MAIN) != 1:
+        raise ValueError("a placed fragment stage has one main")
+    head = "#define SRPSS_SCENE_ITEM_ONLY\n" + (SRPSS_TARGET_CLIP_GLSL if "SRPSS_CONVENTIONS_MAPPING" in text
+                                                else SRPSS_TARGET_CLIP_FRAGMENT_GLSL)
+    return _with_placement_members(text).replace(
+        _MAIN, head + f"{_MAIN}\n    srpssItemOnly(u_scene_item.zw, u_target_px);\n")
+
+
 def shader_files() -> dict[str, str]:
     """Every native pack's source name (``eb_<program>.vert`` / ``.frag``, ``eb_<program>_sorted.frag``) and text."""
     files: dict[str, str] = {}
     for program, (vertex, fragment, _layout) in _texts().items():
+        if program in PLACED:
+            vertex, fragment = placed_vertex(vertex), placed_fragment(fragment)
         if program in CUBE and "layout(location=1) out vec4 Emission;" in fragment:
             fragment = unemitted_text(fragment)
         vertex, located = _located(vertex, fragment)
@@ -243,5 +302,6 @@ def pack(name: str) -> bytes:
     return path.read_bytes()
 
 
-__all__ = ["CUBE", "PACK_FOLDER", "PROGRAMS", "TRANSPARENT", "block_layout", "block_members", "instance_name",
-           "member_name", "pack", "shader_files", "sorted_text", "unemitted_text"]
+__all__ = ["CUBE", "PACK_FOLDER", "PLACED", "PLACEMENT_MEMBERS", "PROGRAMS", "TRANSPARENT", "block_layout",
+           "block_members", "instance_name", "member_name", "pack", "placed_fragment", "placed_vertex", "shader_files",
+           "sorted_text", "unemitted_text"]

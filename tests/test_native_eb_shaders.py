@@ -39,14 +39,15 @@ def test_every_program_names_each_block_member_for_itself_and_keeps_the_core_mem
 
 def test_the_texts_are_the_python_texts_apart_from_the_names_and_the_core_variants():
     from rendering.gl_programs import extruded_bubble_program as p
-    from rendering.native.extruded_bubble_shaders import shader_files, sorted_text
+    from rendering.native.extruded_bubble_shaders import placed_fragment, shader_files, sorted_text
 
     files = shader_files()
     body = files["eb_backdrop.frag"].split("\n", 1)[1]
     body = re.sub(r"\} blk_\w+;", "};", body)
     body = "\n".join(line for line in body.splitlines()
                      if not line.startswith(("#define u", "// Extruded Bubble")) and " blk_" not in line)
-    assert body.strip() == p.BACKDROP_FRAGMENT.split("\n", 1)[1].strip()
+    # The backdrop draws into the bucketed scene: its placement variant (``placed_fragment``) is the core's.
+    assert body.strip() == placed_fragment(p.BACKDROP_FRAGMENT).split("\n", 1)[1].strip()
     assert "SceneColour" in files["eb_shells_sorted.frag"] and "SceneAccum" not in files["eb_shells_sorted.frag"]
     assert "layout(location=1) out vec4 Emission;" in files["eb_shells_sorted.frag"]
     # The probe's proxies keep their emission as a plain variable (one cube attachment).
