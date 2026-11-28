@@ -53,9 +53,53 @@ enum class GpuPassKind : int {
     Surface = 2, // a composited surface's content pass (surfaces.h)
     Load = 3,    // the harness's known-cost pass (load_pass.h)
     Backdrop = 4, // a backdrop pyramid's build, every level (backdrop.h, N5.7b)
+    ScenePass = 5, // N5.2h: one unit of a mode's record (GpuUnitPart), only under the harness's time_scene_passes
 };
 
 QString gpuPassKindName(GpuPassKind kind);
+
+// N5.2h: what a ScenePass figure times inside a mode's record (mode_content.cpp recordPasses), each bracketed between
+// render passes, never inside one. `pass` names the program's first pass of the unit (-1: none).
+enum class GpuUnitPart : int {
+    Unit = 0,      // the unit at `pass`: a run (its primes, its passes, the pass's own resolves at its end), a compute
+                   // entry, a capture, an environment, a bloom chain, a defocus or a prefilter
+    Nearest = 1,   // the run's nearest copies of its multisampled attachments (recordNearest)
+    SelfMips = 2,  // the run's self-mipped chains
+    Chains = 3,    // the item textures' chains before any pass (pass -1)
+    LastClear = 4, // the surface's clear when no run drew it (pass -1)
+};
+
+// N5.2h: the harness control time_scene_passes (stage_control). While it is on and a host's timer runs, the frame driver
+// does not bracket a surface's record whole (OpenGL's GL_TIME_ELAPSED queries cannot nest) but hands the record its unit
+// brackets (below), so each unit is a ScenePass figure. Off (the default) nothing changes: the brackets stay null.
+void setTimeScenePasses(bool on);
+bool timeScenePasses();
+
+// N5.2h: the render thread's unit brackets for the record in progress (null: no unit is timed, one pointer read per unit).
+struct GpuUnitBrackets
+{
+    void *owner = nullptr;
+    int (*begin)(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int pass, int part) = nullptr;
+    void (*end)(void *owner, QRhi *rhi, QRhiCommandBuffer *cb, int scope) = nullptr;
+};
+const GpuUnitBrackets *gpuUnitBrackets();
+void setGpuUnitBrackets(const GpuUnitBrackets *brackets);
+
+// N5.2h: a unit's bracket for its scope (render thread, outside any pass at construction and destruction).
+class GpuUnitScope
+{
+public:
+    GpuUnitScope(QRhi *rhi, QRhiCommandBuffer *cb, int pass, GpuUnitPart part);
+    ~GpuUnitScope();
+    GpuUnitScope(const GpuUnitScope &) = delete;
+    GpuUnitScope &operator=(const GpuUnitScope &) = delete;
+
+private:
+    const GpuUnitBrackets *m_brackets;
+    QRhi *m_rhi;
+    QRhiCommandBuffer *m_cb;
+    int m_scope = -1;
+};
 
 // The ring's rule for a frame's slot (GPU-free; R-223): take it when free; leave the frame untimed while the slot's
 // results are unread (Busy); abandon the slot once they have stayed unread for more frames than the ring is long (its
@@ -90,6 +134,8 @@ struct GpuTimingSample
     qint64 frame = -1;      // the frame edge the pass was recorded at (-1 for QRhi's frame figure: Qt does not say)
     qint64 readAt = -1;     // the edge the result was read at
     qint64 nanoseconds = 0; // GPU time
+    int pass = -1;          // N5.2h, ScenePass only: the unit's first program pass (-1: none)
+    int part = 0;           // N5.2h, ScenePass only: GpuUnitPart
 };
 
 // The frame driver's queue of results, drained from the GUI thread (bounded: the oldest are kept, overflow is counted).
@@ -116,7 +162,9 @@ public:
     // up to 5 frames late and left 3 of 30 frames untimed with 4 slots; the hidden host then only flushed its OpenGL
     // frames and ran ahead without bound, R-223: it now finishes them, and a slot unread past the ring is abandoned).
     static constexpr int kRingFrames = 8;
-    static constexpr int kMaxScopes = 16;  // timed passes per frame; more are recorded untimed and counted
+    // Timed passes per frame; more are recorded untimed and counted. N5.2h: 32, for a scene's units under
+    // time_scene_passes (a 4x scene with motion blur and trails has about a dozen).
+    static constexpr int kMaxScopes = 32;
 
     GpuTimer(const GpuTimerConfig &config, std::shared_ptr<GpuSampleQueue> queue);
     ~GpuTimer();
@@ -129,7 +177,7 @@ public:
     void beginFrame(QRhi *rhi, QRhiCommandBuffer *cb, qint64 edge);
     // Render thread, inside the frame, outside any pass: a bracket around one pass. begin returns its scope, or -1 when
     // nothing is timed (no per-pass form on this backend, the timer stopped, the frame's slot busy or full, an error).
-    int begin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind);
+    int begin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind, int pass = -1, int part = 0);
     void end(QRhi *rhi, QRhiCommandBuffer *cb, int scope);
 
     // Render thread: no more recording (the timer switched off). Its objects stay until released.
@@ -156,6 +204,8 @@ private:
     struct Scope
     {
         int kind = 0;
+        int pass = -1;
+        int part = 0;
         bool closed = false;
     };
     struct Slot

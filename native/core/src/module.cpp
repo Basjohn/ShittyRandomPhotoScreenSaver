@@ -618,8 +618,9 @@ PyObject *host_gpu_samples(PyObject *, PyObject *args)
         return nullptr;
     for (qsizetype i = 0; i < samples.size(); ++i) {
         const srpss_core::GpuTimingSample &s = samples.at(i);
-        PyObject *row = Py_BuildValue("(iLLL)", s.kind, (long long)s.frame, (long long)s.readAt,
-                                      (long long)s.nanoseconds);
+        // N5.2h: a ScenePass figure's unit (pass, part) rides as the row's last two items (-1, 0 for every other kind).
+        PyObject *row = Py_BuildValue("(iLLLii)", s.kind, (long long)s.frame, (long long)s.readAt,
+                                      (long long)s.nanoseconds, s.pass, s.part);
         if (!row) {
             Py_DECREF(list);
             return nullptr;
@@ -2297,6 +2298,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSurfaceClearDraw(value);
     else if (control == "scene_clear_draw")
         srpss_core::setSceneClearDraw(value);
+    else if (control == "time_scene_passes")      // N5.2h: a record's units timed one by one (gpu_timer.h)
+        srpss_core::setTimeScenePasses(value);
     else if (control == "skip_stage_release")
         srpss_core::setSkipStageRelease(value);
     else if (control == "device_without_independent_blend")
@@ -3139,7 +3142,8 @@ PyMethodDef methods[] = {
       "(handle, config_json) -> None: the GPU timer on or off from the next frame (enabled; keep_when_off and "
       "wait_for_results are negative controls)." },
     { "host_gpu_samples", host_gpu_samples, METH_VARARGS,
-      "(handle) -> list of (kind, frame, read_at, nanoseconds): the timer's results read since the last call." },
+      "(handle) -> list of (kind, frame, read_at, nanoseconds, pass, part): the timer's results read since the last "
+      "call (pass, part: a ScenePass figure's unit, N5.2h; -1, 0 otherwise)." },
     { "gpu_timer_live", gpu_timer_live, METH_NOARGS,
       "() -> JSON str: GPU timers alive in the process and their query objects (pools, queries)." },
     { "live_hosts", live_hosts, METH_NOARGS, "() -> int: hosts not closed." },
@@ -3336,7 +3340,8 @@ PyMethodDef methods[] = {
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
       "flush_defocus_between_draws, flush_defocus_after_sprites, declare_defocus_external, "
       "disable_defocus_compute_tracking (OpenGL; latter requires no compute passes), device_without_independent_blend: read at the next device's "
-      "creation); False for an unknown "
+      "creation; time_scene_passes (N5.2h: while the GPU timer is on, each surface's record is timed per unit as "
+      "ScenePass figures in place of its whole Surface figure, read at the next frame)); False for an unknown "
       "name. fail_allocation (texture/target sync) and fail_build (sampler/bindings/pipeline build or rebind) accept "
       "integer create-attempt ordinals (0: off), bounded by the stage limits." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,

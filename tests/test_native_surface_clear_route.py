@@ -223,3 +223,69 @@ def test_the_clear_control_passes_on_the_pass_route_and_fails_on_its_negatives()
     assert record["core_record_gpu_clear_draw"]["median_ms"] > record["core_record_gpu_clear_pass"]["median_ms"]
     assert not _run(_Stand(share_returns=False))[1]["clear_route_share_returns"]
     assert _run(_Stand(share_returns=False, by_pass_on_opengl=False), api="vulkan")[1]["clear_route_share_returns"]
+
+
+# ------------------------------------------------------------------------------------ the scene-pass round
+
+
+class _UnitStand:
+    """A stand-in for ``_scene_passes``: a record of three units (two passes, one with its nearest copies) while the
+    switch is on, the whole Surface figure while it is off. ``nested``: a module that kept the whole bracket beside the
+    units; ``always``: one whose units ignore the switch."""
+
+    def __init__(self, *, known=True, nested=False, always=False):
+        self.known, self.nested, self.always = known, nested, always
+        self.units = False
+        self.edge = 0
+        self.pending = []
+        self.module = SimpleNamespace(stage_control=self._stage_control)
+        self.layer = SimpleNamespace(tick=self._record, state=lambda: {"mode": {"program": {"passes": [
+            {"name": "underlay"}, {"name": "chunks"}]}}})
+
+    def _stage_control(self, name, on):
+        if not self.known or name != "time_scene_passes":
+            return False
+        self.units = bool(on)
+        return True
+
+    def _record(self):
+        from rendering.native.gpu_timing import GpuSample
+
+        self.edge += 1
+        e = self.edge
+        if self.units or self.always:
+            self.pending += [GpuSample(5, e, e + 1, 100_000, 0, 0), GpuSample(5, e, e + 1, 300_000, 1, 0),
+                             GpuSample(5, e, e + 1, 50_000, 1, 1)]
+        if not self.units or self.nested:
+            self.pending.append(GpuSample(2, e, e + 1, 460_000))
+        self.pending.append(GpuSample(0, -1, e + 1, 600_000))
+
+    def frames(self, n=1):
+        pass
+
+    def set_gpu_timer(self, on):
+        pass
+
+    def gpu_samples(self):
+        taken, self.pending = self.pending, []
+        return taken
+
+
+def _units(stand):
+    import transition_route_check as trc
+
+    scene = SimpleNamespace(layer=stand.layer, frames=stand.frames)
+    return trc._scene_passes(stand, scene, stand, SimpleNamespace(at=lambda run, progress: None), object())
+
+
+def test_the_scene_pass_round_names_each_unit_and_fails_on_its_negatives():
+    record, checks = _units(_UnitStand())
+    assert record["available"] and all(checks.values()), checks
+    assert set(record["units"]) == {"0:underlay:unit", "1:chunks:unit", "1:chunks:nearest"}
+    assert abs(record["units_sum_per_frame"]["median_ms"] - 0.45) < 1e-9
+    assert abs(record["core_record_gpu_units_off"]["median_ms"] - 0.46) < 1e-9
+    # Negatives: a module without the switch judges nothing; one that kept the whole bracket beside the units (nested
+    # GL_TIME_ELAPSED), and one whose units ignore the switch (the control blocks timed too), each fail.
+    assert _units(_UnitStand(known=False)) == ({"available": False}, {})
+    assert not _units(_UnitStand(nested=True))[1]["scene_passes_replace_the_record"]
+    assert not _units(_UnitStand(always=True))[1]["scene_passes_control_has_none"]

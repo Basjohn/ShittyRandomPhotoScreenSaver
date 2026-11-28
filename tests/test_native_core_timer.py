@@ -186,8 +186,57 @@ def test_the_frame_driver_brackets_every_pass_it_records():
     assert len(re.findall(r"->record\(rhi, cb", edge)) == 3          # the probe, the known-cost pass, each surface
     assert unbracketed_passes(edge) == []
     # Negative control: the same reading with the surfaces' bracket taken out.
-    stripped = edge.replace("const int scope = timerBegin(rhi, cb, GpuPassKind::Surface);", "const int scope = -1;")
+    stripped = edge.replace("const int scope = units ? -1 : timerBegin(rhi, cb, GpuPassKind::Surface);",
+                            "const int scope = -1;")
     assert stripped != edge and unbracketed_passes(stripped)
+
+
+# N5.2h: under the harness's time_scene_passes a surface's record is timed per unit (GpuPassKind::ScenePass) in place of
+# its whole Surface figure (GL_TIME_ELAPSED cannot nest). Each unit of ModeContent::recordPasses opens a scope of its own.
+_UNIT_WORK = ("recordTextureChains(", "recordCompute(", "t.captureTarget.get()", "m_post.recordEnvironment(",
+              "m_post.recordBloom(", "recordDefocus(rhi", "m_cubePrefilter.record(",
+              "cb->beginPass(passClears ? clearingTarget", "primeForLoad(rhi, cb, textures", "recordNearest(cb",
+              "m_targets.generateSelfMips(", "cb->beginPass(clearingTarget ? clearingTarget")
+_UNIT_SCOPE = re.compile(r"const GpuUnitScope timed\(rhi, cb, |timed\.emplace\(rhi, cb, ")
+
+
+def units_without_a_scope(body: str) -> list[str]:
+    """The record's units (``_UNIT_WORK``, in source order) with no scope opened between the previous unit and them."""
+    sites = sorted((body.index(work), work) for work in _UNIT_WORK)
+    scopes = [m.start() for m in _UNIT_SCOPE.finditer(body)]
+    missing, previous = [], 0
+    for at, work in sites:
+        if not any(previous < s < at for s in scopes):
+            missing.append(work)
+        previous = at
+    return missing
+
+
+def test_each_unit_of_a_surfaces_record_is_timed_apart_under_time_scene_passes():
+    source = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    start = source.index("void ModeContent::recordPasses(")
+    body = source[start:source.index("\n}\n", start)]
+    assert all(body.count(work) == 1 for work in _UNIT_WORK)
+    assert units_without_a_scope(body) == []
+    # Negative control: the run's nearest copies folded back into its unit are no longer timed apart.
+    folded = body.replace("timed.emplace(rhi, cb, i, GpuUnitPart::Nearest);", "", 1)
+    assert folded != body and units_without_a_scope(folded) == ["recordNearest(cb"]
+    # The driver sets the brackets around the surface's record only, and only while the timer is on; the whole
+    # Surface bracket is taken then.
+    edge = _function((CORE / "src" / "frame_driver.cpp").read_text(encoding="utf-8"), "onBeforeRendering")
+    assert "const bool units = m_timer && timeScenePasses();" in edge
+    flat = re.sub(r"\s+", " ", edge)
+    on, record, off = (flat.index(s) for s in ("if (units) setGpuUnitBrackets(&brackets);", "surface->record(rhi, cb",
+                                                "if (units) setGpuUnitBrackets(nullptr);"))
+    assert on < record < off
+    # The parts are one list in C++ and Python, and a row carries its pass and part (a 4-item row stays readable).
+    header = (CORE / "src" / "gpu_timer.h").read_text(encoding="utf-8")
+    enum = re.search(r"enum class GpuUnitPart : int \{(.*?)\};", header, re.S).group(1)
+    parts = {int(v): re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name, v in re.findall(r"(\w+) = (\d+)", enum)}
+    assert parts == gpu_timing.GPU_UNIT_PARTS
+    six, four = gpu_timing.samples_from([(5, 9, 10, 1_000, 3, 1), (2, 9, 10, 2_000)])
+    assert (six.kind_name, six.pass_index, six.part_name) == ("scenepass", 3, "nearest")
+    assert (four.kind_name, four.pass_index, four.part_name) == ("surface", -1, "unit")
 
 
 def test_off_holds_no_timer_and_the_edge_tests_one_pointer_for_it():

@@ -42,6 +42,7 @@ comparison in work/: delete it once judged). Exit 0 whenever the harness ran; th
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import subprocess
 import sys
@@ -937,6 +938,155 @@ def _clear_control(core, api: str, scene, host, clock, run, route: str = "surfac
     return record, checks
 
 
+#: N5.2h's scene-pass gap: the variants timed per unit (``_scene_passes``) and per Python stage (``_python_stages``), in
+#: alternating blocks of SCENE_PASS_BLOCK_FRAMES frames over the cost round's progress span (units on, then off).
+SCENE_PASS_VARIANTS = ("crumble_both_4x", "glass_shatter_both_4x")
+SCENE_PASS_BLOCKS = 6
+SCENE_PASS_BLOCK_FRAMES = 24
+
+
+def _program_pass_names(scene) -> tuple[list, str]:
+    """The mode program's pass names in the core's order (the index a scene-pass figure names), and where they were
+    read; ([], "none") when the state names none (the figures are then labelled by index alone)."""
+    mode = scene.layer.state().get("mode") or {}
+    for source, passes in (("program", (mode.get("program") or {}).get("passes")),
+                           ("facts", (mode.get("facts") or {}).get("passes")), ("mode", mode.get("passes"))):
+        if passes:
+            return [p.get("name") if isinstance(p, dict) else str(p) for p in passes], source
+    return [], "none"
+
+
+def _scene_passes(core, scene, host, clock, run) -> tuple[dict, dict]:
+    """N5.2h: the record timed per unit (``stage_control("time_scene_passes")``: each run with its primes, passes and
+    the pass's own resolves; its nearest copies; its self mips; each compute, step and the texture chains) against the
+    whole record (the Surface figure) in alternating blocks over the same frames. The off blocks are the control: no
+    scene-pass figure without the switch, and the Surface figure with it off only. A module without the switch:
+    ``available`` False, nothing judged."""
+    from rendering.native.gpu_timing import GPU_UNIT_PARTS
+
+    if not core.module.stage_control("time_scene_passes", False):
+        return {"available": False}, {}
+    names, names_from = _program_pass_names(scene)
+    timed: dict = {True: [], False: []}
+    host.set_gpu_timer(True)
+    host.gpu_samples()
+    frame = 0
+    try:
+        for _block in range(SCENE_PASS_BLOCKS):
+            for units in (True, False):
+                core.module.stage_control("time_scene_passes", units)
+                for _ in range(SCENE_PASS_BLOCK_FRAMES):
+                    clock.at(run, 0.1 + 0.8 * (frame % COST_FRAMES) / (COST_FRAMES - 1))
+                    frame += 1
+                    scene.layer.tick()
+                    scene.frames(1)
+                scene.frames(2)
+                timed[units].extend(host.gpu_samples())
+    finally:
+        core.module.stage_control("time_scene_passes", False)
+        host.set_gpu_timer(False)
+    units_on = [s for s in timed[True] if s.kind == 5]
+    by_unit: dict = {}
+    per_frame: dict = {}
+    for s in units_on:
+        name = names[s.pass_index] if 0 <= s.pass_index < len(names) else "-"
+        by_unit.setdefault(f"{s.pass_index}:{name}:{GPU_UNIT_PARTS.get(s.part, s.part)}", []).append(s.nanoseconds / 1e6)
+        per_frame[s.frame] = per_frame.get(s.frame, 0.0) + s.nanoseconds / 1e6
+    whole = [s.nanoseconds / 1e6 for s in timed[False] if s.kind == 2]
+    units_sum = blc._ms_stats(list(per_frame.values()))
+    record = {"available": True, "pass_names_from": names_from, "pass_names": names,
+              "units": {key: blc._ms_stats(values) for key, values in sorted(by_unit.items(),
+                                                                           key=lambda kv: int(kv[0].split(":")[0]))},
+              "units_per_frame": round(len(units_on) / max(1, len(per_frame)), 2),
+              "units_sum_per_frame": units_sum, "core_record_gpu_units_off": blc._ms_stats(whole),
+              "qrhi_frame_gpu_units_on": blc._ms_stats([s.nanoseconds / 1e6 for s in timed[True] if s.kind == 0]),
+              "qrhi_frame_gpu_units_off": blc._ms_stats([s.nanoseconds / 1e6 for s in timed[False] if s.kind == 0])}
+    checks = {"scene_passes_timed": len(per_frame) >= SCENE_PASS_BLOCKS * SCENE_PASS_BLOCK_FRAMES // 2,
+              # The switch replaces the whole bracket (GL_TIME_ELAPSED cannot nest) and nothing else times units.
+              "scene_passes_replace_the_record": not any(s.kind == 2 for s in timed[True]),
+              "scene_passes_control_has_none": not any(s.kind == 5 for s in timed[False]) and bool(whole)}
+    return record, checks
+
+
+def _python_stages(capture, run, frames: int = SCENE_PASS_BLOCKS * SCENE_PASS_BLOCK_FRAMES) -> dict:
+    """N5.2h: the Python renderer's same work on the same progress span, each stage between two GL timestamps (they
+    nest, unlike GL_TIME_ELAPSED): the underlay, the trails (ghosts into R8 and the edges), the scene target's begin,
+    the pieces (chunks or shards), the debris, and the scope's end (its resolve and motion blur stamped inside it, the
+    composite the rest); ``frame`` the whole render. A harness patch of the implementation's instance only, restored
+    after; the capture's bare FBO (``TransitionCapture``), not the product route."""
+    from OpenGL import GL as gl
+
+    with capture._target.current():
+        capture.host.render(capture.frame(run, 0.5))              # the implementation and its run resources exist
+        impl = capture.host._implementations[run.request.transition_id]
+        target = impl._target
+        owners = [("underlay", impl._resources, "draw_image"), ("trails", impl._trails, "draw"),
+                  ("begin", target, "begin"), ("end", target, "end"), ("resolve", target, "_resolve"),
+                  ("pieces", impl, "_draw_chunks" if hasattr(impl, "_draw_chunks") else "_draw_shards")]
+        if hasattr(impl, "_draw_debris"):
+            owners.append(("debris", impl, "_draw_debris"))
+        motion = getattr(target, "_motion", None)
+        if motion is not None:
+            owners.append(("motion_blur", motion, "apply"))
+        stamps: list = []
+        pending: list = []
+
+        def stamp() -> int:
+            query = int(gl.glGenQueries(1)[0])
+            gl.glQueryCounter(query, gl.GL_TIMESTAMP)
+            return query
+
+        def wrapped(label, original):
+            def call(*args, **kwargs):
+                before = stamp()
+                try:
+                    return original(*args, **kwargs)
+                finally:
+                    pending.append((label, before, stamp()))
+            return call
+
+        saved = [(owner, attr, owner.__dict__.get(attr)) for _label, owner, attr in owners]
+        for label, owner, attr in owners:
+            setattr(owner, attr, wrapped(label, getattr(owner, attr)))
+        try:
+            for index in range(frames):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+                before = stamp()
+                capture.host.render(capture.frame(run, 0.1 + 0.8 * (index % COST_FRAMES) / (COST_FRAMES - 1)))
+                pending.append(("frame", before, stamp()))
+                gl.glFlush()                                     # per frame, as the benchmark does
+                stamps.append(pending[:])
+                pending.clear()
+            per_label: dict = {}
+            queries = []
+            for frame_stamps in stamps:
+                seen: dict = {}
+                for label, first, last in frame_stamps:
+                    queries += [first, last]
+                    values = []
+                    for query in (first, last):
+                        value = ctypes.c_uint64()
+                        gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
+                        values.append(value.value)
+                    seen[label] = seen.get(label, 0.0) + (values[1] - values[0]) / 1e6
+                for label, ms in seen.items():
+                    per_label.setdefault(label, []).append(ms)
+            gl.glDeleteQueries(len(queries), queries)
+        finally:
+            for owner, attr, original in saved:
+                if original is None:
+                    owner.__dict__.pop(attr, None)
+                else:
+                    setattr(owner, attr, original)
+    stats = {label: blc._ms_stats(values) for label, values in per_label.items()}
+    end = stats.get("end", {}).get("median_ms")
+    inner = sum(stats.get(k, {}).get("median_ms") or 0.0 for k in ("resolve", "motion_blur"))
+    if end is not None:
+        stats["composite_rest_of_end_median_ms"] = round(end - inner, 4)
+    return stats
+
+
 def round_cost(core, engine, app, api: str, variants) -> dict:
     from PIL import Image
 
@@ -1027,6 +1177,10 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     control, control_checks = _clear_control(core, api, scene, host, clock, run, route="scene")
                     facts[f"{label}_{variant}"]["scene_clear_control"] = control
                     checks.update({f"{label}_{variant}_scene_{k}": v for k, v in control_checks.items()})
+                if variant in SCENE_PASS_VARIANTS:
+                    units, unit_checks = _scene_passes(core, scene, host, clock, run)
+                    facts[f"{label}_{variant}"]["scene_passes"] = units
+                    checks.update({f"{label}_{variant}_{k}": v for k, v in unit_checks.items()})
                 checks[f"{label}_{variant}_timed"] = len(surface) >= COST_FRAMES // 2
                 scene.layer.transition(None)
                 scene.present(photos[1][0])
@@ -1046,6 +1200,8 @@ def round_cost(core, engine, app, api: str, variants) -> dict:
                     run = production_run(variant, [image for image, _rows in photos], index + 1)
                     capture.render(run, 0.5)                     # its per-run resources made before the timing
                     facts[f"{label}_{variant}"]["python_opengl"] = capture.benchmark(run)
+                    if variant in SCENE_PASS_VARIANTS:
+                        facts[f"{label}_{variant}"]["python_stages"] = _python_stages(capture, run)
             finally:
                 capture.close()
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}

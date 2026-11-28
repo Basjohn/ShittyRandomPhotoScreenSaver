@@ -63,8 +63,50 @@ QString gpuPassKindName(GpuPassKind kind)
         return QStringLiteral("load");
     case GpuPassKind::Backdrop:
         return QStringLiteral("backdrop");
+    case GpuPassKind::ScenePass:
+        return QStringLiteral("scenepass");
     }
     return QStringLiteral("unknown");
+}
+
+// ---------------------------------------------------------------------------------- N5.2h: a scene's unit brackets
+
+namespace {
+QAtomicInteger<int> g_timeScenePasses { 0 };
+thread_local const GpuUnitBrackets *t_unitBrackets = nullptr; // the render thread's record in progress
+} // namespace
+
+void setTimeScenePasses(bool on)
+{
+    g_timeScenePasses.storeRelaxed(on ? 1 : 0);
+}
+
+bool timeScenePasses()
+{
+    return g_timeScenePasses.loadRelaxed() != 0;
+}
+
+const GpuUnitBrackets *gpuUnitBrackets()
+{
+    return t_unitBrackets;
+}
+
+void setGpuUnitBrackets(const GpuUnitBrackets *brackets)
+{
+    t_unitBrackets = brackets;
+}
+
+GpuUnitScope::GpuUnitScope(QRhi *rhi, QRhiCommandBuffer *cb, int pass, GpuUnitPart part)
+    : m_brackets(t_unitBrackets), m_rhi(rhi), m_cb(cb)
+{
+    if (m_brackets)
+        m_scope = m_brackets->begin(m_brackets->owner, rhi, cb, pass, int(part));
+}
+
+GpuUnitScope::~GpuUnitScope()
+{
+    if (m_brackets && m_scope >= 0)
+        m_brackets->end(m_brackets->owner, m_rhi, m_cb, m_scope);
 }
 
 // ------------------------------------------------------------------------------------------------- the ring's rule
@@ -468,6 +510,8 @@ bool GpuTimer::resolveSlot(int index, qint64 edge)
         sample.frame = slot.edge;
         sample.readAt = edge;
         sample.nanoseconds = nanoseconds[s];
+        sample.pass = slot.scope[s].pass;
+        sample.part = slot.scope[s].part;
         m_queue->append(sample);
         ++m_results;
     }
@@ -479,7 +523,7 @@ bool GpuTimer::resolveSlot(int index, qint64 edge)
     return true;
 }
 
-int GpuTimer::begin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind)
+int GpuTimer::begin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind, int pass, int part)
 {
     if (m_stopped || m_current < 0 || !rhi || !cb || (!m_vk && !m_gl))
         return -1;
@@ -507,6 +551,8 @@ int GpuTimer::begin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind)
     }
     cb->endExternal();
     slot.scope[s].kind = int(kind);
+    slot.scope[s].pass = pass;
+    slot.scope[s].part = part;
     slot.scope[s].closed = false;
     slot.scopes = s + 1;
     slot.pending = true;
