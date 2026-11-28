@@ -167,9 +167,9 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     samples: the Python renderer's ``SceneTarget`` scope, or Quick's framebuffer, which a one-sample target copies
     exactly), then the opaque composite onto the layer. Returns (passes, targets, images).
 
-    N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity as two
-    R16F attachments (``vx``, ``vy``: QRhi has no RG16F; cleared to no motion), written by the passes that move (the
-    others mask them, Python's ``velocity_writes``); then the tile max (a compute entry triggered by every drawn record,
+    N5.2d (N4.i; ``Current_Plan.md`` N5.2d's design): with motion blur the scene target also holds the velocity, one
+    RGBA16F attachment (``velocity``: QRhi has no RG16F; its .xy the half floats of Python's RG16F, cleared to no
+    motion), written by the passes that move (the others mask it, Python's ``velocity_writes``); then the tile max (a compute entry triggered by every drawn record,
     into the ``motion_tiles`` image of Python's tile counts for the item's ``pixels``), the gather into ``blurred`` and
     the composite of that. With trails each ghost pass (target ``ghosts``) is drawn once a ghost into an R8 buffer,
     MAX-blended, and the edges are a pass of the scene's list."""
@@ -213,8 +213,7 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
         # With motion blur every pass on the scene writes its colour; only a moving one writes the velocity.
         outputs = ()
         if motion and target == "scene":
-            outputs = (PassOutput(True),) + ((PassOutput(True),) * 2 if getattr(p, "moves", False)
-                                              else (PassOutput(False),) * 2)
+            outputs = (PassOutput(True), PassOutput(bool(getattr(p, "moves", False))))
         if getattr(p, "core_triangle", False):
             fragment = shared_pack_path(p.name, ".frag").read_bytes()
             passes.append(ModePass(p.name, fragment, blend, samplers, target=SCENE_TARGET, outputs=outputs,
@@ -251,11 +250,14 @@ def scene_program(renderer: Any, scene: Any, old: str, new: str, destination_siz
     images: list = []
     scene_texture = f"{SCENE_TARGET}.colour"
     if motion:
-        colour += [TargetAttachment("vx", "r16f"), TargetAttachment("vy", "r16f")]
+        # N5.2h: one RGBA16F, not two R16F attachments (x and y, as before): on OpenGL the pair cost 0.42 ms a 4K frame
+        # at 4x for crumble_both_4x (their clearing draw, the pieces' writes and QRhi's resolve blits; a raw-GL probe of
+        # the same shape: two R16F 0.86 ms, one RGBA16F 0.51, Python's RG16F 0.38). Cleared as Python's glClear clears
+        # its RG16F (0, 0, 0, 1); only .xy is read.
+        colour += [TargetAttachment("velocity", "rgba16f", clear=(0.0, 0.0, 0.0, 1.0))]
         geometry = motion_geometry(pixels if pixels is not None else destination_size)
         images.append(StorageImage(SCENE_MOTION_TILES, geometry.tiles, "rgba16f"))
-        velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.vx", "nearest"),
-                    PassSampler("uVelocityY", f"{SCENE_TARGET}.vy", "nearest"))
+        velocity = (PassSampler("uVelocity", f"{SCENE_TARGET}.velocity", "nearest"),)
         passes.append(ComputePass(MOTION_TILE_MAX, shared_pack_path(MOTION_TILE_MAX, ".comp").read_bytes(),
                                   (ComputeBinding("uTiles", SCENE_MOTION_TILES, "image", "write"),),
                                   groups=(geometry.tiles[0], geometry.tiles[1], 1), trigger="draw", samplers=velocity))

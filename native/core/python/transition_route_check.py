@@ -1332,7 +1332,7 @@ TIE_LEVEL = pt.TIE_LEVEL
 
 
 def _native_velocity(scene):
-    """The native scene's velocity of the frame just drawn (``scene.vx``, ``scene.vy``, read back), in the display's
+    """The native scene's velocity of the frame just drawn (``scene.velocity``'s x and y, read back), in the display's
     frame: the target's content rows [H - h, H) top first are the display's rows (the core's frame, F1), and its y is
     the display's down (Python's up negated, read back on the build)."""
     import numpy as np
@@ -1347,16 +1347,16 @@ def _native_velocity(scene):
         if pixels:
             break
         scene.frames(1)
-    got = {}
+    velocity = None
     for entry in pixels or []:
-        if entry["name"] in ("scene.vx", "scene.vy"):
+        if entry["name"] == "scene.velocity":                  # N5.2h: one RGBA16F, the motion in .xy
             width, height = entry["size"]
-            got[entry["name"]] = np.frombuffer(entry["data"], np.float16).reshape(height, width).astype(np.float32)
-    if len(got) != 2:
+            velocity = np.frombuffer(entry["data"], np.float16).reshape(height, width, 4).astype(np.float32)
+    if velocity is None:
         return None          # a frame showing a photograph (no scene): judged by the edges alone, the stricter
     h, w = blc.DISPLAY[1], blc.DISPLAY[0]
-    vx, vy = got["scene.vx"], got["scene.vy"]
-    return vx[vx.shape[0] - h:, :w], vy[vy.shape[0] - h:, :w]
+    velocity = velocity[velocity.shape[0] - h:, :w]
+    return velocity[..., 0], velocity[..., 1]
 
 
 #: Black flicker (operator, 21 Nov): a run's first frame keeps the source's lit pixels lit (at most this fraction of

@@ -517,9 +517,6 @@ in float vReleased; in vec3 vFront;
 in vec4 vClipNow; in vec4 vClipBefore;
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 SceneMotion;   // only kept while the target takes motion
-// N5.2e (checklist 16): the velocity's y again at location 2, as scene3d_motion_fragment writes it (the native core's
-// velocity is two R16F, x at 1 and y at 2; this renderer's RG16F at 1 keeps both and has no draw buffer at 2).
-layout(location = 2) out vec4 SceneMotionY;
 uniform sampler2D uOldTex; uniform vec2 uItemSize;
 uniform sampler2D uEnvironment;   // the new picture as a blurred environment (photo reflections)
 """
@@ -569,7 +566,6 @@ void main() {
     FragColor = sceneOutput(colour, glow + flash);
     vec2 motion = sceneVelocity(vClipNow, vClipBefore, uViewport);
     SceneMotion = vec4(motion, 0.0, 1.0);
-    SceneMotionY = vec4(motion.y, 0.0, 0.0, 1.0);
 }
 """
 )

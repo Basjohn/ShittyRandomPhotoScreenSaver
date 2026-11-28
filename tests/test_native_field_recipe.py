@@ -23,8 +23,8 @@ from rendering.native import loader
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / "release" / "native_module"
 BUILT = os.name == "nt" and (MODULE_DIR / f"{loader.MODULE_NAME}.pyd").is_file()
-# A shipped compute pack with a sampler pair, a writeonly rgba16f image and one block (the motion blur's tile max,
-# rendering/quick/scene3d/motion.py: uVelocity, uVelocityY, uTiles, MotionTileMax { int uTile; }).
+# A shipped compute pack with a sampler, a writeonly rgba16f image and one block (the motion blur's tile max,
+# rendering/quick/scene3d/motion.py: uVelocity, uTiles, MotionTileMax { int uTile; }; N5.2h: one velocity sampler).
 TILE_MAX = ROOT / "rendering" / "quick" / "qml" / "shaders" / "transitions" / "scene3d_motion_tile_max.comp.qsb"
 
 needs_module = pytest.mark.skipif(
@@ -43,8 +43,7 @@ def _recipe(**changes) -> dict:
         "input": "photo",
         "images": [{"name": "tiles", "format": "rgba16f", "size": [4, 4]}],
         "dispatches": [{"pack": 0, "block": 0, "groups": [1, 1, 1],
-                        "bindings": {"uVelocity": "input", "uVelocityY": "input",
-                                     "uTiles": {"image": "tiles", "access": "write"}}}],
+                        "bindings": {"uVelocity": "input", "uTiles": {"image": "tiles", "access": "write"}}}],
         "outputs": [{"image": "tiles", "texture": "tiles_out"}],
     }
     recipe.update(changes)
@@ -68,13 +67,13 @@ def test_a_recipe_bound_as_its_pack_declares_is_admitted_with_the_reflected_bind
     assert result["ok"], result
     dispatch = result["recipe"]["dispatches"][0]
     bound = {name: entry["binding"] for name, entry in dispatch["bindings"].items()}
-    assert sorted(bound) == ["uTiles", "uVelocity", "uVelocityY"]
-    assert len(set(bound.values())) == 3 and min(bound.values()) >= 0
+    assert sorted(bound) == ["uTiles", "uVelocity"]
+    assert len(set(bound.values())) == 2 and min(bound.values()) >= 0
     assert dispatch["block_binding"] >= 0 and 1 <= dispatch["block_size"] <= 16
 
 
 def _bindings(**changes) -> dict:
-    bindings = {"uVelocity": "input", "uVelocityY": "input", "uTiles": {"image": "tiles", "access": "write"}}
+    bindings = {"uVelocity": "input", "uTiles": {"image": "tiles", "access": "write"}}
     bindings.update(changes)
     return {name: value for name, value in bindings.items() if value is not None}
 
@@ -98,7 +97,7 @@ def test_every_disagreement_with_the_pack_is_refused_with_its_reason(core, label
                                       "bindings": _bindings(uTiles={"image": "tiles", "access": "read"})}])
     elif label == "sampler unbound":
         recipe = _recipe(dispatches=[{"pack": 0, "block": 0, "groups": [1, 1, 1],
-                                      "bindings": _bindings(uVelocityY=None)}])
+                                      "bindings": _bindings(uVelocity=None)}])
     elif label == "binding the pack lacks":
         recipe = _recipe(dispatches=[{"pack": 0, "block": 0, "groups": [1, 1, 1],
                                       "bindings": _bindings(uNothing="input")}])

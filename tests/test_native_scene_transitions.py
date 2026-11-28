@@ -194,6 +194,13 @@ def scene_target_runs(drawn, target: str) -> int:
     return runs
 
 
+def velocity_is_one_attachment(target: dict) -> bool:
+    """A motion-blurred scene target's attachments: its colour, then the velocity as one RGBA16F (the half floats of
+    Python's RG16F in .xy; QRhi has no RG16F), and nothing else."""
+    colour = target["colour"]
+    return len(colour) == 2 and colour[1]["format"] == "rgba16f"
+
+
 @pytest.mark.parametrize("variant", VARIANTS)
 def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(variant):
     from rendering.native.mode import CompositeStep, EnvironmentStep, ModePass, program_json
@@ -265,6 +272,17 @@ def test_the_program_is_the_environment_the_passes_and_the_opaque_composite(vari
     target = program["targets"][0]
     assert target["depth"] is True and target.get("samples", 1) == max(1, scene.samples)
     assert len(program["targets"]) == 1 + int(scene.trails) + int(scene.motion)
+    # N5.2h: with motion blur the velocity is one four-channel half-float attachment (its .xy), never a pair of
+    # single-channel ones (0.42 ms a 4K frame at 4x on OpenGL), and each scene pass writes one output per attachment.
+    if scene.motion:
+        assert velocity_is_one_attachment(target)
+        assert all(len(p.outputs) == 2 for p in drawn if p.target == nb.SCENE_TARGET)
+        # Negative control: the ABI 37 declaration (x and y as two R16F attachments) fails.
+        pair = dict(target, colour=[target["colour"][0], {"name": "vx", "format": "r16f"},
+                                    {"name": "vy", "format": "r16f"}])
+        assert not velocity_is_one_attachment(pair)
+    else:
+        assert len(target["colour"]) == 1
     own_vertex = [p for p in drawn if p.geometry is not None]
     assert len(packs) == len(program["passes"]) + len(own_vertex)   # each own vertex pack after its fragment's
 
@@ -730,7 +748,7 @@ def test_the_merge_refuses_a_doubled_member_and_a_third_block():
 
 def test_the_motion_free_tiles_write_no_motion_and_the_motion_tiles_both_axes():
     """Without motion blur the scene target has its colour alone and the core refuses outputs past it: the tiles' pack
-    writes FragColor only; with it, x at location 1 and y at 2 (the conversion: Python's RG16F keeps both at 1)."""
+    writes FragColor only; with it, (x, y) at location 1 (N5.2h: the core's one RGBA16F, Python's RG16F)."""
     from rendering.quick.transitions.implementations.exploding_tiles import QuickExplodingTilesRenderer
     from rendering.quick.transitions.native_scene import native_without_motion
 
@@ -738,8 +756,8 @@ def test_the_motion_free_tiles_write_no_motion_and_the_motion_tiles_both_axes():
     plain = QuickExplodingTilesRenderer.scene_pass("tiles").fragment_source
     moving = QuickExplodingTilesRenderer.scene_pass("tiles_motion").fragment_source
     assert output.findall(plain) == [("0", "FragColor")]
-    assert output.findall(moving) == [("0", "FragColor"), ("1", "SceneMotion"), ("2", "SceneMotionY")]
-    assert "SceneMotionY = vec4(motion.y" in moving
+    assert output.findall(moving) == [("0", "FragColor"), ("1", "SceneMotion")]
+    assert "SceneMotion = vec4(motion, 0.0, 1.0);" in moving
     # Control: a fragment without the outputs is refused (it is not a motion-writing fragment).
     with pytest.raises(ValueError):
         native_without_motion(plain)

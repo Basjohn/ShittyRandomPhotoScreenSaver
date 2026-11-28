@@ -233,8 +233,9 @@ def test_a_motion_fragment_writes_x_and_y_at_one_and_y_at_two_and_a_ghost_its_co
               pixel_accretion_program.PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
               exploding_tiles_program.EXPLODING_TILES_GHOST_FRAGMENT_SOURCE)
     for text in motions:
-        assert sorted(_OUTPUT.findall(text)) == [("0", "FragColor"), ("1", "SceneMotion"), ("2", "SceneMotionY")]
-        assert "SceneMotionY = vec4(motion.y, 0.0, 0.0, 1.0);" in text
+        # N5.2h: the motion (x, y) at location 1 alone (the native core's one RGBA16F velocity, Python's RG16F).
+        assert sorted(_OUTPUT.findall(text)) == [("0", "FragColor"), ("1", "SceneMotion")]
+        assert "SceneMotion = vec4(motion, 0.0, 1.0);" in text
     for text in ghosts:
         assert _OUTPUT.findall(text) == [("0", "FragColor")]
     # Negative controls: a ghost keeping the motion outputs (the ABI 36 ghost kept SceneMotion) fails the check, and a
@@ -250,7 +251,7 @@ def post_texts_read_in_pythons_frame(tile: str, gather: str, edges: str) -> bool
     flipped back from the fragment's."""
     plain = ("texelFetch(uVelocity, texel, 0).xy;\n            float", "texelFetch(uVelocity, pixel, 0)",
              "texelFetch(uVelocity, tap, 0)", "texelFetch(uScene, pixel, 0)", "texelFetch(uScene, tap, 0)")
-    return (all("sceneVelocityAt(uVelocity, uVelocityY" in text for text in (tile, gather))
+    return (all("sceneVelocityAt(uVelocity, " in text for text in (tile, gather))
             and not any(p in tile or p in gather for p in plain)
             and "ivec2 pixel = sceneMemoryTexel(fragTexel(uSize), uSize);" in gather
             and "ivec2 pixel = sceneMemoryTexel(fragTexel(uSize), uSize);" in edges
@@ -260,7 +261,7 @@ def post_texts_read_in_pythons_frame(tile: str, gather: str, edges: str) -> bool
 def test_the_post_passes_read_in_pythons_frame_under_the_native_define():
     """Checklist 16 (N5.2d): one text per pass for both renderers; the native packs are baked with
     ``SRPSS_NATIVE_CORE`` (the core's scene target is Python's allocation flipped whole, its motion y negated, its
-    velocity two R16F). Python's stills before and after: byte-identical (evidence native_core/n5_2d)."""
+    velocity one RGBA16F: N5.2h). Python's stills before and after: byte-identical (evidence native_core/n5_2d)."""
     from rendering.quick.scene3d.motion import MOTION_BLUR_PROGRAMS, NATIVE_FRAME_DEFINE, NATIVE_FRAME_GLSL
     from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM
 
@@ -268,11 +269,12 @@ def test_the_post_passes_read_in_pythons_frame_under_the_native_define():
     edges = TRAIL_EDGES_PROGRAM[2]
     assert post_texts_read_in_pythons_frame(tile, gather, edges)
     native, plain = NATIVE_FRAME_GLSL.split("#else")
-    assert f"#ifdef {NATIVE_FRAME_DEFINE}" in native and "size.y - 1 - texel.y" in native and "-texelFetch(y" in native
-    assert "return texel;" in plain and "texelFetch(x, texel, 0).xy" in plain   # identity without the define
+    assert f"#ifdef {NATIVE_FRAME_DEFINE}" in native and "size.y - 1 - texel.y" in native
+    assert "return vec2(motion.x, -motion.y);" in native and "uVelocityY" not in tile + gather   # one attachment
+    assert "return texel;" in plain and "texelFetch(velocity, texel, 0).xy" in plain   # identity without the define
     # Negative control: the ABI 36 texts (plain reads, the fragment's own texel) fail.
     assert not post_texts_read_in_pythons_frame(
-        tile.replace("sceneVelocityAt(uVelocity, uVelocityY, texel)", "texelFetch(uVelocity, texel, 0).xy"), gather, edges)
+        tile.replace("sceneVelocityAt(uVelocity, texel)", "texelFetch(uVelocity, texel, 0).xy"), gather, edges)
     assert not post_texts_read_in_pythons_frame(
         tile, gather, edges.replace("sceneMemoryTexel(fragTexel(uSize), uSize)", "fragTexel(uSize)"))
 
