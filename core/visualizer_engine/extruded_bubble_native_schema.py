@@ -309,12 +309,14 @@ def stream_arena(label_namespace: int) -> GeometryArenaOwner | None:
 
 
 class DriftStream:
-    """The native route's drift side (GUI thread): per record, the stream's arena by the frame's label namespace, a
-    projector per (writer namespace, engine generation, activation), the drift fields and the packed stream. A bound
+    """The native route's drift side (GUI thread): per record, the stream's arena by the frame's label namespace, one
+    projector per stream (its namespace) for its current (writer namespace, engine generation, activation), the drift
+    fields and the packed stream. A bound
     item (``bound``) is told its stream's arena name when it first differs (the core opens it once per name)."""
 
     def __init__(self) -> None:
-        self._projectors: dict[tuple[int, int, int], DriftRecordProjector] = {}
+        # Per stream (its arena's label namespace): the (writer, engine, activation) identity and its projector.
+        self._projectors: dict[int, tuple[tuple[int, int, int], DriftRecordProjector]] = {}
         self._items: list[tuple[weakref.ref, tuple[int, int, int], list[str]]] = []
         self._missing: set[int] = set()
 
@@ -346,11 +348,15 @@ class DriftStream:
             fields, _window = DriftRecordProjector(1, 0, 0).project(frame, held=lambda _key: False)
             return fields
         identity = (writer, engine, activation)
-        projector = self._projectors.get(identity)
-        if projector is None:
-            # One stream a route: a new writer (a replacement worker) or activation starts its own epochs.
-            self._projectors = {identity: DriftRecordProjector(writer, engine, activation)}
-            projector = self._projectors[identity]
+        held = self._projectors.get(namespace)
+        if held is None or held[0] != identity:
+            # One projector a stream (its arena's label namespace): a new writer (a replacement worker) or activation
+            # starts that stream's own epochs, and leaves every other stream's alone (two displays each draw one;
+            # one projector a process reset the other's every frame). A stream whose arena closed is forgotten here.
+            self._projectors = {ns: entry for ns, entry in self._projectors.items()
+                                if ns != namespace and stream_arena(ns) is not None}
+            held = self._projectors[namespace] = (identity, DriftRecordProjector(writer, engine, activation))
+        projector = held[1]
         fields, _window = projector.project(frame, held=arena.holds)
         self._tell(logical, arena.name)
         return fields
@@ -479,7 +485,8 @@ def _numbers(name: str, kind: str, count: int, value: Any) -> object:
     return numbers if expected > 1 else numbers[0]
 
 
-#: The route's drift side (one per process: the route's records and the reference encoder name the same lineage).
+#: The route's drift side (one per process, a projector per stream inside: the route's records and the reference
+#: encoder name the same lineage).
 DRIFT = DriftStream()
 
 #: The label namespace of a stream drawn in process: the drift log's own revisions (an engine session's are >= 1).

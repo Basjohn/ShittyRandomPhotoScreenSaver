@@ -443,6 +443,37 @@ def test_control_a_route_naming_the_arena_every_record_is_seen():
         _check_route_names_arena(chatty)
 
 
+def _check_streams_keep_their_projectors(module):
+    """Two streams at once (two displays): each stream's record fields are those of a route that drew it alone."""
+    owners = [module.open_stream_arena(ns, CHAIN_GEOMETRY_BYTES * 4) for ns in (0x5EE1, 0x5EE2)]
+    writers = [GeometryArenaWriter(owner.name, families=FAMILIES) for owner in owners]
+    try:
+        mixed, alone = module.DriftStream(), [module.DriftStream(), module.DriftStream()]
+        for sequence in range(1, 6):
+            for index, (ns, writer) in enumerate(zip((0x5EE1, 0x5EE2), writers)):
+                # A new revision each frame: a stream's epochs climb (1, 2, ...) only while its projector lives.
+                state = _state(_family((ns << 32) + sequence, rebase_from=(ns << 32) + sequence - 1),
+                               activation=3 + index, serials=tuple(range(1, sequence + 1)))
+                _publish(writer, state, sequence - 1, sequence)
+                logical = SimpleNamespace(runtime_generation=7, **vars(state))
+                assert mixed.project(logical) == alone[index].project(logical), (sequence, index)
+    finally:
+        for writer in writers:
+            writer.close()
+        for owner in owners:
+            module.close_stream_arena(owner)
+
+
+def test_two_streams_at_once_keep_their_own_projectors():
+    _check_streams_keep_their_projectors(schema_module)
+
+
+def test_control_one_projector_a_process_is_seen():
+    shared = _mutated(schema_module, ("if ns != namespace and stream_arena(ns) is not None}", "if False}"))
+    with pytest.raises(AssertionError):
+        _check_streams_keep_their_projectors(shared)
+
+
 def _check_unactivated(arena, module):
     owner, attach = arena
     writer = attach(module)
