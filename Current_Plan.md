@@ -121,7 +121,14 @@ Continue the native sequence below with the repaired timing receipts. The report
     `.claude/worktrees/agent-a6b16aeef142dc895`, branch `worktree-agent-a6b16aeef142dc895` (merges ac5eb's): the
     remaining ~54 `TransitionCapture` callers → `NativeTransitionCapture`, delete `render_host.py` and the transitions'
     GL draw code, bench/overhead/conventions retargets, public bootstrap close, smoke tests, Docs/Reference, and the
-    pre-existing red `afterRendering.connect` in `background_item.py`.
+    pre-existing red `afterRendering.connect` in `background_item.py`. Done 28 Nov (`90aea5034`, `e7cafe96b`,
+    `0d7b757bc`, `30c44c194`, journal `48658e507`): all of the above. The four reference checks pass from the cache on
+    both APIs, and the media, onboarding, overhead and conventions smokes ran. Lead merged ac5eb's sampler follow-up as
+    `9caada852`. Side defects: `tests/test_native_scene_targets.py::test_the_admission_refuses_with_its_reasons` wording vs
+    the f475358aa module (goes to the GL fix agent); `rendering/quick/scene3d` PhotoEnvironment/MotionTrails/trails may
+    now be dead for transitions (the visualizers still use them; check before any deletion). Retired at 231k.
+    **Next: Opus Medium GL_INVALID_ENUM fix** (diagnosis in the switch box) on this branch, from after the 07:00Z usage
+    reset.
   - **Sonnet Medium `ac12d10542a75cc4a`** (28 Nov): switch point 4, `TransitionCapture` → `OffscreenRenderTarget`,
     worktree `.claude/worktrees/agent-ac12d10542a75cc4a`, branch `worktree-agent-ac12d10542a75cc4a` (merges a5767's).
     Done 28 Nov (`d2c26bcb6` tests + `OffscreenRenderTarget.upload_image`, `d84ee39ae` tools; 40 test files, 7 tools,
