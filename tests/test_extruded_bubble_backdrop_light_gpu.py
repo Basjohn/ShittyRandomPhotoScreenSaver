@@ -15,14 +15,14 @@ def test_shaft_blur_and_backdrop_sample_only_odd_content_in_padded_targets(qt_ap
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.scene3d.uniforms import PassBlocks
     from rendering.quick.visualizer.implementations.extruded_bubble import _common, _Uniforms
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     shaft_size = (5, 3)
     scene_size = (11, 7)
     # Opposite edges and rows have different values. Slack poisoned far above the content exposes either wrong
     # row alignment or bilinear taps crossing an edge.
     pattern = np.array([[.05, .3, .1, .5, .9], [.4, .5, .3, .6, .2], [.8, .2, .5, .3, .3]], dtype="f4")
-    target = TransitionCapture(14, 11)
+    target = OffscreenRenderTarget(14, 11)
     programs, textures = [], []
     blocks = PassBlocks("EB padded shaft sampling", block_bytes=shaders.FULLSCREEN_BLOCK.size)
     bank = _Uniforms()
@@ -112,9 +112,9 @@ def backdrop_light(qt_app):
     from rendering.quick.render.gl_resources import compile_program
     from rendering.quick.scene3d.uniforms import PassBlocks
     from rendering.quick.visualizer.implementations.extruded_bubble import _Uniforms
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    target = TransitionCapture(1, 1)
+    target = OffscreenRenderTarget(1, 1)
     program = texture = shafts = 0
     blocks = PassBlocks('EB direct light backdrop', block_bytes=FULLSCREEN_BLOCK.size)
     try:

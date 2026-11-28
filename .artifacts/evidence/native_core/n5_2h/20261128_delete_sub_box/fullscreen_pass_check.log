@@ -1,0 +1,7 @@
+opengl: PASS
+vulkan: PASS
+vulkan against opengl: {'pass': True, 'compared': 256, 'max_level': 1, 'worst': 'dpr1.0_burn_0.20', 'tolerance': {'pass': True, 'frames': 256, 'frames_failed': 0, 'max_level': 1, 'masked_differing_worst_frame': 0, 'mask_pixels_largest_frame': 0, 'scatter_worst_frame': 618, 'scatter_group_worst_frame': 0, 'scatter_window_worst_frame': 0, 'ties_worst_frame': 0, 'flips_worst_frame': 0, 'first_reasons': []}, 'bound': {'name': 'fullscreen pass, Vulkan against OpenGL (rule b)', 'masked_level': 0, 'scatter_pixels': 927, 'tie_pixels': 0, 'tie_level': 2, 'flip_pixels': 0, 'edge_contrast': 32}, 'uv_bits_identical': True}
+evidence: F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.claude\worktrees\agent-ac5eb8a969947d272\.artifacts\evidence\native_core\n4_a\20261128_n52h_delete_fullscreen_pass_check\summary.json (the work folder holds the frames: delete it once judged)
+N4A VERDICT PASS
+
+--- stderr

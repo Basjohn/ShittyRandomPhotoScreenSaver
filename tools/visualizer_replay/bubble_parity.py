@@ -107,10 +107,10 @@ def _gpu_snapshots(folder, snapshots, indices):
     from OpenGL import GL as gl
     from PIL import Image
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     width,height=1920,1080
-    target,host=TransitionCapture(width,height),QuickVisualizerRenderHost()
+    target,host=OffscreenRenderTarget(width,height),QuickVisualizerRenderHost()
     rows=[]
     try:
         for index in indices:

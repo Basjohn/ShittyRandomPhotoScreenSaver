@@ -16,10 +16,10 @@ def test_sphere_ufade_is_the_scene_faded_content_fade_not_squared(qt_app, monkey
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
     from rendering.quick.visualizer.render_contract import scene_faded_snapshot
     from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     scene = 0.5
-    context = TransitionCapture(160, 90)
+    context = OffscreenRenderTarget(160, 90)
     host = QuickVisualizerRenderHost()
     seen: list[float] = []
     original = sphere_voxel.QuickSphereVoxelRenderer._packed_frame

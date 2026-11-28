@@ -53,7 +53,7 @@ The Orchestrator Handbook's "where everything is" table points here. A tool nobo
 | 10 | `tools/run_matrix.py` | declarative matrix of bounded RUN sessions over the product's `--exit-after` | LEAD |
 | 11 | `tools/release_media.py` | showcase WebPs for transitions and Visualizer modes into `assets/webp/` (judge a new effect by looking) | ANY |
 | 12 | `tools/overhead_baseline.py` | cost of every transition and mode before/after a shared change (`--compare`) | ANY |
-| 13 | `tools/transition_contact_sheet.py` | deterministic transition frames through the production GL host (`--effect`, `--animate`) | ANY (not `--quick-smoke`) |
+| 13 | `tools/transition_contact_sheet.py` | deterministic transition frames drawn by the native core (`--effect`, `--animate`) | ANY |
 | 14 | `tools/visualizer_replay/record.py` | record real music as a replay clip (`record NAME --seconds 60`; GUI: `tools/music_recorder.py`) | OP (needs music playing) |
 | 15 | `tools/visualizer_replay/owner_worker_gate.py`, `live_engine_gate.py`, `owner_render_parity.py` | native core identity gates: the engine worker against in process (frames, session, drawn pixels) | ANY |
 | 16 | `tools/compute_pass_identity.py` | bit-for-bit before/after of the scene3d compute passes (`record`, `compare`, `paired`) | ANY |
@@ -303,7 +303,7 @@ new. `-m tools.visualizer_replay.X` means `PY -m tools.visualizer_replay.X`. Met
 
 | Path | What it does and how to run it | Who | Out | Tests / docs |
 |---|---|---|---|---|
-| `tools/transition_contact_sheet.py` | Deterministic transition frames through the production GL host. `[--effect glass_shatter] [--width 960] [--height 540] [--direction D] [--seed 713] [--source IMG] [--destination IMG] [--animate] [--quick-smoke [--windows 1\|2 (=2)]] [--output-dir DIR]`. `--animate` writes a 60-frame two-second WebP. `--quick-smoke` opens real windows: operator-visible. Render on personal wallpapers; keep seen candidates. | ANY (not `--quick-smoke`) | layout `transitions/<effect>/contact_sheet` | 71 tests import it; Transitions.md |
+| `tools/transition_contact_sheet.py` | Deterministic transition frames drawn by the native core (`tools/native_transition_capture.py`, no window). `[--effect glass_shatter] [--width 960] [--height 540] [--direction D] [--seed 713] [--source IMG] [--destination IMG] [--animate] [--output-dir DIR]`. `--animate` writes a 60-frame two-second WebP. Render on personal wallpapers; keep seen candidates. | ANY | layout `transitions/<effect>/contact_sheet` | tests import its fixtures; Transitions.md |
 | `tools/qtquick_blinds_smoke.py` | Real-GL wrapper of the Quick Blinds smoke. `--direction horizontal\|vertical\|diagonal [--windows 1\|2] [--output DIR]`. `--windows 2` only for intentional multi-display evidence. Opens a window. | OP | layout | Harness_Index §2 |
 | `tools/qtquick_phase_c_effect_smoke.py` | Parameterised Phase C effects (Ripple, Crumble, Particle, Burn). `--effect E [--case C] [--windows 1\|2] [--output DIR]`; use the source's exact case names. Opens a window. | OP | layout | `test_qtquick_phase_c_effect_smoke.py` |
 | `tools/qtquick_render_node_smoke.py` | Production-shaped threaded Qt Quick lifecycle smoke. `[--windows 2] [--generations 1] [--hide-show-cycles 0] [--exit-via-input] [--topology-recreate] [--size WxH] [--phase-delay-ms 350] [--transition-id crossfade] [--transition-direction D] [--slide-motion-style Linear\|Elastic\|Wobble\|Flex\|Perspective Push] [--output DIR]`. Opens windows; the tests drive it. | OP (tests: ANY) | layout | 6 tests; Transitions.md |

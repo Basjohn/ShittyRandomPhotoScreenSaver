@@ -16,7 +16,7 @@ from rendering.quick.transitions.glass_dynamics import (
     split_polygon,
 )
 from rendering.quick.transitions.run_geometry import build_glass_geometry, glass_geometry_key
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 ASPECT = 16 / 9
 MODES = (
@@ -145,7 +145,7 @@ def test_dynamic_geometry_is_deterministic_per_seed():
 @pytest.mark.parametrize("mode", MODES, ids=("collide", "reshatter", "both"))
 @pytest.mark.parametrize("size", ((160, 480), (720, 180), (320, 180)))
 def test_every_piece_still_leaves_the_frame(qt_app, mode, size):
-    capture = TransitionCapture(*size)
+    capture = NativeTransitionCapture(*size)
     try:
         source, destination = (np.asarray(i, dtype=np.int16) for i in capture.images)
         for direction in ("left", "up", "diag_tr_bl", "center_out"):
@@ -162,7 +162,7 @@ def test_every_piece_still_leaves_the_frame(qt_app, mode, size):
 @pytest.mark.qt
 @pytest.mark.parametrize("mode", MODES, ids=("collide", "reshatter", "both"))
 def test_events_do_not_pop(qt_app, mode):
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         params = {"shards": 95, "depth": 1.0, **mode}
         run = capture.run("glass_shatter", seed=417, direction="left", parameters=params)
@@ -184,7 +184,7 @@ def test_events_do_not_pop(qt_app, mode):
 @pytest.mark.qt
 @pytest.mark.parametrize("mode", MODES, ids=("collide", "reshatter", "both"))
 def test_each_option_changes_the_flight(qt_app, mode):
-    capture = TransitionCapture(320, 180)
+    capture = NativeTransitionCapture(320, 180)
     try:
         # TEST INPUT, NOT A DEFAULT GOLDEN: both options explicitly off (the shipped
         # defaults are operator policy and may turn them on).

@@ -19,10 +19,9 @@ from rendering.gl_programs.disintegrate_program import (
     disintegrate_noise,
     disintegrate_release,
 )
-from rendering.quick.scene3d.population import POPULATION_FIRST_BINDING
 from rendering.quick.transitions.directions import direction_vector
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 pytestmark = pytest.mark.qt
 
@@ -45,7 +44,7 @@ def test_the_schedule_leaves_both_ends_exact_and_the_grid_bounded():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -65,67 +64,6 @@ def test_frames_before_the_first_release_and_after_the_last_death_are_the_photog
     middle = _pixels(capture.render(run, 0.45)[0])
     assert np.abs(middle - source).mean() > 5 and np.abs(middle - destination).mean() > 5
     assert np.array_equal(middle, _pixels(capture.render(run, 0.45)[0]))      # the same frame, the same pixels
-
-
-@pytest.mark.parametrize("direction", ("right", "up", "diag_bl_tr"))
-def test_the_gpu_grains_are_the_mirrors_live_grains_in_order(capture, direction):
-    from OpenGL import GL as gl
-
-    run = capture.run("disintegrate", direction=direction, duration_ms=6000)
-    parameters = run.request.parameter_dict()
-    seed, grain = parameters["seed"], parameters["grain_size"]
-    columns, rows, _size = disintegrate_grid(W, H, grain)
-    vector = direction_vector(direction)
-    for progress in (0.2, 0.5, 0.8):
-        capture.render(run, progress)
-        expected = []
-        for g in range(columns * rows):
-            release = disintegrate_release(g, columns, rows, vector, W / H, seed)
-            if release <= progress < release + disintegrate_life(g, seed):
-                expected.append(g)
-        names = capture.host._implementations["disintegrate"]._grains._names
-        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
-        command = np.zeros(4, np.uint32)
-        gl.glGetNamedBufferSubData(names[POPULATION_FIRST_BINDING + 2], 0, command.nbytes, command)
-        ids = np.zeros(int(command[1]), np.uint32)
-        if len(ids):
-            gl.glGetNamedBufferSubData(names[POPULATION_FIRST_BINDING + 3], 0, ids.nbytes, ids)
-        # Float rounding may move a release that sits exactly on this progress by one ulp.
-        borderline = {g for g in range(columns * rows)
-                      if abs(disintegrate_release(g, columns, rows, vector, W / H, seed) - progress) < 1e-5
-                      or abs(disintegrate_release(g, columns, rows, vector, W / H, seed)
-                             + disintegrate_life(g, seed) - progress) < 1e-5}
-        got = [g for g in ids.tolist() if g not in borderline]
-        assert got == [g for g in expected if g not in borderline], progress
-        assert ids.tolist() == sorted(ids.tolist())
-
-
-def test_warmed_runs_compile_and_allocate_nothing_on_their_first_frames(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("disintegrate", direction="left", settings={"scene3d_detail": "High"}, duration_ms=3000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("disintegrate", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 50
-        renderer = capture.host._implementations["disintegrate"]
-        buffers = dict(renderer._grains._names)
-        assert buffers                                                  # the run's population is ready
-        warmed, allocated = work.total, list(work.allocations)
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated
-        assert renderer._grains._names == buffers
-        capture.host.park()
-        assert not renderer._grains.has_resources and not renderer._target.has_resources
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_directions_and_repairs_values():

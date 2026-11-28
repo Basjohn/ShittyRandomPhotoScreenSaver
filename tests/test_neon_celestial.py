@@ -11,7 +11,7 @@ from rendering.gl_programs.neon_celestial import (
     NEON_CELESTIAL_GLSL,
     basin_body_position,
 )
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.quick.render.gl_resources import delete_program
 
 
@@ -110,7 +110,7 @@ def test_body_position_rejects_invalid_authored_or_active_orbit_values():
 
 
 def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
-    capture = TransitionCapture(16, 16)
+    capture = OffscreenRenderTarget(16, 16)
     from rendering.quick.render.gl_resources import compile_program
 
     program = compile_program(_VERTEX, _probe_fragment(), label="Neon Lake celestial probe")

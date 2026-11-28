@@ -48,9 +48,9 @@ def _longest_run(row) -> int:
 @pytest.mark.qt
 def test_a_slow_gradient_keeps_its_level_without_contour_bands(qt_app):
     from rendering.quick.render.gl_resources import compile_program, delete_program
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    capture = TransitionCapture(WIDTH, HEIGHT)
+    capture = OffscreenRenderTarget(WIDTH, HEIGHT)
     programs = {name: compile_program(_VERTEX, _fragment(name == "dithered"), label=f"dither probe {name}")
                 for name in ("plain", "dithered")}
     vao = int(gl.glGenVertexArrays(1))

@@ -8,12 +8,10 @@ no light, each field is built once per run, warm-up allocates the fields and par
 resolver repairs values."""
 from __future__ import annotations
 
-import ctypes
 import random
 
 import numpy as np
 import pytest
-from OpenGL import GL as gl
 from PIL import Image, ImageDraw
 
 from rendering.gl_programs.edge_bloom_program import (
@@ -25,16 +23,11 @@ from rendering.gl_programs.edge_bloom_program import (
     edge_bloom_fill_time,
     edge_bloom_thresholds,
 )
-from rendering.quick.scene3d.edge_field import (
-    EDGE_FIELD_SEED,
-    edge_distance_reference,
-    edge_field_jumps,
-    edge_seed_reference,
-)
+from rendering.quick.scene3d.edge_field import edge_field_jumps
 from core.settings.default_settings import DEFAULT_SETTINGS
 from rendering.gl_programs.edge_bloom_options import EDGE_BLOOM_COLOUR_SOURCES
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 
@@ -68,66 +61,13 @@ def _shapes(fill) -> Image.Image:
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), _shapes((90, 140, 200)))
+    capture = NativeTransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), _shapes((90, 140, 200)))
     yield capture
     capture.close()
 
 
 def _pixels(image) -> np.ndarray:
     return np.asarray(image.convert("RGB"), dtype=np.int16)
-
-
-def _read(texture: int, size: tuple[int, int], channels: int) -> np.ndarray:
-    width, height = size
-    data = (ctypes.c_float * (width * height * channels))()
-    gl.glGetTextureImage(texture, 0, gl.GL_RED if channels == 1 else gl.GL_RG, gl.GL_FLOAT,
-                         ctypes.sizeof(data), data)
-    return np.frombuffer(data, dtype=np.float32).reshape(height, width, channels)
-
-
-@pytest.mark.qt
-def test_the_field_matches_its_cpu_mirror(capture):
-    run = capture.run("edge_bloom", duration_ms=5000)
-    capture.render(run, 0.3)
-    field = capture.host._implementations["edge_bloom"]._new_field
-    size = field._size
-    low, high = edge_bloom_thresholds(float(run.request.parameter_dict()["detail"]))
-    blurred = _read(field._textures["luma"], size, 1)[..., 0]       # holds the twice-blurred luma
-    strength = _read(field._textures["edge"], size, 1)[..., 0]
-    expected, points = edge_seed_reference(blurred, low, high)
-    seeds, expected_seeds = strength >= EDGE_FIELD_SEED, expected >= EDGE_FIELD_SEED
-    assert seeds.sum() > 50
-    assert (seeds != expected_seeds).mean() < 0.005
-    distance = _read(field._textures["field"], size, 2)[..., 0]
-    exact, _strength = edge_distance_reference(expected, points)
-    texel = 1.0 / size[1]
-    assert np.abs(distance - exact).mean() < 0.25 * texel and np.abs(distance - exact).max() < 2.0 * texel
-
-
-@pytest.mark.qt
-def test_contours_sit_on_their_sub_texel_ridge_not_on_the_texel_grid(qt_app):
-    # A gently slanted, anti-aliased edge: texel-snapped seeds would stair-step about 0.29 texels RMS.
-    big = Image.new("L", (W * 4, H * 4), 20)
-    ImageDraw.Draw(big).polygon([(0, 240), (W * 4, 240 + 0.15 * W * 4), (W * 4, H * 4), (0, H * 4)], fill=235)
-    destination = big.resize((W, H), Image.BOX).convert("RGB")
-    capture = TransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), destination)
-    try:
-        run = capture.run("edge_bloom", duration_ms=5000)
-        capture.render(run, 0.3)
-        field = capture.host._implementations["edge_bloom"]._new_field
-        size = field._size
-        final = field._textures["ping" if len(edge_field_jumps(size)) % 2 == 0 else "pong"]
-        seeds = _read(final, size, 2)
-        ys, xs = np.mgrid[0:size[1], 0:size[0]]
-        own = (seeds[..., 0] >= 0) & (np.abs(seeds[..., 0] - xs) <= 0.5) & (np.abs(seeds[..., 1] - ys) <= 0.5)
-        inner = own & (xs > 8) & (xs < size[0] - 8)          # away from the clamped picture borders
-        x, y = seeds[..., 0][inner], seeds[..., 1][inner]
-        assert len(x) > size[0] // 2
-        slope, offset = np.polyfit(x, y, 1)
-        assert slope == pytest.approx(0.15, abs=0.01)
-        assert np.sqrt(np.mean((y - (slope * x + offset)) ** 2)) < 0.12
-    finally:
-        capture.close()
 
 
 @pytest.mark.qt
@@ -171,7 +111,7 @@ def test_light_appears_on_the_new_contours_and_the_fill_starts_there(capture):
 def test_next_picture_glows_in_the_next_pictures_colour(qt_app, source, red_lines):
     destination = Image.new("RGB", (W, H), (20, 20, 20))
     ImageDraw.Draw(destination).rectangle((60, 40, 260, 140), fill=(220, 30, 30))
-    capture = TransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), destination)
+    capture = NativeTransitionCapture(W, H, Image.new("RGB", (W, H), (120, 120, 120)), destination)
     try:
         settings = {"edge_bloom": {"color_source": source, "color": [40, 120, 255, 255]}}
         lit = capture.run("edge_bloom", settings={"edge_bloom": {**settings["edge_bloom"], "glow": 1.0}},
@@ -183,27 +123,6 @@ def test_next_picture_glows_in_the_next_pictures_colour(qt_app, source, red_line
         assert (light[0] > light[2]) == red_lines
     finally:
         capture.close()
-
-
-@pytest.mark.qt
-def test_each_field_is_built_once_per_run_and_park_drops_it(capture):
-    run = capture.run("edge_bloom", duration_ms=5000)
-    parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-    steps = 0
-    while not capture.host.warm_step("edge_bloom", parameters, size):
-        steps += 1
-        assert steps < 20
-    renderer = capture.host._implementations["edge_bloom"]
-    assert renderer._new_field.has_resources and renderer._old_field.has_resources
-    allocated = dict(renderer._new_field._textures)
-    for progress in (0.1, 0.3, 0.6):
-        capture.render(run, progress)
-    assert renderer._new_field.builds == 1 and renderer._old_field.builds == 1
-    assert renderer._new_field._textures == allocated          # built into the warmed textures
-    capture.host.park()
-    assert not renderer._new_field.has_resources and not renderer._old_field.has_resources
-    renderer.release_resources()
-    assert not renderer.has_resources
 
 
 def test_the_resolver_repairs_values():

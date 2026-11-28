@@ -19,7 +19,7 @@ from rendering.gl_programs.depth_cascade_program import (
     screen_point,
 )
 from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
-from tools.transition_contact_sheet import TransitionCapture
+from tools.native_transition_capture import NativeTransitionCapture
 
 W, H = 320, 180
 ASPECT = W / H
@@ -45,7 +45,7 @@ def test_cards_start_along_the_sweep_and_clear_the_frame_before_done():
 
 @pytest.fixture
 def capture(qt_app):
-    capture = TransitionCapture(W, H)
+    capture = NativeTransitionCapture(W, H)
     yield capture
     capture.close()
 
@@ -96,34 +96,6 @@ def test_shadows_only_darken_the_new_picture(capture):
     # Only where the new picture showed (no multisampled rims with anti-aliasing off), always darker.
     assert np.all(plain[changed] == destination[changed], axis=-1).all()
     assert (shaded[changed].sum(axis=-1) <= plain[changed].sum(axis=-1)).all()
-
-
-@pytest.mark.qt
-def test_warmed_runs_compile_nothing_and_park_drops_the_cards(qt_app, monkeypatch):
-    from tests.test_transition_warmup import _Work
-
-    capture = TransitionCapture(256, 144)
-    try:
-        work = _Work(monkeypatch)
-        run = capture.run("depth_cascade", direction="up", settings={"scene3d_detail": "High"}, duration_ms=4000)
-        parameters, size = run.request.parameter_dict(), (capture.width, capture.height)
-        steps = 0
-        while not capture.host.warm_step("depth_cascade", parameters, size):
-            steps += 1
-            assert work.total <= steps and steps < 50
-        warmed = work.total
-        capture.render(run, 0.0)
-        capture.render(run, 0.4)
-        assert work.total == warmed
-        renderer = capture.host._implementations["depth_cascade"]
-        assert renderer._resources.has_mesh("cards")
-        capture.host.park()
-        assert not renderer._resources.has_mesh("cards")
-        assert not renderer._target.has_resources and not renderer._environment.has_resources
-        renderer.release_resources()
-        assert not renderer.has_resources
-    finally:
-        capture.close()
 
 
 def test_the_resolver_picks_sweeps_and_repairs_values():

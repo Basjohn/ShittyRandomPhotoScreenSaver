@@ -347,14 +347,12 @@ def test_scene_readiness_preserves_generation_zero_and_requires_intentional_fram
 
 
 @pytest.mark.parametrize("backend", ["vulkan", "opengl"])
-def test_presented_frame_is_published_only_without_a_background_renderer(backend, qt_app, monkeypatch) -> None:
-    # D10: on a backend without the background family's renderers the presented frame is the reveal's input
-    # (DisplayManager._startup_reveal_admits); on OpenGL the scene publishes exactly what it published before.
-    from rendering import transition_registry
+def test_presented_frame_is_published_on_every_backend(backend, qt_app, monkeypatch) -> None:
+    # D10, N5.2h: the native background draws the photo on every backend, so the presented frame is the reveal's input
+    # (DisplayManager._startup_reveal_admits), published once.
     from rendering.quick import bootstrap
 
     monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
-    without_background = not transition_registry.background_family_available_on_backend()
     screen = qt_app.primaryScreen()
     assert screen is not None
     window = QuickDisplayWindow(                       # never shown: the swap is emitted, not rendered
@@ -372,8 +370,8 @@ def test_presented_frame_is_published_only_without_a_background_renderer(backend
         for _ in range(3):
             window.frameSwapped.emit()
             qt_app.processEvents()
-        assert controller.readiness.frame_presented is without_background
-        assert [state.frame_presented for state in published] == ([True] if without_background else [])
+        assert controller.readiness.frame_presented is True
+        assert [state.frame_presented for state in published] == [True]
         assert controller.readiness.background_renderer_ready is False     # no background fact is invented
     finally:
         controller.quiesce_for_retirement()

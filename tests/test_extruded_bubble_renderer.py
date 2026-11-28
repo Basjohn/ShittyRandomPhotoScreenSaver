@@ -502,11 +502,11 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
     from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, GLASS_BLOCK, PARTICLE_BLOCK, PARTICLE_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.pass_block_gl import PassBlockGL
-    from tools.transition_contact_sheet import TransitionCapture
+    from tools.labs.render_target import OffscreenRenderTarget
 
     gl = PassBlockGL(GL)          # the stages' values are their pass block (N1.6), set by name as before
     width, height = 96, 64
-    capture = TransitionCapture(width, height)
+    capture = OffscreenRenderTarget(width, height)
     try:
         assert capture.context.makeCurrent(capture.surface)
         _v, _w, tan, projection = scene.camera(0.0, 0.0, width / height)

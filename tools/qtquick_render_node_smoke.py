@@ -46,9 +46,6 @@ from PySide6.QtQuick import QQuickWindow, QSGRendererInterface  # noqa: E402
 from rendering.quick.image_boundary import capture_qimage  # noqa: E402
 from rendering.quick.image_state import PresentationImage  # noqa: E402
 from rendering.quick.render import RenderNodeSnapshot, RenderNodeTelemetry  # noqa: E402
-from rendering.quick.render.background_node import (  # noqa: E402
-    TRANSITION_DENSE_SAMPLE_AXIS_COUNT,
-)
 from rendering.quick.runtime import QuickDisplayRuntime  # noqa: E402
 from rendering.quick.scene_controller import (  # noqa: E402
     QuickSceneController,
@@ -114,7 +111,8 @@ _TRANSITION_SAMPLE_COORDINATES = tuple(
 # The dense midpoint grid, mirroring the render node's dense readback exactly so
 # each dense colour lines up with its coordinate. Consumed only by the Phase-C
 # effect oracles (see qtquick_phase_c_effect_smoke), never by the geometry
-# oracles above.
+# oracles above. (The axis count was the deleted Python node's, N5.2h.)
+TRANSITION_DENSE_SAMPLE_AXIS_COUNT = 15
 _DENSE_SAMPLE_FRACTIONS = tuple(
     (index + 0.5) / TRANSITION_DENSE_SAMPLE_AXIS_COUNT
     for index in range(TRANSITION_DENSE_SAMPLE_AXIS_COUNT)
