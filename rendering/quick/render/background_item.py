@@ -104,9 +104,9 @@ class BackgroundRenderItem(QQuickItem):
                 self._native_layer_wanted = False
                 self._degraded = True
                 self.update()
-                from rendering.quick.bootstrap import native_core
+                from rendering.quick.bootstrap import window_hosted
 
-                if native_core() is not None:
+                if window_hosted(self.window()):     # an unhosted window's or a coreless process's: logged by the owner
                     logger.error("[BACKGROUND][NATIVE] The native background layer could not be made", exc_info=True)
                 return
             if self._native_layer is None:

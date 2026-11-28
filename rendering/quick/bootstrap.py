@@ -468,6 +468,9 @@ class _BackendOwner:
         self.hidden_hosts_created = 0
         self.quit_edge_connected = False
         self.degraded_reason = ""                # set once when no native core loads (N5.2h's degraded display)
+        # The windows the core refused to host on OpenGL: each shows the degraded display alone (per window; the
+        # core stays loaded for every other window).
+        self.unhosted_windows: weakref.WeakSet[Any] = weakref.WeakSet()
 
 
 _owner = _BackendOwner()
@@ -487,6 +490,12 @@ def native_core() -> Any:
     """The process's native core (``rendering.native.NativeCore``) once the owner loaded it (the Vulkan start, or the
     first hidden host); None before. The Visualizer's native route draws through it (N2.5)."""
     return _owner.core
+
+
+def window_hosted(window: Any) -> bool:
+    """Whether ``window``'s scene can draw through the native core: a core is loaded and the core did not refuse to
+    host this window (a refused window shows the degraded display alone; ``host_quick_window``)."""
+    return _owner.core is not None and (window is None or window not in _owner.unhosted_windows)
 
 
 def reset_quick_backend_for_testing() -> None:
@@ -773,16 +782,19 @@ def host_quick_window(window: Any) -> Any:
     device it then renders on (D6); returns its ``rendering.native.WindowHost``, closed when the window is destroyed.
     The first frame any hosted window presents completes the Vulkan start. On OpenGL nothing happens (None). A failure
     is remembered (the next start runs OpenGL) and raised. N5.2h: on OpenGL the window is hosted too (the core's frame
-    driver records the background layer at its edge); a failure there leaves the process on the degraded display
-    (None)."""
+    driver records the background layer at its edge); a failure there leaves that window alone on the degraded
+    display (None, ``window_hosted`` False, logged once per window), the core loaded for every other window."""
     core = _owner.core
     if _owner.backend.api != "vulkan":
-        if core is None:
+        if core is None or window in _owner.unhosted_windows:
             return None
         try:
             host = core.attach_host(window)
         except Exception as exc:
-            _degrade(f"the window could not be hosted on the native core: {exc}")
+            _owner.unhosted_windows.add(window)
+            _logger().error("[QUICK_BACKEND] Degraded display on one window: the window could not be hosted on the "
+                            "native core (%s); its photos show through Qt's own image node with hard cuts and no "
+                            "transitions, every other window stays native", exc)
             return None
         from functools import partial
 
@@ -869,7 +881,10 @@ def native_hidden_host(width: int, height: int, *, dpr: float = 1.0, timestamps:
     if core is None:
         if _owner.backend.api == "vulkan":
             raise RuntimeError("the Vulkan backend has not started: start_quick_backend() comes first")
-        core = _load_native_core()
+        if _owner.started:
+            # The started process runs the degraded display (no core loaded): one-way, never a reload here.
+            raise RuntimeError(f"no native core: the process runs the degraded display ({_owner.degraded_reason})")
+        core = _load_native_core()       # a tool or test process that never starts the backend
         _owner.core = core
     from PySide6.QtCore import QCoreApplication
 

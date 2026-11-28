@@ -27,5 +27,10 @@ Order: 1 reveal waits for first wallpaper; 2 hidden-host owner guard; 3 fullscre
   retargeted: Python updatePaintNode on the kept hidden host's render thread (painted_off_main), quit requested, exits,
   both APIs. NO failing control on Windows: the synchronous app.quit() contrast also exits (the wedge was Linux/Xvfb
   only; the original test had no Windows control either) - log 20261128_audit_item5_exit_routes.
+- Item 6 DONE: per-window degrade (owner.unhosted_windows WeakSet, window_hosted(window); attach_native_background
+  refuses an unhosted window's item; core kept for other windows; one error per window) + one-way: a started process
+  with no core never reloads one for a hidden host. Controls: HEAD files fail both new tests; behavioural (old
+  _degrade branch) fails (evidence 20261128_audit_item6_per_window_degrade). Residual: backdrop + Visualizer on an
+  unhosted window still take the core (native_backdrop_core/attach_native_route have no window check): draw nothing.
 
 ---- previous agent's journal (aa3b364) is in git history of .artifacts/handover/JOURNAL.md ----

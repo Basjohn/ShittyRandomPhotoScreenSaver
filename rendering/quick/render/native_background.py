@@ -1095,9 +1095,13 @@ def attach_native_background(item: Any, backend: str | None = None) -> NativeBac
         return None
     from rendering.quick.bootstrap import native_core
 
+    from rendering.quick.bootstrap import window_hosted
+
     core = native_core()
     if core is None:
         raise RuntimeError("the native background layer needs the native core (start_quick_backend)")
+    if not window_hosted(item.window()):
+        raise RuntimeError("the item's window is not hosted on the native core (its degraded display)")
     return NativeBackgroundLayer(core, item)
 
 

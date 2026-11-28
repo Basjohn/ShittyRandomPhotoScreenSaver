@@ -133,44 +133,87 @@ def test_a_recorded_failure_survives_the_clean_quit_that_follows_it(tmp_path):
     assert record["state"] == "failed" and record["reason"] == "forced"
 
 
-def test_hosting_a_window_on_opengl_hosts_it_on_the_core_or_degrades(qt_app, caplog):
+def test_hosting_a_window_on_opengl_hosts_it_on_the_core_or_degrades_that_window_alone(qt_app, caplog):
     # N5.2h: OpenGL windows are hosted on the native core too (its frame driver records the background layer); with no
-    # core, or a host the core refuses, the process shows the degraded display (one error), never a quit.
+    # core there is nothing to host on. Audit item 6: a window the core refuses shows the degraded display alone (one
+    # error for it), never a quit, and the core stays loaded: the next window is hosted, and the started process never
+    # reloads a core for a hidden host once it runs the degraded display.
     from PySide6.QtQuick import QQuickWindow
 
     attached: list = []
 
     class Host:
-        handle, closed = 11, False
+        def __init__(self, handle):
+            self.handle, self.closed = handle, False
 
         def close(self):
             return {}
 
     class Core:
+        refuse: set = set()
+
         def attach_host(self, window):
+            if window in self.refuse:
+                raise RuntimeError("refused")
             attached.append(window)
-            return Host()
+            return Host(10 + len(attached))
 
-    class Refusing:
-        def attach_host(self, window):
-            raise RuntimeError("refused")
-
-    window = QQuickWindow()                                    # never shown: no frame, no device
+    refused, other = QQuickWindow(), QQuickWindow()            # never shown: no frame, no device
     try:
         assert bootstrap._owner.backend.api == "opengl"
-        assert bootstrap.host_quick_window(window) is None and bootstrap.degraded_reason() == ""   # no core yet
-        bootstrap._owner.core = Core()
-        host = bootstrap.host_quick_window(window)
-        assert isinstance(host, Host) and attached == [window] and bootstrap._owner.window_hosts == {11: host}
-        bootstrap._owner.core = Refusing()
+        assert bootstrap.host_quick_window(refused) is None and bootstrap.degraded_reason() == ""   # no core yet
+        assert bootstrap.window_hosted(refused) is False
+        core = bootstrap._owner.core = Core()
+        core.refuse = {refused}
         with caplog.at_level("ERROR"):
-            assert bootstrap.host_quick_window(window) is None
-            assert bootstrap.host_quick_window(window) is None
-        assert "could not be hosted" in bootstrap.degraded_reason()
-        assert bootstrap._owner.core is None
-        assert len([r for r in caplog.records if "Degraded display" in r.getMessage()]) == 1    # logged once
+            assert bootstrap.host_quick_window(refused) is None
+            assert bootstrap.host_quick_window(refused) is None
+        assert len([r for r in caplog.records if "Degraded display on one window" in r.getMessage()]) == 1
+        assert bootstrap.window_hosted(refused) is False and bootstrap.degraded_reason() == ""
+        assert bootstrap._owner.core is core                    # the process keeps its core ...
+        host = bootstrap.host_quick_window(other)               # ... and the next window is hosted on it
+        assert isinstance(host, Host) and attached == [other] and bootstrap._owner.window_hosts == {11: host}
+        assert bootstrap.window_hosted(other) is True
+        # One-way: a started process with no core runs the degraded display; a hidden host never reloads one.
+        bootstrap._owner.core, bootstrap._owner.started = None, True
+        loads: list = []
+        original = bootstrap._load_native_core
+        bootstrap._load_native_core = lambda: loads.append(1)
+        try:
+            with pytest.raises(RuntimeError, match="degraded display"):
+                bootstrap.native_hidden_host(16, 16)
+        finally:
+            bootstrap._load_native_core = original
+        assert loads == [] and bootstrap._owner.core is None
     finally:
-        window.deleteLater()
+        refused.deleteLater()
+        other.deleteLater()
+        qt_app.processEvents()
+
+
+def test_a_refused_windows_background_takes_no_native_layer_and_another_windows_does(qt_app, monkeypatch):
+    # Audit item 6: the layer of an item in a window the core refused is not made (its degraded display); an item in
+    # a hosted window of the same process gets its layer from the core that stays loaded.
+    from PySide6.QtQuick import QQuickItem, QQuickWindow
+    from rendering.quick.render import native_background
+
+    made: list = []
+    monkeypatch.setattr(native_background, "NativeBackgroundLayer", lambda core, item: made.append(item) or "layer")
+    bootstrap._owner.core = object()
+    refused, hosted = QQuickWindow(), QQuickWindow()            # never shown
+    try:
+        bootstrap._owner.unhosted_windows.add(refused)
+        items = []
+        for window in (refused, hosted):
+            item = QQuickItem()
+            item.setParentItem(window.contentItem())
+            items.append(item)
+        with pytest.raises(RuntimeError, match="not hosted"):
+            native_background.attach_native_background(items[0], "opengl")
+        assert native_background.attach_native_background(items[1], "opengl") == "layer" and made == [items[1]]
+    finally:
+        refused.deleteLater()
+        hosted.deleteLater()
         qt_app.processEvents()
 
 
