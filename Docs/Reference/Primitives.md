@@ -505,7 +505,8 @@ the product module holds today.
 | **Framed camera** (D5.5, N0.4) | `core/settings/framed_camera.py`; Decisions line 1466+ | decided; the worker publishes the finished camera, built with N5.4 then N5.6 (N0.4's remainder box) | one camera for every framed 3D mode (section 7) |
 
 Quick-side services that stay as they are until the native presenter replaces them: the program cache (E27), the
-background and image nodes (`background_node.py`, `background_item.py`, `background_image_node.py`) and the GL
+background item (`background_item.py`, the owner of the core's background layer, `native_background.py`, and of the
+degraded display's image, `degraded_background.py`; N5.2h deleted the Python background and image nodes) and the GL
 query helpers (`rendering/quick/gl_query.py`, raw getters for CPU-cheap reads; Lessons line 168-171).
 
 ## 5. Planned primitives (never built)
@@ -570,7 +571,8 @@ N6.1 to N6.3, so it omits N4.d; see contradictions).
 
 Never built in any form:
 - **N4.a, the fullscreen pass and image sampling as a primitive** (N4.a's box, in N2b). Seeds exist as
-  `FULLSCREEN_VERTEX_SOURCE` (E4) and the background node, not as one primitive. Consumers: the seven fullscreen
+  `FULLSCREEN_VERTEX_SOURCE` (E4) and the core's background layer, not as one primitive (the Python background
+  node it grew from was deleted in N5.2h). Consumers: the seven fullscreen
   transitions of N5.2a (Crossfade, Burn, Particle, Ripple, Slide, Warp, Wipe) and the background layer (N5.7a). No
   class stated.
 - **Mixed-resolution soft layers with depth-aware upsampling** (N4.f2, D8 plus 4): bloom, reflection blur, wide glows
